@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Black circular badge background -->
+  <circle cx="256" cy="256" r="256" fill="#000000"/>
+
+  <!-- White NF monogram letterforms -->
+  <!-- N letterform -->
+  <g fill="#FFFFFF">
+    <!-- N: left stem -->
+    <rect x="108" y="148" width="36" height="216"/>
+    <!-- N: diagonal bar -->
+    <polygon points="144,148 180,148 288,316 288,364 252,364 144,196"/>
+    <!-- N: right stem -->
+    <rect x="252" y="148" width="36" height="216"/>
+  </g>
+
+  <!-- F letterform -->
+  <g fill="#FFFFFF">
+    <!-- F: vertical stem -->
+    <rect x="304" y="148" width="36" height="216"/>
+    <!-- F: top horizontal bar -->
+    <rect x="304" y="148" width="100" height="32"/>
+    <!-- F: mid horizontal bar -->
+    <rect x="304" y="230" width="80" height="28"/>
+  </g>
+
+  <!-- Pure-red diagonal slash — brand mark -->
+  <line
+    x1="88"
+    y1="424"
+    x2="424"
+    y2="88"
+    stroke="#FF0000"
+    stroke-width="28"
+    stroke-linecap="round"
+  />
+</svg>

@@ -1,0 +1,220 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design tokens — dark (default) ──────────────────────────── */
+:root,
+[data-theme="dark"] {
+  --shell:       #0E0F12;
+  --panel:       #16181D;
+  --raised:      #1E2128;
+  --raised2:     #262A32;
+  --line:        #2A2E37;
+  --line2:       #353A45;
+
+  --brand:       #B11116;
+  --brand-bright:#E4373D;
+  --brand-deep:  #7A0C10;
+
+  --txt:         #E8EAED;
+  --txt-mut:     #9BA1AC;
+  --txt-dim:     #6B7280;
+
+  --ok:          #2FB67C;
+  --warn:        #E0A93B;
+  --risk:        #E4373D;
+  --info:        #4C8DD6;
+
+  /* BrandMark ring & glow — dark */
+  --bm-ring:        rgba(228,55,61,.25);
+  --bm-glow:        radial-gradient(circle, rgba(228,55,61,.18) 0%, rgba(228,55,61,0) 70%);
+  --bm-inner-shadow: inset 0 1px 3px rgba(0,0,0,.6), inset 0 -1px 1px rgba(255,255,255,.03), 0 0 0 1px rgba(0,0,0,.4);
+}
+
+/* ─── Design tokens — light ────────────────────────────────────── */
+/*
+ * Semantic colors keep the same hue but are darkened for WCAG AA on white.
+ * Verified ratios (on #FFF):
+ *   --brand-bright #C81A1F  5.7:1  ✓
+ *   --ok           #1A7A52  4.9:1  ✓
+ *   --warn         #896010  5.6:1  ✓  (user example #B8860B was 3.3:1 — insufficient)
+ *   --risk         #C81A1F  5.7:1  ✓
+ *   --info         #1A5FAA  6.4:1  ✓
+ */
+[data-theme="light"] {
+  --shell:       #F7F8FA;
+  --panel:       #FFFFFF;
+  --raised:      #FFFFFF;
+  --raised2:     #F1F3F5;
+  --line:        #E3E6EA;
+  --line2:       #D3D8DE;
+
+  --brand:       #B11116;
+  --brand-bright:#C81A1F;
+  --brand-deep:  #7A0C10;
+
+  --txt:         #1A1D23;
+  --txt-mut:     #5A616B;
+  --txt-dim:     #8A909A;
+
+  --ok:          #1A7A52;
+  --warn:        #896010;
+  --risk:        #C81A1F;
+  --info:        #1A5FAA;
+
+  /* BrandMark ring & glow — light (logo is black disc; give it depth on white) */
+  --bm-ring:        rgba(0,0,0,.15);
+  --bm-glow:        radial-gradient(circle, rgba(0,0,0,.04) 0%, rgba(0,0,0,0) 70%);
+  --bm-inner-shadow: inset 0 1px 2px rgba(255,255,255,.8), 0 2px 6px rgba(0,0,0,.14), 0 0 0 1px rgba(0,0,0,.09);
+}
+
+/* ─── Smooth theme transition (only during the swap) ───────────── */
+@media (prefers-reduced-motion: no-preference) {
+  html.nf-theme-transitioning * {
+    transition:
+      background-color 150ms ease,
+      border-color     150ms ease,
+      color            150ms ease,
+      box-shadow       150ms ease !important;
+  }
+}
+
+/* ─── Base ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { font-size: 16px; }
+
+body {
+  margin: 0;
+  background-color: var(--shell);
+  color: var(--txt);
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root { min-height: 100dvh; }
+
+/* ─── Focus ring — every interactive element ───────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--brand-bright);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* ─── Tabular numbers for data columns ────────────────────────── */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Scrollbar ────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--panel);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--txt-dim);
+}
+
+/* ─── Shell responsive layout ───────────────────────────────────── */
+.shell-sidebar {
+  display: flex;
+  flex-direction: column;
+}
+@media (max-width: 900px) {
+  .shell-sidebar { display: none; }
+}
+
+.shell-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+@media (max-width: 900px) {
+  .shell-hamburger { display: flex; }
+}
+
+.shell-main-content {
+  margin-left: 236px;
+}
+@media (max-width: 900px) {
+  .shell-main-content { margin-left: 0; }
+}
+
+/* ─── Content-area nav items (theme-aware) ─────────────────────── */
+.nf-nav-item {
+  color: var(--txt-mut);
+  transition: background 120ms, color 120ms;
+}
+.nf-nav-item:hover {
+  background: var(--raised2) !important;
+  color: var(--txt) !important;
+}
+.nf-nav-item[aria-current="page"] {
+  background: linear-gradient(90deg, rgba(177,17,22,.18), rgba(177,17,22,.04));
+  color: var(--txt);
+}
+.nf-nav-item[aria-current="page"]:hover {
+  background: linear-gradient(90deg, rgba(177,17,22,.26), rgba(177,17,22,.07)) !important;
+}
+
+/* ─── Sidebar items — always dark, never themes ────────────────── */
+/*     Inactive: #C8CCD2 (crisp on #0E0F12), hover: #FFFFFF        */
+.nf-sidebar-item {
+  color: #C8CCD2;
+  transition: background 120ms, color 120ms;
+}
+.nf-sidebar-item:hover {
+  background: #1E2128 !important;
+  color: #FFFFFF !important;
+}
+.nf-sidebar-item[aria-current="page"] {
+  background: linear-gradient(90deg, rgba(177,17,22,.22), rgba(177,17,22,.05));
+  color: #FFFFFF;
+}
+.nf-sidebar-item[aria-current="page"]:hover {
+  background: linear-gradient(90deg, rgba(177,17,22,.30), rgba(177,17,22,.09)) !important;
+}
+
+/* ─── Topbar items — always dark frame ─────────────────────────── */
+.nf-topbar-item {
+  color: #9BA1AC;
+  transition: background 120ms, color 120ms;
+}
+.nf-topbar-item:hover {
+  background: rgba(255,255,255,.07) !important;
+  color: #E8EAED !important;
+}
+
+/* ─── Skeleton shimmer ─────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--raised)  25%,
+    var(--raised2) 50%,
+    var(--raised)  75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+  border-radius: 4px;
+}
+
+/* ─── Reduced motion ───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
