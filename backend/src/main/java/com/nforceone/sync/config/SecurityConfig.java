@@ -43,7 +43,10 @@ public class SecurityConfig {
                 // Path-only matchers (no HttpMethod arg) — Spring Security 7's
                 // MvcRequestMatcher with an HttpMethod constraint does not correctly
                 // whitelist the path in Boot 4.x; removing the method constraint fixes it.
-                .requestMatchers("/api/auth/login", "/api/auth/forgot-password").permitAll()
+                // /error must be permitted: Spring Boot forwards exceptions there, and
+                // the Security filter chain re-runs for FORWARD dispatches — without this,
+                // any controller exception (409, 404, 500…) gets silently converted to 401.
+                .requestMatchers("/api/auth/login", "/api/auth/forgot-password", "/error").permitAll()
                 .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex

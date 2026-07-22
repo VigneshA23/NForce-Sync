@@ -69,8 +69,8 @@ The auth mechanism above is reused from NForce timetracker but N-Force Sync keep
 ## Admin creates users (User Management screen — backend phase)
 Super Admin creates an employee by entering: full name, company email, initial password, role (one of the 8), and an auto-incrementing employee ID. Created users are persisted in the database and can then log in. This is a BACKEND feature (DB + API) — the frontend User Management screen calls it.
 
-## Login screen (current state for demo)
-The login currently shows the SSO button + credentials form + demo role-picker. SSO button is visually present but INERT. Credentials form simulates errors (generic "Invalid email or password" — never reveals whether account exists). Demo role-picker is the working entry. This is correct for now — all three will become functional in the backend phase.
+## Login screen (current state)
+Real email + password login via POST /api/auth/login. JWT stored in localStorage (key: nfsync_session). On page refresh, getMe() re-validates the token — if expired/invalid, clears state and returns to login. SSO button is visually present but INERT (disabled, cursor: not-allowed). Demo role-picker has been removed. Error messages shown verbatim from server response. Lockout at 5 consecutive failures redirects to /locked.
 
 ## Quality bar
 This must look like a shipped enterprise product, not a mockup. Layered elevation, purposeful motion, real depth. Reference quality: Linear, Vercel dashboard, Stripe.

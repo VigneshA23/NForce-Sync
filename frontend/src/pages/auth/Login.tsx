@@ -2,22 +2,12 @@ import { useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import axios from 'axios';
 import { AuthLayout } from './AuthLayout';
-import { useAuth, ROLE_LANDING } from '../../lib/auth';
-import type { Role } from '../../lib/types';
+import { useAuth, ROLE_LANDING, buildAuthUser } from '../../lib/auth';
+import { login } from '../../api/auth';
 
 const MAX_ATTEMPTS = 5;
-
-const DEMO_ROLES: { role: Role; label: string; color: string }[] = [
-  { role: 'employee',   label: 'Employee',        color: '#4C8DD6' },
-  { role: 'lead',       label: 'Team Lead',        color: '#2FB67C' },
-  { role: 'pm',         label: 'Project Manager',  color: '#E0A93B' },
-  { role: 'dm',         label: 'Delivery Manager', color: '#9B6DFF' },
-  { role: 'hr',         label: 'HR Admin',         color: '#E4373D' },
-  { role: 'finance',    label: 'Finance Admin',    color: '#14B8A6' },
-  { role: 'leadership', label: 'Leadership',       color: '#F09030' },
-  { role: 'superadmin', label: 'Super Admin',      color: '#A78BFA' },
-];
 
 function MicrosoftIcon() {
   return (
@@ -41,7 +31,7 @@ const itemVariants = {
 };
 
 export default function Login() {
-  const { loginWithRole, failCount, recordFailedAttempt } = useAuth();
+  const { loginWithCredentials, failCount, recordFailedAttempt } = useAuth();
   const navigate = useNavigate();
   const reduced = useReducedMotion();
 
@@ -49,41 +39,39 @@ export default function Login() {
   const passId   = useId();
   const errorId  = useId();
 
-  const [email, setEmail]         = useState('');
-  const [password, setPassword]   = useState('');
-  const [showPass, setShowPass]   = useState(false);
-  const [error, setError]         = useState<string | null>(null);
+  const [email, setEmail]           = useState('');
+  const [password, setPassword]     = useState('');
+  const [showPass, setShowPass]     = useState(false);
+  const [error, setError]           = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const emailRef = useRef<HTMLInputElement>(null);
-
-  function handleDemoPill(role: Role) {
-    loginWithRole(role);
-    navigate(ROLE_LANDING[role], { replace: true });
-  }
-
-  function handleSsoClick() {
-    // SSO is inert in this phase — visual only
-    setError('Microsoft SSO is not yet connected. Use a demo role below to explore the app.');
-  }
 
   async function handleCredentialSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
 
-    await new Promise((r) => setTimeout(r, 420));
-
-    const attempts = recordFailedAttempt();
-    setSubmitting(false);
-
-    if (attempts >= MAX_ATTEMPTS) {
-      navigate('/locked', { replace: true });
-      return;
+    try {
+      const { token, user: serverUser } = await login(email, password);
+      const authUser = buildAuthUser(serverUser);
+      loginWithCredentials(token, authUser);
+      navigate(ROLE_LANDING[authUser.role], { replace: true });
+    } catch (err) {
+      const attempts = recordFailedAttempt();
+      if (attempts >= MAX_ATTEMPTS) {
+        navigate('/locked', { replace: true });
+        return;
+      }
+      let message = 'Invalid email or password.';
+      if (axios.isAxiosError(err) && typeof err.response?.data?.error === 'string') {
+        message = err.response.data.error;
+      }
+      setError(message);
+      emailRef.current?.focus();
+    } finally {
+      setSubmitting(false);
     }
-
-    setError('Invalid email or password.');
-    emailRef.current?.focus();
   }
 
   const hasError = Boolean(error);
@@ -118,14 +106,51 @@ export default function Login() {
           </p>
         </motion.div>
 
-        {/* SSO button */}
+        {/* SSO button — visual only, not yet connected */}
         <motion.div variants={reduced ? undefined : itemVariants}>
-          <SsoButton onClick={handleSsoClick} />
+          <button
+            type="button"
+            disabled
+            aria-label="Microsoft SSO — coming soon"
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 10,
+              padding: '12px 16px',
+              background: 'var(--brand)',
+              color: 'rgba(255,255,255,.45)',
+              border: 'none',
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'not-allowed',
+              opacity: 0.55,
+              marginBottom: 4,
+            }}
+          >
+            <MicrosoftIcon />
+            Continue with Microsoft SSO
+          </button>
         </motion.div>
 
         {/* OR divider */}
         <motion.div variants={reduced ? undefined : itemVariants}>
-          <OrDivider />
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              color: 'var(--txt-dim)',
+              fontSize: 12,
+              margin: '20px 0',
+            }}
+          >
+            <span style={{ flex: 1, height: 1, background: 'var(--line)', display: 'block' }} />
+            or use company credentials
+            <span style={{ flex: 1, height: 1, background: 'var(--line)', display: 'block' }} />
+          </div>
         </motion.div>
 
         {/* Error alert */}
@@ -158,7 +183,7 @@ export default function Login() {
         {/* Credentials form */}
         <form onSubmit={handleCredentialSubmit} noValidate>
           <motion.div variants={reduced ? undefined : itemVariants}>
-            <FieldGroup>
+            <div style={{ marginBottom: 14 }}>
               <label htmlFor={emailId} style={labelStyle}>
                 Email
               </label>
@@ -167,7 +192,7 @@ export default function Login() {
                 id={emailId}
                 type="email"
                 autoComplete="email"
-                placeholder="you@nforce.one"
+                placeholder="you@nforceone.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 aria-invalid={hasError}
@@ -176,11 +201,11 @@ export default function Login() {
                 onFocus={(e) => Object.assign(e.target.style, inputFocusStyle)}
                 onBlur={(e) => Object.assign(e.target.style, inputStyle)}
               />
-            </FieldGroup>
+            </div>
           </motion.div>
 
           <motion.div variants={reduced ? undefined : itemVariants}>
-            <FieldGroup>
+            <div style={{ marginBottom: 14 }}>
               <label htmlFor={passId} style={labelStyle}>
                 Password
               </label>
@@ -223,7 +248,7 @@ export default function Login() {
                   }
                 </button>
               </div>
-            </FieldGroup>
+            </div>
           </motion.div>
 
           {/* Forgot link */}
@@ -247,45 +272,16 @@ export default function Login() {
             <button
               type="submit"
               disabled={submitting}
-              style={outlineButtonStyle}
+              style={submitButtonStyle}
               onMouseEnter={(e) => {
-                if (!submitting) Object.assign(e.currentTarget.style, outlineButtonHoverStyle);
+                if (!submitting) Object.assign(e.currentTarget.style, submitButtonHoverStyle);
               }}
-              onMouseLeave={(e) => Object.assign(e.currentTarget.style, outlineButtonStyle)}
+              onMouseLeave={(e) => Object.assign(e.currentTarget.style, submitButtonStyle)}
             >
               {submitting ? 'Signing in…' : 'Sign in'}
             </button>
           </motion.div>
         </form>
-
-        {/* Demo section */}
-        <motion.div variants={reduced ? undefined : itemVariants}>
-          <div style={{ height: 1, background: 'var(--line)', margin: '28px 0 20px' }} />
-          <div style={{ marginBottom: 12 }}>
-            <span
-              style={{
-                fontSize: 10,
-                letterSpacing: '0.14em',
-                textTransform: 'uppercase',
-                color: 'var(--txt-dim)',
-                fontWeight: 600,
-              }}
-            >
-              Demo · preview as any role
-            </span>
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 8,
-            }}
-          >
-            {DEMO_ROLES.map(({ role, label, color }) => (
-              <DemoPill key={role} role={role} label={label} color={color} onClick={handleDemoPill} />
-            ))}
-          </div>
-        </motion.div>
 
         {/* Attempt warning */}
         {failCount > 0 && failCount < MAX_ATTEMPTS && (
@@ -304,117 +300,6 @@ export default function Login() {
         )}
       </motion.div>
     </AuthLayout>
-  );
-}
-
-function SsoButton({ onClick }: { onClick: () => void }) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        width: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 10,
-        padding: '12px 16px',
-        background: hovered ? 'var(--brand-bright)' : 'var(--brand)',
-        color: '#fff',
-        border: 'none',
-        borderRadius: 8,
-        fontSize: 14,
-        fontWeight: 600,
-        cursor: 'pointer',
-        transition: 'background 0.15s, transform 0.15s, box-shadow 0.15s',
-        transform: hovered ? 'translateY(-1px)' : 'none',
-        boxShadow: hovered
-          ? '0 4px 20px rgba(177,17,22,.35)'
-          : '0 1px 4px rgba(0,0,0,.3)',
-        marginBottom: 4,
-      }}
-    >
-      <MicrosoftIcon />
-      Continue with Microsoft SSO
-    </button>
-  );
-}
-
-function OrDivider() {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        color: 'var(--txt-dim)',
-        fontSize: 12,
-        margin: '20px 0',
-      }}
-    >
-      <span style={{ flex: 1, height: 1, background: 'var(--line)', display: 'block' }} />
-      or use company credentials
-      <span style={{ flex: 1, height: 1, background: 'var(--line)', display: 'block' }} />
-    </div>
-  );
-}
-
-function FieldGroup({ children }: { children: React.ReactNode }) {
-  return <div style={{ marginBottom: 14 }}>{children}</div>;
-}
-
-function DemoPill({
-  role,
-  label,
-  color,
-  onClick,
-}: {
-  role: Role;
-  label: string;
-  color: string;
-  onClick: (role: Role) => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(role)}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 7,
-        padding: '7px 12px',
-        background: hovered ? `${color}18` : 'var(--raised2)',
-        border: `1px solid ${hovered ? color + '55' : 'var(--line2)'}`,
-        borderRadius: 99,
-        fontSize: 12,
-        color: hovered ? 'var(--txt)' : 'var(--txt-mut)',
-        cursor: 'pointer',
-        transition: 'all 0.14s',
-        textAlign: 'left',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-      }}
-      aria-label={`Sign in as ${label}`}
-    >
-      <span
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: '50%',
-          background: color,
-          flexShrink: 0,
-        }}
-        aria-hidden="true"
-      />
-      {label}
-    </button>
   );
 }
 
@@ -453,7 +338,7 @@ const mutedLinkStyle: React.CSSProperties = {
   transition: 'color 0.12s',
 };
 
-const outlineButtonStyle: React.CSSProperties = {
+const submitButtonStyle: React.CSSProperties = {
   width: '100%',
   display: 'flex',
   alignItems: 'center',
@@ -470,8 +355,8 @@ const outlineButtonStyle: React.CSSProperties = {
   fontFamily: 'Inter, sans-serif',
 };
 
-const outlineButtonHoverStyle: React.CSSProperties = {
-  ...outlineButtonStyle,
+const submitButtonHoverStyle: React.CSSProperties = {
+  ...submitButtonStyle,
   borderColor: 'var(--txt-mut)',
   background: 'var(--raised)',
 };

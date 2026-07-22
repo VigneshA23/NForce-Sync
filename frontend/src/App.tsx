@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { ThemeProvider } from './lib/theme';
 import { AuthProvider, useAuth, ROLE_LANDING } from './lib/auth';
+import { ToastProvider } from './lib/toast';
 import { Shell } from './components/Shell';
 import { NotAuthorized } from './pages/NotAuthorized';
 import { Placeholder } from './pages/Placeholder';
@@ -9,6 +10,10 @@ import Forgot   from './pages/auth/Forgot';
 import Reset    from './pages/auth/Reset';
 import Locked   from './pages/auth/Locked';
 import Inactive from './pages/auth/Inactive';
+import AdminDashboard  from './pages/admin/Dashboard';
+import UserManagement  from './pages/admin/UserManagement';
+import AuditLog        from './pages/admin/AuditLog';
+import RolesAccess     from './pages/admin/RolesAccess';
 
 function RequireAuth() {
   const { user } = useAuth();
@@ -96,13 +101,13 @@ function AppRoutes() {
           <Route path="/leadership/reports"   element={<Placeholder title="Reports" />} />
 
           {/* ── Super Admin ────────────────────────── */}
-          <Route path="/admin/dashboard"    element={<Placeholder title="Admin Dashboard" />} />
-          <Route path="/admin/users"        element={<Placeholder title="User Management" />} />
-          <Route path="/admin/roles"        element={<Placeholder title="Roles & Access" />} />
+          <Route path="/admin/dashboard"    element={<AdminDashboard />} />
+          <Route path="/admin/users"        element={<UserManagement />} />
+          <Route path="/admin/roles"        element={<RolesAccess />} />
           <Route path="/admin/rules"        element={<Placeholder title="Business Rules" />} />
           <Route path="/admin/integrations" element={<Placeholder title="Integrations" />} />
           <Route path="/admin/ai"           element={<Placeholder title="AI & Automation" />} />
-          <Route path="/admin/audit"        element={<Placeholder title="Audit Log" />} />
+          <Route path="/admin/audit"        element={<AuditLog />} />
 
           {/* ── Shared ─────────────────────────────── */}
           <Route path="/notifications" element={<Placeholder title="Notifications" />} />
@@ -120,7 +125,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AppRoutes />
+        <ToastProvider>
+          <AppRoutes />
+        </ToastProvider>
       </AuthProvider>
     </ThemeProvider>
   );

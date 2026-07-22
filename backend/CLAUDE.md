@@ -32,6 +32,7 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 - Deactivation not deletion: deactivated users are blocked from login but retain their row.
 - Roles for THIS PHASE (4 of the eventual 8): EMPLOYEE, MANAGER, HR, SUPERADMIN. Design the schema to hold all 8 eventually but only seed/test these 4 now.
 - Authorization enforced SERVER-SIDE on every request — never trust the frontend alone.
+- Before any non-local deployment, set a real JWT_SECRET environment variable — application.yml's current value is an intentionally obvious dev-only placeholder and must never be used outside local development.
 
 ## Rules for every module
 - Flyway owns schema. Two underscores: V2__name.sql

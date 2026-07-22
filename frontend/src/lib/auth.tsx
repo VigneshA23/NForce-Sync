@@ -1,50 +1,69 @@
-import { createContext, useContext, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { Role } from './types';
+import { getMe, toRole } from '../api/auth';
+import type { ServerUser } from '../api/auth';
 
-const SESSION_KEY = 'nfsync_demo_user';
+const SESSION_KEY = 'nfsync_session';
 
-function loadSession(): AuthUser | null {
+interface StoredSession {
+  token: string;
+  user: AuthUser;
+}
+
+function loadSession(): StoredSession | null {
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    return raw ? (JSON.parse(raw) as AuthUser) : null;
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as StoredSession) : null;
   } catch {
     return null;
   }
 }
 
-function saveSession(u: AuthUser | null): void {
+function saveSession(s: StoredSession | null): void {
   try {
-    if (u) sessionStorage.setItem(SESSION_KEY, JSON.stringify(u));
-    else sessionStorage.removeItem(SESSION_KEY);
+    if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+    else localStorage.removeItem(SESSION_KEY);
   } catch {}
 }
 
+function initials(name: string): string {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join('');
+}
+
 export interface AuthUser {
+  id: number;
   name: string;
   initials: string;
   email: string;
   role: Role;
+  employeeCode: number | null;
+}
+
+export function buildAuthUser(serverUser: ServerUser): AuthUser {
+  return {
+    id:           serverUser.id,
+    name:         serverUser.fullName,
+    initials:     initials(serverUser.fullName),
+    email:        serverUser.email,
+    role:         toRole(serverUser.role),
+    employeeCode: serverUser.employeeCode,
+  };
 }
 
 interface AuthContextValue {
   user: AuthUser | null;
+  token: string | null;
   failCount: number;
-  loginWithRole: (role: Role) => void;
+  loginWithCredentials: (token: string, user: AuthUser) => void;
   recordFailedAttempt: () => number;
   resetFailCount: () => void;
   logout: () => void;
 }
-
-export const ROLE_PERSONAS: Record<Role, AuthUser> = {
-  employee:   { name: 'Aarav Mehta',   initials: 'AM', email: 'aarav.mehta@nforce.one',   role: 'employee' },
-  lead:       { name: 'Priya Nair',    initials: 'PN', email: 'priya.nair@nforce.one',     role: 'lead' },
-  pm:         { name: 'Rohan Das',     initials: 'RD', email: 'rohan.das@nforce.one',       role: 'pm' },
-  dm:         { name: 'Sana Kapoor',   initials: 'SK', email: 'sana.kapoor@nforce.one',     role: 'dm' },
-  hr:         { name: 'Neha Singh',    initials: 'NS', email: 'neha.singh@nforce.one',      role: 'hr' },
-  finance:    { name: 'Arjun Bhat',    initials: 'AB', email: 'arjun.bhat@nforce.one',      role: 'finance' },
-  leadership: { name: 'Vikram Rao',    initials: 'VR', email: 'vikram.rao@nforce.one',      role: 'leadership' },
-  superadmin: { name: 'Admin Console', initials: 'SA', email: 'admin@nforce.one',            role: 'superadmin' },
-};
 
 export const ROLE_LANDING: Record<Role, string> = {
   employee:   '/dashboard',
@@ -60,16 +79,35 @@ export const ROLE_LANDING: Record<Role, string> = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(loadSession);
-  const failRef = useRef(0);
+  const initSession = useRef(loadSession());
+  const [user, setUser]   = useState<AuthUser | null>(initSession.current?.user ?? null);
+  const [token, setToken] = useState<string | null>(initSession.current?.token ?? null);
+  const failRef           = useRef(0);
   const [failCount, setFailCount] = useState(0);
 
-  function loginWithRole(role: Role) {
+  useEffect(() => {
+    const savedToken = initSession.current?.token;
+    if (!savedToken) return;
+    getMe(savedToken)
+      .then((serverUser) => {
+        const freshUser = buildAuthUser(serverUser);
+        setUser(freshUser);
+        setToken(savedToken);
+        saveSession({ token: savedToken, user: freshUser });
+      })
+      .catch(() => {
+        saveSession(null);
+        setUser(null);
+        setToken(null);
+      });
+  }, []);
+
+  function loginWithCredentials(newToken: string, newUser: AuthUser) {
     failRef.current = 0;
     setFailCount(0);
-    const u = ROLE_PERSONAS[role];
-    saveSession(u);
-    setUser(u);
+    saveSession({ token: newToken, user: newUser });
+    setToken(newToken);
+    setUser(newUser);
   }
 
   function recordFailedAttempt(): number {
@@ -87,11 +125,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     failRef.current = 0;
     setFailCount(0);
     saveSession(null);
+    setToken(null);
     setUser(null);
   }
 
   return (
-    <AuthContext.Provider value={{ user, failCount, loginWithRole, recordFailedAttempt, resetFailCount, logout }}>
+    <AuthContext.Provider
+      value={{ user, token, failCount, loginWithCredentials, recordFailedAttempt, resetFailCount, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -10,6 +10,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -22,6 +23,13 @@ public class GlobalExceptionHandler {
     public ObjectMapper objectMapper() {
         // Jackson 3 (Spring Boot 4): Java time support is built in; no JavaTimeModule needed.
         return JsonMapper.builder().build();
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException ex) {
+        String message = ex.getReason() != null ? ex.getReason() : ex.getStatusCode().toString();
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(Map.of("error", message));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

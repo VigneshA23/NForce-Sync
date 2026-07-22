@@ -1,44 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Menu, X, Search, Bell, LogOut, ChevronDown, Sun, Moon } from 'lucide-react';
+import { Menu, X, Search, Bell, LogOut, Sun, Moon } from 'lucide-react';
 import { BrandMark } from './BrandMark';
-import { NAV, ROLE_COLORS, ROLE_LABELS, ALL_ROLES, getNavPaths } from '../lib/nav';
-import { useAuth, ROLE_LANDING } from '../lib/auth';
+import { NAV, ROLE_COLORS, ROLE_LABELS, getNavPaths } from '../lib/nav';
+import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { NotAuthorized } from '../pages/NotAuthorized';
-import type { Role } from '../lib/types';
 
 // ─── Sidebar content (shared desktop + mobile) ────────────────────────────────
 // All colors hardcoded dark — sidebar NEVER themes regardless of html data-theme.
 
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
-  const { user, loginWithRole, logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [switcherOpen, setSwitcherOpen] = useState(false);
-  const switcherRef = useRef<HTMLDivElement>(null);
-  const reduced = useReducedMotion();
 
   const role = user!.role;
   const navSections = NAV[role];
-
-  useEffect(() => {
-    if (!switcherOpen) return;
-    function onClickOutside(e: MouseEvent) {
-      if (!switcherRef.current?.contains(e.target as Node)) {
-        setSwitcherOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
-  }, [switcherOpen]);
-
-  function handleRoleSwitch(newRole: Role) {
-    setSwitcherOpen(false);
-    loginWithRole(newRole);
-    navigate(ROLE_LANDING[newRole]);
-  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -180,144 +159,30 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         ))}
       </div>
 
-      {/* Footer: role switcher */}
-      <div
-        ref={switcherRef}
-        style={{
-          borderTop: '1px solid #2A2E37',
-          padding: 8,
-          flexShrink: 0,
-          position: 'relative',
-        }}
-      >
-        {/* Switcher dropdown */}
-        <AnimatePresence>
-          {switcherOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: reduced ? 0 : 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: reduced ? 0 : 6 }}
-              transition={{ duration: 0.14 }}
-              style={{
-                position: 'absolute',
-                bottom: '100%',
-                left: 8,
-                right: 8,
-                marginBottom: 4,
-                background: '#1E2128',
-                border: '1px solid #353A45',
-                borderRadius: 8,
-                overflow: 'hidden',
-                zIndex: 50,
-                boxShadow: '0 8px 24px rgba(0,0,0,.5)',
-              }}
-            >
-              <div style={{
-                padding: '8px 10px 4px',
-                fontSize: 10,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                color: '#6B7280',
-                fontWeight: 500,
-              }}>
-                Preview as role
-              </div>
-
-              {ALL_ROLES.map((r) => (
-                <button
-                  key={r}
-                  onClick={() => handleRoleSwitch(r)}
-                  className="nf-sidebar-item"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    width: '100%',
-                    padding: '7px 10px',
-                    background: r === role ? 'rgba(177,17,22,.10)' : 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: 12,
-                    textAlign: 'left',
-                  }}
-                  aria-pressed={r === role}
-                >
-                  <span style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: ROLE_COLORS[r],
-                    flexShrink: 0,
-                  }} aria-hidden="true" />
-                  {ROLE_LABELS[r]}
-                  {r === role && (
-                    <span style={{ marginLeft: 'auto', fontSize: 10, color: '#6B7280' }}>
-                      current
-                    </span>
-                  )}
-                </button>
-              ))}
-
-              <div style={{ borderTop: '1px solid #2A2E37', marginTop: 2, padding: '2px 4px 4px' }}>
-                <button
-                  onClick={() => { setSwitcherOpen(false); logout(); navigate('/login'); }}
-                  className="nf-sidebar-item"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    width: '100%',
-                    padding: '7px 10px',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: 12,
-                    textAlign: 'left',
-                  }}
-                >
-                  <LogOut size={13} aria-hidden="true" />
-                  Sign out
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* User trigger */}
-        <button
-          onClick={() => setSwitcherOpen(o => !o)}
-          aria-label={`${user!.name} — switch role`}
-          aria-expanded={switcherOpen}
-          className="nf-sidebar-item"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            width: '100%',
-            padding: '8px 10px',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            borderRadius: 6,
-          }}
-        >
-          <span style={{
-            width: 28,
-            height: 28,
-            borderRadius: '50%',
-            background: ROLE_COLORS[role],
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 11,
-            fontWeight: 600,
-            color: '#fff',
-            flexShrink: 0,
-            fontFamily: 'Inter, sans-serif',
-          }} aria-hidden="true">
+      {/* Footer: user identity + full-width sign-out */}
+      <div style={{ borderTop: '1px solid #2A2E37', padding: '6px 8px 8px', flexShrink: 0 }}>
+        {/* User identity — non-interactive */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 8px' }}>
+          <span
+            aria-hidden="true"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              background: ROLE_COLORS[role],
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 11,
+              fontWeight: 600,
+              color: '#fff',
+              flexShrink: 0,
+              fontFamily: 'Inter, sans-serif',
+            }}
+          >
             {user!.initials}
           </span>
-          <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
               fontSize: 12,
               fontWeight: 500,
@@ -338,16 +203,39 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
               {ROLE_LABELS[role]}
             </div>
           </div>
-          <ChevronDown
-            size={14}
-            aria-hidden="true"
-            style={{
-              color: '#6B7280',
-              flexShrink: 0,
-              transform: switcherOpen ? 'rotate(180deg)' : 'none',
-              transition: 'transform 150ms',
-            }}
-          />
+        </div>
+
+        {/* Sign out — full-width, icon + text, obvious hover state */}
+        <button
+          onClick={() => { logout(); navigate('/login'); }}
+          className="nf-sidebar-item"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            width: '100%',
+            padding: '9px 10px',
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 6,
+            cursor: 'pointer',
+            color: '#9BA1AC',
+            fontSize: 12,
+            fontWeight: 500,
+            fontFamily: 'Inter, sans-serif',
+            transition: 'background 0.14s, color 0.14s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(228,55,61,.08)';
+            e.currentTarget.style.color = '#E4373D';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = '#9BA1AC';
+          }}
+        >
+          <LogOut size={14} aria-hidden="true" />
+          Sign out
         </button>
       </div>
     </div>
