@@ -47,28 +47,31 @@ The logo's red is pure #FF0000 — do NOT sample it for UI. UI crimson stays #B1
 7. Dates DERIVE from a function. Never hardcode day strings.
 8. Respect prefers-reduced-motion.
 
-## Authentication model (OPEN DECISION — confirm with company before backend build)
-Primary path is Microsoft SSO. Likely final design: SSO-ONLY.
+## Authentication model (CONFIRMED — email + password NOW, SSO later)
 
-Key facts:
-- With SSO, our app stores NO passwords. Ever. Identity is Microsoft's responsibility. The user's only password is their existing Microsoft/Outlook one, managed by company IT — our app never sees, stores, creates, or resets it.
-- Users never "create a password" in our app. There is no password to create. First login = they authenticate on Microsoft's page with credentials IT already gave them.
+### Phase 1 — email + password + JWT
+- Login: email + password. Passwords hashed with bcrypt, never stored plain. Company-domain emails only (@nforceone.com).
+- On login: issue a signed JWT, 8-hour expiry; stateless, validated every request; role/team changes take effect immediately.
+- Account creation: new users sign up with a company-domain email and MUST verify via a time-limited link before first login. New signups ALWAYS start as a base Employee — only a Super Admin promotes/assigns roles. No self-assigned elevated access.
+- Password reset: single-use link, valid 1 hour. The forgot-password screen NEVER reveals whether an email is registered (no user enumeration). Super Admins can also reset a user's password directly.
+- Deactivation, not deletion: deactivated accounts are blocked immediately but retained for historical/audit records.
 
-User provisioning lifecycle:
-1. Company IT creates the person's Microsoft account (password lives there).
-2. Super Admin creates their profile in OUR app: role, department, projects — NO password.
-3. First login: SSO verifies their identity; we match the verified email to the admin-created profile.
+### Phase 2/3 — Microsoft SSO (additional path, not replacement)
+- Added as an ADDITIONAL sign-in option ("Continue with Microsoft SSO") alongside existing email+password.
+- SSO users authenticate on Microsoft's page; our app never sees or stores their Microsoft password.
+- The login screen will show both paths: SSO button (primary) + credentials form (fallback).
+- Implementation depends on company Azure AD configuration — coordinate with IT when ready.
 
-DECISION PENDING: Does anyone who needs access lack an NForce Microsoft account (contractors, service accounts, break-glass admin)?
-- If NO → SSO-ONLY. Remove the email/password form and "Forgot password" entirely. Simpler and more secure.
-- If YES → keep a local email/password fallback for THOSE accounts only. That local password is separate from Microsoft, stored in our DB, and "Forgot password" resets ONLY that local password — never the Microsoft one. SSO users never see the password form or "Forgot password".
+## Roles — 8 roles, enforced server-side
+employee, lead, pm, dm, hr, finance, leadership, superadmin.
+The auth mechanism above is reused from NForce timetracker but N-Force Sync keeps its full 8-role set. Super Admin performs provisioning duties (create users, assign roles, reset passwords, deactivate). Enforce access on the SERVER for every request, not just in the UI. Leadership is READ-ONLY. One role per user. Restricted route → "Not authorized".
 
-For the DEMO: login UI shows both paths but all are inert; role-pills are the entry point. No change needed now.
+## Admin creates users (User Management screen — backend phase)
+Super Admin creates an employee by entering: full name, company email, initial password, role (one of the 8), and an auto-incrementing employee ID. Created users are persisted in the database and can then log in. This is a BACKEND feature (DB + API) — the frontend User Management screen calls it.
+
+## Login screen (current state for demo)
+The login currently shows the SSO button + credentials form + demo role-picker. SSO button is visually present but INERT. Credentials form simulates errors (generic "Invalid email or password" — never reveals whether account exists). Demo role-picker is the working entry. This is correct for now — all three will become functional in the backend phase.
 
 ## Quality bar
 This must look like a shipped enterprise product, not a mockup. Layered elevation, purposeful motion, real depth. Reference quality: Linear, Vercel dashboard, Stripe.
-
-## 8 roles
-employee, lead, pm, dm, hr, finance, leadership, superadmin
-Leadership is READ-ONLY. One role per user. Restricted route → "Not authorized".
 ---
