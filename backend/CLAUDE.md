@@ -1,5 +1,5 @@
 ---
-# N-Force Sync Backend — Context
+# Nforce Sync Backend — Context
 
 ## Tech stack
 
@@ -41,21 +41,35 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 - Validate all request DTOs with jakarta.validation.
 - Every user create/deactivate/role-change writes an audit_log row.
 
-## Module structure (module-by-feature)
-```
-com.nforceone.sync/
-  config/          — SecurityConfig, CorsConfig, and future infrastructure config
-  auth/            — AppUser entity, PasswordResetToken, AuditLog, repositories,
-                     AuthController, JwtService, UserDetailsServiceImpl, DTOs
-  employee/        — Employee entity, repository, controller, DTO (pre-existing)
-```
 
 ## Auth tables (V2 migration)
 - app_user: id (BIGSERIAL PK), full_name, email (UNIQUE), password_hash, role (CHECK 8 values),
-  employee_code (GENERATED ALWAYS AS IDENTITY, starts 1001), status (ACTIVE/INACTIVE), created_at, created_by (FK self)
+  employee_code (GENERATED ALWAYS AS IDENTITY, starts 1001), status (ACTIVE/INACTIVE), created_at,
+  created_by (FK self), manager_id (FK self, added V3 — Team Lead for this employee)
 - password_reset_token: id, user_id (FK app_user), token (UNIQUE), expires_at, used (BOOLEAN)
 - audit_log: id, entity_type, entity_id, action, actor_id (FK app_user), before_value (JSONB), after_value (JSONB), occurred_at
 - Seed: admin@nforceone.com / ChangeMe123! (bcrypt) as SUPERADMIN
+
+## Project & allocation tables (V3 migration)
+- project: id, code (UNIQUE), name, client, project_type, billing_model,
+  status (ACTIVE/INACTIVE/COMPLETED/ON_HOLD), pm_id (FK app_user), start_date, end_date, created_at
+- allocation: id, employee_id (FK app_user), project_id (FK project),
+  allocation_pct INT (0–100 CHECK), effective_from DATE, effective_to DATE NULL, created_at
+- task_category: id, name (UNIQUE), is_productive BOOLEAN, is_billable_default BOOLEAN, active BOOLEAN
+  Seeded with 19 PRD categories. NOT productive: "Leave / Holiday", "Bench Activity". All others productive.
+- Seed: Priya Nair (id=2, MANAGER) set as manager_id for employees id=3,4,5
+
+## Module structure (module-by-feature)
+```
+com.nforceone.sync/
+  config/          — SecurityConfig, CorsConfig, GlobalExceptionHandler
+  auth/            — AppUser, PasswordResetToken, AuditLog, repositories, AuthController,
+                     JwtService, UserDetailsServiceImpl, DTOs
+  admin/           — UserController, UserService, AdminStatsController, AuditLogController,
+                     RolesController, AuditLogSpecs, DTOs
+  project/         — Project, Allocation, TaskCategory entities + repositories (no controllers yet)
+  employee/        — Employee entity (pre-existing, legacy)
+```
 
 ## Seed super admin credentials (local dev only)
 email: admin@nforceone.com

@@ -137,7 +137,7 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
                 color: 'var(--txt)',
               }}
             >
-              N-FORCE SYNC
+              Nforce Sync
             </div>
             <div
               style={{
@@ -263,7 +263,7 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
               letterSpacing: '0.03em',
             }}
           >
-            N-FORCE SYNC
+            Nforce Sync
           </span>
         </div>
 

@@ -44,6 +44,10 @@ public class AppUser {
     @JoinColumn(name = "created_by")
     private AppUser createdBy;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "manager_id")
+    private AppUser manager;
+
     public enum Role {
         EMPLOYEE, MANAGER, HR, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP
     }

@@ -3,9 +3,9 @@ spring:
     name: nforce-sync
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/nforce_sync
-    username: appanivignesh
-    password:
+    url: jdbc:postgresql://ep-curly-block-az1o59ol.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+    username: neondb_owner
+    password: npg_gBPETcD1Zb3m
     driver-class-name: org.postgresql.Driver
 
   jpa:
