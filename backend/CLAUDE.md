@@ -36,6 +36,7 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 
 ## Rules for every module
 - Flyway owns schema. Two underscores: V2__name.sql
+- Never edit user data directly in Neon's table view — always via a Flyway migration file, so changes are tracked in git and don't silently conflict with what the app expects.
 - Never expose entities from controllers. DTOs only. NEVER include password hash in any DTO.
 - Constructor injection, not field @Autowired.
 - Validate all request DTOs with jakarta.validation.
@@ -48,7 +49,7 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   created_by (FK self), manager_id (FK self, added V3 — Team Lead for this employee)
 - password_reset_token: id, user_id (FK app_user), token (UNIQUE), expires_at, used (BOOLEAN)
 - audit_log: id, entity_type, entity_id, action, actor_id (FK app_user), before_value (JSONB), after_value (JSONB), occurred_at
-- Seed: admin@nforceone.com / ChangeMe123! (bcrypt) as SUPERADMIN
+- Seed: superadmin@nforceone.com / ChangeMe123! (bcrypt) as SUPERADMIN
 
 ## Project & allocation tables (V3 migration)
 - project: id, code (UNIQUE), name, client, project_type, billing_model,
@@ -59,6 +60,37 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   Seeded with 19 PRD categories. NOT productive: "Leave / Holiday", "Bench Activity". All others productive.
 - Seed: Priya Nair (id=2, MANAGER) set as manager_id for employees id=3,4,5
 
+## EOD tables (V4 migration)
+- eod_entry: id, employee_id FK, entry_date DATE, status (DRAFT/SUBMITTED/APPROVED/REJECTED/CHANGES_REQUESTED/MISSED),
+  work_location, next_day_plan, remarks, submitted_at, created_at, updated_at
+  UNIQUE (employee_id, entry_date)
+- eod_task: id, eod_entry_id FK ON DELETE CASCADE, project_id FK NULL, task_category_id FK NULL,
+  description, hours NUMERIC(5,2), task_status (COMPLETED/IN_PROGRESS/BLOCKED/NOT_STARTED), is_billable,
+  blocker_reason, support_needed
+  CHECK: blocked tasks must have blocker_reason
+- Status uppercase to match existing conventions (ACTIVE, SUPERADMIN pattern)
+- Business rules: Leave / Holiday tasks must have hours=0; submitted entries are immutable;
+  edit only allowed in REJECTED or CHANGES_REQUESTED status
+
+## Utilization snapshot (V6 migration)
+- util_snapshot: id, employee_id FK, snapshot_date DATE, available_hours, approved_productive_hours,
+  billable_hours, non_billable_hours, bench_hours, idle_hours, utilization_pct NULLABLE, computed_at
+  UNIQUE (employee_id, snapshot_date)
+- THE SPINE (absolute): available==0 → utilizationPct=NULL (never 0.0). 0 approved + available>0 → 0.0.
+  Uncapped (>100 allowed). Only APPROVED hours count. Written on approval only, never retroactively.
+- UtilizationCalculator (package-private): computeAvailableHours (weekend→0, weekday→8),
+  computeUtilizationPct (null vs 0.00 distinction is THE SPINE invariant)
+- recomputeForEntry wired into ApprovalService.approveEntry ONLY (not reject/requestChanges)
+- AppUserRepository.findByManagerId used for team endpoint
+
+## Approval table (V5 migration)
+- approval_action: id, eod_entry_id FK, actor_id FK, action (APPROVE/REJECT/REQUEST_CHANGES),
+  comment TEXT NULL, billable_override BOOLEAN NULL, acted_at TIMESTAMPTZ
+- State machine: SUBMITTED → APPROVED | REJECTED | CHANGES_REQUESTED only. Illegal transitions throw CONFLICT.
+- Authorization: actor must be the employee's direct manager (manager_id FK) OR SUPERADMIN.
+  No manager assigned → only SUPERADMIN can act.
+- billable_override: stored on approval_action, does NOT mutate eod_task records; applied at billing calc time.
+
 ## Module structure (module-by-feature)
 ```
 com.nforceone.sync/
@@ -68,10 +100,24 @@ com.nforceone.sync/
   admin/           — UserController, UserService, AdminStatsController, AuditLogController,
                      RolesController, AuditLogSpecs, DTOs
   project/         — Project, Allocation, TaskCategory entities + repositories (no controllers yet)
+  eod/             — EodEntry, EodTask entities, EodEntryRepository, EodService, EodController, DTOs
+                     POST /api/eod/draft  POST /api/eod/{id}/submit
+                     GET  /api/eod        GET  /api/eod/{id}
+                     Employees see own entries; MANAGER/HR/SUPERADMIN/DM/LEADERSHIP can see others'
+  approval/        — ApprovalAction entity, ApprovalService, ApprovalController, DTOs
+                     GET  /api/approvals/pending
+                     POST /api/approvals/{entryId}/approve
+                     POST /api/approvals/{entryId}/reject
+                     POST /api/approvals/{entryId}/request-changes
+                     POST /api/approvals/batch-approve
+  utilization/     — UtilSnapshot entity, UtilSnapshotRepository, UtilizationService,
+                     UtilizationController, UtilizationCalculator (package-private)
+                     GET  /api/utilization/employee/{id}?from=&to=
+                     GET  /api/utilization/team/{managerId}?date=
   employee/        — Employee entity (pre-existing, legacy)
 ```
 
 ## Seed super admin credentials (local dev only)
-email: admin@nforceone.com
+email: superadmin@nforceone.com
 password: ChangeMe123!   ← change on first login
 ---

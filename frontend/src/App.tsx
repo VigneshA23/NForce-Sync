@@ -14,6 +14,12 @@ import AdminDashboard  from './pages/admin/Dashboard';
 import UserManagement  from './pages/admin/UserManagement';
 import AuditLog        from './pages/admin/AuditLog';
 import RolesAccess     from './pages/admin/RolesAccess';
+import SubmitEOD       from './pages/employee/SubmitEOD';
+import EodHistory      from './pages/employee/EodHistory';
+import TeamDashboard   from './pages/lead/TeamDashboard';
+import Approvals       from './pages/lead/Approvals';
+import TeamUtilization from './pages/lead/TeamUtilization';
+import Blockers        from './pages/lead/Blockers';
 
 function RequireAuth() {
   const { user } = useAuth();
@@ -53,15 +59,15 @@ function AppRoutes() {
 
           {/* ── Employee ───────────────────────────── */}
           <Route path="/dashboard"   element={<Placeholder title="My Dashboard" />} />
-          <Route path="/eod/submit"  element={<Placeholder title="Submit EOD" />} />
-          <Route path="/eod/history" element={<Placeholder title="My EOD History" />} />
+          <Route path="/eod/submit"  element={<SubmitEOD />} />
+          <Route path="/eod/history" element={<EodHistory />} />
           <Route path="/utilization" element={<Placeholder title="My Utilization" />} />
 
           {/* ── Team Lead ──────────────────────────── */}
-          <Route path="/team/dashboard"   element={<Placeholder title="Team Dashboard" />} />
-          <Route path="/team/approvals"   element={<Placeholder title="Approvals" />} />
-          <Route path="/team/utilization" element={<Placeholder title="Team Utilization" />} />
-          <Route path="/team/blockers"    element={<Placeholder title="Blockers" />} />
+          <Route path="/team/dashboard"   element={<TeamDashboard />} />
+          <Route path="/team/approvals"   element={<Approvals />} />
+          <Route path="/team/utilization" element={<TeamUtilization />} />
+          <Route path="/team/blockers"    element={<Blockers />} />
           <Route path="/team/reports"     element={<Placeholder title="Reports" />} />
 
           {/* ── Project Manager ────────────────────── */}

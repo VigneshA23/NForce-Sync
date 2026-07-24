@@ -76,10 +76,26 @@ public class UserService {
 
         user.setFullName(request.fullName());
         user.setRole(request.role());
+
+        if (request.managerId() != null) {
+            if (request.managerId().equals(id)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "A user cannot be their own Team Lead");
+            }
+            AppUser manager = userRepository.findById(request.managerId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "Team Lead not found"));
+            if (manager.getRole() != AppUser.Role.MANAGER) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Selected user is not a Team Lead");
+            }
+            user.setManager(manager);
+        } else {
+            user.setManager(null);
+        }
+
         user = userRepository.save(user);
-
         writeAudit("APP_USER", user.getId(), "UPDATE", before, toJson(UserDto.from(user)), actor);
-
         return UserDto.from(user);
     }
 

@@ -10,5 +10,7 @@ public record UpdateUserRequest(
         String fullName,
 
         @NotNull(message = "Role is required")
-        AppUser.Role role
+        AppUser.Role role,
+
+        Long managerId  // null = unassign
 ) {}

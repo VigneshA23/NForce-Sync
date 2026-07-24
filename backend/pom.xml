@@ -104,6 +104,31 @@
 	<build>
 		<plugins>
 			<plugin>
+				<groupId>org.flywaydb</groupId>
+				<artifactId>flyway-maven-plugin</artifactId>
+				<version>10.21.0</version>
+				<configuration>
+					<url>jdbc:postgresql://ep-curly-block-az1o59ol.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require</url>
+					<user>neondb_owner</user>
+					<password>npg_gBPETcD1Zb3m</password>
+					<locations>
+						<location>filesystem:src/main/resources/db/migration</location>
+					</locations>
+				</configuration>
+				<dependencies>
+					<dependency>
+						<groupId>org.postgresql</groupId>
+						<artifactId>postgresql</artifactId>
+						<version>42.7.7</version>
+					</dependency>
+					<dependency>
+						<groupId>org.flywaydb</groupId>
+						<artifactId>flyway-database-postgresql</artifactId>
+						<version>10.21.0</version>
+					</dependency>
+				</dependencies>
+			</plugin>
+			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>

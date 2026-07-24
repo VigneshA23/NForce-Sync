@@ -1,0 +1,55 @@
+package com.nforceone.sync.eod;
+
+import com.nforceone.sync.project.Project;
+import com.nforceone.sync.project.TaskCategory;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.math.BigDecimal;
+
+@Entity
+@Table(name = "eod_task")
+@Getter
+@Setter
+public class EodTask {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "eod_entry_id", nullable = false)
+    private EodEntry eodEntry;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "project_id")
+    private Project project;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "task_category_id")
+    private TaskCategory taskCategory;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Column(precision = 5, scale = 2)
+    private BigDecimal hours;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "task_status", nullable = false, length = 30)
+    private TaskStatus taskStatus;
+
+    @Column(name = "is_billable", nullable = false)
+    private Boolean isBillable;
+
+    @Column(name = "blocker_reason", columnDefinition = "TEXT")
+    private String blockerReason;
+
+    @Column(name = "support_needed", columnDefinition = "TEXT")
+    private String supportNeeded;
+
+    public enum TaskStatus {
+        COMPLETED, IN_PROGRESS, BLOCKED, NOT_STARTED
+    }
+}

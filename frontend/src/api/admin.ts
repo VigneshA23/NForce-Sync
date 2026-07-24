@@ -9,6 +9,7 @@ export interface UserDto {
   role: string;
   employeeCode: number | null;
   status: string;
+  managerId: number | null;
 }
 
 export interface AuditLogDto {
@@ -59,6 +60,7 @@ export interface CreateUserPayload {
 export interface UpdateUserPayload {
   fullName: string;
   role: string;
+  managerId: number | null;
 }
 
 export interface AuditFilters {

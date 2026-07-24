@@ -1,4 +1,4 @@
-import { useState, useId } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Eye, EyeOff, RefreshCw, Pencil, Power, KeyRound, AlertTriangle } from 'lucide-react';
 import {
@@ -311,27 +311,40 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
 
 // ── Edit User Modal ───────────────────────────────────────────────────────────
 
-function EditModal({ user, open, onClose }: { user: UserDto | null; open: boolean; onClose: () => void }) {
+const ROLES_WITH_MANAGER = new Set(['EMPLOYEE', 'MANAGER', 'PM', 'DM']);
+
+function EditModal({
+  user,
+  open,
+  onClose,
+  managerOptions,
+}: {
+  user: UserDto | null;
+  open: boolean;
+  onClose: () => void;
+  managerOptions: { id: number; fullName: string }[];
+}) {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ fullName: '', role: '' });
+  const [form, setForm] = useState<{ fullName: string; role: string; managerId: number | null }>({
+    fullName: '', role: '', managerId: null,
+  });
   const [error, setError] = useState<string | null>(null);
 
-  const fnId = useId(), roleId = useId();
+  const fnId = useId(), roleId = useId(), mgrId = useId();
 
-  // Sync form when target changes
-  const prevId = user?.id;
-  if (user && user.id !== prevId) {
-    setForm({ fullName: user.fullName, role: user.role });
-  }
-
-  function openSync() {
-    if (user) setForm({ fullName: user.fullName, role: user.role });
-    setError(null);
-  }
+  // Sync form each time the target user changes (or modal opens for a user).
+  // NOT on focus — focus-based resets caused managerId to be overwritten
+  // with the old value every time the Save button was clicked.
+  useEffect(() => {
+    if (user) {
+      setForm({ fullName: user.fullName, role: user.role, managerId: user.managerId ?? null });
+      setError(null);
+    }
+  }, [user?.id]);
 
   const mutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: { fullName: string; role: string } }) =>
+    mutationFn: ({ id, data }: { id: number; data: { fullName: string; role: string; managerId: number | null } }) =>
       updateUser(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
@@ -348,10 +361,12 @@ function EditModal({ user, open, onClose }: { user: UserDto | null; open: boolea
     mutation.mutate({ id: user.id, data: form });
   }
 
+  const showManagerField = ROLES_WITH_MANAGER.has(form.role);
+
   return (
-    <Modal open={open} title="Edit User" onClose={onClose} width={420}>
+    <Modal open={open} title="Edit User" onClose={onClose} width={440}>
       {user && (
-        <form onSubmit={handleSave} noValidate onFocus={openSync}>
+        <form onSubmit={handleSave} noValidate>
           {error && <ErrorBanner message={error} />}
 
           <div style={fieldWrap}>
@@ -368,7 +383,7 @@ function EditModal({ user, open, onClose }: { user: UserDto | null; open: boolea
             />
           </div>
 
-          <div style={{ marginBottom: 20 }}>
+          <div style={fieldWrap}>
             <FieldLabel id={roleId}>Role</FieldLabel>
             <select
               id={roleId}
@@ -380,7 +395,27 @@ function EditModal({ user, open, onClose }: { user: UserDto | null; open: boolea
             </select>
           </div>
 
-          <div style={{ display: 'flex', gap: 10 }}>
+          {showManagerField && (
+            <div style={fieldWrap}>
+              <FieldLabel id={mgrId}>Team Lead</FieldLabel>
+              <select
+                id={mgrId}
+                value={form.managerId ?? ''}
+                onChange={(e) => setForm((f) => ({
+                  ...f,
+                  managerId: e.target.value === '' ? null : Number(e.target.value),
+                }))}
+                style={{ ...inputStyle, cursor: 'pointer' }}
+              >
+                <option value="">No Team Lead assigned</option>
+                {managerOptions.map((m) => (
+                  <option key={m.id} value={m.id}>{m.fullName}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
             <button type="submit" disabled={mutation.isPending} style={{
               padding: '9px 20px', background: mutation.isPending ? 'var(--brand-deep)' : 'var(--brand)',
               border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 600,
@@ -683,7 +718,14 @@ export default function UserManagement() {
                         </span>
                       </td>
                       <td style={tdStyle2}>
-                        <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>{user.fullName}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>{user.fullName}</span>
+                          {user.managerId != null && (
+                            <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontStyle: 'italic' }}>
+                              ↳ {users.find((u) => u.id === user.managerId)?.fullName ?? '—'}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={tdStyle2}>
                         <span style={{ fontSize: 12, color: 'var(--txt-mut)' }}>{user.email}</span>
@@ -720,6 +762,7 @@ export default function UserManagement() {
         user={editTarget}
         open={Boolean(editTarget)}
         onClose={() => setEditTarget(null)}
+        managerOptions={(users ?? []).filter((u) => u.role === 'MANAGER').map((u) => ({ id: u.id, fullName: u.fullName }))}
       />
       <DeactivateModal
         user={deactivateTarget}

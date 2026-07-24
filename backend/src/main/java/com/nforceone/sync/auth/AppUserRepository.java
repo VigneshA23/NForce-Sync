@@ -18,4 +18,6 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     long countByRole(AppUser.Role role);
 
     long countByRoleAndStatus(AppUser.Role role, AppUser.Status status);
+
+    List<AppUser> findByManagerId(Long managerId);
 }
