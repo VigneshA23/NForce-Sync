@@ -150,6 +150,24 @@ body {
   .shell-main-content { margin-left: 0; }
 }
 
+/* Breadcrumb — hide on small screens where space is tight */
+.shell-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+@media (max-width: 640px) {
+  .shell-breadcrumb { display: none; }
+}
+
+/* Search input — hide on small screens */
+.shell-search {
+  display: flex;
+}
+@media (max-width: 768px) {
+  .shell-search { display: none; }
+}
+
 /* ─── Content-area nav items (theme-aware) ─────────────────────── */
 .nf-nav-item {
   color: var(--txt-mut);
@@ -187,12 +205,25 @@ body {
 
 /* ─── Topbar items — always dark frame ─────────────────────────── */
 .nf-topbar-item {
-  color: #9BA1AC;
+  color: rgba(255,255,255,0.82);
   transition: background 120ms, color 120ms;
 }
 .nf-topbar-item:hover {
-  background: rgba(255,255,255,.07) !important;
-  color: #E8EAED !important;
+  background: rgba(255,255,255,.12) !important;
+  color: #ffffff !important;
+}
+
+/* ─── Topbar search input — always dark frame ───────────────────── */
+.nf-search-input::placeholder {
+  color: #6B7280;
+}
+.nf-search-input:focus {
+  border-color: rgba(228,55,61,.45) !important;
+  background: rgba(255,255,255,.09) !important;
+}
+/* Remove default browser search cancel button */
+.nf-search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
 }
 
 /* ─── Skeleton shimmer ─────────────────────────────────────────── */

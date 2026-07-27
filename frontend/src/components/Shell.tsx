@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Menu, X, Search, Bell, LogOut, Sun, Moon } from 'lucide-react';
+import { Menu, X, Search, Bell, LogOut, Sun, Moon, UserCircle2, HelpCircle, Shield } from 'lucide-react';
 import { BrandMark } from './BrandMark';
-import { NAV, ROLE_COLORS, ROLE_LABELS, getNavPaths } from '../lib/nav';
+import { NAV, ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem } from '../lib/nav';
 import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { NotAuthorized } from '../pages/NotAuthorized';
@@ -12,8 +12,7 @@ import { NotAuthorized } from '../pages/NotAuthorized';
 // All colors hardcoded dark — sidebar NEVER themes regardless of html data-theme.
 
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const location = useLocation();
 
   const role = user!.role;
@@ -22,10 +21,11 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
-      {/* Brand header */}
+      {/* Brand header — plain dark, 56px to match topbar height exactly */}
       <div style={{
-        padding: '18px 16px 14px',
-        borderBottom: '1px solid #2A2E37',
+        height: 56,
+        padding: '0 16px',
+        borderBottom: '1px solid #23262D',
         display: 'flex',
         alignItems: 'center',
         gap: 10,
@@ -58,6 +58,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0 8px' }}>
         {navSections.map((section) => (
           <div key={section.section}>
+            {/* FIX 7: all sections labeled — matches OneHR's labeled-section pattern */}
             <div style={{
               padding: '12px 10px 5px',
               fontSize: 10,
@@ -92,7 +93,6 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                   }}
                   onClick={onNavClick}
                 >
-                  {/* Active left rail */}
                   {isActive && (
                     <span
                       aria-hidden="true"
@@ -113,7 +113,6 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                     {item.label}
                   </span>
 
-                  {/* Notification badge */}
                   {item.badge !== undefined && item.badge > 0 && (
                     <span
                       aria-label={`${item.badge} unread`}
@@ -134,7 +133,6 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                     </span>
                   )}
 
-                  {/* Phase badge */}
                   {item.phase !== undefined && (
                     <span
                       title={`Ships in phase ${item.phase}`}
@@ -159,17 +157,16 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         ))}
       </div>
 
-      {/* Footer: user identity + full-width sign-out */}
-      <div style={{ borderTop: '1px solid #2A2E37', padding: '6px 8px 8px', flexShrink: 0 }}>
-        {/* User identity — non-interactive */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 8px' }}>
+      {/* Footer: user identity only — FIX 5: sign-out moved to topbar avatar dropdown */}
+      <div style={{ borderTop: '1px solid #2A2E37', padding: '10px 8px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px' }}>
           <span
             aria-hidden="true"
             style={{
               width: 28,
               height: 28,
               borderRadius: '50%',
-              background: ROLE_COLORS[role],
+              background: '#B11116',   /* FIX 4: brand red, not role color */
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -204,39 +201,6 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
             </div>
           </div>
         </div>
-
-        {/* Sign out — full-width, icon + text, obvious hover state */}
-        <button
-          onClick={() => { logout(); navigate('/login'); }}
-          className="nf-sidebar-item"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            width: '100%',
-            padding: '9px 10px',
-            background: 'transparent',
-            border: 'none',
-            borderRadius: 6,
-            cursor: 'pointer',
-            color: '#9BA1AC',
-            fontSize: 12,
-            fontWeight: 500,
-            fontFamily: 'Inter, sans-serif',
-            transition: 'background 0.14s, color 0.14s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(228,55,61,.08)';
-            e.currentTarget.style.color = '#E4373D';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = '#9BA1AC';
-          }}
-        >
-          <LogOut size={14} aria-hidden="true" />
-          Sign out
-        </button>
       </div>
     </div>
   );
@@ -245,34 +209,58 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
 export function Shell() {
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const { user } = useAuth();
+  const [drawerOpen, setDrawerOpen]   = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
-  const reduced = useReducedMotion();
+  const navigate  = useNavigate();
+  const reduced   = useReducedMotion();
 
-  const role = user!.role;
+  const role         = user!.role;
   const allowedPaths = getNavPaths(role);
-  const isAllowed = allowedPaths.includes(location.pathname) || location.pathname === '/';
+  const isAllowed    = allowedPaths.includes(location.pathname) || location.pathname === '/';
+
+  // FIX 4: derive breadcrumb label from nav map
+  const navInfo  = getNavItem(role, location.pathname);
+  const pageLabel = navInfo?.item.label ?? 'Home';
 
   const bellBadge = NAV[role]
     .flatMap(s => s.items)
     .find(i => i.key === 'notifications')?.badge ?? 0;
 
-  // Close drawer on route change
+  // Close drawer + profile on route change
   useEffect(() => {
     setDrawerOpen(false);
+    setProfileOpen(false);
   }, [location.pathname]);
 
-  // Close drawer on Escape
+  // Escape closes drawer and profile dropdown
   useEffect(() => {
-    if (!drawerOpen) return;
+    if (!drawerOpen && !profileOpen) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setDrawerOpen(false);
+      if (e.key === 'Escape') {
+        if (drawerOpen)   setDrawerOpen(false);
+        if (profileOpen)  setProfileOpen(false);
+      }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [drawerOpen]);
+  }, [drawerOpen, profileOpen]);
+
+  // Close profile dropdown on outside click
+  useEffect(() => {
+    if (!profileOpen) return;
+    function onMouse(e: MouseEvent) {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onMouse);
+    return () => document.removeEventListener('mousedown', onMouse);
+  }, [profileOpen]);
 
   return (
     <div style={{ display: 'flex', minHeight: '100dvh' }}>
@@ -376,17 +364,17 @@ export function Shell() {
         {/* Topbar — always dark frame */}
         <header
           style={{
-            height: 60,
-            background: 'rgba(14,15,18,.96)',
+            height: 56,
+            background: 'linear-gradient(90deg, #050506 0%, #6B0C10 40%, #A01418 100%)',
             backdropFilter: 'blur(10px)',
-            borderBottom: '1px solid #2A2E37',
+            borderBottom: '1px solid rgba(228,55,61,.22)',
             position: 'sticky',
             top: 0,
             zIndex: 30,
             display: 'flex',
             alignItems: 'center',
             padding: '0 20px',
-            gap: 10,
+            gap: 12,
             flexShrink: 0,
           }}
         >
@@ -408,28 +396,44 @@ export function Shell() {
             <Menu size={20} aria-hidden="true" />
           </button>
 
-          {/* Spacer — pushes right controls to the right */}
+          {/* FIX 4: Breadcrumb — every page, matching "Sync / <Page Name>" pattern */}
+          <nav aria-label="Breadcrumb" className="shell-breadcrumb">
+            <span style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>Sync</span>
+            <span style={{ fontSize: 13, color: '#3E4450', margin: '0 5px' }}>/</span>
+            <span style={{ fontSize: 13, color: '#C8CCD2', fontWeight: 500 }}>{pageLabel}</span>
+          </nav>
+
+          {/* Spacer */}
           <div style={{ flex: 1 }} />
 
           {/* Right controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-            <button
-              aria-label="Search"
-              className="nf-topbar-item"
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+
+            {/* Search bar — styled div matching OneHR's exact spec */}
+            <div
+              className="shell-search"
+              role="search"
+              aria-label="Search workspace"
               style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 8,
-                borderRadius: 6,
                 display: 'flex',
                 alignItems: 'center',
+                gap: 6,
+                background: '#1E2128',
+                border: '1px solid #2A2E37',
+                borderRadius: 8,
+                padding: '7px 11px',
+                color: '#6B7280',
+                fontSize: 12,
+                cursor: 'text',
+                userSelect: 'none',
+                minWidth: 188,
               }}
             >
-              <Search size={17} aria-hidden="true" />
-            </button>
+              <Search size={13} aria-hidden="true" style={{ flexShrink: 0 }} />
+              <span>Search this workspace...</span>
+            </div>
 
-            {/* Theme toggle */}
+            {/* Theme toggle — current-mode text label */}
             <button
               onClick={toggleTheme}
               aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -438,17 +442,23 @@ export function Shell() {
                 background: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
-                padding: 8,
+                padding: 7,
                 borderRadius: 6,
                 display: 'flex',
                 alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
               }}
             >
               {theme === 'dark'
-                ? <Sun size={17} aria-hidden="true" />
-                : <Moon size={17} aria-hidden="true" />}
+                ? <Sun  size={15} aria-hidden="true" />
+                : <Moon size={15} aria-hidden="true" />}
+              <span style={{ fontSize: 12, fontWeight: 500 }}>
+                {theme === 'dark' ? 'Light' : 'Dark'}
+              </span>
             </button>
 
+            {/* Bell */}
             <Link
               to="/notifications"
               aria-label={bellBadge > 0 ? `Notifications, ${bellBadge} unread` : 'Notifications'}
@@ -458,7 +468,7 @@ export function Shell() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: 8,
+                padding: 7,
                 borderRadius: 6,
                 textDecoration: 'none',
               }}
@@ -492,27 +502,211 @@ export function Shell() {
               )}
             </Link>
 
-            <div
-              aria-label={`Signed in as ${user!.name}`}
-              title={user!.name}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                background: ROLE_COLORS[role],
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#fff',
-                flexShrink: 0,
-                marginLeft: 6,
-                fontFamily: 'Inter, sans-serif',
-                userSelect: 'none',
-              }}
-            >
-              {user!.initials}
+            {/* Avatar — clickable, opens profile + sign-out dropdown */}
+            <div ref={profileRef} style={{ position: 'relative', marginLeft: 4 }}>
+              {/* 32×32 wrapper: avatar circle + badge are siblings, badge positioned relative to this */}
+              <div style={{ position: 'relative', width: 32, height: 32 }}>
+                <button
+                  onClick={() => setProfileOpen(p => !p)}
+                  aria-label={`Account: ${user!.name}`}
+                  aria-expanded={profileOpen}
+                  aria-haspopup="menu"
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    background: '#B11116',
+                    color: '#fff',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    border: '2px solid rgba(255,255,255,0.55)',
+                    boxSizing: 'border-box',
+                    display: 'grid',
+                    placeItems: 'center',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  {user!.initials}
+                </button>
+
+                {/* Super Admin shield badge — sibling of button, outside its grid context */}
+                {role === 'superadmin' && (
+                  <span
+                    aria-label="Super Admin session"
+                    title="Super Admin"
+                    style={{
+                      position: 'absolute',
+                      bottom: -1,
+                      right: -1,
+                      width: 14,
+                      height: 14,
+                      borderRadius: '50%',
+                      background: '#1C0709',
+                      border: '1.5px solid #3D0D15',
+                      display: 'grid',
+                      placeItems: 'center',
+                    }}
+                  >
+                    <Shield size={8} color="#E4373D" aria-hidden="true" />
+                  </span>
+                )}
+              </div>{/* end 32×32 wrapper */}
+
+              {/* Profile dropdown */}
+              {profileOpen && (
+                <div
+                  role="menu"
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    right: 0,
+                    width: 224,
+                    background: '#1E2128',
+                    border: '1px solid #2A2E37',
+                    borderRadius: 10,
+                    boxShadow: '0 8px 24px rgba(0,0,0,.44)',
+                    zIndex: 100,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {/* Identity header */}
+                  <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid #2A2E37' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        background: '#B11116',   /* FIX 4: brand red */
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: '#fff',
+                        flexShrink: 0,
+                      }}>
+                        {user!.initials}
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#E8EAED', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {user!.name}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {user!.email}
+                        </div>
+                        <div style={{ fontSize: 10, color: ROLE_COLORS[role], fontWeight: 600, marginTop: 3, letterSpacing: '0.04em' }}>
+                          {ROLE_LABELS[role]}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* FIX 5: My Profile + Help & Guidance + divider + Sign out */}
+                  <div style={{ padding: '6px' }}>
+                    {/* My Profile */}
+                    <Link
+                      to="/profile"
+                      role="menuitem"
+                      onClick={() => setProfileOpen(false)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        width: '100%',
+                        padding: '9px 10px',
+                        borderRadius: 6,
+                        textDecoration: 'none',
+                        color: '#9BA1AC',
+                        fontSize: 13,
+                        fontWeight: 500,
+                        fontFamily: 'Inter, sans-serif',
+                        transition: 'background 120ms, color 120ms',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,.05)';
+                        e.currentTarget.style.color = '#E8EAED';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = '#9BA1AC';
+                      }}
+                    >
+                      <UserCircle2 size={14} aria-hidden="true" />
+                      My Profile
+                    </Link>
+
+                    {/* Help & Guidance */}
+                    <Link
+                      to="/help"
+                      role="menuitem"
+                      onClick={() => setProfileOpen(false)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        width: '100%',
+                        padding: '9px 10px',
+                        borderRadius: 6,
+                        textDecoration: 'none',
+                        color: '#9BA1AC',
+                        fontSize: 13,
+                        fontWeight: 500,
+                        fontFamily: 'Inter, sans-serif',
+                        transition: 'background 120ms, color 120ms',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,.05)';
+                        e.currentTarget.style.color = '#E8EAED';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = '#9BA1AC';
+                      }}
+                    >
+                      <HelpCircle size={14} aria-hidden="true" />
+                      Help & Guidance
+                    </Link>
+
+                    {/* Divider before destructive action */}
+                    <div style={{ height: 1, background: '#2A2E37', margin: '4px 2px' }} />
+
+                    {/* Sign out — handler unchanged: clears session, redirects /login */}
+                    <button
+                      role="menuitem"
+                      onClick={() => { setProfileOpen(false); logout(); navigate('/login'); }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        width: '100%',
+                        padding: '9px 10px',
+                        background: 'transparent',
+                        border: 'none',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        color: '#9BA1AC',
+                        fontSize: 13,
+                        fontWeight: 500,
+                        fontFamily: 'Inter, sans-serif',
+                        transition: 'background 120ms, color 120ms',
+                        textAlign: 'left',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(228,55,61,.08)';
+                        e.currentTarget.style.color = '#E4373D';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = '#9BA1AC';
+                      }}
+                    >
+                      <LogOut size={14} aria-hidden="true" />
+                      Sign out
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>
