@@ -1,29 +1,35 @@
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './lib/theme';
 import { AuthProvider, useAuth, ROLE_LANDING } from './lib/auth';
 import { ToastProvider } from './lib/toast';
 import { Shell } from './components/Shell';
 import { NotAuthorized } from './pages/NotAuthorized';
 import { Placeholder } from './pages/Placeholder';
-import Login    from './pages/auth/Login';
-import Forgot   from './pages/auth/Forgot';
-import Reset    from './pages/auth/Reset';
-import Locked   from './pages/auth/Locked';
-import Inactive from './pages/auth/Inactive';
-import AdminDashboard  from './pages/admin/Dashboard';
-import UserManagement  from './pages/admin/UserManagement';
-import AuditLog        from './pages/admin/AuditLog';
-import RolesAccess     from './pages/admin/RolesAccess';
-import SubmitEOD       from './pages/employee/SubmitEOD';
-import EodHistory      from './pages/employee/EodHistory';
-import TeamDashboard   from './pages/lead/TeamDashboard';
-import Approvals       from './pages/lead/Approvals';
-import TeamUtilization from './pages/lead/TeamUtilization';
-import Blockers        from './pages/lead/Blockers';
+import Login                from './pages/auth/Login';
+import Forgot               from './pages/auth/Forgot';
+import Reset                from './pages/auth/Reset';
+import Locked               from './pages/auth/Locked';
+import Inactive             from './pages/auth/Inactive';
+import ForceChangePassword  from './pages/auth/ForceChangePassword';
+import AdminDashboard       from './pages/admin/Dashboard';
+import UserManagement       from './pages/admin/UserManagement';
+import AuditLog             from './pages/admin/AuditLog';
+import RolesAccess          from './pages/admin/RolesAccess';
+import OrganizationMasters  from './pages/admin/OrganizationMasters';
+import SubmitEOD            from './pages/employee/SubmitEOD';
+import EodHistory           from './pages/employee/EodHistory';
+import TeamDashboard        from './pages/lead/TeamDashboard';
+import Approvals            from './pages/lead/Approvals';
+import TeamUtilization      from './pages/lead/TeamUtilization';
+import Blockers             from './pages/lead/Blockers';
 
 function RequireAuth() {
   const { user } = useAuth();
+  const location = useLocation();
   if (!user) return <Navigate to="/login" replace />;
+  if (user.mustChangePassword && location.pathname !== '/force-change-password') {
+    return <Navigate to="/force-change-password" replace />;
+  }
   return <Outlet />;
 }
 
@@ -54,6 +60,9 @@ function AppRoutes() {
 
       {/* App shell — requires auth */}
       <Route element={<RequireAuth />}>
+        {/* Force-change-password: requires auth but no Shell chrome */}
+        <Route path="/force-change-password" element={<ForceChangePassword />} />
+
         <Route element={<Shell />}>
           <Route index element={<RoleLanding />} />
 
@@ -110,6 +119,7 @@ function AppRoutes() {
           <Route path="/admin/dashboard"    element={<AdminDashboard />} />
           <Route path="/admin/users"        element={<UserManagement />} />
           <Route path="/admin/roles"        element={<RolesAccess />} />
+          <Route path="/admin/org-masters"  element={<OrganizationMasters />} />
           <Route path="/admin/rules"        element={<Placeholder title="Business Rules" />} />
           <Route path="/admin/integrations" element={<Placeholder title="Integrations" />} />
           <Route path="/admin/ai"           element={<Placeholder title="AI & Automation" />} />

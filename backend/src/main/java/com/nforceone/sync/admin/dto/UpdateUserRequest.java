@@ -12,5 +12,14 @@ public record UpdateUserRequest(
         @NotNull(message = "Role is required")
         AppUser.Role role,
 
+        // Org assignments (null = leave unchanged / unassign)
+        Long departmentId,
+        Long designationId,
+        Long locationId,
+
+        // Employee profile
+        String employmentType,
+        String workMode,
+
         Long managerId  // null = unassign
 ) {}

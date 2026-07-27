@@ -3,6 +3,7 @@ package com.nforceone.sync.auth;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 @Entity
@@ -47,6 +48,27 @@ public class AppUser {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "manager_id")
     private AppUser manager;
+
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword = false;
+
+    @Column(name = "department_id")
+    private Long departmentId;
+
+    @Column(name = "designation_id")
+    private Long designationId;
+
+    @Column(name = "location_id")
+    private Long locationId;
+
+    @Column(name = "employment_type", length = 50)
+    private String employmentType;
+
+    @Column(name = "work_mode", length = 50)
+    private String workMode;
+
+    @Column(name = "joining_date")
+    private LocalDate joiningDate;
 
     public enum Role {
         EMPLOYEE, MANAGER, HR, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP

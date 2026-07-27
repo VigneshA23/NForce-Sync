@@ -3,7 +3,7 @@ import {
   Bell, User, ClipboardCheck, AlertOctagon,
   FolderKanban, Users, TrendingUp, Map,
   AlertTriangle, CalendarDays, DollarSign, Trophy,
-  Lock, Settings, Plug, Bot, ScrollText,
+  Lock, Settings, Plug, Bot, ScrollText, Building2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Role } from './types';
@@ -197,8 +197,9 @@ export const NAV: Record<Role, RoleNav> = {
       items: [
         { key: 'admin-dash',     label: 'Admin Dashboard',  path: '/admin/dashboard',   icon: LayoutDashboard },
         { key: 'user-mgmt',      label: 'User Management',  path: '/admin/users',        icon: Users },
-        { key: 'role-mgmt',      label: 'Roles & Access',   path: '/admin/roles',        icon: Lock },
-        { key: 'business-rules', label: 'Business Rules',   path: '/admin/rules',        icon: Settings },
+        { key: 'role-mgmt',      label: 'Roles & Access',       path: '/admin/roles',        icon: Lock },
+        { key: 'org-masters',    label: 'Organization Masters', path: '/admin/org-masters',  icon: Building2 },
+        { key: 'business-rules', label: 'Business Rules',       path: '/admin/rules',        icon: Settings },
         { key: 'integrations',   label: 'Integrations',     path: '/admin/integrations', icon: Plug, phase: 2 },
         { key: 'ai-settings',    label: 'AI & Automation',  path: '/admin/ai',           icon: Bot, phase: 3 },
         { key: 'audit',          label: 'Audit Log',        path: '/admin/audit',        icon: ScrollText },

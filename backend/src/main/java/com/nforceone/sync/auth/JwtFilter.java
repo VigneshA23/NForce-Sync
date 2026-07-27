@@ -47,6 +47,18 @@ public class JwtFilter extends OncePerRequestFilter {
             );
             SecurityContextHolder.getContext().setAuthentication(auth);
 
+            // Enforce password change: if mustChangePassword is set in the JWT,
+            // block all requests except the change-password endpoint itself.
+            Boolean mustChange = claims.get("mustChangePassword", Boolean.class);
+            if (Boolean.TRUE.equals(mustChange)
+                    && !"/api/auth/change-password".equals(request.getRequestURI())) {
+                response.setContentType("application/json");
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                response.getWriter().write(
+                        "{\"error\":\"Password change required before continuing\"}");
+                return;
+            }
+
         } catch (JwtException | IllegalArgumentException e) {
             // Invalid or expired token — clear context and pass through unauthenticated.
             // Spring Security's access rules will reject the request downstream.

@@ -4,6 +4,8 @@ import com.nforceone.sync.admin.dto.CreateUserRequest;
 import com.nforceone.sync.admin.dto.ResetPasswordRequest;
 import com.nforceone.sync.admin.dto.SetStatusRequest;
 import com.nforceone.sync.admin.dto.UpdateUserRequest;
+import com.nforceone.sync.admin.dto.UserCreateResult;
+import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.dto.UserDto;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -27,7 +29,7 @@ public class UserController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public UserDto createUser(@Valid @RequestBody CreateUserRequest request) {
+    public UserCreateResult createUser(@Valid @RequestBody CreateUserRequest request) {
         return userService.createUser(request, actingEmail());
     }
 
@@ -54,10 +56,15 @@ public class UserController {
     }
 
     @PostMapping("/{id}/reset-password")
-    public Map<String, String> resetPassword(@PathVariable Long id,
-                                             @Valid @RequestBody ResetPasswordRequest request) {
-        userService.resetPassword(id, request.newPassword(), actingEmail());
-        return Map.of("message", "Password updated");
+    public Map<String, String> resetPassword(@PathVariable Long id) {
+        String tempPassword = userService.resetPassword(id, actingEmail());
+        return Map.of("message", "Password reset successfully", "tempPassword", tempPassword);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteUser(@PathVariable Long id) {
+        userService.softDeleteUser(id, actingEmail());
     }
 
     private String actingEmail() {

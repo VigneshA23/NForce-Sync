@@ -42,16 +42,18 @@ export interface AuthUser {
   email: string;
   role: Role;
   employeeCode: number | null;
+  mustChangePassword: boolean;
 }
 
-export function buildAuthUser(serverUser: ServerUser): AuthUser {
+export function buildAuthUser(serverUser: ServerUser, mustChangePassword = false): AuthUser {
   return {
-    id:           serverUser.id,
-    name:         serverUser.fullName,
-    initials:     initials(serverUser.fullName),
-    email:        serverUser.email,
-    role:         toRole(serverUser.role),
-    employeeCode: serverUser.employeeCode,
+    id:                 serverUser.id,
+    name:               serverUser.fullName,
+    initials:           initials(serverUser.fullName),
+    email:              serverUser.email,
+    role:               toRole(serverUser.role),
+    employeeCode:       serverUser.employeeCode,
+    mustChangePassword: serverUser.mustChangePassword ?? mustChangePassword,
   };
 }
 

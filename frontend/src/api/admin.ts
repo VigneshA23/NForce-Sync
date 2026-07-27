@@ -10,6 +10,14 @@ export interface UserDto {
   employeeCode: number | null;
   status: string;
   managerId: number | null;
+  // Org fields
+  departmentId: number | null;
+  designationId: number | null;
+  locationId: number | null;
+  // Employee profile
+  employmentType: string | null;
+  workMode: string | null;
+  joiningDate: string | null;
 }
 
 export interface AuditLogDto {
@@ -53,13 +61,35 @@ export interface PageDto<T> {
 export interface CreateUserPayload {
   fullName: string;
   email: string;
-  password: string;
   role: string;
+  // Org assignments
+  departmentId?: number | null;
+  designationId?: number | null;
+  locationId?: number | null;
+  // Employee profile
+  employmentType?: string;
+  workMode?: string;
+  joiningDate?: string;
+  // Reporting line
+  managerId?: number | null;
+}
+
+export interface UserCreateResult {
+  user: UserDto;
+  tempPassword: string;
 }
 
 export interface UpdateUserPayload {
   fullName: string;
   role: string;
+  // Org assignments (null = unassign)
+  departmentId: number | null;
+  designationId: number | null;
+  locationId: number | null;
+  // Employee profile
+  employmentType?: string;
+  workMode?: string;
+  // Reporting line
   managerId: number | null;
 }
 
@@ -114,8 +144,8 @@ export async function getUser(id: number): Promise<UserDto> {
   return res.data;
 }
 
-export async function createUser(data: CreateUserPayload): Promise<UserDto> {
-  const res = await api.post<UserDto>('/users', data);
+export async function createUser(data: CreateUserPayload): Promise<UserCreateResult> {
+  const res = await api.post<UserCreateResult>('/users', data);
   return res.data;
 }
 
@@ -132,8 +162,11 @@ export async function setUserStatus(
   return res.data;
 }
 
-export async function resetPassword(id: number, newPassword: string): Promise<void> {
-  await api.post(`/users/${id}/reset-password`, { newPassword });
+export async function resetPassword(id: number): Promise<{ message: string; tempPassword: string }> {
+  const res = await api.post<{ message: string; tempPassword: string }>(
+    `/users/${id}/reset-password`,
+  );
+  return res.data;
 }
 
 // ── Audit log ─────────────────────────────────────────────────────────────────
@@ -160,4 +193,82 @@ export async function listRoles(): Promise<RoleInfoDto[]> {
 export async function getAdminStats(): Promise<AdminStatsDto> {
   const res = await api.get<AdminStatsDto>('/admin/stats');
   return res.data;
+}
+
+// ── Org Masters ────────────────────────────────────────────────────────────────
+
+export interface DepartmentDto {
+  id: number;
+  name: string;
+  active: boolean;
+}
+
+export interface DesignationDto {
+  id: number;
+  title: string;
+  active: boolean;
+}
+
+export interface OrgLocationDto {
+  id: number;
+  name: string;
+  active: boolean;
+}
+
+export async function listDepartments(): Promise<DepartmentDto[]> {
+  const res = await api.get<DepartmentDto[]>('/org/departments');
+  return res.data;
+}
+
+export async function createDepartment(name: string): Promise<DepartmentDto> {
+  const res = await api.post<DepartmentDto>('/org/departments', { name });
+  return res.data;
+}
+
+export async function toggleDepartment(id: number): Promise<DepartmentDto> {
+  const res = await api.patch<DepartmentDto>(`/org/departments/${id}`);
+  return res.data;
+}
+
+export async function listDesignations(): Promise<DesignationDto[]> {
+  const res = await api.get<DesignationDto[]>('/org/designations');
+  return res.data;
+}
+
+export async function createDesignation(title: string): Promise<DesignationDto> {
+  const res = await api.post<DesignationDto>('/org/designations', { title });
+  return res.data;
+}
+
+export async function toggleDesignation(id: number): Promise<DesignationDto> {
+  const res = await api.patch<DesignationDto>(`/org/designations/${id}`);
+  return res.data;
+}
+
+export async function listLocations(): Promise<OrgLocationDto[]> {
+  const res = await api.get<OrgLocationDto[]>('/org/locations');
+  return res.data;
+}
+
+export async function createLocation(name: string): Promise<OrgLocationDto> {
+  const res = await api.post<OrgLocationDto>('/org/locations', { name });
+  return res.data;
+}
+
+export async function toggleLocation(id: number): Promise<OrgLocationDto> {
+  const res = await api.patch<OrgLocationDto>(`/org/locations/${id}`);
+  return res.data;
+}
+
+// Fix 2: Delete org master records (FK-safe — backend returns 409 if employees assigned)
+export async function deleteDepartment(id: number): Promise<void> {
+  await api.delete(`/org/departments/${id}`);
+}
+
+export async function deleteDesignation(id: number): Promise<void> {
+  await api.delete(`/org/designations/${id}`);
+}
+
+export async function deleteLocation(id: number): Promise<void> {
+  await api.delete(`/org/locations/${id}`);
 }

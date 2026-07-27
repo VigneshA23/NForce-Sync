@@ -28,6 +28,7 @@ public class JwtService {
                 .claim("role", user.getRole().name())
                 .claim("employeeCode", user.getEmployeeCode())
                 .claim("userId", user.getId())
+                .claim("mustChangePassword", user.isMustChangePassword())
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(key, Jwts.SIG.HS256)

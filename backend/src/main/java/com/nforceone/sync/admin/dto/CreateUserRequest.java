@@ -5,7 +5,8 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
+
+import java.time.LocalDate;
 
 public record CreateUserRequest(
 
@@ -17,10 +18,22 @@ public record CreateUserRequest(
         @Pattern(regexp = "^[^@]+@nforceone\\.com$", message = "Email must end with @nforceone.com")
         String email,
 
-        @NotBlank(message = "Password is required")
-        @Size(min = 8, message = "Password must be at least 8 characters")
-        String password,
-
         @NotNull(message = "Role is required")
-        AppUser.Role role
+        AppUser.Role role,
+
+        // Optional — auto-generated if blank (DB GENERATED ALWAYS AS IDENTITY handles this)
+        String employeeCode,
+
+        // Org assignments
+        Long departmentId,
+        Long designationId,
+        Long locationId,
+
+        // Employee profile
+        String employmentType,   // FULL_TIME | PART_TIME | CONTRACT | INTERN (defaults to FULL_TIME)
+        String workMode,         // ONSITE | HYBRID | REMOTE (defaults to ONSITE)
+        LocalDate joiningDate,
+
+        // Reporting line
+        Long managerId           // null = no manager assigned
 ) {}

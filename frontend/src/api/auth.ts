@@ -19,6 +19,7 @@ export interface ServerUser {
   role: string;
   employeeCode: number | null;
   status: string;
+  mustChangePassword?: boolean;
 }
 
 export function toRole(serverRole: string): Role {
@@ -28,11 +29,22 @@ export function toRole(serverRole: string): Role {
 export async function login(
   email: string,
   password: string,
-): Promise<{ token: string; user: ServerUser }> {
-  const res = await api.post<{ token: string; user: ServerUser }>('/auth/login', {
-    email,
-    password,
-  });
+): Promise<{ token: string; user: ServerUser; mustChangePassword: boolean }> {
+  const res = await api.post<{ token: string; user: ServerUser; mustChangePassword: boolean }>(
+    '/auth/login',
+    { email, password },
+  );
+  return res.data;
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ token: string; user: ServerUser; mustChangePassword: boolean }> {
+  const res = await api.post<{ token: string; user: ServerUser; mustChangePassword: boolean }>(
+    '/auth/change-password',
+    { currentPassword, newPassword },
+  );
   return res.data;
 }
 
