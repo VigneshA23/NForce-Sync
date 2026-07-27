@@ -192,11 +192,12 @@ public class UserService {
         AppUser user  = requireUserById(id);
         AppUser actor = requireActorByEmail(actingEmail);
 
-        // Soft-delete: deactivate and record in audit
+        String before = toJson(UserDto.from(user));
         user.setStatus(AppUser.Status.INACTIVE);
+        user.setDeletedAt(OffsetDateTime.now());
         userRepository.save(user);
 
-        writeAudit("APP_USER", id, "SOFT_DELETE", toJson(UserDto.from(user)), null, actor);
+        writeAudit("APP_USER", id, "SOFT_DELETE", before, null, actor);
     }
 
     @Transactional(readOnly = true)

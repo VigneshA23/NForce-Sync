@@ -70,6 +70,9 @@ public class AppUser {
     @Column(name = "joining_date")
     private LocalDate joiningDate;
 
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
+
     public enum Role {
         EMPLOYEE, MANAGER, HR, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP
     }

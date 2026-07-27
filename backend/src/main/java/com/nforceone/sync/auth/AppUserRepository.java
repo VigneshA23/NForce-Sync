@@ -13,7 +13,8 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     boolean existsByEmail(String email);
 
     // Fix 3: JOIN FETCH manager + createdBy to avoid N+1 lazy-load round trips to Neon
-    @Query("SELECT u FROM AppUser u LEFT JOIN FETCH u.manager LEFT JOIN FETCH u.createdBy ORDER BY u.employeeCode ASC")
+    // Also excludes soft-deleted users (deleted_at IS NULL)
+    @Query("SELECT u FROM AppUser u LEFT JOIN FETCH u.manager LEFT JOIN FETCH u.createdBy WHERE u.deletedAt IS NULL ORDER BY u.employeeCode ASC")
     List<AppUser> findAllWithRelationsOrderByEmployeeCodeAsc();
 
     // Keep original for backward compatibility (used by setStatus, etc.)
