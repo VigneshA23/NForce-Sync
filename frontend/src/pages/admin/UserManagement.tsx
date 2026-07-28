@@ -1234,7 +1234,7 @@ export default function UserManagement() {
                     >
                       <td style={tdStyle}>
                         <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
-                          {user.employeeCode != null ? `NF-${String(user.employeeCode).padStart(5, '0')}` : '—'}
+                          {user.employeeCode ?? '—'}
                         </span>
                       </td>
                       <td style={tdStyle}>

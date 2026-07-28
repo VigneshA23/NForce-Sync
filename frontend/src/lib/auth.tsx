@@ -41,11 +41,11 @@ export interface AuthUser {
   initials: string;
   email: string;
   role: Role;
-  employeeCode: number | null;
+  employeeCode: string | null;
   mustChangePassword: boolean;
 }
 
-export function buildAuthUser(serverUser: ServerUser, mustChangePassword = false): AuthUser {
+export function buildAuthUser(serverUser: ServerUser, mustChangePassword?: boolean): AuthUser {
   return {
     id:                 serverUser.id,
     name:               serverUser.fullName,
@@ -53,7 +53,7 @@ export function buildAuthUser(serverUser: ServerUser, mustChangePassword = false
     email:              serverUser.email,
     role:               toRole(serverUser.role),
     employeeCode:       serverUser.employeeCode,
-    mustChangePassword: serverUser.mustChangePassword ?? mustChangePassword,
+    mustChangePassword: mustChangePassword ?? serverUser.mustChangePassword,
   };
 }
 

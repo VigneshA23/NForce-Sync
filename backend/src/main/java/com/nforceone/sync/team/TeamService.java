@@ -41,7 +41,7 @@ public class TeamService {
     }
 
     public DashboardStatsDto getDashboardStats(Long managerId, String actingEmail) {
-        AppUser actor = userRepository.findByEmail(actingEmail)
+        AppUser actor = userRepository.findByEmailAndDeletedAtIsNull(actingEmail)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
 

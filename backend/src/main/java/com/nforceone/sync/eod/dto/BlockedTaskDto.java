@@ -11,7 +11,7 @@ public record BlockedTaskDto(
         Long           entryId,
         Long           employeeId,
         String         employeeName,
-        Long           employeeCode,
+        String         employeeCode,
         LocalDate      entryDate,
         String         projectCode,
         String         projectName,

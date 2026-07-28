@@ -1,5 +1,6 @@
 package com.nforceone.sync.auth;
 
+import com.nforceone.sync.admin.UserService;
 import com.nforceone.sync.auth.dto.ChangePasswordRequest;
 import com.nforceone.sync.auth.dto.ForgotPasswordRequest;
 import com.nforceone.sync.auth.dto.LoginRequest;
@@ -31,15 +32,18 @@ public class AuthController {
     private final JwtService jwtService;
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserService userService;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtService jwtService,
                           AppUserRepository appUserRepository,
-                          PasswordEncoder passwordEncoder) {
+                          PasswordEncoder passwordEncoder,
+                          UserService userService) {
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.appUserRepository = appUserRepository;
         this.passwordEncoder = passwordEncoder;
+        this.userService = userService;
     }
 
     @PostMapping("/login")
@@ -63,17 +67,16 @@ public class AuthController {
     @PostMapping("/forgot-password")
     public ResponseEntity<Map<String, String>> forgotPassword(
             @Valid @RequestBody ForgotPasswordRequest request) {
-        // Email delivery is stubbed. Always return the same generic message so
-        // callers cannot determine whether the email is registered.
+        userService.forgotPassword(request.email());
         return ResponseEntity.ok(Map.of(
-                "message", "If that email exists, a reset link has been sent"
+                "message", "If that email is registered, we've sent password reset instructions."
         ));
     }
 
     @GetMapping("/me")
     public ResponseEntity<UserDto> me() {
         String email = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        AppUser user = appUserRepository.findByEmail(email)
+        AppUser user = appUserRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new RuntimeException("Authenticated user no longer exists"));
         return ResponseEntity.ok(UserDto.from(user));
     }
@@ -81,7 +84,7 @@ public class AuthController {
     @PostMapping("/change-password")
     public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         String email = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        AppUser user = appUserRepository.findByEmail(email)
+        AppUser user = appUserRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
 

@@ -29,10 +29,10 @@ public class AppUser {
     @Column(nullable = false, length = 20)
     private Role role;
 
-    // GENERATED ALWAYS AS IDENTITY — Hibernate must not include in INSERT/UPDATE
+    // Managed by DB (GENERATED ALWAYS AS IDENTITY or equivalent) — Hibernate must not include in INSERT/UPDATE
     @Column(name = "employee_code", nullable = false, unique = true,
             insertable = false, updatable = false)
-    private Long employeeCode;
+    private String employeeCode;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

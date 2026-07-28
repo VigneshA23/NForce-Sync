@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import { AuthLayout } from './AuthLayout';
+import { api } from '../../api/client';
 
 const containerVariants = {
   hidden: {},
@@ -39,15 +40,20 @@ export default function Forgot() {
     }
 
     setSending(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setSending(false);
-    setSent(true);
+    try {
+      await api.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
+    } catch {
+      // Always show sent state — never reveal whether email exists
+    } finally {
+      setSending(false);
+      setSent(true);
+    }
   }
 
   return (
     <AuthLayout
-      leftHeadline="Reset your access in a minute."
-      leftSubtext="Enter your company email and we'll send a secure reset link. Links expire in 30 minutes."
+      leftHeadline="Forgot your password?"
+      leftSubtext="Enter your company email. If an account exists, we'll send a temporary password to sign in with."
     >
       <motion.div
         variants={reduced ? undefined : containerVariants}
@@ -68,7 +74,7 @@ export default function Forgot() {
             Forgot password
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.5 }}>
-            We'll email a reset link to your registered company address.
+            We'll email a temporary password to your registered company address.
           </p>
         </motion.div>
 
@@ -162,7 +168,7 @@ export default function Forgot() {
                   e.currentTarget.style.background = sending ? 'var(--brand-deep)' : 'var(--brand)';
                 }}
               >
-                {sending ? 'Sending…' : 'Send reset link'}
+                {sending ? 'Sending…' : 'Send temporary password'}
               </button>
             </motion.div>
 
@@ -198,10 +204,10 @@ function ConfirmationCard({ onBack }: { onBack: () => void }) {
         />
         <div>
           <p style={{ fontSize: 13, color: '#8fe0bd', lineHeight: 1.5, marginBottom: 4 }}>
-            If an account exists for that address, a reset link is on its way.
+            If an account exists for that address, a temporary password is on its way.
           </p>
           <p style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
-            Check your inbox — links expire in 30 minutes.
+            Check your inbox — sign in with it, then you'll be prompted to set a new password.
           </p>
         </div>
       </div>

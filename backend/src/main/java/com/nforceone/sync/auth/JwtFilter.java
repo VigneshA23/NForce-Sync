@@ -50,8 +50,11 @@ public class JwtFilter extends OncePerRequestFilter {
             // Enforce password change: if mustChangePassword is set in the JWT,
             // block all requests except the change-password endpoint itself.
             Boolean mustChange = claims.get("mustChangePassword", Boolean.class);
-            if (Boolean.TRUE.equals(mustChange)
-                    && !"/api/auth/change-password".equals(request.getRequestURI())) {
+            String uri = request.getRequestURI();
+            boolean isAllowedWhileMustChange =
+                    "/api/auth/change-password".equals(uri) ||
+                    "/api/auth/me".equals(uri);
+            if (Boolean.TRUE.equals(mustChange) && !isAllowedWhileMustChange) {
                 response.setContentType("application/json");
                 response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                 response.getWriter().write(

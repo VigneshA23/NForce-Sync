@@ -7,7 +7,7 @@ export interface UserDto {
   fullName: string;
   email: string;
   role: string;
-  employeeCode: number | null;
+  employeeCode: string | null;
   status: string;
   managerId: number | null;
   // Org fields

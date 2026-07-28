@@ -8,9 +8,14 @@ import java.util.Optional;
 
 public interface AppUserRepository extends JpaRepository<AppUser, Long> {
 
+    // Deleted-inclusive: use only when historical/audit lookup is needed
     Optional<AppUser> findByEmail(String email);
 
-    boolean existsByEmail(String email);
+    // Active-only variants: use for all authentication and actor resolution
+    Optional<AppUser> findByEmailAndDeletedAtIsNull(String email);
+
+    // Only counts non-deleted rows — mirrors the partial unique index from V23
+    boolean existsByEmailAndDeletedAtIsNull(String email);
 
     // Fix 3: JOIN FETCH manager + createdBy to avoid N+1 lazy-load round trips to Neon
     // Also excludes soft-deleted users (deleted_at IS NULL)
