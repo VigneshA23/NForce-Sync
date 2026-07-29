@@ -41,7 +41,7 @@ export interface AuthUser {
   initials: string;
   email: string;
   role: Role;
-  employeeCode: number | null;
+  employeeCode: string;
   mustChangePassword: boolean;
 }
 

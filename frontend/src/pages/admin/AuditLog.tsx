@@ -1,27 +1,17 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { listAuditLog } from '../../api/admin';
 import type { AuditLogDto, AuditFilters } from '../../api/admin';
+import { formatAuditDate, auditActionBadgeStyle } from '../../lib/auditLog';
 
-const ENTITY_TYPES = ['APP_USER', 'PASSWORD_RESET_TOKEN'];
+// Fix: EOD_ENTRY audit rows exist (approve/reject/changes-requested) but were missing here
+const ENTITY_TYPES = ['APP_USER', 'EOD_ENTRY', 'PASSWORD_RESET_TOKEN'];
 const PAGE_SIZE = 25;
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
 function actionBadge(action: string) {
-  const map: Record<string, { bg: string; color: string }> = {
-    CREATE:         { bg: 'rgba(47,182,124,.12)',  color: '#2FB67C' },
-    UPDATE:         { bg: 'rgba(76,141,214,.12)',  color: '#4C8DD6' },
-    STATUS_CHANGE:  { bg: 'rgba(224,169,59,.12)', color: '#E0A93B' },
-    PASSWORD_RESET: { bg: 'rgba(155,109,255,.12)', color: '#9B6DFF' },
-  };
-  const style = map[action] ?? { bg: 'var(--raised2)', color: 'var(--txt-dim)' };
+  const style = auditActionBadgeStyle(action);
   return (
     <span style={{
       display: 'inline-block', fontSize: 10, fontWeight: 600,
@@ -80,7 +70,7 @@ function AuditRow({ entry }: { entry: AuditLogDto }) {
       <tr style={{ borderBottom: '1px solid var(--line)' }}>
         <td style={tdStyle}>
           <span style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-dim)', whiteSpace: 'nowrap' }}>
-            {formatDate(entry.occurredAt)}
+            {formatAuditDate(entry.occurredAt)}
           </span>
         </td>
         <td style={tdStyle}>
@@ -141,8 +131,14 @@ const tdStyle: React.CSSProperties = {
 };
 
 export default function AuditLog() {
+  const [searchParams] = useSearchParams();
   const [page, setPage] = useState(0);
-  const [filters, setFilters] = useState<Pick<AuditFilters, 'entityType' | 'from' | 'to'>>({});
+  // Seeds the "from" filter when arriving via the dashboard's "View all N →" link,
+  // so the count shown there matches what's actually displayed here.
+  const [filters, setFilters] = useState<Pick<AuditFilters, 'entityType' | 'from' | 'to'>>(() => {
+    const from = searchParams.get('from');
+    return from ? { from } : {};
+  });
 
   const queryFilters: AuditFilters = { ...filters, page, size: PAGE_SIZE };
   const { data, isPending, isError, refetch } = useQuery({

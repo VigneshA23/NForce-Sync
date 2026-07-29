@@ -18,7 +18,7 @@ export interface EodEntryDto {
   id: number;
   employeeId: number;
   employeeName: string;
-  employeeCode: number;
+  employeeCode: string;
   entryDate: string;
   status: string;
   workLocation: string | null;

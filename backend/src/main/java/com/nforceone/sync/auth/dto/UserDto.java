@@ -9,7 +9,7 @@ public record UserDto(
         String fullName,
         String email,
         String role,
-        Long   employeeCode,
+        String employeeCode,
         String status,
         Long   managerId,
         // Org fields

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X } from 'lucide-react';
+import { useBodyScrollLock } from '../lib/useBodyScrollLock';
 
 interface ModalProps {
   open: boolean;
@@ -8,10 +9,14 @@ interface ModalProps {
   onClose: () => void;
   children: React.ReactNode;
   width?: number;
+  /** Sticky footer (e.g. Save/Cancel) rendered outside the scrollable body — never clipped. */
+  footer?: React.ReactNode;
 }
 
-export function Modal({ open, title, onClose, children, width = 440 }: ModalProps) {
+export function Modal({ open, title, onClose, children, width = 440, footer }: ModalProps) {
   const reduced = useReducedMotion();
+
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (!open) return;
@@ -57,22 +62,26 @@ export function Modal({ open, title, onClose, children, width = 440 }: ModalProp
               left: '50%',
               transform: 'translate(-50%, -50%)',
               width: `min(${width}px, calc(100vw - 32px))`,
-              background: '#1E2128',
-              border: '1px solid #2A2E37',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--panel)',
+              border: '1px solid var(--line)',
               borderRadius: 12,
               boxShadow: '0 24px 60px rgba(0,0,0,.7)',
               zIndex: 901,
               overflow: 'hidden',
             }}
           >
-            {/* Header */}
+            {/* Header — sticky, never scrolls */}
             <div
               style={{
+                flexShrink: 0,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '16px 20px',
-                borderBottom: '1px solid #2A2E37',
+                borderBottom: '1px solid var(--line)',
               }}
             >
               <h2
@@ -81,7 +90,7 @@ export function Modal({ open, title, onClose, children, width = 440 }: ModalProp
                   fontFamily: '"Space Grotesk", sans-serif',
                   fontSize: 15,
                   fontWeight: 600,
-                  color: '#E8EAED',
+                  color: 'var(--txt)',
                   margin: 0,
                 }}
               >
@@ -94,21 +103,35 @@ export function Modal({ open, title, onClose, children, width = 440 }: ModalProp
                   background: 'transparent',
                   border: 'none',
                   cursor: 'pointer',
-                  color: '#6B7280',
+                  color: 'var(--txt-dim)',
                   padding: 4,
                   display: 'flex',
                   alignItems: 'center',
                   borderRadius: 4,
                   transition: 'color 0.14s',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = '#E8EAED')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--txt)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--txt-dim)')}
               >
                 <X size={16} aria-hidden="true" />
               </button>
             </div>
-            {/* Body */}
-            <div style={{ padding: '20px' }}>{children}</div>
+            {/* Body — the only scrollable region */}
+            <div style={{ padding: '20px', overflowY: 'auto', flex: '1 1 auto' }}>{children}</div>
+            {/* Footer — sticky, never scrolls or gets clipped */}
+            {footer && (
+              <div
+                style={{
+                  flexShrink: 0,
+                  padding: '14px 20px',
+                  borderTop: '1px solid var(--line)',
+                  display: 'flex',
+                  gap: 10,
+                }}
+              >
+                {footer}
+              </div>
+            )}
           </motion.div>
         </>
       )}

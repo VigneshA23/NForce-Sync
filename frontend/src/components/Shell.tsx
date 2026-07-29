@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Menu, X, Search, Bell, LogOut, Sun, Moon, UserCircle2, HelpCircle, Shield } from 'lucide-react';
 import { BrandMark } from './BrandMark';
@@ -7,6 +8,165 @@ import { NAV, ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem } from '../lib/n
 import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { NotAuthorized } from '../pages/NotAuthorized';
+import { searchUsers, listLocations } from '../api/admin';
+import { toRole } from '../api/auth';
+
+// ─── Workspace search (top nav) ────────────────────────────────────────────────
+// Only wired up for superadmin — the destination (User Management) and the
+// backend /users/search endpoint are both superadmin-only today.
+
+function WorkspaceSearch() {
+  const navigate = useNavigate();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
+  const [open, setOpen] = useState(false);
+
+  // Debounce ~300ms
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const { data: results, isFetching } = useQuery({
+    queryKey: ['workspace-search', debounced],
+    queryFn: () => searchUsers({ q: debounced }),
+    enabled: debounced.length > 0,
+  });
+
+  const { data: locations } = useQuery({
+    queryKey: ['org', 'locations'],
+    queryFn: listLocations,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  function locationName(id: number | null): string | null {
+    if (id == null) return null;
+    return locations?.find((l) => l.id === id)?.name ?? null;
+  }
+
+  // Close on outside click / Escape
+  useEffect(() => {
+    if (!open) return;
+    function onMouse(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onMouse);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onMouse);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  function handleSelect(userId: number) {
+    setOpen(false);
+    setQuery('');
+    navigate(`/admin/users?userId=${userId}`);
+  }
+
+  const showDropdown = open && debounced.length > 0;
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <div
+        className="shell-search"
+        role="search"
+        aria-label="Search workspace"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          background: '#1E2128',
+          border: '1px solid #2A2E37',
+          borderRadius: 8,
+          padding: '7px 11px',
+          color: '#6B7280',
+          fontSize: 12,
+          minWidth: 188,
+        }}
+      >
+        <Search size={13} aria-hidden="true" style={{ flexShrink: 0 }} />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search this workspace..."
+          aria-label="Search workspace by name, email, role, or location"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            color: '#C8CCD2',
+            fontSize: 12,
+            width: '100%',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        />
+      </div>
+
+      {showDropdown && (
+        <div
+          role="listbox"
+          aria-label="Search results"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 8px)',
+            right: 0,
+            width: 300,
+            background: '#1E2128',
+            border: '1px solid #2A2E37',
+            borderRadius: 10,
+            boxShadow: '0 8px 24px rgba(0,0,0,.44)',
+            zIndex: 100,
+            maxHeight: 320,
+            overflowY: 'auto',
+          }}
+        >
+          {isFetching ? (
+            <div style={{ padding: '14px 16px', fontSize: 12, color: '#9BA1AC' }}>Searching…</div>
+          ) : !results || results.length === 0 ? (
+            <div style={{ padding: '14px 16px', fontSize: 12, color: '#9BA1AC' }}>
+              No results for &ldquo;{debounced}&rdquo;
+            </div>
+          ) : (
+            results.map((u) => (
+              <button
+                key={u.id}
+                type="button"
+                role="option"
+                aria-selected={false}
+                onClick={() => handleSelect(u.id)}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '10px 14px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: '1px solid #2A2E37',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.05)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <div style={{ fontSize: 13, color: '#E8EAED', fontWeight: 500 }}>{u.fullName}</div>
+                <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>
+                  {u.email} · {ROLE_LABELS[toRole(u.role)] ?? u.role}
+                  {locationName(u.locationId) ? ` · ${locationName(u.locationId)}` : ''}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Sidebar content (shared desktop + mobile) ────────────────────────────────
 // All colors hardcoded dark — sidebar NEVER themes regardless of html data-theme.
@@ -409,29 +569,34 @@ export function Shell() {
           {/* Right controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
 
-            {/* Search bar — styled div matching OneHR's exact spec */}
-            <div
-              className="shell-search"
-              role="search"
-              aria-label="Search workspace"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                background: '#1E2128',
-                border: '1px solid #2A2E37',
-                borderRadius: 8,
-                padding: '7px 11px',
-                color: '#6B7280',
-                fontSize: 12,
-                cursor: 'text',
-                userSelect: 'none',
-                minWidth: 188,
-              }}
-            >
-              <Search size={13} aria-hidden="true" style={{ flexShrink: 0 }} />
-              <span>Search this workspace...</span>
-            </div>
+            {/* Search bar — functional for superadmin (User Management search target);
+                decorative placeholder for other roles, matching the original spec */}
+            {role === 'superadmin' ? (
+              <WorkspaceSearch />
+            ) : (
+              <div
+                className="shell-search"
+                role="search"
+                aria-label="Search workspace"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: '#1E2128',
+                  border: '1px solid #2A2E37',
+                  borderRadius: 8,
+                  padding: '7px 11px',
+                  color: '#6B7280',
+                  fontSize: 12,
+                  cursor: 'text',
+                  userSelect: 'none',
+                  minWidth: 188,
+                }}
+              >
+                <Search size={13} aria-hidden="true" style={{ flexShrink: 0 }} />
+                <span>Search this workspace...</span>
+              </div>
+            )}
 
             {/* Theme toggle — current-mode text label */}
             <button

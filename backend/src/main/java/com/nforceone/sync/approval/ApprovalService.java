@@ -1,5 +1,6 @@
 package com.nforceone.sync.approval;
 
+import tools.jackson.databind.ObjectMapper;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.auth.AuditLog;
@@ -15,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Transactional
@@ -25,17 +27,20 @@ public class ApprovalService {
     private final ApprovalActionRepository actionRepository;
     private final AuditLogRepository     auditLogRepository;
     private final UtilizationService     utilizationService;
+    private final ObjectMapper           objectMapper;
 
     public ApprovalService(EodEntryRepository entryRepository,
                            AppUserRepository userRepository,
                            ApprovalActionRepository actionRepository,
                            AuditLogRepository auditLogRepository,
-                           UtilizationService utilizationService) {
+                           UtilizationService utilizationService,
+                           ObjectMapper objectMapper) {
         this.entryRepository    = entryRepository;
         this.userRepository     = userRepository;
         this.actionRepository   = actionRepository;
         this.auditLogRepository = auditLogRepository;
         this.utilizationService = utilizationService;
+        this.objectMapper       = objectMapper;
     }
 
     @Transactional(readOnly = true)
@@ -68,7 +73,7 @@ public class ApprovalService {
         entry.setUpdatedAt(now);
         entryRepository.save(entry);
 
-        writeAudit(entry.getId(), "EOD_REJECTED", actor, now);
+        writeAudit(entry, "EOD_REJECTED", actor, now);
         return EodEntryDto.from(entry);
     }
 
@@ -85,7 +90,7 @@ public class ApprovalService {
         entry.setUpdatedAt(now);
         entryRepository.save(entry);
 
-        writeAudit(entry.getId(), "EOD_CHANGES_REQUESTED", actor, now);
+        writeAudit(entry, "EOD_CHANGES_REQUESTED", actor, now);
         return EodEntryDto.from(entry);
     }
 
@@ -110,7 +115,7 @@ public class ApprovalService {
         entry.setUpdatedAt(now);
         entryRepository.save(entry);
 
-        writeAudit(entry.getId(), "EOD_APPROVED", actor, now);
+        writeAudit(entry, "EOD_APPROVED", actor, now);
         utilizationService.recomputeForEntry(entry.getId());
         return EodEntryDto.from(entry);
     }
@@ -153,12 +158,18 @@ public class ApprovalService {
         actionRepository.save(aa);
     }
 
-    private void writeAudit(Long entryId, String action, AppUser actor, OffsetDateTime now) {
+    // Records employeeName + entryDate in afterValue so the admin dashboard's Recent
+    // Activity panel can render "Approved [Name]'s EOD entry — [date]" instead of raw IDs.
+    private void writeAudit(EodEntry entry, String action, AppUser actor, OffsetDateTime now) {
         AuditLog log = new AuditLog();
         log.setEntityType("EOD_ENTRY");
-        log.setEntityId(entryId);
+        log.setEntityId(entry.getId());
         log.setAction(action);
         log.setActor(actor);
+        log.setAfterValue(objectMapper.writeValueAsString(Map.of(
+                "employeeName", entry.getEmployee().getFullName(),
+                "entryDate", entry.getEntryDate().toString()
+        )));
         log.setOccurredAt(now);
         auditLogRepository.save(log);
     }

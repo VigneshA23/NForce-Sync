@@ -4,7 +4,7 @@ import { api } from './client';
 export interface MemberStatusDto {
   id: number;
   fullName: string;
-  employeeCode: number;
+  employeeCode: string;
   todayStatus: string;
 }
 
@@ -22,7 +22,7 @@ export interface BlockedTaskDto {
   entryId: number;
   employeeId: number;
   employeeName: string;
-  employeeCode: number;
+  employeeCode: string;
   entryDate: string;
   projectCode: string | null;
   projectName: string | null;

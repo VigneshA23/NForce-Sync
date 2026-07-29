@@ -31,6 +31,10 @@
   --bm-ring:        rgba(228,55,61,.25);
   --bm-glow:        radial-gradient(circle, rgba(228,55,61,.18) 0%, rgba(228,55,61,0) 70%);
   --bm-inner-shadow: inset 0 1px 3px rgba(0,0,0,.6), inset 0 -1px 1px rgba(255,255,255,.03), 0 0 0 1px rgba(0,0,0,.4);
+
+  /* Native form-control glyphs (e.g. the date-input calendar icon) render dark
+     by default; invert them to read against our dark surfaces. */
+  --icon-invert: 1;
 }
 
 /* ─── Design tokens — light ────────────────────────────────────── */
@@ -68,6 +72,9 @@
   --bm-ring:        rgba(0,0,0,.15);
   --bm-glow:        radial-gradient(circle, rgba(0,0,0,.04) 0%, rgba(0,0,0,0) 70%);
   --bm-inner-shadow: inset 0 1px 2px rgba(255,255,255,.8), 0 2px 6px rgba(0,0,0,.14), 0 0 0 1px rgba(0,0,0,.09);
+
+  /* Native glyph is already dark, which reads fine on our light surfaces. */
+  --icon-invert: 0;
 }
 
 /* ─── Smooth theme transition (only during the swap) ───────────── */
@@ -107,6 +114,25 @@ body {
 /* ─── Tabular numbers for data columns ────────────────────────── */
 .font-mono {
   font-variant-numeric: tabular-nums;
+}
+
+/* ─── Native date input — theme-aware calendar icon ─────────────── */
+/* color-scheme is forced to "light" unconditionally (not per [data-theme])
+   so the browser always renders its baseline dark glyph as the starting
+   point — otherwise Chromium's own color-scheme:dark heuristic can recolor
+   the glyph independently of our filter below, and the two would fight
+   each other. --icon-invert (defined per theme above) is then the SINGLE
+   source of truth: invert(0) in light theme leaves the dark glyph as-is,
+   invert(1) in dark theme flips it to white. */
+input[type="date"],
+input[type="time"] {
+  color-scheme: light;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(var(--icon-invert));
+  opacity: 0.9;
+  cursor: pointer;
 }
 
 /* ─── Scrollbar ────────────────────────────────────────────────── */

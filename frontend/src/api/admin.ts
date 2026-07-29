@@ -7,7 +7,7 @@ export interface UserDto {
   fullName: string;
   email: string;
   role: string;
-  employeeCode: number | null;
+  employeeCode: string;
   status: string;
   managerId: number | null;
   // Org fields
@@ -36,6 +36,7 @@ export interface AdminStatsDto {
   totalUsers: number;
   activeUsers: number;
   inactiveUsers: number;
+  inactiveUserNames: string[];
   usersByRole: Record<string, number>;
   recentAuditEvents: AuditLogDto[];
   auditEventsLast24h: number;
@@ -62,6 +63,7 @@ export interface CreateUserPayload {
   fullName: string;
   email: string;
   role: string;
+  employeeCode: string;
   // Org assignments
   departmentId?: number | null;
   designationId?: number | null;
@@ -141,6 +143,18 @@ export async function listUsers(): Promise<UserDto[]> {
 
 export async function getUser(id: number): Promise<UserDto> {
   const res = await api.get<UserDto>(`/users/${id}`);
+  return res.data;
+}
+
+export interface UserSearchParams {
+  q?: string;
+  role?: string;
+  locationId?: number;
+}
+
+// Top-nav workspace search — matches name, email, role, and location (case-insensitive, partial).
+export async function searchUsers(params: UserSearchParams): Promise<UserDto[]> {
+  const res = await api.get<UserDto[]>('/users/search', { params });
   return res.data;
 }
 
