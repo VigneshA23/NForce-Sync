@@ -35,6 +35,8 @@ app:
     # CHANGE IN PRODUCTION — move to environment variable JWT_SECRET, min 32 chars for HS256
     secret: "nforce-sync-dev-only-secret-key-change-this-in-prod-env-var-32chars+"
   base-url: http://localhost:5173
+  cors:
+    allowed-origins: ${FRONTEND_URL:http://localhost:5173}
 
 resend:
   api-key: ${RESEND_API_KEY:re_placeholder_set_RESEND_API_KEY_env_var}
