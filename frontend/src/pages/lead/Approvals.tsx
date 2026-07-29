@@ -245,7 +245,7 @@ function EntryRow({ entry }: { entry: EodEntryDto }) {
             {(entry as EodEntryDto & { employeeName?: string }).employeeName ?? `Employee #${entry.employeeId}`}
           </div>
           <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
-            #{(entry as EodEntryDto & { employeeCode?: number }).employeeCode ?? entry.employeeId}
+            {entry.employeeCode ?? `#${entry.employeeId}`}
           </div>
         </div>
         <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>

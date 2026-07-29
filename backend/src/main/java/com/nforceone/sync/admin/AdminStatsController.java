@@ -31,23 +31,31 @@ public class AdminStatsController {
 
     @GetMapping("/stats")
     public AdminStatsDto getStats() {
-        long total    = userRepository.count();
-        long active   = userRepository.countByStatus(AppUser.Status.ACTIVE);
-        long inactive = userRepository.countByStatus(AppUser.Status.INACTIVE);
+        long total    = userRepository.countByDeletedAtIsNull();
+        long active   = userRepository.countByStatusAndDeletedAtIsNull(AppUser.Status.ACTIVE);
+        long inactive = userRepository.countByStatusAndDeletedAtIsNull(AppUser.Status.INACTIVE);
+
+        List<String> inactiveNames = userRepository.findByStatusAndDeletedAtIsNull(AppUser.Status.INACTIVE)
+                .stream()
+                .map(AppUser::getFullName)
+                .toList();
 
         Map<String, Long> byRole = new LinkedHashMap<>();
         for (AppUser.Role role : AppUser.Role.values()) {
-            byRole.put(role.name(), userRepository.countByRole(role));
+            byRole.put(role.name(), userRepository.countByRoleAndDeletedAtIsNull(role));
         }
 
-        List<AuditLogDto> recentEvents = auditLogRepository.findTop5ByOrderByOccurredAtDesc()
+        // Admin/config-level events only — routine EOD approvals are high-volume and
+        // are excluded from this summary widget (see AuditLogRepository for rationale).
+        List<AuditLogDto> recentEvents = auditLogRepository
+                .findTop5ByEntityTypeNotOrderByOccurredAtDesc("EOD_ENTRY")
                 .stream()
                 .map(AuditLogDto::from)
                 .toList();
 
-        long last24h = auditLogRepository.countByOccurredAtAfter(
-                OffsetDateTime.now().minusHours(24));
+        long last24h = auditLogRepository.countByOccurredAtAfterAndEntityTypeNot(
+                OffsetDateTime.now().minusHours(24), "EOD_ENTRY");
 
-        return new AdminStatsDto(total, active, inactive, byRole, recentEvents, last24h);
+        return new AdminStatsDto(total, active, inactive, inactiveNames, byRole, recentEvents, last24h);
     }
 }

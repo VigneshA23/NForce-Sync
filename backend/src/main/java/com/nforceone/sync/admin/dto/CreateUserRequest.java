@@ -21,7 +21,8 @@ public record CreateUserRequest(
         @NotNull(message = "Role is required")
         AppUser.Role role,
 
-        // Optional — auto-generated if blank (DB GENERATED ALWAYS AS IDENTITY handles this)
+        @NotBlank(message = "Employee ID is required")
+        @Pattern(regexp = "^NF-\\d{8}$", message = "Employee ID must match format NF-######## (e.g. NF-20240040)")
         String employeeCode,
 
         // Org assignments

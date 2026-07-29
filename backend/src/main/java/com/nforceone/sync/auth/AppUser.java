@@ -29,9 +29,9 @@ public class AppUser {
     @Column(nullable = false, length = 20)
     private Role role;
 
-    // Managed by DB (GENERATED ALWAYS AS IDENTITY or equivalent) — Hibernate must not include in INSERT/UPDATE
-    @Column(name = "employee_code", nullable = false, unique = true,
-            insertable = false, updatable = false)
+    // Manually entered by Super Admin at creation, format NF-##### — validated in
+    // CreateUserRequest/UserService; DB CHECK constraint enforces the format too.
+    @Column(name = "employee_code", nullable = false, unique = true, length = 20)
     private String employeeCode;
 
     @Enumerated(EnumType.STRING)

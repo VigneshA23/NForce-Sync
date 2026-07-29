@@ -12,8 +12,10 @@ import com.nforceone.sync.auth.dto.UserDto;
 import com.nforceone.sync.email.EmailService;
 import com.nforceone.sync.org.DepartmentRepository;
 import com.nforceone.sync.org.DesignationRepository;
+import com.nforceone.sync.org.OrgLocation;
 import com.nforceone.sync.org.OrgLocationRepository;
-import jakarta.persistence.EntityManager;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Transactional
@@ -30,11 +33,23 @@ public class UserService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
+    // Mirrors frontend ROLE_LABELS (src/lib/nav.ts) so free-text search ("team lead",
+    // "hr admin") matches the label users actually see, not just the backend enum name.
+    private static final Map<AppUser.Role, String> ROLE_LABELS = Map.of(
+            AppUser.Role.EMPLOYEE,   "Employee",
+            AppUser.Role.MANAGER,    "Team Lead",
+            AppUser.Role.PM,         "Project Manager",
+            AppUser.Role.DM,         "Delivery Manager",
+            AppUser.Role.HR,         "HR Admin",
+            AppUser.Role.FINANCE,    "Finance Admin",
+            AppUser.Role.LEADERSHIP, "Leadership Viewer",
+            AppUser.Role.SUPERADMIN, "Super Admin"
+    );
+
     private final AppUserRepository userRepository;
     private final AuditLogRepository auditLogRepository;
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper;
-    private final EntityManager entityManager;
     private final DepartmentRepository departmentRepository;
     private final DesignationRepository designationRepository;
     private final OrgLocationRepository locationRepository;
@@ -44,7 +59,6 @@ public class UserService {
                        AuditLogRepository auditLogRepository,
                        PasswordEncoder passwordEncoder,
                        ObjectMapper objectMapper,
-                       EntityManager entityManager,
                        DepartmentRepository departmentRepository,
                        DesignationRepository designationRepository,
                        OrgLocationRepository locationRepository,
@@ -53,7 +67,6 @@ public class UserService {
         this.auditLogRepository    = auditLogRepository;
         this.passwordEncoder       = passwordEncoder;
         this.objectMapper          = objectMapper;
-        this.entityManager         = entityManager;
         this.departmentRepository  = departmentRepository;
         this.designationRepository = designationRepository;
         this.locationRepository    = locationRepository;
@@ -61,9 +74,16 @@ public class UserService {
     }
 
     public UserCreateResult createUser(CreateUserRequest request, String actingEmail) {
-        if (userRepository.existsByEmailAndDeletedAtIsNull(request.email())) {
+        // Emails must always be stored/compared in lowercase — the client normalizes too,
+        // but this is the authoritative point so uniqueness checks and storage never diverge.
+        String email = request.email() == null ? null : request.email().trim().toLowerCase(java.util.Locale.ROOT);
+        if (userRepository.existsByEmailAndDeletedAtIsNull(email)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "An account with this email already exists");
+        }
+        if (userRepository.existsByEmployeeCode(request.employeeCode())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This Employee ID is already in use");
         }
         AppUser actor = requireActorByEmail(actingEmail);
 
@@ -71,7 +91,8 @@ public class UserService {
 
         AppUser user = new AppUser();
         user.setFullName(request.fullName());
-        user.setEmail(request.email());
+        user.setEmail(email);
+        user.setEmployeeCode(request.employeeCode());
         user.setPasswordHash(passwordEncoder.encode(tempPassword));
         user.setRole(request.role());
         user.setStatus(AppUser.Status.ACTIVE);
@@ -97,11 +118,6 @@ public class UserService {
         }
 
         user = userRepository.save(user);
-
-        // flush writes the INSERT, then refresh reads back DB-generated columns
-        // (employee_code is GENERATED ALWAYS AS IDENTITY — not returned by getGeneratedKeys)
-        entityManager.flush();
-        entityManager.refresh(user);
 
         writeAudit("APP_USER", user.getId(), "CREATE", null, toJson(UserDto.from(user)), actor);
 
@@ -183,6 +199,10 @@ public class UserService {
         AppUser user  = requireUserById(id);
         AppUser actor = requireActorByEmail(actingEmail);
 
+        // Snapshot for audit display only (e.g. resolving the target's name in the
+        // Recent Activity panel) — no password data is ever written to the audit log.
+        String snapshot = toJson(UserDto.from(user));
+
         String tempPassword = generateTempPassword();
         user.setPasswordHash(passwordEncoder.encode(tempPassword));
         user.setMustChangePassword(true);
@@ -191,7 +211,7 @@ public class UserService {
         emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), tempPassword);
 
         // No password data in audit log — who reset whose password, and when
-        writeAudit("APP_USER", id, "PASSWORD_RESET", null, null, actor);
+        writeAudit("APP_USER", id, "PASSWORD_RESET", snapshot, null, actor);
 
         return tempPassword;
     }
@@ -235,6 +255,47 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserDto getUser(Long id) {
         return UserDto.from(requireUserById(id));
+    }
+
+    // Top-nav workspace search: free text (q) matches name, email, role label, and
+    // location name; role/locationId can additionally be passed as exact filters.
+    @Transactional(readOnly = true)
+    public List<UserDto> searchUsers(String q, String roleParam, Long locationId) {
+        AppUser.Role roleFilter = null;
+        if (roleParam != null && !roleParam.isBlank()) {
+            try {
+                roleFilter = AppUser.Role.valueOf(roleParam.toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown role: " + roleParam);
+            }
+        }
+
+        String trimmed = q == null ? "" : q.trim();
+        List<AppUser.Role> matchingRoles = trimmed.isEmpty()
+                ? List.of()
+                : ROLE_LABELS.entrySet().stream()
+                        .filter(e -> e.getKey().name().toLowerCase().contains(trimmed.toLowerCase())
+                                || e.getValue().toLowerCase().contains(trimmed.toLowerCase()))
+                        .map(Map.Entry::getKey)
+                        .toList();
+
+        List<Long> matchingLocationIds = trimmed.isEmpty()
+                ? List.of()
+                : locationRepository.findAll().stream()
+                        .filter(l -> l.getName().toLowerCase().contains(trimmed.toLowerCase()))
+                        .map(OrgLocation::getId)
+                        .toList();
+
+        Specification<AppUser> spec = Specification
+                .where(UserSpecs.notDeleted())
+                .and(UserSpecs.roleIs(roleFilter))
+                .and(UserSpecs.locationIdIs(locationId))
+                .and(UserSpecs.matchesQuery(trimmed, matchingRoles, matchingLocationIds));
+
+        return userRepository.findAll(spec, Sort.by("employeeCode").ascending())
+                .stream()
+                .map(UserDto::from)
+                .toList();
     }
 
     // ── private helpers ─────────────────────────────────────────────

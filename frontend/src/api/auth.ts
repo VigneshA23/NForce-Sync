@@ -17,7 +17,7 @@ export interface ServerUser {
   fullName: string;
   email: string;
   role: string;
-  employeeCode: string | null;
+  employeeCode: string;
   status: string;
   mustChangePassword: boolean;
 }

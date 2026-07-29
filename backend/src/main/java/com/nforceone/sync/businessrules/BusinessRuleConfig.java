@@ -1,0 +1,47 @@
+package com.nforceone.sync.businessrules;
+
+import com.nforceone.sync.auth.AppUser;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.time.LocalTime;
+
+// Column names/types below mirror the table as it actually exists on the shared database
+// (created by an earlier, since-reverted migration — see V27__create_shifts_and_holidays.sql).
+@Entity
+@Table(name = "business_rule_config")
+@Getter
+@Setter
+public class BusinessRuleConfig {
+
+    @Id
+    private Long id;
+
+    @Column(name = "standard_hours_per_day", nullable = false)
+    private BigDecimal workingHoursPerDay;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "weekend_rule", nullable = false, length = 20)
+    private WeekendRule weekendRule;
+
+    @Column(name = "eod_cutoff_time", nullable = false)
+    private LocalTime eodCutoffTime;
+
+    @Column(name = "reminder_lead_minutes", nullable = false)
+    private Integer reminderLeadMinutes;
+
+    @Column(name = "escalation_sla_hours", nullable = false)
+    private Integer escalationSlaHours;
+
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "updated_by")
+    private AppUser updatedBy;
+
+    public enum WeekendRule { SAT_SUN, SUN_ONLY }
+}
