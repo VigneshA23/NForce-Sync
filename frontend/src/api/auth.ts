@@ -17,9 +17,9 @@ export interface ServerUser {
   fullName: string;
   email: string;
   role: string;
-  employeeCode: number | null;
+  employeeCode: string | null;
   status: string;
-  mustChangePassword?: boolean;
+  mustChangePassword: boolean;
 }
 
 export function toRole(serverRole: string): Role {

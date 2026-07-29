@@ -16,7 +16,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        AppUser user = appUserRepository.findByEmail(email)
+        AppUser user = appUserRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
         // Throw the same exception for inactive users — DaoAuthenticationProvider
         // converts UsernameNotFoundException → BadCredentialsException so callers

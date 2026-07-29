@@ -29,9 +29,11 @@ public class AppUser {
     @Column(nullable = false, length = 20)
     private Role role;
 
-    // Manually-entered HR employee ID, format NF-######## (see V23). Required and
-    // unique; writable because it is supplied on create and correctable on edit.
-    @Column(name = "employee_code", nullable = false, unique = true, length = 20)
+    // HR employee ID in NF-##### format, assigned by the trg_employee_code trigger on
+    // INSERT (see V22). Read-only to Hibernate: including it in INSERT/UPDATE would send
+    // null and either suppress the trigger's generation or violate the NOT NULL on edit.
+    @Column(name = "employee_code", nullable = false, unique = true,
+            insertable = false, updatable = false)
     private String employeeCode;
 
     @Enumerated(EnumType.STRING)

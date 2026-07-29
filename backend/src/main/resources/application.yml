@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: optional:classpath:application-local.yml
   application:
     name: nforce-sync
 
@@ -10,7 +12,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     show-sql: true
     properties:
       hibernate:
@@ -32,6 +34,11 @@ app:
   jwt:
     # CHANGE IN PRODUCTION — move to environment variable JWT_SECRET, min 32 chars for HS256
     secret: "nforce-sync-dev-only-secret-key-change-this-in-prod-env-var-32chars+"
+  base-url: http://localhost:5173
+
+resend:
+  api-key: ${RESEND_API_KEY:re_placeholder_set_RESEND_API_KEY_env_var}
+  from: NForce Sync <onboarding@nforceone.com>
 
 logging:
   level:

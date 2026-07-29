@@ -9,6 +9,7 @@ import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.auth.AuditLog;
 import com.nforceone.sync.auth.AuditLogRepository;
 import com.nforceone.sync.auth.dto.UserDto;
+import com.nforceone.sync.email.EmailService;
 import com.nforceone.sync.org.DepartmentRepository;
 import com.nforceone.sync.org.DesignationRepository;
 import com.nforceone.sync.org.OrgLocationRepository;
@@ -37,6 +38,7 @@ public class UserService {
     private final DepartmentRepository departmentRepository;
     private final DesignationRepository designationRepository;
     private final OrgLocationRepository locationRepository;
+    private final EmailService emailService;
 
     public UserService(AppUserRepository userRepository,
                        AuditLogRepository auditLogRepository,
@@ -45,7 +47,8 @@ public class UserService {
                        EntityManager entityManager,
                        DepartmentRepository departmentRepository,
                        DesignationRepository designationRepository,
-                       OrgLocationRepository locationRepository) {
+                       OrgLocationRepository locationRepository,
+                       EmailService emailService) {
         this.userRepository        = userRepository;
         this.auditLogRepository    = auditLogRepository;
         this.passwordEncoder       = passwordEncoder;
@@ -54,10 +57,11 @@ public class UserService {
         this.departmentRepository  = departmentRepository;
         this.designationRepository = designationRepository;
         this.locationRepository    = locationRepository;
+        this.emailService          = emailService;
     }
 
     public UserCreateResult createUser(CreateUserRequest request, String actingEmail) {
-        if (userRepository.existsByEmail(request.email())) {
+        if (userRepository.existsByEmailAndDeletedAtIsNull(request.email())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "An account with this email already exists");
         }
@@ -100,6 +104,8 @@ public class UserService {
         entityManager.refresh(user);
 
         writeAudit("APP_USER", user.getId(), "CREATE", null, toJson(UserDto.from(user)), actor);
+
+        emailService.sendInviteEmail(user.getEmail(), user.getFullName(), tempPassword);
 
         return new UserCreateResult(UserDto.from(user), tempPassword);
     }
@@ -182,10 +188,26 @@ public class UserService {
         user.setMustChangePassword(true);
         userRepository.save(user);
 
+        emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), tempPassword);
+
         // No password data in audit log — who reset whose password, and when
         writeAudit("APP_USER", id, "PASSWORD_RESET", null, null, actor);
 
         return tempPassword;
+    }
+
+    public void forgotPassword(String email) {
+        String normalized = email.toLowerCase().trim();
+        userRepository.findByEmailAndDeletedAtIsNull(normalized).ifPresent(user -> {
+            if (user.getStatus() == AppUser.Status.ACTIVE && user.getDeletedAt() == null) {
+                String tempPassword = generateTempPassword();
+                user.setPasswordHash(passwordEncoder.encode(tempPassword));
+                user.setMustChangePassword(true);
+                userRepository.save(user);
+                emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), tempPassword);
+                writeAudit("APP_USER", user.getId(), "PASSWORD_RESET_SELF", null, null, user);
+            }
+        });
     }
 
     public void softDeleteUser(Long id, String actingEmail) {
@@ -223,7 +245,7 @@ public class UserService {
     }
 
     private AppUser requireActorByEmail(String email) {
-        return userRepository.findByEmail(email)
+        return userRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
     }

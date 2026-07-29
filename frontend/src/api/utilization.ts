@@ -18,7 +18,7 @@ export interface UtilSnapshotDto {
 export interface TeamUtilDto {
   employeeId: number;
   employeeName: string;
-  employeeCode: number;
+  employeeCode: string;
   snapshot: UtilSnapshotDto | null;
 }
 
