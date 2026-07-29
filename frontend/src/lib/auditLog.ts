@@ -118,7 +118,10 @@ export function describeAuditEvent(event: AuditLogDto): AuditDisplay {
       ?? (before?.name as string | undefined)
       ?? (before?.title as string | undefined);
     const suffix = name ? `: ${name}` : ` #${event.entityId ?? '?'}`;
-    return { message: `${actor} ${event.action.toLowerCase()}d business rule${suffix}`, category: 'business-rule' };
+    // Optional-chained to match entityType above — a null action would otherwise throw
+    // here and, rendering inside the dashboard's activity list, blank the page.
+    const verb = event.action?.toLowerCase() ?? 'change';
+    return { message: `${actor} ${verb}d business rule${suffix}`, category: 'business-rule' };
   }
 
   return { message: `${actor} performed ${event.action} on ${entityLabel}`, category: 'other' };

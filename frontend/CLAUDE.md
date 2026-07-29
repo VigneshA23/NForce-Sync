@@ -17,7 +17,11 @@ Utilization % = (Approved productive hours ÷ Available working hours) × 100
 ## SINGLE SOURCE OF TRUTH
 All thresholds live ONLY in src/lib/rules.ts. Never hardcode a threshold anywhere.
 - under-utilized: < 60% | healthy: 60–100% | over-utilized: > 100%
-- BENCH = exactly 0% allocation. Nothing else. 41% = "under-allocated", NOT bench.
+- ⚠ Allocations no longer carry a percentage. V29 dropped `allocation_pct`, so an allocation is
+  just employee + project + date range, and the old "BENCH = exactly 0% allocation" definition is
+  no longer expressible. `benchAllocation`/`isBench`/`allocationLabel` were removed from rules.ts.
+  The utilization thresholds above are UNAFFECTED — utilization is computed from approved EOD
+  hours ÷ available hours and never referenced allocation %.
 
 ## Design language — dark control-room
 Calm charcoal shell so COLOUR CARRIES MEANING, not decoration.

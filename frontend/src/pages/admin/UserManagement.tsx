@@ -9,6 +9,7 @@ import {
   Search, Filter, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { api } from '../../api/client';
+import { todayISO } from '../../lib/date';
 import {
   listUsers, createUser, updateUser, setUserStatus, resetPassword,
   extractApiError, extractFieldErrors, isHttpStatus,
@@ -436,7 +437,7 @@ const EMPTY_CREATE: CreateForm = {
   email: '',
   employeeCode: '',
   role: 'EMPLOYEE',
-  joiningDate: new Date().toISOString().slice(0, 10),
+  joiningDate: todayISO(),
   workMode: 'ONSITE',
   employmentType: 'FULL_TIME',
   departmentId: null,

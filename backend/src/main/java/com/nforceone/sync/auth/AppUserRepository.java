@@ -57,6 +57,9 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long>, JpaSpec
 
     List<AppUser> findByManagerId(Long managerId);
 
+    List<AppUser> findByRoleAndStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Role role,
+                                                                         AppUser.Status status);
+
     // Fix 2: FK reference checks before deleting org master records
     long countByDepartmentId(Long departmentId);
 

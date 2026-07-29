@@ -1,10 +1,10 @@
 package com.nforceone.sync.project;
 
+import com.nforceone.sync.auth.AppUser;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDate;
 import java.util.List;
 
 public interface AllocationRepository extends JpaRepository<Allocation, Long> {
@@ -19,26 +19,12 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
            "WHERE a.project.id = :projectId ORDER BY a.effectiveFrom DESC")
     List<Allocation> findByProjectIdWithRefs(@Param("projectId") Long projectId);
 
-    @Query("SELECT COALESCE(SUM(a.allocationPct), 0) FROM Allocation a " +
-           "WHERE a.employee.id = :employeeId AND a.effectiveFrom <= :today " +
-           "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :today)")
-    int sumActiveAllocationPct(@Param("employeeId") Long employeeId, @Param("today") LocalDate today);
-
-    // Same total but ignoring one allocation — used when editing a row, which would otherwise
-    // count its own current % against the 100% ceiling and reject an unchanged save.
-    @Query("SELECT COALESCE(SUM(a.allocationPct), 0) FROM Allocation a " +
-           "WHERE a.employee.id = :employeeId AND a.id <> :excludeId " +
-           "AND a.effectiveFrom <= :today AND (a.effectiveTo IS NULL OR a.effectiveTo >= :today)")
-    int sumActiveAllocationPctExcluding(@Param("employeeId") Long employeeId,
-                                       @Param("today") LocalDate today,
-                                       @Param("excludeId") Long excludeId);
-
-    // Current load for every allocated employee in one query — lets the assignable-employee
-    // list carry each person's committed % without an N+1 of sumActiveAllocationPct calls.
-    @Query("SELECT a.employee.id, COALESCE(SUM(a.allocationPct), 0) FROM Allocation a " +
-           "WHERE a.effectiveFrom <= :today AND (a.effectiveTo IS NULL OR a.effectiveTo >= :today) " +
-           "GROUP BY a.employee.id")
-    List<Object[]> sumActiveByEmployee(@Param("today") LocalDate today);
-
-    long countByProjectId(Long projectId);
+    /**
+     * Headcount for the Projects tab. Counts only EMPLOYEE-role allocations so the number agrees
+     * with the rows the Allocation tab actually shows — a plain count would include leads and
+     * back-office accounts that are filtered out of the list.
+     */
+    @Query("SELECT COUNT(a) FROM Allocation a WHERE a.project.id = :projectId AND a.employee.role = :role")
+    long countByProjectIdAndEmployeeRole(@Param("projectId") Long projectId,
+                                        @Param("role") AppUser.Role role);
 }

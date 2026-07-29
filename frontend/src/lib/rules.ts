@@ -1,6 +1,5 @@
 export const RULES = {
   util: { under: 60, over: 100 },
-  benchAllocation: 0,
   standardDayHours: 8,
   cutoff: '19:00',
   escalationHours: 48,
@@ -22,17 +21,6 @@ export function utilColor(pct: number | null): string {
     case 'healthy': return 'var(--ok)';
     case 'over':    return 'var(--risk)';
   }
-}
-
-export function isBench(allocationPct: number): boolean {
-  return allocationPct === RULES.benchAllocation;
-}
-
-export function allocationLabel(pct: number): string {
-  if (isBench(pct)) return 'Bench';
-  if (pct < RULES.util.under) return 'Under-allocated';
-  if (pct <= RULES.util.over) return 'Allocated';
-  return 'Over-allocated';
 }
 
 export function isWorkingDay(d: Date): boolean {

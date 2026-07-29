@@ -1,14 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Clock, Users, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
+import { todayISO } from '../../lib/date';
 import { useDashboardStats, type DashboardStatsDto, type MemberStatusDto } from '../../api/team';
 import { RULES, fmtPct } from '../../lib/rules';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function teamHealth(s: DashboardStatsDto): 'healthy' | 'at-risk' | 'critical' {
   const submissionRate = s.teamSize > 0 ? s.membersSubmittedToday / s.teamSize : 0;

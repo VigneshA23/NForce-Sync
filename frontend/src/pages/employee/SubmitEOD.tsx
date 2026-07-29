@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, XCircle, MessageSquare } from 'lucide-react';
 import { useToast } from '../../lib/toast';
 import { useAuth } from '../../lib/auth';
+import { todayISO } from '../../lib/date';
 import { listProjects } from '../../api/projects';
 import { listTaskCategories } from '../../api/taskCategories';
 import { saveDraft, submitEntry, listEntries } from '../../api/eod';
@@ -21,9 +22,6 @@ const TASK_STATUSES = [
 const WORK_LOCATIONS = ['Office', 'Remote', 'Client Site', 'Field'];
 const LEAVE_HOLIDAY   = 'Leave / Holiday';
 
-function todayISO() {
-  return new Date().toISOString().split('T')[0];
-}
 
 // ── Local task row type ────────────────────────────────────────────────────────
 

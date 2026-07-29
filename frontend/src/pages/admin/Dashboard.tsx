@@ -94,7 +94,9 @@ function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
 
 // ── Inactive users tile — hover popover ────────────────────────────────────────
 
-function InactiveUsersTile({ count, names }: { count: number; names: string[] }) {
+// `names` is defaulted, not required: an older backend build omits inactiveUserNames from
+// /api/admin/stats entirely, and an undefined .map() here took down the whole app.
+function InactiveUsersTile({ count, names = [] }: { count: number; names?: string[] }) {
   const [hover, setHover] = useState(false);
   return (
     <div
@@ -205,7 +207,10 @@ export default function AdminDashboard() {
     );
   }
 
-  const roleEntries = Object.entries(stats.usersByRole).filter(([, v]) => v > 0);
+  // Both defaulted for the same reason as InactiveUsersTile: a partial stats payload should
+  // degrade to an empty section, not blank the page.
+  const roleEntries = Object.entries(stats.usersByRole ?? {}).filter(([, v]) => v > 0);
+  const recentEvents = stats.recentAuditEvents ?? [];
 
   return (
     <div>
@@ -233,9 +238,9 @@ export default function AdminDashboard() {
         {/* Recent audit events — admin/config-level only, see AdminStatsController */}
         <Card>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 16 }}>Recent Activity</div>
-          {stats.recentAuditEvents.length === 0
+          {recentEvents.length === 0
             ? <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>No recent activity</div>
-            : stats.recentAuditEvents.map((event) => {
+            : recentEvents.map((event) => {
               const { message, category } = describeAuditEvent(event);
               const Icon = AUDIT_CATEGORY_ICONS[category];
               return (

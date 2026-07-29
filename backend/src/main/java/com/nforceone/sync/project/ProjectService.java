@@ -38,7 +38,11 @@ public class ProjectService {
      */
     @Transactional(readOnly = true)
     public List<ProjectDto> listMine(String actingEmail, LocalDate onDate) {
-        AppUser actor = appUserRepository.findByEmail(actingEmail)
+        // Deleted-aware lookup, per the convention documented on AppUserRepository: an email can
+        // be reused after a soft delete, so findByEmail can match several rows and blow up an
+        // Optional query with IncorrectResultSizeDataAccessException (a 500 on this endpoint,
+        // which the EOD screen shows as an empty Project dropdown).
+        AppUser actor = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
 
@@ -53,7 +57,7 @@ public class ProjectService {
     public List<ProjectFullDto> listAll() {
         return projectRepository.findAllWithPmOrderByNameAsc()
                 .stream()
-                .map(p -> ProjectFullDto.from(p, (int) allocationRepository.countByProjectId(p.getId())))
+                .map(p -> ProjectFullDto.from(p, (int) allocationRepository.countByProjectIdAndEmployeeRole(p.getId(), AppUser.Role.EMPLOYEE)))
                 .toList();
     }
 
@@ -62,7 +66,7 @@ public class ProjectService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A project with this code already exists");
         }
-        AppUser actor = appUserRepository.findByEmail(actingEmail)
+        AppUser actor = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
 
@@ -115,7 +119,7 @@ public class ProjectService {
         project.setEndDate(req.endDate());
 
         Project saved = projectRepository.save(project);
-        return ProjectFullDto.from(saved, (int) allocationRepository.countByProjectId(saved.getId()));
+        return ProjectFullDto.from(saved, (int) allocationRepository.countByProjectIdAndEmployeeRole(saved.getId(), AppUser.Role.EMPLOYEE));
     }
 
     /**

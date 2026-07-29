@@ -1,7 +1,7 @@
 package com.nforceone.sync.project;
 
 import com.nforceone.sync.project.dto.AllocationDto;
-import com.nforceone.sync.project.dto.CreateAssignmentRequest;
+import com.nforceone.sync.project.dto.CreateAllocationRequest;
 import com.nforceone.sync.project.dto.EmployeeRefDto;
 import com.nforceone.sync.project.dto.UpdateAllocationRequest;
 import jakarta.validation.Valid;
@@ -32,14 +32,14 @@ public class AllocationController {
         return allocationService.listAssignableEmployees();
     }
 
-    /** Creates the employee's primary allocation plus an optional secondary one, atomically. */
+    /** Assigns one employee to one project for a date range. */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public List<AllocationDto> create(@Valid @RequestBody CreateAssignmentRequest request) {
-        return allocationService.createAssignment(request);
+    public AllocationDto create(@Valid @RequestBody CreateAllocationRequest request) {
+        return allocationService.create(request);
     }
 
-    /** Edits an allocation's %, primary/secondary and date range. Employee and project are fixed. */
+    /** Edits an allocation's date range. Employee and project are fixed. */
     @PatchMapping("/{id}")
     public AllocationDto update(@PathVariable Long id,
                                 @Valid @RequestBody UpdateAllocationRequest request) {

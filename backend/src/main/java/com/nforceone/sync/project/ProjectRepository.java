@@ -11,9 +11,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     boolean existsByCode(String code);
 
     // Projects the employee may log EOD time against on a given date: an allocation whose
-    // effective window covers that date, on a project that is still ACTIVE. Same date-window
-    // idiom as AllocationRepository.sumActiveAllocationPct. DISTINCT because an employee can
-    // hold more than one allocation row (PRIMARY + SECONDARY) on the same project.
+    // effective window covers that date, on a project that is still ACTIVE. DISTINCT because
+    // nothing prevents an employee holding more than one allocation row for the same project.
     @Query("SELECT DISTINCT a.project FROM Allocation a " +
            "WHERE a.employee.id = :employeeId " +
            "AND a.project.status = :status " +

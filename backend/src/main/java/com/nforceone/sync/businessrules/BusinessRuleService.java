@@ -236,7 +236,9 @@ public class BusinessRuleService {
     }
 
     private AppUser requireActorByEmail(String email) {
-        return userRepository.findByEmail(email)
+        // Deleted-aware: see the note on AppUserRepository. A reused email matches multiple
+        // rows and would throw IncorrectResultSizeDataAccessException here.
+        return userRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
     }

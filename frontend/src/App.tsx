@@ -3,6 +3,7 @@ import { ThemeProvider } from './lib/theme';
 import { AuthProvider, useAuth, ROLE_LANDING } from './lib/auth';
 import { ToastProvider } from './lib/toast';
 import { Shell } from './components/Shell';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotAuthorized } from './pages/NotAuthorized';
 import { Placeholder } from './pages/Placeholder';
 import Login                from './pages/auth/Login';
@@ -144,7 +145,10 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <ToastProvider>
-          <AppRoutes />
+          {/* Inside the providers so the fallback picks up the theme variables. */}
+          <ErrorBoundary>
+            <AppRoutes />
+          </ErrorBoundary>
         </ToastProvider>
       </AuthProvider>
     </ThemeProvider>

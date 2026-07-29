@@ -12,8 +12,6 @@ public record AllocationDto(
         Long projectId,
         String projectCode,
         String projectName,
-        Integer allocationPct,
-        String allocationType,
         LocalDate effectiveFrom,
         LocalDate effectiveTo
 ) {
@@ -26,8 +24,6 @@ public record AllocationDto(
                 a.getProject().getId(),
                 a.getProject().getCode(),
                 a.getProject().getName(),
-                a.getAllocationPct(),
-                a.getAllocationType().name(),
                 a.getEffectiveFrom(),
                 a.getEffectiveTo());
     }

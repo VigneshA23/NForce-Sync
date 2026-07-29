@@ -57,14 +57,10 @@ export interface UpdateProjectPayload {
   endDate?: string | null;
 }
 
-export type AllocationType = 'PRIMARY' | 'SECONDARY';
-
 export interface EmployeeRefDto {
   id: number;
   fullName: string;
   employeeCode: string;
-  /** Percentage this employee is already committed to today, across all projects. */
-  currentAllocationPct: number;
 }
 
 export interface AllocationDto {
@@ -75,31 +71,22 @@ export interface AllocationDto {
   projectId: number;
   projectCode: string;
   projectName: string;
-  allocationPct: number;
-  allocationType: AllocationType;
   effectiveFrom: string;
+  /** Null means the assignment is open-ended. */
   effectiveTo: string | null;
 }
 
-/**
- * One allocation decision: a required primary project plus an optional secondary one,
- * sharing a single effective date range. The backend writes both rows atomically and
- * returns them, so this creates one or two allocations.
- */
-/** In-place edit of one allocation. Employee and project are not changeable. */
-export interface UpdateAllocationPayload {
-  allocationPct: number;
-  allocationType: AllocationType;
+/** Assigns one employee to one project for a date range. */
+export interface CreateAllocationPayload {
+  employeeId: number;
+  projectId: number;
   effectiveFrom: string;
+  /** Null leaves the assignment open-ended. */
   effectiveTo?: string | null;
 }
 
-export interface CreateAssignmentPayload {
-  employeeId: number;
-  primaryProjectId: number;
-  primaryPct: number;
-  secondaryProjectId?: number | null;
-  secondaryPct?: number | null;
+/** In-place edit of an allocation's dates. Employee and project are not changeable. */
+export interface UpdateAllocationPayload {
   effectiveFrom: string;
   effectiveTo?: string | null;
 }
@@ -129,8 +116,8 @@ export async function listAssignableEmployees(): Promise<EmployeeRefDto[]> {
   return res.data;
 }
 
-export async function createAllocation(data: CreateAssignmentPayload): Promise<AllocationDto[]> {
-  const res = await api.post<AllocationDto[]>('/allocations', data);
+export async function createAllocation(data: CreateAllocationPayload): Promise<AllocationDto> {
+  const res = await api.post<AllocationDto>('/allocations', data);
   return res.data;
 }
 

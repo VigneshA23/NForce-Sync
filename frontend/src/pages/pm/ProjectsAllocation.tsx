@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  FolderKanban, Users, Plus, RefreshCw, AlertTriangle, Trash2, Pencil,
+  FolderKanban, Users, Plus, RefreshCw, AlertTriangle, Trash2, Pencil, Search, X,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../lib/toast';
+import { todayISO } from '../../lib/date';
 import { extractApiError } from '../../api/admin';
 import {
   useAllProjects, useAllocations, useAssignableEmployees,
   useCreateProject, useUpdateProject, useCreateAllocation, useUpdateAllocation, useDeleteAllocation,
 } from '../../api/projects';
-import type { ProjectFullDto, AllocationDto, AllocationType } from '../../api/projects';
+import type { ProjectFullDto, AllocationDto } from '../../api/projects';
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
@@ -76,57 +78,40 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function AllocationTypeBadge({ type }: { type: AllocationType }) {
-  const primary = type === 'PRIMARY';
-  const color = primary ? '#4C8DD6' : '#9BA1AC';
-  return (
-    <span style={{
-      display: 'inline-block', padding: '3px 8px', borderRadius: 20,
-      fontSize: 11, fontWeight: 500,
-      background: `color-mix(in srgb, ${color} 14%, transparent)`,
-      border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
-      color,
-    }}>
-      {primary ? 'Primary' : 'Secondary'}
-    </span>
-  );
-}
+type AllocationSortKey = 'employee' | 'project';
 
 /**
- * Running allocation total for the employee: what they already hold on *other* rows plus
- * whatever the open dialog would apply. Shared by the create and edit dialogs. Purely a
- * hint — AllocationService enforces the 100% ceiling authoritatively.
+ * Clickable column header: first click sorts A–Z, the next flips to Z–A. `dir` is null when this
+ * column isn't the active sort, which shows a faint double arrow to advertise that it is sortable.
  */
-function TotalAllocationPanel({ existingPct, requestedPct }: { existingPct: number; requestedPct: number }) {
-  const totalPct = existingPct + requestedPct;
-  const remainingPct = 100 - totalPct;
-  const overAllocated = totalPct > 100;
+function SortableTh({ label, dir, onToggle }: {
+  label: string; dir: 'asc' | 'desc' | null; onToggle: () => void;
+}) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-      padding: '10px 14px', marginBottom: 14, borderRadius: 7,
-      background: 'var(--raised)',
-      border: `1px solid ${overAllocated ? 'var(--risk)' : 'var(--line2)'}`,
-    }}>
-      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-mut)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-        Total Allocation
-      </span>
-      <span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
-        <b style={{
-          fontSize: 18, fontFamily: '"Space Grotesk", sans-serif',
-          fontVariantNumeric: 'tabular-nums',
-          color: overAllocated ? 'var(--risk)' : totalPct === 100 ? 'var(--warn)' : 'var(--ok)',
-        }}>
-          {totalPct}%
-        </b>
-        {existingPct > 0 && (
-          <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}> ({existingPct}% existing + {requestedPct}% new)</span>
-        )}
-        {overAllocated
-          ? <span style={{ color: 'var(--risk)' }}> · {totalPct - 100}% over limit</span>
-          : <span style={{ color: 'var(--txt-dim)' }}> · {remainingPct}% free</span>}
-      </span>
-    </div>
+    <th
+      style={{ ...thStyle, padding: 0 }}
+      aria-sort={dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none'}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        title={dir === 'asc' ? 'Sorted A–Z — click for Z–A'
+          : dir === 'desc' ? 'Sorted Z–A — click for A–Z'
+            : `Sort by ${label.toLowerCase()} A–Z`}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          width: '100%', padding: '10px 16px',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          font: 'inherit', color: dir ? 'var(--txt)' : 'var(--txt-dim)',
+          letterSpacing: 'inherit', textTransform: 'inherit', textAlign: 'left',
+        }}
+      >
+        {label}
+        {dir === 'asc' ? <ArrowUp size={12} aria-hidden="true" />
+          : dir === 'desc' ? <ArrowDown size={12} aria-hidden="true" />
+            : <ArrowUpDown size={12} aria-hidden="true" style={{ opacity: 0.55 }} />}
+      </button>
+    </th>
   );
 }
 
@@ -167,22 +152,28 @@ function IconButton({ icon, label, danger, onClick, disabled }: {
   );
 }
 
-function Toolbar({ count, noun, onRefetch, onAdd, addLabel }: {
+function Toolbar({ count, noun, onRefetch, onAdd, addLabel, filters }: {
   count: number | undefined; noun: string; onRefetch: () => void; onAdd: () => void; addLabel: string;
+  /** Optional filter controls, rendered in the left group after the count. */
+  filters?: React.ReactNode;
 }) {
   return (
     <div style={{
       padding: '14px 20px', borderBottom: '1px solid var(--line)',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
     }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        fontSize: 13, fontWeight: 600, color: 'var(--txt)',
+      }}>
         {count != null && (
-          <span style={{ color: 'var(--txt-dim)', fontWeight: 400 }}>
+          <span style={{ color: 'var(--txt-dim)', fontWeight: 400, whiteSpace: 'nowrap' }}>
             {count} {count === 1 ? noun : `${noun}s`}
           </span>
         )}
+        {filters}
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
         <button
           onClick={onRefetch}
           aria-label="Refresh"
@@ -221,8 +212,30 @@ interface ProjectFormState {
   endDate: string;
 }
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+/**
+ * Trailing-edge debounce. Keeps a fast-typing search box from re-filtering on every keystroke.
+ * Local because the repo has no debounce utility and no new dependency is warranted for it.
+ */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+
+/**
+ * ISO `yyyy-MM-dd` → `DD-MM-YYYY` for display; a plain hyphen when absent.
+ *
+ * Splits the string rather than going through `new Date(iso)`, which parses a bare date as UTC
+ * midnight and would render the previous day for anyone west of UTC.
+ */
+function fmtDateDMY(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  const [y, m, d] = iso.split('-');
+  return y && m && d ? `${d}-${m}-${y}` : iso;
 }
 
 /** Earliest selectable end date: the day after the start, since the two may not be equal. */
@@ -395,19 +408,21 @@ function ProjectModal({ open, onClose, editing }: {
               onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
           </div>
           <div>
-            <label style={labelStyle}>End Date{endDateRequired ? ' *' : ''}</label>
+            {/* Optional in general, but mandatory once the status is Completed. */}
+            <label style={labelStyle}>
+              End Date{endDateRequired
+                ? ' *'
+                : <span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}> (Optional)</span>}
+            </label>
             <input type="date" style={inputStyle} value={form.endDate} min={dayAfterISO(form.startDate)}
               onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
-            <p style={{
-              fontSize: 11, margin: '5px 0 0',
-              color: badDateOrder || (endDateRequired && form.endDate === '') ? 'var(--risk)' : 'var(--txt-dim)',
-            }}>
-              {badDateOrder
-                ? 'End Date must be after Start Date.'
-                : endDateRequired
-                  ? 'Required when status is Completed.'
-                  : 'Leave blank if ongoing — no fixed end date.'}
-            </p>
+            {(badDateOrder || (endDateRequired && form.endDate === '')) && (
+              <p style={{ fontSize: 11, margin: '5px 0 0', color: 'var(--risk)' }}>
+                {badDateOrder
+                  ? 'End Date must be after Start Date.'
+                  : 'Required when status is Completed.'}
+              </p>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -440,13 +455,61 @@ function ProjectsTab() {
   const { data, isPending, isError, refetch } = useAllProjects();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ProjectFullDto | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  // Only the free-text box is debounced; the status select applies immediately.
+  const debouncedSearch = useDebouncedValue(search, 300);
+
+  const filtered = useMemo(() => {
+    const term = debouncedSearch.trim().toLowerCase();
+    return (data ?? []).filter(p =>
+      (term === '' || p.name.toLowerCase().includes(term))
+      && (statusFilter === '' || p.status === statusFilter),
+    );
+  }, [data, debouncedSearch, statusFilter]);
+
+  const filtersActive = debouncedSearch.trim() !== '' || statusFilter !== '';
 
   function openCreate() { setEditing(null); setModalOpen(true); }
   function openEdit(p: ProjectFullDto) { setEditing(p); setModalOpen(true); }
 
+  // Status options come from STATUS_CFG — the same map StatusBadge reads, so the labels and
+  // colours stay in one place rather than being restated here.
+  const projectFilters = (
+    <>
+      <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+        <Search
+          size={13} aria-hidden="true"
+          style={{ position: 'absolute', left: 10, color: 'var(--txt-dim)', pointerEvents: 'none' }}
+        />
+        <input
+          type="search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search project"
+          aria-label="Search project by name"
+          style={{ ...inputStyle, width: 220, paddingLeft: 30, fontWeight: 400 }}
+        />
+      </div>
+      <select
+        value={statusFilter}
+        onChange={e => setStatusFilter(e.target.value)}
+        aria-label="Filter by status"
+        style={{ ...inputStyle, width: 170, fontWeight: 400 }}
+      >
+        <option value="">Filter by status</option>
+        {Object.entries(STATUS_CFG).map(([value, cfg]) => (
+          <option key={value} value={value}>{cfg.label}</option>
+        ))}
+      </select>
+    </>
+  );
+
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
-      <Toolbar count={data?.length} noun="project" onRefetch={() => refetch()} onAdd={openCreate} addLabel="New Project" />
+      <Toolbar count={data ? filtered.length : undefined} noun="project" onRefetch={() => refetch()}
+        onAdd={openCreate} addLabel="New Project" filters={projectFilters} />
 
       {isPending && (
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -484,30 +547,34 @@ function ProjectsTab() {
             </tr>
           </thead>
           <tbody>
-            {data.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
-                  No projects yet. Create one above.
+                  {filtersActive
+                    ? 'No projects match your search or filter.'
+                    : 'No projects yet. Create one above.'}
                 </td>
               </tr>
             ) : (
-              data.map(p => (
+              filtered.map(p => (
                 <tr key={p.id}>
                   <td style={{ ...tdStyle, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-mut)' }}>{p.code}</td>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{p.name}</td>
-                  <td style={tdStyle}>{p.client ?? '—'}</td>
-                  {/* Derived, never stored: a real end date when there is one, otherwise a word
-                      taken from the status — a COMPLETED project must not read as "Ongoing". */}
+                  {/* Internal projects have no client by design — the server forces it null. */}
+                  <td style={tdStyle}>{p.client ?? '-'}</td>
+                  {/* Derived, never stored: a recorded end date always wins; with none, the status
+                      supplies the word. Labels come straight from STATUS_CFG, so this reads
+                      "On Hold" rather than ON_HOLD and a new status needs no change here. */}
                   <td style={{ ...tdStyle, whiteSpace: 'nowrap', fontSize: 12 }}>
-                    {p.startDate ?? '—'}
+                    {fmtDateDMY(p.startDate)}
                     <span style={{ color: 'var(--txt-dim)' }}> → </span>
-                    {p.endDate ?? (
+                    {p.endDate ? fmtDateDMY(p.endDate) : (
                       <span style={{ color: 'var(--txt-mut)', fontStyle: 'italic' }}>
-                        {p.status === 'COMPLETED' ? 'Completed' : 'Ongoing'}
+                        {STATUS_CFG[p.status]?.label ?? p.status}
                       </span>
                     )}
                   </td>
-                  <td style={tdStyle}>{p.pmName ?? '—'}</td>
+                  <td style={tdStyle}>{p.pmName ?? '-'}</td>
                   <td style={tdStyle}>{p.allocatedHeadcount}</td>
                   <td style={tdStyle}><StatusBadge status={p.status} /></td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
@@ -534,66 +601,40 @@ function AllocationModal({ open, onClose, projects }: {
   const { data: employees } = useAssignableEmployees();
   const createMutation = useCreateAllocation();
   const [employeeId, setEmployeeId] = useState('');
-  const [primaryProjectId, setPrimaryProjectId] = useState('');
-  const [primaryPct, setPrimaryPct] = useState('100');
-  const [secondaryProjectId, setSecondaryProjectId] = useState('');
-  const [secondaryPct, setSecondaryPct] = useState('');
-  const [effectiveFrom, setEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 10));
+  const [projectId, setProjectId] = useState('');
+  const [effectiveFrom, setEffectiveFrom] = useState(todayISO);
   const [effectiveTo, setEffectiveTo] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const hasSecondary = secondaryProjectId !== '';
+  const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
 
-  // Totals are measured against what the employee already holds, so an over-commit is
-  // visible before submitting rather than surfacing as a 409 afterwards.
-  const selectedEmployee = employees?.find(e => String(e.id) === employeeId);
-  const existingPct  = selectedEmployee?.currentAllocationPct ?? 0;
-  const requestedPct = (Number(primaryPct) || 0) + (hasSecondary ? Number(secondaryPct) || 0 : 0);
-  const overAllocated = existingPct + requestedPct > 100;
-
-  const secondaryIncomplete = hasSecondary && !secondaryPct;
+  // Only ACTIVE projects are allocatable — you cannot staff someone onto work that is
+  // completed, on hold, or inactive. It would also be invisible to them: the EOD Project
+  // dropdown filters to ACTIVE, so such an allocation could never be booked against.
+  const activeProjects = useMemo(
+    () => projects.filter(p => p.status === 'ACTIVE'),
+    [projects],
+  );
 
   function handleClose() {
     setEmployeeId('');
-    setPrimaryProjectId(''); setPrimaryPct('100');
-    setSecondaryProjectId(''); setSecondaryPct('');
+    setProjectId('');
     setEffectiveTo(''); setError(null);
     onClose();
   }
 
-  // Clearing the secondary project must clear its % too, or a stale value would be
-  // sent alongside a null project and rejected by the paired-fields check.
-  function handleSecondaryProjectChange(value: string) {
-    setSecondaryProjectId(value);
-    if (value === '') setSecondaryPct('');
-  }
-
-  // Picking a primary that matches the current secondary would leave the secondary
-  // holding a value that is no longer offered in its (filtered) list, so drop it.
-  function handlePrimaryProjectChange(value: string) {
-    setPrimaryProjectId(value);
-    if (value !== '' && value === secondaryProjectId) {
-      setSecondaryProjectId('');
-      setSecondaryPct('');
-    }
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!employeeId || !primaryProjectId || !effectiveFrom) return;
-    if (overAllocated || secondaryIncomplete) return;
+    if (!employeeId || !projectId || !effectiveFrom || badDateOrder) return;
     setError(null);
     try {
-      const created = await createMutation.mutateAsync({
+      await createMutation.mutateAsync({
         employeeId: Number(employeeId),
-        primaryProjectId: Number(primaryProjectId),
-        primaryPct: Number(primaryPct),
-        secondaryProjectId: hasSecondary ? Number(secondaryProjectId) : null,
-        secondaryPct: hasSecondary ? Number(secondaryPct) : null,
+        projectId: Number(projectId),
         effectiveFrom,
         effectiveTo: effectiveTo || null,
       });
-      showToast('success', created.length > 1 ? 'Allocations created' : 'Allocation created');
+      showToast('success', 'Allocation created');
       handleClose();
     } catch (err) {
       setError(extractApiError(err, 'Failed to create allocation'));
@@ -601,7 +642,7 @@ function AllocationModal({ open, onClose, projects }: {
   }
 
   return (
-    <Modal open={open} title="New Allocation" onClose={handleClose} width={520}>
+    <Modal open={open} title="New Allocation" onClose={handleClose} width={480}>
       <form onSubmit={handleSubmit} noValidate>
         {error && <ErrorBanner message={error} />}
         <div style={{ marginBottom: 14 }}>
@@ -609,55 +650,22 @@ function AllocationModal({ open, onClose, projects }: {
           <select style={inputStyle} value={employeeId} onChange={e => setEmployeeId(e.target.value)} autoFocus>
             <option value="">Select employee…</option>
             {employees?.map(emp => (
-              <option key={emp.id} value={emp.id}>
-                {emp.fullName} ({emp.employeeCode})
-                {emp.currentAllocationPct > 0 ? ` — already ${emp.currentAllocationPct}%` : ''}
-              </option>
+              <option key={emp.id} value={emp.id}>{emp.fullName} ({emp.employeeCode})</option>
             ))}
           </select>
         </div>
 
-        {/* Primary */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 14, marginBottom: 14 }}>
-          <div>
-            <label style={labelStyle}>Primary Project *</label>
-            <select style={inputStyle} value={primaryProjectId}
-              onChange={e => handlePrimaryProjectChange(e.target.value)}>
-              <option value="">Select project…</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Primary % *</label>
-            <input type="number" min={1} max={100} style={inputStyle} value={primaryPct}
-              onChange={e => setPrimaryPct(e.target.value)} />
-          </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Project *</label>
+          <select style={inputStyle} value={projectId} onChange={e => setProjectId(e.target.value)}>
+            <option value="">
+              {activeProjects.length === 0 ? 'No active projects' : 'Select project…'}
+            </option>
+            {activeProjects.map(p => (
+              <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+            ))}
+          </select>
         </div>
-
-        {/* Secondary — optional. The primary project is excluded from the list so the
-            same project can't be picked twice. */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 14, marginBottom: 14 }}>
-          <div>
-            <label style={labelStyle}>Secondary Project</label>
-            <select style={inputStyle} value={secondaryProjectId}
-              onChange={e => handleSecondaryProjectChange(e.target.value)}>
-              <option value="">— none —</option>
-              {projects.filter(p => String(p.id) !== primaryProjectId).map(p => (
-                <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Secondary %{hasSecondary ? ' *' : ''}</label>
-            <input type="number" min={1} max={100} style={{ ...inputStyle, opacity: hasSecondary ? 1 : 0.5 }}
-              value={secondaryPct} disabled={!hasSecondary} placeholder={hasSecondary ? '' : '—'}
-              onChange={e => setSecondaryPct(e.target.value)} />
-          </div>
-        </div>
-
-        <TotalAllocationPanel existingPct={existingPct} requestedPct={requestedPct} />
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
           <div>
@@ -666,16 +674,25 @@ function AllocationModal({ open, onClose, projects }: {
               onChange={e => setEffectiveFrom(e.target.value)} />
           </div>
           <div>
-            <label style={labelStyle}>Effective To</label>
-            <input type="date" style={inputStyle} value={effectiveTo}
+            {/* Blank means the assignment is open-ended. */}
+            <label style={labelStyle}>
+              Effective To
+              <span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}> (Optional)</span>
+            </label>
+            <input type="date" style={inputStyle} value={effectiveTo} min={effectiveFrom || undefined}
               onChange={e => setEffectiveTo(e.target.value)} />
+            {badDateOrder && (
+              <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>
+                Effective To cannot be earlier than Effective From.
+              </p>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             type="submit"
-            disabled={createMutation.isPending || !employeeId || !primaryProjectId || !primaryPct
-              || !effectiveFrom || overAllocated || secondaryIncomplete}
+            disabled={createMutation.isPending || !employeeId || !projectId
+              || !effectiveFrom || badDateOrder}
             style={{
               padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
               color: '#fff', fontSize: 13, fontWeight: 600,
@@ -698,10 +715,7 @@ function AllocationModal({ open, onClose, projects }: {
 
 function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDto | null; onClose: () => void }) {
   const { showToast } = useToast();
-  const { data: employees } = useAssignableEmployees();
   const updateMutation = useUpdateAllocation();
-  const [pct, setPct] = useState('');
-  const [type, setType] = useState<AllocationType>('PRIMARY');
   const [effectiveFrom, setEffectiveFrom] = useState('');
   const [effectiveTo, setEffectiveTo] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -709,39 +723,21 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
   // Re-seed whenever a different row is opened.
   useEffect(() => {
     if (!allocation) return;
-    setPct(String(allocation.allocationPct));
-    setType(allocation.allocationType);
     setEffectiveFrom(allocation.effectiveFrom);
     setEffectiveTo(allocation.effectiveTo ?? '');
     setError(null);
   }, [allocation]);
 
-  // `currentAllocationPct` counts allocations active today and *includes this row*, so strip
-  // this row's own contribution before adding the edited value — otherwise it double-counts
-  // itself. Judged on the row's original dates: a future-dated or already-ended row was never
-  // in that total, so subtracting it would under-report.
-  const employee = employees?.find(e => e.id === allocation?.employeeId);
-  const today = new Date().toISOString().slice(0, 10);
-  const rowActiveToday = allocation != null
-    && allocation.effectiveFrom <= today
-    && (allocation.effectiveTo === null || allocation.effectiveTo >= today);
-  const existingOtherPct = Math.max(
-    0,
-    (employee?.currentAllocationPct ?? 0) - (rowActiveToday ? allocation!.allocationPct : 0),
-  );
-  const requestedPct  = Number(pct) || 0;
-  const overAllocated = existingOtherPct + requestedPct > 100;
+  const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!allocation || !pct || !effectiveFrom || overAllocated) return;
+    if (!allocation || !effectiveFrom || badDateOrder) return;
     setError(null);
     try {
       await updateMutation.mutateAsync({
         id: allocation.id,
         data: {
-          allocationPct: Number(pct),
-          allocationType: type,
           effectiveFrom,
           effectiveTo: effectiveTo || null,
         },
@@ -754,7 +750,7 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
   }
 
   return (
-    <Modal open={allocation != null} title="Edit Allocation" onClose={onClose} width={520}>
+    <Modal open={allocation != null} title="Edit Allocation" onClose={onClose} width={480}>
       {allocation && (
         <form onSubmit={handleSubmit} noValidate>
           {error && <ErrorBanner message={error} />}
@@ -782,41 +778,28 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 14, marginBottom: 14 }}>
-            <div>
-              <label style={labelStyle}>Allocation % *</label>
-              <input type="number" min={1} max={100} style={inputStyle} value={pct} autoFocus
-                onChange={e => setPct(e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Type *</label>
-              <select style={inputStyle} value={type}
-                onChange={e => setType(e.target.value as AllocationType)}>
-                <option value="PRIMARY">Primary</option>
-                <option value="SECONDARY">Secondary</option>
-              </select>
-            </div>
-          </div>
-
-          <TotalAllocationPanel existingPct={existingOtherPct} requestedPct={requestedPct} />
-
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
             <div>
               <label style={labelStyle}>Effective From *</label>
-              <input type="date" style={inputStyle} value={effectiveFrom}
+              <input type="date" style={inputStyle} value={effectiveFrom} autoFocus
                 onChange={e => setEffectiveFrom(e.target.value)} />
             </div>
             <div>
               <label style={labelStyle}>Effective To</label>
-              <input type="date" style={inputStyle} value={effectiveTo}
+              <input type="date" style={inputStyle} value={effectiveTo} min={effectiveFrom || undefined}
                 onChange={e => setEffectiveTo(e.target.value)} />
+              <p style={{ fontSize: 11, color: badDateOrder ? 'var(--risk)' : 'var(--txt-dim)', margin: '5px 0 0' }}>
+                {badDateOrder
+                  ? 'Effective To cannot be earlier than Effective From.'
+                  : 'Leave blank for an open-ended assignment.'}
+              </p>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="submit"
-              disabled={updateMutation.isPending || !pct || !effectiveFrom || overAllocated}
+              disabled={updateMutation.isPending || !effectiveFrom || badDateOrder}
               style={{
                 padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
                 color: '#fff', fontSize: 13, fontWeight: 600,
@@ -861,8 +844,8 @@ function DeleteAllocationModal({ allocation, onClose }: { allocation: Allocation
         <div>
           {error && <ErrorBanner message={error} />}
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.7, marginBottom: 20 }}>
-            Remove <b style={{ color: 'var(--txt)' }}>{allocation.employeeName}</b>'s {allocation.allocationPct}%
-            allocation on <b style={{ color: 'var(--txt)' }}>{allocation.projectName}</b>?
+            Remove <b style={{ color: 'var(--txt)' }}>{allocation.employeeName}</b> from{' '}
+            <b style={{ color: 'var(--txt)' }}>{allocation.projectName}</b>?
           </p>
           <div style={{ display: 'flex', gap: 10 }}>
             <button
@@ -895,9 +878,41 @@ function AllocationTab() {
   const { data: projects } = useAllProjects();
   const [projectFilter, setProjectFilter] = useState('');
   const { data, isPending, isError, refetch } = useAllocations(projectFilter ? Number(projectFilter) : undefined);
+  const [employeeSearch, setEmployeeSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [toEdit, setToEdit] = useState<AllocationDto | null>(null);
   const [toDelete, setToDelete] = useState<AllocationDto | null>(null);
+
+  // null = the order the API returned. Single-column sort: clicking a different header moves the
+  // sort to it rather than layering a second one.
+  const [sort, setSort] = useState<{ key: AllocationSortKey; dir: 'asc' | 'desc' } | null>(null);
+
+  function toggleSort(key: AllocationSortKey) {
+    setSort(prev => (prev?.key === key
+      ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: 'asc' }));
+  }
+
+  // The project filter is applied server-side by useAllocations; the employee search narrows the
+  // rows it returns and the sort orders what's left, so all three combine.
+  const debouncedEmployeeSearch = useDebouncedValue(employeeSearch, 300);
+  const filtered = useMemo(() => {
+    const term = debouncedEmployeeSearch.trim().toLowerCase();
+    const rows = term === ''
+      ? (data ?? [])
+      : (data ?? []).filter(a =>
+          a.employeeName.toLowerCase().includes(term) || a.employeeCode.toLowerCase().includes(term));
+    if (sort === null) return rows;
+    // Sort on the leading text of each cell, so the visible order matches what's read: the
+    // Project column renders "CODE — Name". Copy first — the array belongs to React Query's cache.
+    const valueOf = (a: AllocationDto) => (sort.key === 'employee' ? a.employeeName : a.projectCode);
+    return [...rows].sort((a, b) => {
+      const cmp = valueOf(a).localeCompare(valueOf(b), undefined, { sensitivity: 'base' });
+      return sort.dir === 'asc' ? cmp : -cmp;
+    });
+  }, [data, debouncedEmployeeSearch, sort]);
+
+  const filtersActive = debouncedEmployeeSearch.trim() !== '';
 
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
@@ -905,9 +920,9 @@ function AllocationTab() {
         padding: '14px 20px', borderBottom: '1px solid var(--line)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 13, color: 'var(--txt-dim)' }}>
-            {data?.length ?? 0} allocation{data?.length === 1 ? '' : 's'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: 'var(--txt-dim)', whiteSpace: 'nowrap' }}>
+            {filtered.length} allocation{filtered.length === 1 ? '' : 's'}
           </span>
           <select
             style={{ ...inputStyle, width: 220 }}
@@ -919,8 +934,31 @@ function AllocationTab() {
               <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
             ))}
           </select>
+          <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+            <Search size={13} aria-hidden="true"
+              style={{ position: 'absolute', left: 10, color: 'var(--txt-dim)', pointerEvents: 'none' }} />
+            <input
+              value={employeeSearch}
+              onChange={e => setEmployeeSearch(e.target.value)}
+              placeholder="Search employee"
+              aria-label="Search employee by name or ID"
+              style={{ ...inputStyle, width: 220, paddingLeft: 30, paddingRight: 30, fontWeight: 400 }}
+            />
+            {employeeSearch !== '' && (
+              <button type="button" onClick={() => setEmployeeSearch('')} aria-label="Clear employee search"
+                style={{
+                  position: 'absolute', right: 8, background: 'transparent', border: 'none',
+                  cursor: 'pointer', color: 'var(--txt-dim)', padding: 4, display: 'flex',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--txt)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--txt-dim)'; }}
+              >
+                <X size={14} aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button
             onClick={() => refetch()}
             aria-label="Refresh"
@@ -969,31 +1007,31 @@ function AllocationTab() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={thStyle}>Employee</th>
-              <th style={thStyle}>Project</th>
-              <th style={thStyle}>Type</th>
-              <th style={thStyle}>Allocation</th>
+              <SortableTh label="Employee" dir={sort?.key === 'employee' ? sort.dir : null}
+                onToggle={() => toggleSort('employee')} />
+              <SortableTh label="Project" dir={sort?.key === 'project' ? sort.dir : null}
+                onToggle={() => toggleSort('project')} />
               <th style={thStyle}>Effective From</th>
               <th style={thStyle}>Effective To</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {data.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
-                  No allocations yet. Create one above.
+                <td colSpan={5} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                  {filtersActive
+                    ? 'No allocations match that employee.'
+                    : 'No allocations yet. Create one above.'}
                 </td>
               </tr>
             ) : (
-              data.map(a => (
+              filtered.map(a => (
                 <tr key={a.id}>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{a.employeeName} <span style={{ color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>{a.employeeCode}</span></td>
                   <td style={tdStyle}>{a.projectCode} — {a.projectName}</td>
-                  <td style={tdStyle}><AllocationTypeBadge type={a.allocationType} /></td>
-                  <td style={tdStyle}>{a.allocationPct}%</td>
-                  <td style={tdStyle}>{a.effectiveFrom}</td>
-                  <td style={tdStyle}>{a.effectiveTo ?? '—'}</td>
+                  <td style={tdStyle}>{fmtDateDMY(a.effectiveFrom)}</td>
+                  <td style={tdStyle}>{fmtDateDMY(a.effectiveTo)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                       <IconButton icon={<Pencil size={13} aria-hidden="true" />} label="Edit" onClick={() => setToEdit(a)} />

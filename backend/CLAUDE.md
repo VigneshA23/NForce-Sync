@@ -89,11 +89,12 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 - project: id, code (UNIQUE), name, client, project_type, billing_model,
   status (ACTIVE/INACTIVE/COMPLETED/ON_HOLD), pm_id (FK app_user), start_date, end_date, created_at
 - allocation: id, employee_id (FK app_user), project_id (FK project),
-  allocation_pct INT (0–100 CHECK), allocation_type (PRIMARY/SECONDARY CHECK, V25),
-  effective_from DATE, effective_to DATE NULL, created_at
-  One row per (employee, project) — a primary+secondary split is TWO rows, written in one
-  transaction. Ceiling is 100% summed across an employee's rows active today; when editing a
-  row, exclude it from that sum or it double-counts itself.
+  effective_from DATE, effective_to DATE NULL (null = open-ended), created_at
+  A plain assignment: this employee is on this project for this period. V29 dropped
+  allocation_pct (V3) and allocation_type (V25) — there is no percentage, no PRIMARY/SECONDARY,
+  and therefore NO capacity ceiling. Nothing currently stops the same employee being allocated
+  to unlimited overlapping projects, or to the same project twice; a unique employee+project
+  guard over overlapping dates is the open follow-up.
 - task_category: id, name (UNIQUE), is_productive BOOLEAN, is_billable_default BOOLEAN, active BOOLEAN
   Seeded with 19 PRD categories. NOT productive: "Leave / Holiday", "Bench Activity". All others productive.
 - Seed: Priya Nair (id=2, MANAGER) set as manager_id for employees id=3,4,5

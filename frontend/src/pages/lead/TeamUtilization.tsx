@@ -1,15 +1,14 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
+import { toLocalISODate, todayISO as localTodayISO } from '../../lib/date';
 import { useTeamUtil } from '../../api/utilization';
 import { RULES, utilState, utilColor, fmtPct, isWorkingDay } from '../../lib/rules';
 import type { TeamUtilDto } from '../../api/utilization';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
-function toISO(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+const toISO = toLocalISODate;
 
 function fmtDisplayDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
@@ -174,7 +173,7 @@ function MemberUtilRow({ member, isLast }: { member: TeamUtilDto; isLast: boolea
 
 export default function TeamUtilization() {
   const { user } = useAuth();
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = localTodayISO();
   const [dateISO, setDateISO] = useState(todayISO);
 
   const { data: members, isPending, isError, refetch } = useTeamUtil(user?.id, dateISO);

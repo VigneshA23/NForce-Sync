@@ -37,11 +37,29 @@ api.interceptors.response.use(
     }
 
     // Expired or invalid token — drop the stale session and re-authenticate.
-    if (status === 401 && window.location.pathname !== "/login") {
-      try {
-        localStorage.removeItem("nfsync_session");
-      } catch {}
-      window.location.assign("/login");
+    if (status === 401) {
+      // A 401 from the login call itself is "wrong password", not a dead session:
+      // Login.tsx owns that message and must not be reloaded out from under it.
+      const isLoginAttempt = (error?.config?.url ?? "").includes("/auth/login");
+
+      if (!isLoginAttempt) {
+        // Cleared unconditionally, and deliberately OUTSIDE the redirect guard below.
+        // Leaving a dead session behind while still navigating to /login lets
+        // RedirectAuth bounce straight back to the role landing page, which 401s
+        // again — a hard-reload loop with no exit.
+        try {
+          localStorage.removeItem("nfsync_session");
+        } catch {
+          // Storage unavailable (private mode, blocked cookies). Nothing more to do —
+          // the redirect still gets the user to a screen where they can sign in.
+        }
+
+        // Pre-auth screens own their own error state; don't navigate out of them.
+        const PRE_AUTH_PATHS = ["/login", "/forgot", "/reset"];
+        if (!PRE_AUTH_PATHS.includes(window.location.pathname)) {
+          window.location.assign("/login");
+        }
+      }
     }
 
     return Promise.reject(error);
