@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import axios from 'axios';
 import type { Role } from './types';
 import { getMe, toRole } from '../api/auth';
 import type { ServerUser } from '../api/auth';
@@ -97,7 +98,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(savedToken);
         saveSession({ token: savedToken, user: freshUser });
       })
-      .catch(() => {
+      .catch((err) => {
+        // A 403 means the token is valid but the account is restricted — currently only the
+        // force-change-password gate in JwtFilter. Keep the session so a refresh on that
+        // screen doesn't bounce the user back to /login. Only clear on 401 / bad token.
+        if (axios.isAxiosError(err) && err.response?.status === 403) return;
         saveSession(null);
         setUser(null);
         setToken(null);

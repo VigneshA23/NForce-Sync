@@ -53,10 +53,16 @@ export default function Login() {
     setSubmitting(true);
 
     try {
-      const { token, user: serverUser } = await login(email, password);
-      const authUser = buildAuthUser(serverUser);
+      const { token, user: serverUser, mustChangePassword } = await login(email, password);
+      // mustChangePassword arrives top-level on the login response as well as on the user
+      // object — pass it through explicitly. Dropping it lets the user into the app with a
+      // temp-password token, which JwtFilter then 403s on every request (empty dropdowns).
+      const authUser = buildAuthUser(serverUser, mustChangePassword);
       loginWithCredentials(token, authUser);
-      navigate(ROLE_LANDING[authUser.role], { replace: true });
+      navigate(
+        authUser.mustChangePassword ? '/force-change-password' : ROLE_LANDING[authUser.role],
+        { replace: true },
+      );
     } catch (err) {
       const attempts = recordFailedAttempt();
       if (attempts >= MAX_ATTEMPTS) {

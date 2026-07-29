@@ -37,6 +37,31 @@ Its background is HARD BLACK (#000000) but our shell is #0E0F12 — so it render
 ALWAYS wrap it in a <BrandMark> component: circular container, 1px rgba(228,55,61,.25) ring, subtle radial crimson glow behind, slight inner shadow. The black must read as intentional depth, not a mismatched cut-out.
 The logo's red is pure #FF0000 — do NOT sample it for UI. UI crimson stays #B11116/#E4373D (deliberately calmer on dark).
 
+## Styling convention — inline styles, NOT Tailwind
+Tailwind is configured (`@tailwind` directives in index.css) but pages and components style with
+inline `style={{}}` objects using the CSS custom properties above (`var(--txt)`, `var(--panel)`).
+Match that; don't introduce Tailwind utility classes into existing components.
+
+## Dialogs — one shared component
+`src/components/Modal.tsx` is the ONLY dialog implementation; every modal in every role renders
+through it, so fix layout/behaviour there once rather than per page. It caps height to the
+viewport, scrolls its body internally, and locks background scroll while open.
+
+## framer-motion owns `transform` ⚠
+Never centre a `motion.div` with `transform: translate(-50%,-50%)` while animating `scale`/`y`.
+framer-motion rebuilds `transform` from its own state and writes `transform: none` once the enter
+animation settles, silently destroying the centring (symptom: dialog sits down-and-right, bottom
+off-screen, worse at higher zoom). Centre with a `position: fixed; inset: 0` flex wrapper — see Modal.tsx.
+
+## Typecheck / build
+- `npm run build` = `tsc -b && vite build` — the single gate for typecheck + build.
+- tsconfig.json is solution-style (project references only): `tsc --noEmit -p tsconfig.json`
+  silently does NOTHING. Use `npx tsc -b`.
+- The page scrolls on the DOCUMENT — Shell's `<main>` sets no overflow. Relevant for scroll locking.
+- ⚠ `employeeCode` is mid-migration: the backend now returns a STRING (`NF-########`) but several
+  `api/*.ts` types still declare `number`. Don't re-add an `NF-` display prefix — the stored value
+  already carries it.
+
 ## Non-negotiable UI rules
 1. Utilization ALWAYS = number + bar. Never colour alone.
 2. Every UtilBar etches threshold ticks at 60% and 100% into the track. The legend IS the component.

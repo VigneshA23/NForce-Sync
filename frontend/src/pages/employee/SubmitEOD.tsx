@@ -30,6 +30,9 @@ function todayISO() {
 interface TaskRow {
   localId: string;
   projectId: number | null;
+  /** Code as saved on the entry. Survives an allocation ending, which would drop the
+   *  project from the (allocation-scoped) dropdown and leave nothing to resolve against. */
+  projectCode: string | null;
   taskCategoryId: number | null;
   categoryName: string | null;
   isBillableDefault: boolean;
@@ -47,6 +50,7 @@ function newRow(): TaskRow {
   return {
     localId:          `row-${++rowSeq}`,
     projectId:        null,
+    projectCode:      null,
     taskCategoryId:   null,
     categoryName:     null,
     isBillableDefault: true,
@@ -63,6 +67,7 @@ function rowFromDto(dto: EodTaskDto, isBillableDefault: boolean): TaskRow {
   return {
     localId:          `row-${++rowSeq}`,
     projectId:        dto.projectId,
+    projectCode:      dto.projectCode,
     taskCategoryId:   dto.taskCategoryId,
     categoryName:     dto.categoryName,
     isBillableDefault,
@@ -171,9 +176,10 @@ export default function SubmitEOD() {
 
   // ── Backend queries ───────────────────────────────────────────────────────
 
+  // Scoped to this user's allocations as of the selected date, so the key must include it.
   const { data: projects = [], isLoading: loadingProjects } = useQuery({
-    queryKey: ['projects'],
-    queryFn:  listProjects,
+    queryKey: ['projects', 'mine', selectedDate],
+    queryFn:  () => listProjects(selectedDate),
     staleTime: 5 * 60_000,
   });
 
@@ -653,13 +659,22 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
           <div>
             <Label>Project</Label>
             {isReadOnly ? (
-              <div style={{ ...inputStyle, fontSize: 12 }}>{projects.find(p => p.id === task.projectId)?.code ?? '—'}</div>
+              <div style={{ ...inputStyle, fontSize: 12 }}>
+                {task.projectCode ?? projects.find(p => p.id === task.projectId)?.code ?? '—'}
+              </div>
             ) : (
               <Sel value={task.projectId ?? ''} onChange={e => onUpdate({ projectId: e.target.value ? Number(e.target.value) : null })}>
                 <option value="">— Project —</option>
                 {projects.map(p => (
                   <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
                 ))}
+                {/* Saved project that is no longer in this user's allocations — keep it selectable
+                    so reopening a draft doesn't silently blank the field on the next save. */}
+                {task.projectId != null && !projects.some(p => p.id === task.projectId) && (
+                  <option value={task.projectId}>
+                    {task.projectCode ?? `Project #${task.projectId}`} (no longer allocated)
+                  </option>
+                )}
               </Sel>
             )}
           </div>

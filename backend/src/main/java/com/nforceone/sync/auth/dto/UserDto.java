@@ -9,7 +9,7 @@ public record UserDto(
         String fullName,
         String email,
         String role,
-        Long   employeeCode,
+        String   employeeCode,
         String status,
         Long   managerId,
         // Org fields
@@ -19,7 +19,11 @@ public record UserDto(
         // Employee profile fields
         String employmentType,
         String workMode,
-        LocalDate joiningDate
+        LocalDate joiningDate,
+        // Carried on the DTO so GET /api/auth/me stays authoritative: without it the
+        // client rebuilds its session on refresh with the flag lost, skips the
+        // force-change-password redirect, and then gets 403'd by JwtFilter on every call.
+        boolean mustChangePassword
 ) {
     public static UserDto from(AppUser user) {
         return new UserDto(
@@ -35,7 +39,8 @@ public record UserDto(
                 user.getLocationId(),
                 user.getEmploymentType(),
                 user.getWorkMode(),
-                user.getJoiningDate()
+                user.getJoiningDate(),
+                user.isMustChangePassword()
         );
     }
 }

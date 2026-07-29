@@ -22,6 +22,30 @@ export function Modal({ open, title, onClose, children, width = 440 }: ModalProp
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  // Lock scrolling behind the dialog. The page scrolls on the document (Shell's
+  // <main> sets no overflow), so `body` is the element to freeze. Save/restore the
+  // previous values rather than clearing them, so a dialog stacked on top of
+  // another leaves the page still locked when only the inner one closes.
+  useEffect(() => {
+    if (!open) return;
+    const { body } = document;
+    const prevOverflow = body.style.overflow;
+    const prevPaddingRight = body.style.paddingRight;
+    // Hiding the scrollbar reclaims its width and would shift the page underneath;
+    // pad by exactly that much to keep it visually still. Resolves to 0 for an
+    // already-locked body (nested dialog) or an overlay scrollbar, so it can't double up.
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    if (scrollbarWidth > 0) {
+      const current = parseFloat(getComputedStyle(body).paddingRight) || 0;
+      body.style.paddingRight = `${current + scrollbarWidth}px`;
+    }
+    body.style.overflow = 'hidden';
+    return () => {
+      body.style.overflow = prevOverflow;
+      body.style.paddingRight = prevPaddingRight;
+    };
+  }, [open]);
+
   return (
     <AnimatePresence>
       {open && (
@@ -42,6 +66,24 @@ export function Modal({ open, title, onClose, children, width = 440 }: ModalProp
               zIndex: 900,
             }}
           />
+          {/* Panel wrapper — flex-centers the panel. Centering must NOT use
+              `transform` on the panel itself: framer-motion owns that property
+              while animating scale/y and overwrites it (to `none` once the enter
+              animation settles), which would strip a `translate(-50%,-50%)` and
+              leave the panel's top-left corner at the viewport centre.
+              `pointerEvents: none` keeps backdrop click-to-close working. */}
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 901,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
+              pointerEvents: 'none',
+            }}
+          >
           {/* Panel */}
           <motion.div
             role="dialog"
@@ -52,17 +94,16 @@ export function Modal({ open, title, onClose, children, width = 440 }: ModalProp
             exit={{ opacity: 0, scale: reduced ? 1 : 0.96, y: reduced ? 0 : 4 }}
             transition={{ duration: reduced ? 0 : 0.2, ease: [0.23, 1, 0.32, 1] }}
             style={{
-              position: 'fixed',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: `min(${width}px, calc(100vw - 32px))`,
+              width: `min(${width}px, 100%)`,
+              maxHeight: '100%',
+              display: 'flex',
+              flexDirection: 'column',
               background: '#1E2128',
               border: '1px solid #2A2E37',
               borderRadius: 12,
               boxShadow: '0 24px 60px rgba(0,0,0,.7)',
-              zIndex: 901,
               overflow: 'hidden',
+              pointerEvents: 'auto',
             }}
           >
             {/* Header */}
@@ -73,6 +114,7 @@ export function Modal({ open, title, onClose, children, width = 440 }: ModalProp
                 justifyContent: 'space-between',
                 padding: '16px 20px',
                 borderBottom: '1px solid #2A2E37',
+                flexShrink: 0,
               }}
             >
               <h2
@@ -107,9 +149,15 @@ export function Modal({ open, title, onClose, children, width = 440 }: ModalProp
                 <X size={16} aria-hidden="true" />
               </button>
             </div>
-            {/* Body */}
-            <div style={{ padding: '20px' }}>{children}</div>
+            {/* Body — scrolls internally so footer buttons stay reachable when content exceeds viewport height */}
+            <div style={{
+              padding: '20px', flex: 1, minHeight: 0, overflowY: 'auto',
+              // Don't hand a wheel gesture off to an ancestor scroller once this
+              // region hits its top/bottom edge.
+              overscrollBehavior: 'contain',
+            }}>{children}</div>
           </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>

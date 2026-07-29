@@ -22,6 +22,7 @@ import TeamDashboard        from './pages/lead/TeamDashboard';
 import Approvals            from './pages/lead/Approvals';
 import TeamUtilization      from './pages/lead/TeamUtilization';
 import Blockers             from './pages/lead/Blockers';
+import ProjectsAllocation   from './pages/pm/ProjectsAllocation';
 
 function RequireAuth() {
   const { user } = useAuth();
@@ -81,8 +82,8 @@ function AppRoutes() {
 
           {/* ── Project Manager ────────────────────── */}
           <Route path="/projects/dashboard"      element={<Placeholder title="Project Dashboard" />} />
-          <Route path="/projects"                element={<Placeholder title="Projects" />} />
-          <Route path="/projects/allocation"     element={<Placeholder title="Allocation" />} />
+          <Route path="/projects"                element={<ProjectsAllocation />} />
+          <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
           <Route path="/projects/planned-actual" element={<Placeholder title="Planned vs Actual" />} />
           <Route path="/projects/blockers"       element={<Placeholder title="Blockers" />} />
           <Route path="/projects/approvals"      element={<Placeholder title="Approvals" />} />

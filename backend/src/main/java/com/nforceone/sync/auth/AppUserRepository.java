@@ -34,4 +34,6 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     long countByDesignationId(Long designationId);
 
     long countByLocationId(Long locationId);
+
+    List<AppUser> findByStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Status status);
 }

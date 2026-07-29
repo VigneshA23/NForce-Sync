@@ -29,10 +29,10 @@ public class AppUser {
     @Column(nullable = false, length = 20)
     private Role role;
 
-    // GENERATED ALWAYS AS IDENTITY — Hibernate must not include in INSERT/UPDATE
-    @Column(name = "employee_code", nullable = false, unique = true,
-            insertable = false, updatable = false)
-    private Long employeeCode;
+    // Manually-entered HR employee ID, format NF-######## (see V23). Required and
+    // unique; writable because it is supplied on create and correctable on edit.
+    @Column(name = "employee_code", nullable = false, unique = true, length = 20)
+    private String employeeCode;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

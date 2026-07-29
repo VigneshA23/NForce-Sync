@@ -29,6 +29,10 @@ public class Allocation {
     @Column(name = "allocation_pct", nullable = false)
     private Integer allocationPct;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "allocation_type", nullable = false, length = 20)
+    private AllocationType allocationType;
+
     @Column(name = "effective_from", nullable = false)
     private LocalDate effectiveFrom;
 
@@ -37,4 +41,8 @@ public class Allocation {
 
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
+
+    public enum AllocationType {
+        PRIMARY, SECONDARY
+    }
 }
