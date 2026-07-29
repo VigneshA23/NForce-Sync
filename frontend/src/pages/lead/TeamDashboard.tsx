@@ -137,7 +137,7 @@ function MemberRow({ member, isLast }: { member: MemberStatusDto; isLast: boolea
           {member.fullName}
         </div>
         <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
-          #{member.employeeCode}
+          {member.employeeCode}
         </div>
       </div>
       <StatusBadge status={member.todayStatus} />

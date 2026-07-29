@@ -1,8 +1,12 @@
-import { useState, useId, useEffect } from 'react';
+import { useState, useId, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  UserPlus, X, Pencil, Power, RotateCcw, Trash2,
+  UserPlus, X, Pencil, Power, PowerOff, RotateCcw, Trash2,
   AlertTriangle, Copy, Check, RefreshCw, ChevronDown,
+  Calendar, ChevronLeft, ChevronRight,
+  Search, Filter, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import {
@@ -15,6 +19,7 @@ import { toRole } from '../../api/auth';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../lib/toast';
+import { useBodyScrollLock } from '../../lib/useBodyScrollLock';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -252,6 +257,159 @@ function CreatableLocationSelect({
   );
 }
 
+// ── Joining Date Picker ────────────────────────────────────────────────────────
+// Custom picker (not a native <input type="date">) so the calendar icon can be a
+// true toggle: click opens, click again on the same icon closes — native date
+// inputs expose no such control (no hidePicker() API), which is what made the
+// icon feel "stuck open" before.
+
+const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const MONTH_LABELS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function formatDateDisplay(iso: string): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  return `${MONTH_LABELS[m - 1].slice(0, 3)} ${d}, ${y}`;
+}
+
+function JoiningDatePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (iso: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selected = value ? new Date(`${value}T00:00:00`) : new Date();
+  const [viewYear, setViewYear]   = useState(selected.getFullYear());
+  const [viewMonth, setViewMonth] = useState(selected.getMonth());
+
+  // Close on click outside — supplements select-to-close and icon-toggle-to-close.
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  function toggleOpen() {
+    setOpen(o => {
+      const next = !o;
+      if (next) {
+        const base = value ? new Date(`${value}T00:00:00`) : new Date();
+        setViewYear(base.getFullYear());
+        setViewMonth(base.getMonth());
+      }
+      return next;
+    });
+  }
+
+  function selectDay(day: number) {
+    const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    onChange(iso);
+    setOpen(false);
+  }
+
+  function shiftMonth(delta: number) {
+    let m = viewMonth + delta;
+    let y = viewYear;
+    if (m < 0) { m = 11; y -= 1; }
+    else if (m > 11) { m = 0; y += 1; }
+    setViewMonth(m);
+    setViewYear(y);
+  }
+
+  const firstWeekday = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth  = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(firstWeekday).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <div style={{ position: 'relative' }}>
+        <input
+          readOnly
+          style={{ ...inputStyle, paddingRight: 36, cursor: 'pointer' }}
+          value={formatDateDisplay(value)}
+          placeholder="Select a date…"
+          onClick={toggleOpen}
+        />
+        <button
+          type="button"
+          aria-label={open ? 'Close date picker' : 'Open date picker'}
+          onClick={toggleOpen}
+          style={{
+            position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+            background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+            display: 'flex', color: 'var(--txt-dim)', borderRadius: 4,
+          }}
+        >
+          <Calendar size={15} />
+        </button>
+      </div>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 4, width: 260,
+          background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8,
+          boxShadow: '0 8px 24px rgba(0,0,0,.3)', zIndex: 100, padding: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <button type="button" onClick={() => shiftMonth(-1)} aria-label="Previous month" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', display: 'flex', padding: 4 }}>
+              <ChevronLeft size={15} />
+            </button>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+              {MONTH_LABELS[viewMonth]} {viewYear}
+            </span>
+            <button type="button" onClick={() => shiftMonth(1)} aria-label="Next month" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', display: 'flex', padding: 4 }}>
+              <ChevronRight size={15} />
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
+            {WEEKDAY_LABELS.map((w, i) => (
+              <div key={i} style={{ textAlign: 'center', fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600 }}>{w}</div>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+            {cells.map((day, i) => {
+              if (day == null) return <div key={i} />;
+              const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+              const isSelected = iso === value;
+              return (
+                <button
+                  type="button"
+                  key={i}
+                  onClick={() => selectDay(day)}
+                  style={{
+                    aspectRatio: '1', border: 'none', borderRadius: 5, cursor: 'pointer',
+                    fontSize: 12, background: isSelected ? 'var(--brand)' : 'transparent',
+                    color: isSelected ? '#fff' : 'var(--txt)',
+                  }}
+                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--raised)'; }}
+                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Org data hook ─────────────────────────────────────────────────────────────
 
 function useOrgData() {
@@ -271,9 +429,12 @@ interface CreateForm extends Omit<CreateUserPayload, 'role'> {
   role: string;
 }
 
+const EMPLOYEE_ID_PATTERN = /^NF-\d{8}$/;
+
 const EMPTY_CREATE: CreateForm = {
   fullName: '',
   email: '',
+  employeeCode: '',
   role: 'EMPLOYEE',
   joiningDate: new Date().toISOString().slice(0, 10),
   workMode: 'ONSITE',
@@ -300,19 +461,32 @@ function AddModal({
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [created, setCreated] = useState<{ user: UserDto; tempPassword: string } | null>(null);
 
+  // AddModal is a raw overlay (not the shared Modal component), so it locks scroll
+  // itself. Always true while mounted — the parent only renders this when open.
+  useBodyScrollLock(true);
+
   const managers = allUsers.filter(u => u.role === 'MANAGER');
 
   const mutation = useMutation({
     mutationFn: createUser,
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
       toast.showToast('success', `User ${result.user.fullName} created successfully`);
       setCreated(result);
     },
     onError: (err: unknown) => {
       const fieldErrs = extractFieldErrors(err);
       if (Object.keys(fieldErrs).length > 0) { setErrors(fieldErrs); return; }
-      if (isHttpStatus(err, 409)) { setErrors({ email: 'An account with this email already exists.' }); return; }
+      if (isHttpStatus(err, 409)) {
+        // Server-side authority on uniqueness — disambiguates which field conflicted
+        // since both email and employeeCode can 409 (client pre-check narrows this
+        // to races only: e.g. two admins picking the same ID at the same time).
+        const msg = extractApiError(err, 'A conflict occurred.');
+        if (msg.toLowerCase().includes('employee id')) { setErrors({ employeeCode: msg }); return; }
+        setErrors({ email: msg || 'An account with this email already exists.' });
+        return;
+      }
       const msg = extractApiError(err, 'Failed to create user.');
       setErrors({ _general: msg });
       toast.showToast('error', msg);
@@ -322,9 +496,20 @@ function AddModal({
   function validate(): boolean {
     const e: Record<string, string> = {};
     if (!form.fullName.trim()) e.fullName = 'Full name is required.';
-    if (!form.email.trim()) e.email = 'Email is required.';
-    else if (!form.email.endsWith('@nforceone.com')) e.email = 'Email must end with @nforceone.com.';
+    const normalizedEmail = form.email.trim().toLowerCase();
+    if (!normalizedEmail) e.email = 'Email is required.';
+    else if (!normalizedEmail.endsWith('@nforceone.com')) e.email = 'Email must end with @nforceone.com.';
     if (!form.role) e.role = 'Role is required.';
+
+    // Client-side pre-check only — fast feedback against the already-loaded user
+    // list. The server re-validates format and uniqueness authoritatively on submit
+    // (see UserService.createUser), since this list can be stale or race with
+    // another admin creating a user concurrently.
+    const empCode = form.employeeCode.trim();
+    if (!empCode) e.employeeCode = 'Employee ID is required.';
+    else if (!EMPLOYEE_ID_PATTERN.test(empCode)) e.employeeCode = 'Must match format NF-######## (e.g. NF-20240040).';
+    else if (allUsers.some(u => u.employeeCode === empCode)) e.employeeCode = 'This Employee ID is already in use.';
+
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -334,6 +519,8 @@ function AddModal({
     if (!validate()) return;
     const payload: CreateUserPayload = {
       ...form,
+      email:         form.email.trim().toLowerCase(),
+      employeeCode:  form.employeeCode.trim(),
       departmentId:  form.departmentId  ?? null,
       designationId: form.designationId ?? null,
       locationId:    form.locationId    ?? null,
@@ -421,9 +608,9 @@ function AddModal({
                 style={inputStyle}
                 value={form.email}
                 placeholder="jane@nforceone.com"
-                onChange={e => set('email', e.target.value)}
+                onChange={e => set('email', e.target.value.toLowerCase())}
                 onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-                onBlur={e => Object.assign(e.target.style, inputStyle)}
+                onBlur={e => { Object.assign(e.target.style, inputStyle); set('email', form.email.trim().toLowerCase()); }}
               />
               <FieldError msg={errors.email} />
             </Field>
@@ -441,22 +628,24 @@ function AddModal({
             <FieldError msg={errors.role} />
           </Field>
 
-          {/* Employee ID (display only — auto-generated) */}
-          <Field label="Employee ID (auto-generated)">
+          {/* Employee ID — manually entered, format NF-######## */}
+          <Field label="Employee ID *">
             <input
-              style={{ ...inputStyle, color: 'var(--txt-dim)', cursor: 'not-allowed', opacity: 0.6 }}
-              value="Auto-generated on save"
-              readOnly
+              style={inputStyle}
+              value={form.employeeCode}
+              placeholder="NF-20240040"
+              onChange={e => set('employeeCode', e.target.value.toUpperCase())}
+              onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+              onBlur={e => Object.assign(e.target.style, inputStyle)}
             />
+            <FieldError msg={errors.employeeCode} />
           </Field>
 
           {/* Joining Date */}
           <Field label="Joining Date *">
-            <input
-              type="date"
-              style={inputStyle}
+            <JoiningDatePicker
               value={form.joiningDate ?? ''}
-              onChange={e => set('joiningDate', e.target.value)}
+              onChange={iso => set('joiningDate', iso)}
             />
           </Field>
 
@@ -779,6 +968,7 @@ function StatusModal({
       setUserStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
       toast.showToast('success', `User ${isDeactivating ? 'deactivated' : 'reactivated'} successfully`);
       onClose();
     },
@@ -991,7 +1181,9 @@ function DeleteModal({
   const [typed, setTyped] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const match = user != null && typed.trim().toLowerCase() === user.email.toLowerCase();
+  // Case-sensitive on purpose — user.email is always stored lowercase, so this is a
+  // genuine "type exactly what you see" safety check, not a case-insensitive shortcut.
+  const match = user != null && typed.trim() === user.email;
 
   // Import softDelete — UserController doesn't expose DELETE yet, so we use status
   // Note: If softDelete endpoint is not available, this uses a DELETE call
@@ -1001,6 +1193,7 @@ function DeleteModal({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
       toast.showToast('success', `${user?.fullName ?? 'User'} deleted`);
       onClose();
     },
@@ -1106,16 +1299,211 @@ function ActionBtn({
   );
 }
 
+// ── Column filter dropdown ─────────────────────────────────────────────────────
+
+interface FilterOption { value: string; label: string }
+
+function ColumnFilterHeader({
+  label, options, selected, onChange,
+}: {
+  label: string;
+  options: FilterOption[];
+  selected: string; // '' = All
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const active = selected !== '';
+
+  // Rendered through a portal (see below) so the table's own overflow-x:auto
+  // wrapper — which forces overflow-y to clip too, per CSS overflow coupling —
+  // can't cut the dropdown off. Position is computed from the trigger's rect
+  // rather than relying on normal-flow placement, since a portaled node is no
+  // longer a DOM descendant of this header.
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setCoords({ top: rect.bottom + 6, left: rect.left });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocMouseDown(e: MouseEvent) {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    // Position isn't tracked continuously — close on scroll/resize rather than
+    // let it drift out of alignment with the trigger. Scrolling *inside* the
+    // panel's own option list must not close it — the capture-phase listener
+    // sees that scroll too, so ignore anything whose target is inside panelRef.
+    function onScrollOrResize(e: Event) {
+      if (panelRef.current && e.target instanceof Node && panelRef.current.contains(e.target)) return;
+      setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocMouseDown);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown);
+      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onScrollOrResize);
+    };
+  }, [open]);
+
+  return (
+    <div ref={triggerRef} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      <span>{label}</span>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-label={`Filter by ${label}`}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 18, height: 18, padding: 0, border: 'none', borderRadius: 4, cursor: 'pointer',
+          background: active ? 'rgba(176,17,22,.16)' : 'transparent',
+          color: active ? 'var(--brand-bright)' : 'var(--txt-dim)',
+        }}
+      >
+        <Filter size={11} aria-hidden="true" />
+      </button>
+      {open && coords && createPortal(
+        <div
+          ref={panelRef}
+          style={{
+            position: 'fixed', top: coords.top, left: coords.left, zIndex: 2000,
+            minWidth: 170, maxHeight: 260, overflowY: 'auto', overscrollBehavior: 'contain',
+            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 7,
+            boxShadow: '0 8px 24px rgba(0,0,0,.35)',
+            textTransform: 'none', letterSpacing: 'normal', fontWeight: 400,
+          }}
+        >
+          <div
+            onClick={() => { onChange(''); setOpen(false); }}
+            style={{
+              padding: '8px 12px', fontSize: 12, cursor: 'pointer',
+              color: selected === '' ? 'var(--brand-bright)' : 'var(--txt)',
+              background: selected === '' ? 'rgba(176,17,22,.1)' : 'transparent',
+            }}
+          >
+            All {label}
+          </div>
+          {options.map(opt => (
+            <div
+              key={opt.value}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              style={{
+                padding: '8px 12px', fontSize: 12, cursor: 'pointer',
+                color: selected === opt.value ? 'var(--brand-bright)' : 'var(--txt)',
+                background: selected === opt.value ? 'rgba(176,17,22,.1)' : 'transparent',
+              }}
+              onMouseEnter={e => { if (selected !== opt.value) e.currentTarget.style.background = 'var(--raised)'; }}
+              onMouseLeave={e => { if (selected !== opt.value) e.currentTarget.style.background = 'transparent'; }}
+            >
+              {opt.label}
+            </div>
+          ))}
+          {options.length === 0 && (
+            <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--txt-dim)' }}>No values</div>
+          )}
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+// Distinct values actually present among the current users, not the full org master
+// list — e.g. Department filter only offers departments someone is actually in.
+function distinctRoleOptions(list: UserDto[]): FilterOption[] {
+  const roles = Array.from(new Set(list.map(u => u.role)));
+  return roles
+    .map(r => ({ value: r, label: ROLE_LABELS[toRole(r)] ?? r }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function distinctIdOptions(
+  list: UserDto[],
+  getId: (u: UserDto) => number | null,
+  resolveName: (id: number) => string,
+): FilterOption[] {
+  const ids = new Set<number | null>();
+  list.forEach(u => ids.add(getId(u)));
+  const opts: FilterOption[] = Array.from(ids)
+    .filter((id): id is number => id != null)
+    .sort((a, b) => resolveName(a).localeCompare(resolveName(b)))
+    .map(id => ({ value: String(id), label: resolveName(id) }));
+  if (ids.has(null)) opts.push({ value: '__none__', label: '—' });
+  return opts;
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function UserManagement() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: users, isPending, isError, refetch } = useQuery({
     queryKey: ['admin', 'users'],
     queryFn: listUsers,
   });
 
-  // Org data pre-fetched for dropdowns (departments used for column display)
-  const { departments } = useOrgData();
+  // Org data pre-fetched for dropdowns (departments/locations also used for column display)
+  const { departments, locations } = useOrgData();
+
+  // ── Search / filters / sort ──────────────────────────────────────────────────
+  const [search,       setSearch]       = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [roleFilter,   setRoleFilter]   = useState(''); // '' = all
+  const [deptFilter,   setDeptFilter]   = useState(''); // '' = all, '__none__' = unset
+  const [locFilter,    setLocFilter]    = useState(''); // '' = all, '__none__' = unset
+  const [sortDir,      setSortDir]      = useState<'asc' | 'desc'>('asc');
+
+  const roleOptions = useMemo(() => distinctRoleOptions(users ?? []), [users]);
+  const deptOptions = useMemo(() => distinctIdOptions(
+    users ?? [], u => u.departmentId, id => departments.find(d => d.id === id)?.name ?? `#${id}`,
+  ), [users, departments]);
+  const locOptions = useMemo(() => distinctIdOptions(
+    users ?? [], u => u.locationId, id => locations.find(l => l.id === id)?.name ?? `#${id}`,
+  ), [users, locations]);
+
+  const filteredUsers = useMemo(() => {
+    if (!users) return undefined;
+    let list = users;
+    if (statusFilter !== 'ALL') list = list.filter(u => u.status === statusFilter);
+    if (roleFilter) list = list.filter(u => u.role === roleFilter);
+    if (deptFilter) {
+      list = list.filter(u => deptFilter === '__none__' ? u.departmentId == null : String(u.departmentId) === deptFilter);
+    }
+    if (locFilter) {
+      list = list.filter(u => locFilter === '__none__' ? u.locationId == null : String(u.locationId) === locFilter);
+    }
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(u =>
+        u.fullName.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        u.employeeCode.toLowerCase().includes(q));
+    }
+    return [...list].sort((a, b) =>
+      sortDir === 'asc' ? a.fullName.localeCompare(b.fullName) : b.fullName.localeCompare(a.fullName));
+  }, [users, statusFilter, roleFilter, deptFilter, locFilter, search, sortDir]);
+
+  const activeFilterCount =
+    (statusFilter !== 'ALL' ? 1 : 0) +
+    (roleFilter ? 1 : 0) +
+    (deptFilter ? 1 : 0) +
+    (locFilter ? 1 : 0) +
+    (search.trim() ? 1 : 0);
+
+  function clearAllFilters() {
+    setSearch('');
+    setStatusFilter('ALL');
+    setRoleFilter('');
+    setDeptFilter('');
+    setLocFilter('');
+  }
 
   const [showAdd,          setShowAdd]          = useState(false);
   const [editTarget,       setEditTarget]        = useState<UserDto | null>(null);
@@ -1129,6 +1517,17 @@ export default function UserManagement() {
   const handleEditOpen  = (u: UserDto) => {
     setEditTarget({ ...u }); // fresh copy so form sync works
   };
+
+  // Deep link from the top-nav workspace search (?userId=…) — opens that
+  // employee's edit view directly, since there's no standalone profile page.
+  useEffect(() => {
+    const userId = searchParams.get('userId');
+    if (!userId || !users) return;
+    const target = users.find((u) => u.id === Number(userId));
+    if (target) setEditTarget({ ...target });
+    setSearchParams((prev) => { prev.delete('userId'); return prev; }, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users, searchParams]);
 
   const thStyle: React.CSSProperties = {
     padding: '10px 16px', fontSize: 11, fontWeight: 600, color: 'var(--txt-dim)',
@@ -1147,6 +1546,10 @@ export default function UserManagement() {
   function managerName(managerId: number | null): string {
     if (managerId == null) return '—';
     return users?.find(u => u.id === managerId)?.fullName ?? '—';
+  }
+  function locationName(id: number | null): string {
+    if (id == null) return '—';
+    return locations.find((l: OrgLocationDto) => l.id === id)?.name ?? '—';
   }
 
   return (
@@ -1171,17 +1574,78 @@ export default function UserManagement() {
 
       {/* Users Table */}
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
-            All Users {users && <span style={{ color: 'var(--txt-dim)', fontWeight: 400 }}>({users.length})</span>}
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--line)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+              All Users {users && (
+                <span style={{ color: 'var(--txt-dim)', fontWeight: 400 }}>
+                  ({filteredUsers?.length ?? 0}{activeFilterCount > 0 ? ` of ${users.length}` : ''})
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => refetch()}
+              aria-label="Refresh users list"
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', padding: 6, display: 'flex', alignItems: 'center', borderRadius: 5 }}
+            >
+              <RefreshCw size={14} aria-hidden="true" />
+            </button>
           </div>
-          <button
-            onClick={() => refetch()}
-            aria-label="Refresh users list"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', padding: 6, display: 'flex', alignItems: 'center', borderRadius: 5 }}
-          >
-            <RefreshCw size={14} aria-hidden="true" />
-          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: '1 1 200px', maxWidth: 280 }}>
+              <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-dim)' }} aria-hidden="true" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Filter this list…"
+                style={{
+                  width: '100%', boxSizing: 'border-box', background: 'var(--shell)', border: '1px solid var(--line2)',
+                  borderRadius: 6, padding: '7px 10px 7px 30px', color: 'var(--txt)', fontSize: 12, outline: 'none',
+                  fontFamily: 'Inter, sans-serif',
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map(s => {
+                const isSelected = statusFilter === s;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setStatusFilter(s)}
+                    style={{
+                      padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                      border: `1px solid ${isSelected ? 'var(--brand-bright)' : 'var(--line2)'}`,
+                      background: isSelected ? 'rgba(176,17,22,.12)' : 'transparent',
+                      color: isSelected ? 'var(--brand-bright)' : 'var(--txt-mut)',
+                    }}
+                  >
+                    {s === 'ALL' ? 'All' : s === 'ACTIVE' ? 'Active' : 'Inactive'}
+                  </button>
+                );
+              })}
+            </div>
+
+            {activeFilterCount > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  fontSize: 11, fontWeight: 600, color: 'var(--brand-bright)',
+                  background: 'rgba(176,17,22,.12)', border: '1px solid rgba(176,17,22,.3)',
+                  borderRadius: 20, padding: '3px 9px',
+                }}>
+                  <Filter size={10} aria-hidden="true" /> {activeFilterCount} filter{activeFilterCount === 1 ? '' : 's'}
+                </span>
+                <button
+                  onClick={clearAllFilters}
+                  style={{ background: 'none', border: 'none', color: 'var(--txt-mut)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {isPending && (
@@ -1201,31 +1665,65 @@ export default function UserManagement() {
           </div>
         )}
 
-        {users && (
+        {filteredUsers && (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
               <thead>
                 <tr>
                   <th style={thStyle}>Employee ID</th>
-                  <th style={thStyle}>Name</th>
+                  <th style={thStyle}>
+                    <button
+                      type="button"
+                      onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                      aria-label={`Sort by name, currently ${sortDir === 'asc' ? 'ascending' : 'descending'}`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none',
+                        padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit',
+                        letterSpacing: 'inherit', textTransform: 'inherit',
+                      }}
+                    >
+                      Name {sortDir === 'asc' ? <ArrowUp size={11} aria-hidden="true" /> : <ArrowDown size={11} aria-hidden="true" />}
+                    </button>
+                  </th>
                   <th style={thStyle}>Email</th>
-                  <th style={thStyle}>Role</th>
-                  <th style={thStyle}>Department</th>
+                  <th style={thStyle}>
+                    <ColumnFilterHeader label="Role" options={roleOptions} selected={roleFilter} onChange={setRoleFilter} />
+                  </th>
+                  <th style={thStyle}>
+                    <ColumnFilterHeader label="Department" options={deptOptions} selected={deptFilter} onChange={setDeptFilter} />
+                  </th>
+                  <th style={thStyle}>
+                    <ColumnFilterHeader label="Location" options={locOptions} selected={locFilter} onChange={setLocFilter} />
+                  </th>
                   <th style={thStyle}>Manager</th>
                   <th style={thStyle}>Status</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {users.length === 0 ? (
+                {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: '48px 20px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 15, color: 'var(--txt-mut)', marginBottom: 8 }}>No users yet</div>
-                      <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>Click "Add User" to create the first account.</div>
+                    <td colSpan={9} style={{ padding: '48px 20px', textAlign: 'center' }}>
+                      {users && users.length === 0 ? (
+                        <>
+                          <div style={{ fontSize: 15, color: 'var(--txt-mut)', marginBottom: 8 }}>No users yet</div>
+                          <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>Click "Add User" to create the first account.</div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ fontSize: 15, color: 'var(--txt-mut)', marginBottom: 8 }}>No users match the current filters</div>
+                          <button
+                            onClick={clearAllFilters}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 12, cursor: 'pointer' }}
+                          >
+                            Clear all filters
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ) : (
-                  users.map(user => (
+                  filteredUsers.map(user => (
                     <tr
                       key={user.id}
                       style={{ opacity: user.status === 'ACTIVE' ? 1 : 0.65, transition: 'background 0.1s' }}
@@ -1234,7 +1732,7 @@ export default function UserManagement() {
                     >
                       <td style={tdStyle}>
                         <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
-                          {user.employeeCode ?? '—'}
+                          {user.employeeCode}
                         </span>
                       </td>
                       <td style={tdStyle}>
@@ -1255,6 +1753,11 @@ export default function UserManagement() {
                       </td>
                       <td style={tdStyle}>
                         <span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
+                          {locationName(user.locationId)}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
                           {managerName(user.managerId)}
                         </span>
                       </td>
@@ -1266,7 +1769,7 @@ export default function UserManagement() {
                           <ActionBtn icon={<Pencil size={13} />} label="Edit user" onClick={() => handleEditOpen(user)} />
                           <ActionBtn icon={<RotateCcw size={13} />} label="Reset password" onClick={() => setResetTarget(user)} />
                           <ActionBtn
-                            icon={<Power size={13} />}
+                            icon={user.status === 'ACTIVE' ? <PowerOff size={13} /> : <Power size={13} />}
                             label={user.status === 'ACTIVE' ? 'Deactivate user' : 'Reactivate user'}
                             onClick={() => setStatusTarget(user)}
                             danger={user.status === 'ACTIVE'}

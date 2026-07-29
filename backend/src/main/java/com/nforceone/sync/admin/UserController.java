@@ -38,6 +38,16 @@ public class UserController {
         return userService.listUsers();
     }
 
+    // Workspace search — matches free text against name, email, role, and location;
+    // role/locationId can also be passed as exact structured filters.
+    @GetMapping("/search")
+    public List<UserDto> searchUsers(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) Long locationId) {
+        return userService.searchUsers(q, role, locationId);
+    }
+
     @GetMapping("/{id}")
     public UserDto getUser(@PathVariable Long id) {
         return userService.getUser(id);

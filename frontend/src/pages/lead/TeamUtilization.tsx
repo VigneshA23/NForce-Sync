@@ -150,7 +150,7 @@ function MemberUtilRow({ member, isLast }: { member: TeamUtilDto; isLast: boolea
           {member.employeeName}
         </div>
         <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
-          #{member.employeeCode}
+          {member.employeeCode}
         </div>
       </div>
       <UtilBar pct={pct} />

@@ -16,6 +16,7 @@ import UserManagement       from './pages/admin/UserManagement';
 import AuditLog             from './pages/admin/AuditLog';
 import RolesAccess          from './pages/admin/RolesAccess';
 import OrganizationMasters  from './pages/admin/OrganizationMasters';
+import BusinessRules        from './pages/admin/BusinessRules';
 import SubmitEOD            from './pages/employee/SubmitEOD';
 import EodHistory           from './pages/employee/EodHistory';
 import TeamDashboard        from './pages/lead/TeamDashboard';
@@ -121,7 +122,7 @@ function AppRoutes() {
           <Route path="/admin/users"        element={<UserManagement />} />
           <Route path="/admin/roles"        element={<RolesAccess />} />
           <Route path="/admin/org-masters"  element={<OrganizationMasters />} />
-          <Route path="/admin/rules"        element={<Placeholder title="Business Rules" />} />
+          <Route path="/admin/rules"        element={<BusinessRules />} />
           <Route path="/admin/integrations" element={<Placeholder title="Integrations" />} />
           <Route path="/admin/ai"           element={<Placeholder title="AI & Automation" />} />
           <Route path="/admin/audit"        element={<AuditLog />} />
