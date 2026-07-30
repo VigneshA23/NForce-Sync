@@ -30,5 +30,8 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long>, JpaSp
     @EntityGraph(attributePaths = {"actor"})
     List<AuditLog> findTop5ByEntityTypeNotOrderByOccurredAtDesc(String entityType);
 
+    @EntityGraph(attributePaths = {"actor"})
+    List<AuditLog> findTop10ByEntityTypeNotOrderByOccurredAtDesc(String entityType);
+
     long countByOccurredAtAfterAndEntityTypeNot(OffsetDateTime since, String entityType);
 }

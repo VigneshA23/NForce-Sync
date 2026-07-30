@@ -73,6 +73,15 @@ public class AppUser {
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
 
+    @Column(name = "phone", length = 30)
+    private String phone;
+
+    @Column(name = "emergency_contact_name", length = 200)
+    private String emergencyContactName;
+
+    @Column(name = "emergency_contact_phone", length = 30)
+    private String emergencyContactPhone;
+
     public enum Role {
         EMPLOYEE, MANAGER, HR, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP
     }

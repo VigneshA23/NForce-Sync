@@ -10,6 +10,7 @@ import com.nforceone.sync.auth.AuditLog;
 import com.nforceone.sync.auth.AuditLogRepository;
 import com.nforceone.sync.auth.dto.UserDto;
 import com.nforceone.sync.email.EmailService;
+import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.org.DepartmentRepository;
 import com.nforceone.sync.org.DesignationRepository;
 import com.nforceone.sync.org.OrgLocation;
@@ -54,6 +55,7 @@ public class UserService {
     private final DesignationRepository designationRepository;
     private final OrgLocationRepository locationRepository;
     private final EmailService emailService;
+    private final NotificationService notificationService;
 
     public UserService(AppUserRepository userRepository,
                        AuditLogRepository auditLogRepository,
@@ -62,7 +64,8 @@ public class UserService {
                        DepartmentRepository departmentRepository,
                        DesignationRepository designationRepository,
                        OrgLocationRepository locationRepository,
-                       EmailService emailService) {
+                       EmailService emailService,
+                       NotificationService notificationService) {
         this.userRepository        = userRepository;
         this.auditLogRepository    = auditLogRepository;
         this.passwordEncoder       = passwordEncoder;
@@ -71,6 +74,7 @@ public class UserService {
         this.designationRepository = designationRepository;
         this.locationRepository    = locationRepository;
         this.emailService          = emailService;
+        this.notificationService   = notificationService;
     }
 
     public UserCreateResult createUser(CreateUserRequest request, String actingEmail) {
@@ -122,6 +126,10 @@ public class UserService {
         writeAudit("APP_USER", user.getId(), "CREATE", null, toJson(UserDto.from(user)), actor);
 
         emailService.sendInviteEmail(user.getEmail(), user.getFullName(), tempPassword);
+        notificationService.send(user.getId(), "ACCOUNT_CREATED",
+                "Welcome to NForce Sync",
+                "Your account has been created. Please log in and update your profile.",
+                "/profile");
 
         return new UserCreateResult(UserDto.from(user), tempPassword);
     }
@@ -209,6 +217,10 @@ public class UserService {
         userRepository.save(user);
 
         emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), tempPassword);
+        notificationService.send(user.getId(), "PASSWORD_RESET",
+                "Password has been reset",
+                "An admin has reset your password. Check your email for the temporary password.",
+                null);
 
         // No password data in audit log — who reset whose password, and when
         writeAudit("APP_USER", id, "PASSWORD_RESET", snapshot, null, actor);

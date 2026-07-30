@@ -6,8 +6,8 @@ import { listAuditLog } from '../../api/admin';
 import type { AuditLogDto, AuditFilters } from '../../api/admin';
 import { formatAuditDate, auditActionBadgeStyle } from '../../lib/auditLog';
 
-// Fix: EOD_ENTRY audit rows exist (approve/reject/changes-requested) but were missing here
 const ENTITY_TYPES = ['APP_USER', 'EOD_ENTRY', 'PASSWORD_RESET_TOKEN'];
+const ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'ACTIVATE', 'DEACTIVATE', 'APPROVE', 'REJECT', 'CHANGES_REQUESTED', 'PASSWORD_RESET'];
 const PAGE_SIZE = 25;
 
 function actionBadge(action: string) {
@@ -135,7 +135,7 @@ export default function AuditLog() {
   const [page, setPage] = useState(0);
   // Seeds the "from" filter when arriving via the dashboard's "View all N →" link,
   // so the count shown there matches what's actually displayed here.
-  const [filters, setFilters] = useState<Pick<AuditFilters, 'entityType' | 'from' | 'to'>>(() => {
+  const [filters, setFilters] = useState<Pick<AuditFilters, 'entityType' | 'action' | 'actorName' | 'from' | 'to'>>(() => {
     const from = searchParams.get('from');
     return from ? { from } : {};
   });
@@ -170,7 +170,7 @@ export default function AuditLog() {
 
       {/* Filters */}
       <div style={{
-        display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16,
+        display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'flex-end',
         padding: '14px 16px', background: 'var(--panel)',
         border: '1px solid var(--line)', borderRadius: 10,
       }}>
@@ -182,9 +182,32 @@ export default function AuditLog() {
             onChange={(e) => handleFilterChange('entityType', e.target.value)}
             style={selectStyle}
           >
-            <option value="">All</option>
+            <option value="">All types</option>
             {ENTITY_TYPES.map((et) => <option key={et} value={et}>{et}</option>)}
           </select>
+        </div>
+        <div>
+          <label style={labelStyle} htmlFor="action-filter">Action</label>
+          <select
+            id="action-filter"
+            value={filters.action ?? ''}
+            onChange={(e) => handleFilterChange('action', e.target.value)}
+            style={selectStyle}
+          >
+            <option value="">All actions</option>
+            {ACTIONS.map((a) => <option key={a} value={a}>{a.replace(/_/g, ' ')}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle} htmlFor="actor-filter">Actor name</label>
+          <input
+            id="actor-filter"
+            type="text"
+            placeholder="Search by name…"
+            value={filters.actorName ?? ''}
+            onChange={(e) => handleFilterChange('actorName', e.target.value)}
+            style={{ ...selectStyle, minWidth: 160 }}
+          />
         </div>
         <div>
           <label style={labelStyle} htmlFor="from-filter">From</label>
@@ -206,14 +229,12 @@ export default function AuditLog() {
             style={selectStyle}
           />
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-          <button
-            onClick={() => { setFilters({}); setPage(0); }}
-            style={{ ...selectStyle, cursor: 'pointer', color: 'var(--txt-mut)', border: '1px solid var(--line2)' }}
-          >
-            Clear
-          </button>
-        </div>
+        <button
+          onClick={() => { setFilters({}); setPage(0); }}
+          style={{ ...selectStyle, cursor: 'pointer', color: 'var(--txt-mut)', border: '1px solid var(--line2)' }}
+        >
+          Clear
+        </button>
       </div>
 
       {/* Table */}

@@ -97,7 +97,9 @@ export interface UpdateUserPayload {
 
 export interface AuditFilters {
   entityType?: string;
+  action?: string;
   actorId?: number;
+  actorName?: string;
   from?: string;
   to?: string;
   page?: number;

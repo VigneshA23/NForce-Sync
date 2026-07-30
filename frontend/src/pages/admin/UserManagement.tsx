@@ -6,7 +6,7 @@ import {
   UserPlus, X, Pencil, Power, PowerOff, RotateCcw, Trash2,
   AlertTriangle, Copy, Check, RefreshCw, ChevronDown,
   Calendar, ChevronLeft, ChevronRight,
-  Search, Filter, ArrowUp, ArrowDown,
+  Search, Filter, ArrowUp, ArrowDown, Download,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { todayISO } from '../../lib/date';
@@ -1441,6 +1441,48 @@ function distinctIdOptions(
   return opts;
 }
 
+function exportUsersCsv(
+  users: UserDto[],
+  departments: { id: number; name: string }[],
+  locations: { id: number; name: string }[],
+  allUsers: UserDto[],
+) {
+  const deptName = (id: number | null) => departments.find(d => d.id === id)?.name ?? '';
+  const locName  = (id: number | null) => locations.find(l => l.id === id)?.name ?? '';
+  const mgrName  = (id: number | null) => allUsers.find(u => u.id === id)?.fullName ?? '';
+
+  const rows: string[][] = [
+    ['Employee Code', 'Full Name', 'Email', 'Role', 'Department', 'Location', 'Manager', 'Status', 'Work Mode', 'Employment Type', 'Joining Date'],
+    ...users.map(u => [
+      u.employeeCode,
+      u.fullName,
+      u.email,
+      ROLE_LABELS[toRole(u.role)] ?? u.role,
+      deptName(u.departmentId),
+      locName(u.locationId),
+      mgrName(u.managerId),
+      u.status,
+      u.workMode ?? '',
+      u.employmentType ?? '',
+      u.joiningDate ?? '',
+    ]),
+  ];
+
+  const csv = rows.map(row =>
+    row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+  ).join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `users-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function UserManagement() {
@@ -1565,12 +1607,25 @@ export default function UserManagement() {
             All users across all roles. Manage access, roles, and account status.
           </p>
         </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'var(--brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-        >
-          <UserPlus size={14} /> Add User
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {filteredUsers && filteredUsers.length > 0 && (
+            <button
+              onClick={() => exportUsersCsv(filteredUsers, departments, locations, users ?? [])}
+              title={`Export ${filteredUsers.length} user${filteredUsers.length !== 1 ? 's' : ''} to CSV`}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', color: 'var(--txt-mut)', border: '1px solid var(--line2)', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--txt-dim)'; e.currentTarget.style.color = 'var(--txt)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line2)'; e.currentTarget.style.color = 'var(--txt-mut)'; }}
+            >
+              <Download size={13} aria-hidden="true" /> Export CSV
+            </button>
+          )}
+          <button
+            onClick={() => setShowAdd(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'var(--brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          >
+            <UserPlus size={14} /> Add User
+          </button>
+        </div>
       </div>
 
       {/* Users Table */}

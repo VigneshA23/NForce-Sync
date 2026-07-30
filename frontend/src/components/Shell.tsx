@@ -10,6 +10,7 @@ import { useTheme } from '../lib/theme';
 import { NotAuthorized } from '../pages/NotAuthorized';
 import { searchUsers, listLocations } from '../api/admin';
 import { toRole } from '../api/auth';
+import { fetchUnreadCount } from '../api/notifications';
 
 // ─── Workspace search (top nav) ────────────────────────────────────────────────
 // Only wired up for superadmin — the destination (User Management) and the
@@ -387,9 +388,13 @@ export function Shell() {
   const navInfo  = getNavItem(role, location.pathname);
   const pageLabel = navInfo?.item.label ?? 'Home';
 
-  const bellBadge = NAV[role]
-    .flatMap(s => s.items)
-    .find(i => i.key === 'notifications')?.badge ?? 0;
+  const { data: unreadCountData } = useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: fetchUnreadCount,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const bellBadge = unreadCountData ?? 0;
 
   // Close drawer + profile on route change
   useEffect(() => {

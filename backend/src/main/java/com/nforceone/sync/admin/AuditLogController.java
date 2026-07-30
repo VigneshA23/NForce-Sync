@@ -30,7 +30,9 @@ public class AuditLogController {
     @GetMapping
     public Page<AuditLogDto> list(
             @RequestParam(required = false) String entityType,
+            @RequestParam(required = false) String action,
             @RequestParam(required = false) Long actorId,
+            @RequestParam(required = false) String actorName,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
             @RequestParam(required = false)
@@ -40,7 +42,9 @@ public class AuditLogController {
 
         Specification<AuditLog> spec = Specification
                 .where(AuditLogSpecs.entityTypeIs(entityType))
+                .and(AuditLogSpecs.actionIs(action))
                 .and(AuditLogSpecs.actorIdIs(actorId))
+                .and(AuditLogSpecs.actorNameContains(actorName))
                 .and(AuditLogSpecs.occurredAfter(from))
                 .and(AuditLogSpecs.occurredBefore(to));
 

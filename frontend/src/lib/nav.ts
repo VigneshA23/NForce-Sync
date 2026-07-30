@@ -64,7 +64,7 @@ export const NAV: Record<Role, RoleNav> = {
     {
       section: 'Account',
       items: [
-        { key: 'notifications', label: 'Notifications', path: '/notifications', icon: Bell, badge: 3 },
+        { key: 'notifications', label: 'Notifications', path: '/notifications', icon: Bell },
         { key: 'profile',       label: 'Profile',        path: '/profile',       icon: User },
       ],
     },
@@ -85,7 +85,7 @@ export const NAV: Record<Role, RoleNav> = {
       items: [
         { key: 'eod-submit',    label: 'Submit EOD',     path: '/eod/submit',    icon: ClipboardList },
         { key: 'reports',       label: 'Reports',         path: '/team/reports',  icon: BarChart3 },
-        { key: 'notifications', label: 'Notifications',  path: '/notifications', icon: Bell, badge: 2 },
+        { key: 'notifications', label: 'Notifications',  path: '/notifications', icon: Bell },
         { key: 'profile',       label: 'Profile',         path: '/profile',       icon: User },
       ],
     },

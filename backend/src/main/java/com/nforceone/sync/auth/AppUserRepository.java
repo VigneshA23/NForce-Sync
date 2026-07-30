@@ -55,6 +55,14 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long>, JpaSpec
 
     long countByRoleAndDeletedAtIsNull(AppUser.Role role);
 
+    // Replaces 11 individual count calls in AdminStatsController — one round-trip for all role+status counts
+    @Query("SELECT u.role, u.status, count(u) FROM AppUser u WHERE u.deletedAt IS NULL GROUP BY u.role, u.status")
+    List<Object[]> countGroupedByRoleAndStatus();
+
+    // Projection query — avoids loading full entities just for name strings
+    @Query("SELECT u.fullName FROM AppUser u WHERE u.status = com.nforceone.sync.auth.AppUser.Status.INACTIVE AND u.deletedAt IS NULL")
+    List<String> findInactiveUserNames();
+
     List<AppUser> findByManagerId(Long managerId);
 
     List<AppUser> findByRoleAndStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Role role,

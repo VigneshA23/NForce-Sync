@@ -1,3 +1,4 @@
+import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './lib/theme';
 import { AuthProvider, useAuth, ROLE_LANDING } from './lib/auth';
@@ -6,25 +7,69 @@ import { Shell } from './components/Shell';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotAuthorized } from './pages/NotAuthorized';
 import { Placeholder } from './pages/Placeholder';
-import Login                from './pages/auth/Login';
-import Forgot               from './pages/auth/Forgot';
-import Reset                from './pages/auth/Reset';
-import Locked               from './pages/auth/Locked';
-import Inactive             from './pages/auth/Inactive';
-import ForceChangePassword  from './pages/auth/ForceChangePassword';
-import AdminDashboard       from './pages/admin/Dashboard';
-import UserManagement       from './pages/admin/UserManagement';
-import AuditLog             from './pages/admin/AuditLog';
-import RolesAccess          from './pages/admin/RolesAccess';
-import OrganizationMasters  from './pages/admin/OrganizationMasters';
-import BusinessRules        from './pages/admin/BusinessRules';
-import SubmitEOD            from './pages/employee/SubmitEOD';
-import EodHistory           from './pages/employee/EodHistory';
-import TeamDashboard        from './pages/lead/TeamDashboard';
-import Approvals            from './pages/lead/Approvals';
-import TeamUtilization      from './pages/lead/TeamUtilization';
-import Blockers             from './pages/lead/Blockers';
-import ProjectsAllocation   from './pages/pm/ProjectsAllocation';
+import Login               from './pages/auth/Login';
+import Forgot              from './pages/auth/Forgot';
+import Reset               from './pages/auth/Reset';
+import Locked              from './pages/auth/Locked';
+import Inactive            from './pages/auth/Inactive';
+import ForceChangePassword from './pages/auth/ForceChangePassword';
+
+const AdminDashboard      = lazy(() => import('./pages/admin/Dashboard'));
+const UserManagement      = lazy(() => import('./pages/admin/UserManagement'));
+const AuditLog            = lazy(() => import('./pages/admin/AuditLog'));
+const RolesAccess         = lazy(() => import('./pages/admin/RolesAccess'));
+const OrganizationMasters = lazy(() => import('./pages/admin/OrganizationMasters'));
+const BusinessRules       = lazy(() => import('./pages/admin/BusinessRules'));
+const SubmitEOD           = lazy(() => import('./pages/employee/SubmitEOD'));
+const EodHistory          = lazy(() => import('./pages/employee/EodHistory'));
+const TeamDashboard       = lazy(() => import('./pages/lead/TeamDashboard'));
+const Approvals           = lazy(() => import('./pages/lead/Approvals'));
+const TeamUtilization     = lazy(() => import('./pages/lead/TeamUtilization'));
+const Blockers            = lazy(() => import('./pages/lead/Blockers'));
+const ProjectsAllocation  = lazy(() => import('./pages/pm/ProjectsAllocation'));
+const Profile             = lazy(() => import('./pages/Profile'));
+const Notifications       = lazy(() => import('./pages/Notifications'));
+
+function PageFallback() {
+  return (
+    <div style={{ padding: '32px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {[300, 220, 180].map((w) => (
+        <div key={w} className="skeleton" style={{ height: 14, width: w, borderRadius: 4 }} />
+      ))}
+    </div>
+  );
+}
+
+// Eagerly trigger dynamic imports for the chunks a role will commonly visit.
+// Runs once after login; by the time the user navigates, the chunk is cached.
+function ChunkPrefetcher() {
+  const { user } = useAuth();
+  useEffect(() => {
+    if (!user) return;
+    // Shared — everyone uses these
+    import('./pages/Profile');
+    import('./pages/Notifications');
+    import('./pages/employee/SubmitEOD');
+    import('./pages/employee/EodHistory');
+    // Role-specific heavy chunks
+    if (user.role === 'superadmin') {
+      import('./pages/admin/Dashboard');
+      import('./pages/admin/UserManagement');
+      import('./pages/admin/AuditLog');
+      import('./pages/admin/RolesAccess');
+      import('./pages/admin/OrganizationMasters');
+      import('./pages/admin/BusinessRules');
+    } else if (user.role === 'lead') {
+      import('./pages/lead/TeamDashboard');
+      import('./pages/lead/Approvals');
+      import('./pages/lead/TeamUtilization');
+      import('./pages/lead/Blockers');
+    } else if (user.role === 'pm') {
+      import('./pages/pm/ProjectsAllocation');
+    }
+  }, [user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
 
 function RequireAuth() {
   const { user } = useAuth();
@@ -33,7 +78,12 @@ function RequireAuth() {
   if (user.mustChangePassword && location.pathname !== '/force-change-password') {
     return <Navigate to="/force-change-password" replace />;
   }
-  return <Outlet />;
+  return (
+    <>
+      <ChunkPrefetcher />
+      <Outlet />
+    </>
+  );
 }
 
 function RedirectAuth() {
@@ -69,71 +119,75 @@ function AppRoutes() {
         <Route element={<Shell />}>
           <Route index element={<RoleLanding />} />
 
-          {/* ── Employee ───────────────────────────── */}
-          <Route path="/dashboard"   element={<Placeholder title="My Dashboard" />} />
-          <Route path="/eod/submit"  element={<SubmitEOD />} />
-          <Route path="/eod/history" element={<EodHistory />} />
-          <Route path="/utilization" element={<Placeholder title="My Utilization" />} />
+          {/* All feature routes wrapped in a single Suspense boundary for lazy chunks */}
+          <Route element={<Suspense fallback={<PageFallback />}><Outlet /></Suspense>}>
 
-          {/* ── Team Lead ──────────────────────────── */}
-          <Route path="/team/dashboard"   element={<TeamDashboard />} />
-          <Route path="/team/approvals"   element={<Approvals />} />
-          <Route path="/team/utilization" element={<TeamUtilization />} />
-          <Route path="/team/blockers"    element={<Blockers />} />
-          <Route path="/team/reports"     element={<Placeholder title="Reports" />} />
+            {/* ── Employee ───────────────────────────── */}
+            <Route path="/dashboard"   element={<Placeholder title="My Dashboard" />} />
+            <Route path="/eod/submit"  element={<SubmitEOD />} />
+            <Route path="/eod/history" element={<EodHistory />} />
+            <Route path="/utilization" element={<Placeholder title="My Utilization" />} />
 
-          {/* ── Project Manager ────────────────────── */}
-          <Route path="/projects/dashboard"      element={<Placeholder title="Project Dashboard" />} />
-          <Route path="/projects"                element={<ProjectsAllocation />} />
-          <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
-          <Route path="/projects/planned-actual" element={<Placeholder title="Planned vs Actual" />} />
-          <Route path="/projects/blockers"       element={<Placeholder title="Blockers" />} />
-          <Route path="/projects/approvals"      element={<Placeholder title="Approvals" />} />
-          <Route path="/projects/reports"        element={<Placeholder title="Reports" />} />
+            {/* ── Team Lead ──────────────────────────── */}
+            <Route path="/team/dashboard"   element={<TeamDashboard />} />
+            <Route path="/team/approvals"   element={<Approvals />} />
+            <Route path="/team/utilization" element={<TeamUtilization />} />
+            <Route path="/team/blockers"    element={<Blockers />} />
+            <Route path="/team/reports"     element={<Placeholder title="Reports" />} />
 
-          {/* ── Delivery Manager ───────────────────── */}
-          <Route path="/dm/dashboard"   element={<Placeholder title="Delivery Dashboard" />} />
-          <Route path="/dm/escalations"   element={<Placeholder title="Escalations" />} />
-          <Route path="/dm/allocation"    element={<Placeholder title="Allocation" />} />
-          <Route path="/dm/heatmap"       element={<Placeholder title="Allocation Heatmap" />} />
-          <Route path="/dm/planned-actual" element={<Placeholder title="Planned vs Actual" />} />
-          <Route path="/dm/utilization"   element={<Placeholder title="Cross-Project Util" />} />
-          <Route path="/dm/reports"     element={<Placeholder title="Reports" />} />
+            {/* ── Project Manager ────────────────────── */}
+            <Route path="/projects/dashboard"      element={<Placeholder title="Project Dashboard" />} />
+            <Route path="/projects"                element={<ProjectsAllocation />} />
+            <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
+            <Route path="/projects/planned-actual" element={<Placeholder title="Planned vs Actual" />} />
+            <Route path="/projects/blockers"       element={<Placeholder title="Blockers" />} />
+            <Route path="/projects/approvals"      element={<Placeholder title="Approvals" />} />
+            <Route path="/projects/reports"        element={<Placeholder title="Reports" />} />
 
-          {/* ── HR Admin ───────────────────────────── */}
-          <Route path="/hr/dashboard" element={<Placeholder title="HR Dashboard" />} />
-          <Route path="/hr/activity"  element={<Placeholder title="Activity & Compliance" />} />
-          <Route path="/hr/leave"     element={<Placeholder title="Leave Alignment" />} />
-          <Route path="/hr/reports"   element={<Placeholder title="Reports" />} />
+            {/* ── Delivery Manager ───────────────────── */}
+            <Route path="/dm/dashboard"      element={<Placeholder title="Delivery Dashboard" />} />
+            <Route path="/dm/escalations"    element={<Placeholder title="Escalations" />} />
+            <Route path="/dm/allocation"     element={<Placeholder title="Allocation" />} />
+            <Route path="/dm/heatmap"        element={<Placeholder title="Allocation Heatmap" />} />
+            <Route path="/dm/planned-actual" element={<Placeholder title="Planned vs Actual" />} />
+            <Route path="/dm/utilization"    element={<Placeholder title="Cross-Project Util" />} />
+            <Route path="/dm/reports"        element={<Placeholder title="Reports" />} />
 
-          {/* ── Finance Admin ──────────────────────── */}
-          <Route path="/finance/dashboard"      element={<Placeholder title="Finance Dashboard" />} />
-          <Route path="/finance/billable"       element={<Placeholder title="Billable Data" />} />
-          <Route path="/finance/profitability"  element={<Placeholder title="Profitability" />} />
-          <Route path="/finance/reports"        element={<Placeholder title="Reports" />} />
+            {/* ── HR Admin ───────────────────────────── */}
+            <Route path="/hr/dashboard" element={<Placeholder title="HR Dashboard" />} />
+            <Route path="/hr/activity"  element={<Placeholder title="Activity & Compliance" />} />
+            <Route path="/hr/leave"     element={<Placeholder title="Leave Alignment" />} />
+            <Route path="/hr/reports"   element={<Placeholder title="Reports" />} />
 
-          {/* ── Leadership ─────────────────────────── */}
-          <Route path="/leadership/dashboard" element={<Placeholder title="Org Dashboard" />} />
-          <Route path="/leadership/trends"    element={<Placeholder title="Trends & Drilldown" />} />
-          <Route path="/leadership/teams"     element={<Placeholder title="Team Rankings" />} />
-          <Route path="/leadership/reports"   element={<Placeholder title="Reports" />} />
+            {/* ── Finance Admin ──────────────────────── */}
+            <Route path="/finance/dashboard"     element={<Placeholder title="Finance Dashboard" />} />
+            <Route path="/finance/billable"      element={<Placeholder title="Billable Data" />} />
+            <Route path="/finance/profitability" element={<Placeholder title="Profitability" />} />
+            <Route path="/finance/reports"       element={<Placeholder title="Reports" />} />
 
-          {/* ── Super Admin ────────────────────────── */}
-          <Route path="/admin/dashboard"    element={<AdminDashboard />} />
-          <Route path="/admin/users"        element={<UserManagement />} />
-          <Route path="/admin/roles"        element={<RolesAccess />} />
-          <Route path="/admin/org-masters"  element={<OrganizationMasters />} />
-          <Route path="/admin/rules"        element={<BusinessRules />} />
-          <Route path="/admin/integrations" element={<Placeholder title="Integrations" />} />
-          <Route path="/admin/ai"           element={<Placeholder title="AI & Automation" />} />
-          <Route path="/admin/audit"        element={<AuditLog />} />
+            {/* ── Leadership ─────────────────────────── */}
+            <Route path="/leadership/dashboard" element={<Placeholder title="Org Dashboard" />} />
+            <Route path="/leadership/trends"    element={<Placeholder title="Trends & Drilldown" />} />
+            <Route path="/leadership/teams"     element={<Placeholder title="Team Rankings" />} />
+            <Route path="/leadership/reports"   element={<Placeholder title="Reports" />} />
 
-          {/* ── Shared ─────────────────────────────── */}
-          <Route path="/notifications" element={<Placeholder title="Notifications" />} />
-          <Route path="/profile"       element={<Placeholder title="Profile" />} />
+            {/* ── Super Admin ────────────────────────── */}
+            <Route path="/admin/dashboard"    element={<AdminDashboard />} />
+            <Route path="/admin/users"        element={<UserManagement />} />
+            <Route path="/admin/roles"        element={<RolesAccess />} />
+            <Route path="/admin/org-masters"  element={<OrganizationMasters />} />
+            <Route path="/admin/rules"        element={<BusinessRules />} />
+            <Route path="/admin/integrations" element={<Placeholder title="Integrations" />} />
+            <Route path="/admin/ai"           element={<Placeholder title="AI & Automation" />} />
+            <Route path="/admin/audit"        element={<AuditLog />} />
 
-          {/* Catch-all → 403 inside shell */}
-          <Route path="*" element={<NotAuthorized />} />
+            {/* ── Shared ─────────────────────────────── */}
+            <Route path="/notifications" element={<Notifications />} />
+            <Route path="/profile"       element={<Profile />} />
+
+            {/* Catch-all → 403 inside shell */}
+            <Route path="*" element={<NotAuthorized />} />
+          </Route>
         </Route>
       </Route>
     </Routes>

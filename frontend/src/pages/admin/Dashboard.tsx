@@ -164,9 +164,12 @@ export default function AdminDashboard() {
   // deep-link "View all N →" to the same 24h window the KPI count reflects.
   const [since24h] = useState(() => new Date(Date.now() - 24 * 3600 * 1000).toISOString());
 
+  // Admin stats rarely change mid-session; override global 30s with 5-minute cache
+  // to avoid a Neon round-trip (~600-800ms) on every navigation back to this page.
   const { data: stats, isPending, isError, refetch } = useQuery({
     queryKey: ['admin', 'stats'],
     queryFn: getAdminStats,
+    staleTime: 5 * 60 * 1000,
   });
 
   if (isPending) {
@@ -218,10 +221,10 @@ export default function AdminDashboard() {
 
       {/* KPI row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
-        <KpiCard icon={<Users size={18} />} label="Total Users"         value={stats.totalUsers}         accent="var(--txt)" />
-        <KpiCard icon={<UserCheck size={18} />} label="Active Users"     value={stats.activeUsers}        accent="#2FB67C" />
+        <KpiCard icon={<Users size={18} />}    label="Total Users"          value={stats.totalUsers}         accent="var(--txt)" />
+        <KpiCard icon={<UserCheck size={18} />} label="Active Users"      value={stats.activeUsers}        accent="var(--ok)" />
         <InactiveUsersTile count={stats.inactiveUsers} names={stats.inactiveUserNames} />
-        <KpiCard icon={<Activity size={18} />} label="Audit Events (24h)" value={stats.auditEventsLast24h} accent="#4C8DD6" />
+        <KpiCard icon={<Activity size={18} />} label="Audit Events (24h)" value={stats.auditEventsLast24h} accent="var(--info)" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 24 }}>
@@ -270,7 +273,7 @@ export default function AdminDashboard() {
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
               marginTop: 4, fontSize: 12, fontWeight: 500,
-              color: '#4C8DD6', textDecoration: 'none',
+              color: 'var(--info)', textDecoration: 'none',
             }}
           >
             View all {stats.auditEventsLast24h} <ArrowRight size={12} aria-hidden="true" />

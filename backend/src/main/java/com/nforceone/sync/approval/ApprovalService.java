@@ -8,6 +8,7 @@ import com.nforceone.sync.auth.AuditLogRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.dto.EodEntryDto;
+import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.utilization.UtilizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -28,19 +29,22 @@ public class ApprovalService {
     private final AuditLogRepository     auditLogRepository;
     private final UtilizationService     utilizationService;
     private final ObjectMapper           objectMapper;
+    private final NotificationService    notificationService;
 
     public ApprovalService(EodEntryRepository entryRepository,
                            AppUserRepository userRepository,
                            ApprovalActionRepository actionRepository,
                            AuditLogRepository auditLogRepository,
                            UtilizationService utilizationService,
-                           ObjectMapper objectMapper) {
-        this.entryRepository    = entryRepository;
-        this.userRepository     = userRepository;
-        this.actionRepository   = actionRepository;
-        this.auditLogRepository = auditLogRepository;
-        this.utilizationService = utilizationService;
-        this.objectMapper       = objectMapper;
+                           ObjectMapper objectMapper,
+                           NotificationService notificationService) {
+        this.entryRepository     = entryRepository;
+        this.userRepository      = userRepository;
+        this.actionRepository    = actionRepository;
+        this.auditLogRepository  = auditLogRepository;
+        this.utilizationService  = utilizationService;
+        this.objectMapper        = objectMapper;
+        this.notificationService = notificationService;
     }
 
     @Transactional(readOnly = true)
@@ -74,6 +78,11 @@ public class ApprovalService {
         entryRepository.save(entry);
 
         writeAudit(entry, "EOD_REJECTED", actor, now);
+        notificationService.send(entry.getEmployee().getId(), "EOD_REJECTED",
+                "EOD entry rejected",
+                "Your EOD entry for " + entry.getEntryDate() + " was rejected."
+                        + (comment != null && !comment.isBlank() ? " Comment: " + comment : ""),
+                "/eod/history");
         return EodEntryDto.from(entry);
     }
 
@@ -91,6 +100,11 @@ public class ApprovalService {
         entryRepository.save(entry);
 
         writeAudit(entry, "EOD_CHANGES_REQUESTED", actor, now);
+        notificationService.send(entry.getEmployee().getId(), "EOD_CHANGES_REQUESTED",
+                "Changes requested on EOD entry",
+                "Your EOD entry for " + entry.getEntryDate() + " requires changes."
+                        + (comment != null && !comment.isBlank() ? " Comment: " + comment : ""),
+                "/eod/history");
         return EodEntryDto.from(entry);
     }
 
@@ -117,6 +131,10 @@ public class ApprovalService {
 
         writeAudit(entry, "EOD_APPROVED", actor, now);
         utilizationService.recomputeForEntry(entry.getId());
+        notificationService.send(entry.getEmployee().getId(), "EOD_APPROVED",
+                "EOD entry approved",
+                "Your EOD entry for " + entry.getEntryDate() + " has been approved.",
+                "/eod/history");
         return EodEntryDto.from(entry);
     }
 

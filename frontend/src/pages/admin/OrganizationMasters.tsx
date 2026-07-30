@@ -65,7 +65,7 @@ function ActiveBadge({ active }: { active: boolean }) {
       fontWeight: 500,
       background: active ? 'rgba(47,182,124,.12)' : 'rgba(107,114,128,.12)',
       border: `1px solid ${active ? 'rgba(47,182,124,.3)' : 'rgba(107,114,128,.3)'}`,
-      color: active ? '#2FB67C' : '#9BA1AC',
+      color: active ? 'var(--ok)' : 'var(--txt-dim)',
     }}>
       {active ? 'Active' : 'Inactive'}
     </span>
@@ -121,7 +121,7 @@ function ConfirmModal({ open, onClose, onConfirm, title, message, confirmLabel, 
               background: danger ? 'rgba(228,55,61,.15)' : 'rgba(47,182,124,.15)',
               border: `1px solid ${danger ? 'rgba(228,55,61,.4)' : 'rgba(47,182,124,.4)'}`,
               borderRadius: 7,
-              color: danger ? '#E4373D' : '#2FB67C',
+              color: danger ? 'var(--risk)' : 'var(--ok)',
               fontSize: 13,
               fontWeight: 600,
               cursor: isPending ? 'not-allowed' : 'pointer',
@@ -462,7 +462,7 @@ function OrgTable<T extends { id: number; active: boolean }>({
                           background: 'transparent',
                           border: `1px solid ${item.active ? 'rgba(228,55,61,.3)' : 'rgba(47,182,124,.3)'}`,
                           borderRadius: 6,
-                          color: item.active ? '#E4373D' : '#2FB67C',
+                          color: item.active ? 'var(--risk)' : 'var(--ok)',
                           fontSize: 11,
                           fontWeight: 500,
                           cursor: isTogglePending ? 'not-allowed' : 'pointer',
