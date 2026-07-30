@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Users, UserCheck, UserX, Activity, ArrowRight, RefreshCw } from 'lucide-react';
 import { getAdminStats } from '../../api/admin';
-import type { AuditLogDto } from '../../api/admin';
 import { toRole } from '../../api/auth';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
+import { describeAuditEvent, formatRelative, AUDIT_CATEGORY_ICONS, AUDIT_CATEGORY_LABELS } from '../../lib/auditLog';
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
@@ -91,29 +92,48 @@ function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
   );
 }
 
-// ── Audit action label ─────────────────────────────────────────────────────────
+// ── Inactive users tile — hover popover ────────────────────────────────────────
 
-function humanAction(event: AuditLogDto): string {
-  const actor = event.actorName ?? 'System';
-  const entity = event.entityType?.toLowerCase() ?? 'record';
-  switch (event.action) {
-    case 'CREATE':       return `${actor} created a new ${entity}`;
-    case 'UPDATE':       return `${actor} updated a ${entity}`;
-    case 'STATUS_CHANGE':return `${actor} changed ${entity} status`;
-    case 'PASSWORD_RESET': return `${actor} reset a password`;
-    default:             return `${actor} performed ${event.action} on ${entity}`;
-  }
-}
-
-function formatRelative(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  const h = Math.floor(diff / 3600000);
-  const d = Math.floor(diff / 86400000);
-  if (m < 1)  return 'just now';
-  if (m < 60) return `${m}m ago`;
-  if (h < 24) return `${h}h ago`;
-  return `${d}d ago`;
+// `names` is defaulted, not required: an older backend build omits inactiveUserNames from
+// /api/admin/stats entirely, and an undefined .map() here took down the whole app.
+function InactiveUsersTile({ count, names = [] }: { count: number; names?: string[] }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      style={{ position: 'relative' }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+      tabIndex={0}
+    >
+      <KpiCard icon={<UserX size={18} />} label="Inactive Users" value={count} accent="var(--txt-dim)" />
+      {hover && (
+        <div
+          role="tooltip"
+          style={{
+            position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50,
+            minWidth: 200, maxWidth: 280,
+            background: 'var(--raised)', border: '1px solid var(--line2)',
+            borderRadius: 8, padding: '10px 12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,.35)',
+            fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.6,
+          }}
+        >
+          {count === 0 ? (
+            <span>No inactive users</span>
+          ) : (
+            <>
+              <div style={{ fontWeight: 600, color: 'var(--txt)', marginBottom: 4 }}>
+                {count} Inactive:
+              </div>
+              {names.map((name) => <div key={name}>{name}</div>)}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Role bar ──────────────────────────────────────────────────────────────────
@@ -140,6 +160,9 @@ function RoleBar({ roleKey, count, total }: { roleKey: string; count: number; to
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  // Computed once per mount, not on every render (Date.now() is impure) — used to
+  // deep-link "View all N →" to the same 24h window the KPI count reflects.
+  const [since24h] = useState(() => new Date(Date.now() - 24 * 3600 * 1000).toISOString());
 
   const { data: stats, isPending, isError, refetch } = useQuery({
     queryKey: ['admin', 'stats'],
@@ -184,7 +207,10 @@ export default function AdminDashboard() {
     );
   }
 
-  const roleEntries = Object.entries(stats.usersByRole).filter(([, v]) => v > 0);
+  // Both defaulted for the same reason as InactiveUsersTile: a partial stats payload should
+  // degrade to an empty section, not blank the page.
+  const roleEntries = Object.entries(stats.usersByRole ?? {}).filter(([, v]) => v > 0);
+  const recentEvents = stats.recentAuditEvents ?? [];
 
   return (
     <div>
@@ -194,7 +220,7 @@ export default function AdminDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
         <KpiCard icon={<Users size={18} />} label="Total Users"         value={stats.totalUsers}         accent="var(--txt)" />
         <KpiCard icon={<UserCheck size={18} />} label="Active Users"     value={stats.activeUsers}        accent="#2FB67C" />
-        <KpiCard icon={<UserX size={18} />} label="Inactive Users"      value={stats.inactiveUsers}      accent="var(--txt-dim)" />
+        <InactiveUsersTile count={stats.inactiveUsers} names={stats.inactiveUserNames} />
         <KpiCard icon={<Activity size={18} />} label="Audit Events (24h)" value={stats.auditEventsLast24h} accent="#4C8DD6" />
       </div>
 
@@ -209,21 +235,46 @@ export default function AdminDashboard() {
             ))}
         </Card>
 
-        {/* Recent audit events */}
+        {/* Recent audit events — admin/config-level only, see AdminStatsController */}
         <Card>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 16 }}>Recent Activity</div>
-          {stats.recentAuditEvents.length === 0
+          {recentEvents.length === 0
             ? <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>No recent activity</div>
-            : stats.recentAuditEvents.map((event) => (
-              <div key={event.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 12 }}>
-                <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5, flex: 1, minWidth: 0 }}>
-                  {humanAction(event)}
+            : recentEvents.map((event) => {
+              const { message, category } = describeAuditEvent(event);
+              const Icon = AUDIT_CATEGORY_ICONS[category];
+              return (
+                <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 12, gap: 10 }}>
+                  <div
+                    title={AUDIT_CATEGORY_LABELS[category]}
+                    aria-label={AUDIT_CATEGORY_LABELS[category]}
+                    style={{
+                      width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+                      background: 'var(--raised2)', color: 'var(--txt-dim)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1,
+                    }}
+                  >
+                    <Icon size={13} aria-hidden="true" />
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5, flex: 1, minWidth: 0 }}>
+                    {message}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    {formatRelative(event.occurredAt)}
+                  </div>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                  {formatRelative(event.occurredAt)}
-                </div>
-              </div>
-            ))}
+              );
+            })}
+          <Link
+            to={`/admin/audit?from=${encodeURIComponent(since24h)}`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              marginTop: 4, fontSize: 12, fontWeight: 500,
+              color: '#4C8DD6', textDecoration: 'none',
+            }}
+          >
+            View all {stats.auditEventsLast24h} <ArrowRight size={12} aria-hidden="true" />
+          </Link>
         </Card>
       </div>
 

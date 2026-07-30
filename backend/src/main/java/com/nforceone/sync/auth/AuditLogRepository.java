@@ -23,4 +23,12 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long>, JpaSp
     List<AuditLog> findTop5ByOrderByOccurredAtDesc();
 
     long countByOccurredAtAfter(OffsetDateTime since);
+
+    // Dashboard "Recent Activity" / "Audit Events (24h)" — admin/config-level events only.
+    // Routine EOD approvals are excluded here (high volume, not admin-actionable); the full
+    // trail including EOD_ENTRY remains visible and filterable on the Audit Log screen.
+    @EntityGraph(attributePaths = {"actor"})
+    List<AuditLog> findTop5ByEntityTypeNotOrderByOccurredAtDesc(String entityType);
+
+    long countByOccurredAtAfterAndEntityTypeNot(OffsetDateTime since, String entityType);
 }

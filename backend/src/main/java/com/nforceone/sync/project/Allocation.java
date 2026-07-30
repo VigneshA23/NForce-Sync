@@ -26,9 +26,6 @@ public class Allocation {
     @JoinColumn(name = "project_id", nullable = false)
     private Project project;
 
-    @Column(name = "allocation_pct", nullable = false)
-    private Integer allocationPct;
-
     @Column(name = "effective_from", nullable = false)
     private LocalDate effectiveFrom;
 

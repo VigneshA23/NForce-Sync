@@ -10,7 +10,7 @@ public record EodEntryDto(
         Long             id,
         Long             employeeId,
         String           employeeName,
-        String           employeeCode,
+        String             employeeCode,
         LocalDate        entryDate,
         String           status,
         String           workLocation,

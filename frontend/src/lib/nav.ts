@@ -96,8 +96,7 @@ export const NAV: Record<Role, RoleNav> = {
       section: 'Projects',
       items: [
         { key: 'pm-dash',        label: 'Project Dashboard', path: '/projects/dashboard',     icon: LayoutDashboard },
-        { key: 'projects',       label: 'Projects',           path: '/projects',                icon: FolderKanban },
-        { key: 'allocation',     label: 'Allocation',         path: '/projects/allocation',     icon: Users },
+        { key: 'projects',       label: 'Projects & Allocation', path: '/projects',            icon: FolderKanban },
         { key: 'planned-actual', label: 'Planned vs Actual',  path: '/projects/planned-actual', icon: TrendingUp, phase: 2 },
         { key: 'blockers',       label: 'Blockers',           path: '/projects/blockers',       icon: AlertOctagon },
       ],

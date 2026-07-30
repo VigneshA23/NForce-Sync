@@ -34,6 +34,38 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 - Authorization enforced SERVER-SIDE on every request — never trust the frontend alone.
 - Before any non-local deployment, set a real JWT_SECRET environment variable — application.yml's current value is an intentionally obvious dev-only placeholder and must never be used outside local development.
 
+## Flyway: the DB is AHEAD of this repo ⚠
+- `validate-on-migrate: false`, so Flyway will NOT warn when the database sits at a higher
+  version than the repo's files.
+- V21–V24 were applied to the shared Neon DB from a working copy whose `.sql` files were never
+  committed. Treat `flyway_schema_history` as the source of truth, NOT `db/migration/`.
+- ALWAYS check before adding a migration, and number ABOVE the top version:
+  `SELECT version, description FROM flyway_schema_history ORDER BY installed_rank DESC LIMIT 5;`
+- Flyway silently SKIPS any local file at/below the recorded version; the app then dies with
+  `SchemaManagementException: missing column`. That's a skipped migration, not a code bug.
+- Flyway expands `${...}` as a placeholder EVEN INSIDE `--` comments — never put `${}` (e.g. a JS
+  template literal) in a migration comment; it fails to parse before touching the DB.
+
+## Debugging gotchas
+- `ddl-auto: validate` → any entity/DB drift stops the app BOOTING (`wrong column type` /
+  `missing column`). Read the startup log first: a down app looks like an API bug.
+- `{"error":"Unauthorized"}` is SecurityConfig's entry point, NOT necessarily an auth failure —
+  a controller exception forwarded to `/error` surfaces this way. Genuine bad credentials return
+  `{"error":"Invalid email or password"}`. Check the server log for the real exception.
+- `open-in-view: false` — lazy associations fail outside a transaction. DTO mappers that touch
+  them (e.g. `UserDto.from` → `getManager()`) must run inside one.
+- INACTIVE users get the same generic "Invalid email or password" as a wrong password
+  (deliberate, prevents enumeration) — don't chase it as a bug.
+
+## Local workflow
+- Verify: `./mvnw.cmd -o compile` — the real check. Java language-server diagnostics go stale
+  after adding nested enums or record components; trust the compiler, not the squiggles.
+- Run: `./mvnw.cmd spring-boot:run`; restart for ANY entity/endpoint/migration change.
+  Backgrounded from a tool shell it gets reaped — run it in your own terminal.
+- Inspect the DB: psql at `/c/Program Files/PostgreSQL/16/bin/psql`, creds in `application.yml`.
+- Test logins (all `ChangeMe123!`, all `@nforceone.com`): `superadmin@` · `projectmanager@` (PM)
+  · `teamlead@` (MANAGER) · `employee@` (EMPLOYEE, currently INACTIVE).
+
 ## Rules for every module
 - Flyway owns schema. Two underscores: V2__name.sql
 - Never edit user data directly in Neon's table view — always via a Flyway migration file, so changes are tracked in git and don't silently conflict with what the app expects.
@@ -45,7 +77,9 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 
 ## Auth tables (V2 migration)
 - app_user: id (BIGSERIAL PK), full_name, email (UNIQUE), password_hash, role (CHECK 8 values),
-  employee_code (GENERATED ALWAYS AS IDENTITY, starts 1001), status (ACTIVE/INACTIVE), created_at,
+  employee_code — NO LONGER an identity column: since V21/V24 it is a manually-entered VARCHAR
+  business ID, format 'NF-' + 8 digits (e.g. NF-20240069), NOT NULL UNIQUE with a format CHECK.
+  status (ACTIVE/INACTIVE), created_at,
   created_by (FK self), manager_id (FK self, added V3 — Team Lead for this employee)
 - password_reset_token: id, user_id (FK app_user), token (UNIQUE), expires_at, used (BOOLEAN)
 - audit_log: id, entity_type, entity_id, action, actor_id (FK app_user), before_value (JSONB), after_value (JSONB), occurred_at
@@ -55,7 +89,12 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 - project: id, code (UNIQUE), name, client, project_type, billing_model,
   status (ACTIVE/INACTIVE/COMPLETED/ON_HOLD), pm_id (FK app_user), start_date, end_date, created_at
 - allocation: id, employee_id (FK app_user), project_id (FK project),
-  allocation_pct INT (0–100 CHECK), effective_from DATE, effective_to DATE NULL, created_at
+  effective_from DATE, effective_to DATE NULL (null = open-ended), created_at
+  A plain assignment: this employee is on this project for this period. V29 dropped
+  allocation_pct (V3) and allocation_type (V25) — there is no percentage, no PRIMARY/SECONDARY,
+  and therefore NO capacity ceiling. Nothing currently stops the same employee being allocated
+  to unlimited overlapping projects, or to the same project twice; a unique employee+project
+  guard over overlapping dates is the open follow-up.
 - task_category: id, name (UNIQUE), is_productive BOOLEAN, is_billable_default BOOLEAN, active BOOLEAN
   Seeded with 19 PRD categories. NOT productive: "Leave / Holiday", "Bench Activity". All others productive.
 - Seed: Priya Nair (id=2, MANAGER) set as manager_id for employees id=3,4,5

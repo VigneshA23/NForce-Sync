@@ -54,6 +54,9 @@ export default function Login() {
 
     try {
       const { token, user: serverUser, mustChangePassword } = await login(email, password);
+      // mustChangePassword arrives top-level on the login response as well as on the user
+      // object — pass it through explicitly. Dropping it lets the user into the app with a
+      // temp-password token, which JwtFilter then 403s on every request (empty dropdowns).
       const authUser = buildAuthUser(serverUser, mustChangePassword);
       loginWithCredentials(token, authUser);
       navigate(
