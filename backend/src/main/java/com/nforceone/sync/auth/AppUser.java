@@ -61,6 +61,9 @@ public class AppUser {
     @Column(name = "location_id")
     private Long locationId;
 
+    @Column(name = "shift_id")
+    private Long shiftId;
+
     @Column(name = "employment_type", length = 50)
     private String employmentType;
 

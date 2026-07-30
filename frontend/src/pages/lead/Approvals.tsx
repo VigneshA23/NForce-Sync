@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, CheckCheck, Check, X, RotateCcw, RefreshCw } from 'lucide-react';
 import { usePendingApprovals, useApprove, useReject, useRequestChanges, useBatchApprove } from '../../api/approvals';
 import { useToast } from '../../lib/toast';
+import { formatDate as fmtDate } from '../../lib/date';
 import type { EodEntryDto, EodTaskDto } from '../../api/eod';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -16,10 +17,6 @@ function formatRelative(iso: string | null): string {
   if (m < 60) return `${m}m ago`;
   if (h < 24) return `${h}h ago`;
   return `${d}d ago`;
-}
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function extractError(err: unknown): string {

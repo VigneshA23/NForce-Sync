@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
-import { toLocalISODate, todayISO as localTodayISO } from '../../lib/date';
+import { toLocalISODate, todayISO as localTodayISO, formatDate } from '../../lib/date';
 import { useTeamUtil } from '../../api/utilization';
 import { RULES, utilState, utilColor, fmtPct, isWorkingDay } from '../../lib/rules';
 import type { TeamUtilDto } from '../../api/utilization';
@@ -10,8 +10,11 @@ import type { TeamUtilDto } from '../../api/utilization';
 
 const toISO = toLocalISODate;
 
+// Weekday is genuinely useful context here (day-by-day navigation header) — kept
+// alongside the standard DD-MM-YYYY date, rather than the old locale-verbose form.
 function fmtDisplayDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const weekday = new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short' });
+  return `${weekday}, ${formatDate(iso)}`;
 }
 
 function prevWorkingDay(iso: string): string {

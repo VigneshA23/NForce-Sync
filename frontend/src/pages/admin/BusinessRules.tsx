@@ -11,6 +11,7 @@ import type { ShiftDefinitionDto, HolidayDto, WeekendRule } from '../../api/busi
 import { extractApiError, extractFieldErrors, isHttpStatus, listAuditLog } from '../../api/admin';
 import type { AuditLogDto } from '../../api/admin';
 import { formatRelative } from '../../lib/auditLog';
+import { formatDate, formatTime12h } from '../../lib/date';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../lib/toast';
 
@@ -73,7 +74,7 @@ function ErrorBanner({ message }: { message: string }) {
       display: 'flex', alignItems: 'flex-start', gap: 8,
       padding: '10px 14px', borderRadius: 7, marginBottom: 14,
       background: 'rgba(228,55,61,.10)', border: '1px solid rgba(228,55,61,.25)',
-      fontSize: 12, color: '#f4a5a8',
+      fontSize: 12, color: 'var(--risk)',
     }} role="alert">
       <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
       {message}
@@ -92,21 +93,27 @@ interface RuleCardProps {
   title: string;
   description: string;
   icon: React.ReactNode;
+  // Each section picks up its icon's color as a top-border + icon-badge tint,
+  // so the four cards read as visually distinct at a glance instead of all
+  // sharing the same flat neutral gray. Heading text itself stays var(--txt) —
+  // full contrast — the accent lives in the icon and border only.
+  accent: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
 }
 
-function RuleCard({ title, description, icon, children, footer }: RuleCardProps) {
+function RuleCard({ title, description, icon, accent, children, footer }: RuleCardProps) {
   return (
     <section style={{
       background: 'var(--panel)',
       border: '1px solid var(--line)',
+      borderTop: `2px solid ${accent}`,
       borderRadius: 10,
       padding: 20,
       marginBottom: 16,
     }}>
       <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-        <SectionIcon icon={icon} />
+        <SectionIcon icon={icon} accent={accent} />
         <div>
           <h2 style={{
             fontFamily: '"Space Grotesk", sans-serif',
@@ -124,12 +131,13 @@ function RuleCard({ title, description, icon, children, footer }: RuleCardProps)
 }
 
 // Matches the icon-badge treatment used on the Admin Dashboard's KPI cards and
-// Quick Actions (rounded square, muted background, centered icon).
-function SectionIcon({ icon }: { icon: React.ReactNode }) {
+// Quick Actions (rounded square, centered icon) but tinted with the section's
+// accent (background at ~9% opacity) instead of flat --raised2/--txt-mut.
+function SectionIcon({ icon, accent }: { icon: React.ReactNode; accent: string }) {
   return (
     <div style={{
       width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-      background: 'var(--raised2)', color: 'var(--txt-mut)',
+      background: `color-mix(in srgb, ${accent} 16%, var(--raised2))`, color: accent,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       {icon}
@@ -476,6 +484,7 @@ export default function BusinessRules() {
         title="Time & Attendance"
         description="Standard working hours and which days count as weekend."
         icon={<Clock size={16} aria-hidden="true" />}
+        accent="var(--info)"
         footer={<LastUpdatedCaption info={timeAttendanceUpdate} />}
       >
         <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -526,6 +535,7 @@ export default function BusinessRules() {
         title="Notifications & Escalation"
         description="EOD cutoff, reminder timing, and how long an unapproved submission waits before escalating."
         icon={<Bell size={16} aria-hidden="true" />}
+        accent="var(--warn)"
         footer={<LastUpdatedCaption info={notificationsUpdate} />}
       >
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -534,6 +544,7 @@ export default function BusinessRules() {
             <input
               id="cutoff-input"
               type="time"
+              lang="en-US"
               value={cutoffDraft}
               onChange={(e) => setCutoffDraft(e.target.value)}
               style={inputStyle}
@@ -587,6 +598,7 @@ export default function BusinessRules() {
         title="Shift Timings"
         description="Shift options available for assignment to employees in User Management."
         icon={<CalendarClock size={16} aria-hidden="true" />}
+        accent="var(--ok)"
         footer={<LastUpdatedCaption info={shiftsUpdate} />}
       >
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -613,6 +625,7 @@ export default function BusinessRules() {
         title="Holiday Calendar"
         description="Dated holiday entries excluded from working-day calculations."
         icon={<CalendarDays size={16} aria-hidden="true" />}
+        accent="var(--risk)"
         footer={<LastUpdatedCaption info={holidaysUpdate} />}
       >
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
@@ -750,7 +763,7 @@ function ShiftTable({ data, isPending, isError, onEdit, onToggle, isTogglePendin
             ) : data.map((shift) => (
               <tr key={shift.id}>
                 <td style={tdStyle}><span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>{shift.name}</span></td>
-                <td style={tdStyle}><span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>{toHm(shift.startTime)} – {toHm(shift.endTime)}</span></td>
+                <td style={tdStyle}><span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>{formatTime12h(shift.startTime)} – {formatTime12h(shift.endTime)}</span></td>
                 <td style={tdStyle}><ActiveBadge active={shift.active} /></td>
                 <td style={{ ...tdStyle, textAlign: 'right' }}>
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
@@ -817,7 +830,7 @@ function HolidayTable({ data, isPending, isError, onDelete }: HolidayTableProps)
                     {holiday.name}
                   </span>
                 </td>
-                <td style={tdStyle}><span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>{holiday.holidayDate}</span></td>
+                <td style={tdStyle}><span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>{formatDate(holiday.holidayDate)}</span></td>
                 <td style={{ ...tdStyle, textAlign: 'right' }}>
                   <button onClick={() => onDelete(holiday)} style={dangerButtonStyle}>Delete</button>
                 </td>
@@ -890,12 +903,12 @@ function ShiftFormModal({ state, onClose, onSubmit, isPending, error, fieldError
         <div style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
           <div style={{ flex: 1 }}>
             <label style={labelStyle} htmlFor="shift-start">Start Time *</label>
-            <input id="shift-start" type="time" value={start} onChange={(e) => setStart(e.target.value)} style={inputStyle} />
+            <input id="shift-start" type="time" lang="en-US" value={start} onChange={(e) => setStart(e.target.value)} style={inputStyle} />
             <FieldError msg={fieldErrors.startTime} />
           </div>
           <div style={{ flex: 1 }}>
             <label style={labelStyle} htmlFor="shift-end">End Time *</label>
-            <input id="shift-end" type="time" value={end} onChange={(e) => setEnd(e.target.value)} style={inputStyle} />
+            <input id="shift-end" type="time" lang="en-US" value={end} onChange={(e) => setEnd(e.target.value)} style={inputStyle} />
             <FieldError msg={fieldErrors.endTime} />
           </div>
         </div>
@@ -952,7 +965,7 @@ function HolidayFormModal({ open, onClose, onSubmit, isPending, error, fieldErro
         </div>
         <div>
           <label style={labelStyle} htmlFor="holiday-date">Date *</label>
-          <input id="holiday-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
+          <input id="holiday-date" type="date" lang="en-GB" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
           <FieldError msg={fieldErrors.holidayDate} />
         </div>
       </form>

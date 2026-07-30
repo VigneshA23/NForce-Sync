@@ -5,6 +5,7 @@ import {
   Lock, Edit2, Save, X, Mail, Hash, Loader2, Info,
 } from 'lucide-react';
 import { fetchProfile, updateProfile, type ProfileDto } from '../api/profile';
+import { formatDate as formatDateDDMMYYYY } from '../lib/date';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -20,12 +21,12 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const WORK_MODE_LABELS: Record<string, string> = {
-  ONSITE: 'On-site', REMOTE: 'Remote', HYBRID: 'Hybrid',
+  ONSITE: 'On-site', OFFICE: 'Office', REMOTE: 'Remote', HYBRID: 'Hybrid',
 };
 
 const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
-  FULL_TIME: 'Full-time', PART_TIME: 'Part-time',
-  CONTRACTOR: 'Contractor', CONTRACT: 'Contract', INTERN: 'Intern',
+  FULL_TIME: 'Full-time', CONTRACT: 'Contractor', CONTRACTOR: 'Contractor',
+  INTERN: 'Intern', CONSULTANT: 'Consultant',
 };
 
 // ── Shared styles — pulled from UserManagement.tsx conventions ────────────────
@@ -57,7 +58,7 @@ const inputStyle: React.CSSProperties = {
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
+  return formatDateDDMMYYYY(iso);
 }
 
 function StatusPill({ status }: { status: string }) {

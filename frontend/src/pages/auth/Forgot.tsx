@@ -102,7 +102,7 @@ export default function Forgot() {
                     borderRadius: 8,
                     background: 'rgba(228,55,61,.10)',
                     border: '1px solid rgba(228,55,61,.25)',
-                    color: '#f4a5a8',
+                    color: 'var(--risk)',
                     fontSize: 13,
                     marginBottom: 16,
                   }}

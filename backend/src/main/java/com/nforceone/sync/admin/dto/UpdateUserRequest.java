@@ -16,6 +16,7 @@ public record UpdateUserRequest(
         Long departmentId,
         Long designationId,
         Long locationId,
+        Long shiftId,
 
         // Employee profile
         String employmentType,

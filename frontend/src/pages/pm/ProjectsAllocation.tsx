@@ -121,7 +121,7 @@ function ErrorBanner({ message }: { message: string }) {
       display: 'flex', alignItems: 'flex-start', gap: 8,
       padding: '10px 14px', borderRadius: 7, marginBottom: 14,
       background: 'rgba(228,55,61,.10)', border: '1px solid rgba(228,55,61,.25)',
-      fontSize: 12, color: '#f4a5a8',
+      fontSize: 12, color: 'var(--risk)',
     }} role="alert">
       <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
       {message}
@@ -404,7 +404,7 @@ function ProjectModal({ open, onClose, editing }: {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
           <div>
             <label style={labelStyle}>Start Date *</label>
-            <input type="date" style={inputStyle} value={form.startDate}
+            <input type="date" lang="en-GB" style={inputStyle} value={form.startDate}
               onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
           </div>
           <div>
@@ -414,7 +414,7 @@ function ProjectModal({ open, onClose, editing }: {
                 ? ' *'
                 : <span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}> (Optional)</span>}
             </label>
-            <input type="date" style={inputStyle} value={form.endDate} min={dayAfterISO(form.startDate)}
+            <input type="date" lang="en-GB" style={inputStyle} value={form.endDate} min={dayAfterISO(form.startDate)}
               onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
             {(badDateOrder || (endDateRequired && form.endDate === '')) && (
               <p style={{ fontSize: 11, margin: '5px 0 0', color: 'var(--risk)' }}>
@@ -670,7 +670,7 @@ function AllocationModal({ open, onClose, projects }: {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
           <div>
             <label style={labelStyle}>Effective From *</label>
-            <input type="date" style={inputStyle} value={effectiveFrom}
+            <input type="date" lang="en-GB" style={inputStyle} value={effectiveFrom}
               onChange={e => setEffectiveFrom(e.target.value)} />
           </div>
           <div>
@@ -679,7 +679,7 @@ function AllocationModal({ open, onClose, projects }: {
               Effective To
               <span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}> (Optional)</span>
             </label>
-            <input type="date" style={inputStyle} value={effectiveTo} min={effectiveFrom || undefined}
+            <input type="date" lang="en-GB" style={inputStyle} value={effectiveTo} min={effectiveFrom || undefined}
               onChange={e => setEffectiveTo(e.target.value)} />
             {badDateOrder && (
               <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>
@@ -781,12 +781,12 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
             <div>
               <label style={labelStyle}>Effective From *</label>
-              <input type="date" style={inputStyle} value={effectiveFrom} autoFocus
+              <input type="date" lang="en-GB" style={inputStyle} value={effectiveFrom} autoFocus
                 onChange={e => setEffectiveFrom(e.target.value)} />
             </div>
             <div>
               <label style={labelStyle}>Effective To</label>
-              <input type="date" style={inputStyle} value={effectiveTo} min={effectiveFrom || undefined}
+              <input type="date" lang="en-GB" style={inputStyle} value={effectiveTo} min={effectiveFrom || undefined}
                 onChange={e => setEffectiveTo(e.target.value)} />
               <p style={{ fontSize: 11, color: badDateOrder ? 'var(--risk)' : 'var(--txt-dim)', margin: '5px 0 0' }}>
                 {badDateOrder

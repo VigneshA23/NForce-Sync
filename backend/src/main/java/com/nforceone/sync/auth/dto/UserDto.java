@@ -16,6 +16,7 @@ public record UserDto(
         Long   departmentId,
         Long   designationId,
         Long   locationId,
+        Long   shiftId,
         // Employee profile fields
         String employmentType,
         String workMode,
@@ -37,6 +38,7 @@ public record UserDto(
                 user.getDepartmentId(),
                 user.getDesignationId(),
                 user.getLocationId(),
+                user.getShiftId(),
                 user.getEmploymentType(),
                 user.getWorkMode(),
                 user.getJoiningDate(),

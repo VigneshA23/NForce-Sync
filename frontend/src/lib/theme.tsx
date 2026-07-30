@@ -2,7 +2,15 @@ import { createContext, useContext, useState } from 'react';
 
 export type Theme = 'dark' | 'light';
 
+const STORAGE_KEY = 'nf-theme';
+
 function getInitialTheme(): Theme {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === 'light' || stored === 'dark') return stored;
+  } catch {
+    // localStorage unavailable (private browsing, etc.) — fall through to OS preference.
+  }
   try {
     return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
   } catch {
@@ -10,7 +18,8 @@ function getInitialTheme(): Theme {
   }
 }
 
-// Module-level variable — survives Provider unmount/remount without localStorage
+// Module-level variable — survives Provider unmount/remount within the same page load;
+// localStorage (below) is what survives an actual page refresh.
 let _theme: Theme = getInitialTheme();
 
 function applyTheme(theme: Theme) {
@@ -42,6 +51,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     _theme = next;
     applyTheme(next);
     setTheme(next);
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      // localStorage unavailable — theme still applies for this page load, just won't persist.
+    }
   }
 
   return (

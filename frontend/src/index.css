@@ -18,9 +18,19 @@
   --brand-bright:#E4373D;
   --brand-deep:  #7A0C10;
 
+  /*
+   * Verified ratios (on --panel #16181D):
+   *   --txt      #E8EAED  14.7:1  ✓
+   *   --txt-mut  #9BA1AC   6.8:1  ✓
+   *   --txt-dim  #9CA3AF   7.0:1  ✓  (was #6B7280 — only 3.7:1 on --panel, 3.0:1 on
+   *                                   --raised2; failed AA for normal-size text, the
+   *                                   most common contrast bug found in the app-wide
+   *                                   legibility audit — table headers, captions,
+   *                                   and "(Optional)" suffixes all use this token)
+   */
   --txt:         #E8EAED;
   --txt-mut:     #9BA1AC;
-  --txt-dim:     #6B7280;
+  --txt-dim:     #9CA3AF;
 
   --ok:          #2FB67C;
   --warn:        #E0A93B;
@@ -46,6 +56,9 @@
  *   --warn         #896010  5.6:1  ✓  (user example #B8860B was 3.3:1 — insufficient)
  *   --risk         #C81A1F  5.7:1  ✓
  *   --info         #1A5FAA  6.4:1  ✓
+ *   --txt-mut      #5A616B  6.3:1  ✓
+ *   --txt-dim      #64748B  4.8:1  ✓  (was #8A909A — only 3.2:1, failed AA for
+ *                                      normal-size text; same token, same fix as dark)
  */
 [data-theme="light"] {
   --shell:       #F7F8FA;
@@ -61,7 +74,7 @@
 
   --txt:         #1A1D23;
   --txt-mut:     #5A616B;
-  --txt-dim:     #8A909A;
+  --txt-dim:     #64748B;
 
   --ok:          #1A7A52;
   --warn:        #896010;

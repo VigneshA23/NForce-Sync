@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, XCircle, MessageSquare } from 'lucide-react';
 import { useToast } from '../../lib/toast';
 import { useAuth } from '../../lib/auth';
-import { todayISO } from '../../lib/date';
+import { todayISO, formatDate } from '../../lib/date';
 import { listProjects } from '../../api/projects';
 import { listTaskCategories } from '../../api/taskCategories';
 import { saveDraft, submitEntry, listEntries } from '../../api/eod';
@@ -426,12 +426,12 @@ export default function SubmitEOD() {
           padding: '12px 16px', borderRadius: 8, marginTop: 20,
           background: 'rgba(228,55,61,.08)', border: '1px solid rgba(228,55,61,.25)',
         }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#E4373D', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--risk)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Fix before submitting
           </div>
           <ul style={{ margin: 0, paddingLeft: 16 }}>
             {errors.map((e, i) => (
-              <li key={i} style={{ fontSize: 13, color: '#f4a5a8', lineHeight: 1.6 }}>{e}</li>
+              <li key={i} style={{ fontSize: 13, color: 'var(--risk)', lineHeight: 1.6 }}>{e}</li>
             ))}
           </ul>
         </div>
@@ -455,6 +455,7 @@ export default function SubmitEOD() {
               <Label>Entry date</Label>
               <Inp
                 type="date"
+                lang="en-GB"
                 value={selectedDate}
                 onChange={e => handleDateChange(e.target.value)}
                 disabled={isReadOnly}
@@ -591,9 +592,10 @@ function PageHeader({
   onDateChange?: (d: string) => void;
   entryStatus: string | null;
 }) {
-  const formatted = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-GB', {
-    weekday: 'long', day: 'numeric', month: 'short', year: 'numeric',
-  });
+  // Weekday kept (useful context for "which day am I submitting EOD for"),
+  // date portion standardized to DD-MM-YYYY.
+  const weekday = new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'long' });
+  const formatted = `${weekday}, ${formatDate(selectedDate)}`;
 
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>

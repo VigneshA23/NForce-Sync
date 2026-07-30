@@ -12,6 +12,7 @@ import {
   markAllRead,
   type NotificationDto,
 } from '../api/notifications';
+import { formatDate } from '../lib/date';
 
 // ── Type metadata ─────────────────────────────────────────────────────────────
 // Colors reference CSS var *values* for the icon glyph; bg is a 12% tint.
@@ -39,7 +40,7 @@ function timeAgo(iso: string): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  return formatDate(iso);
 }
 
 // ── Notification row ──────────────────────────────────────────────────────────

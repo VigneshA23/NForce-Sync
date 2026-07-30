@@ -108,6 +108,7 @@ public class UserService {
         user.setDepartmentId(request.departmentId());
         user.setDesignationId(request.designationId());
         user.setLocationId(request.locationId());
+        user.setShiftId(request.shiftId());
 
         // Employee profile
         user.setEmploymentType(request.employmentType() != null ? request.employmentType() : "FULL_TIME");
@@ -152,6 +153,7 @@ public class UserService {
         user.setDepartmentId(request.departmentId());
         user.setDesignationId(request.designationId());
         user.setLocationId(request.locationId());
+        user.setShiftId(request.shiftId());
 
         // Employee profile — null means leave existing value untouched
         if (request.employmentType() != null && !request.employmentType().isBlank()) {

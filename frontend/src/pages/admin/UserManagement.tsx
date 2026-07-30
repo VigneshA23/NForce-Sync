@@ -9,13 +9,16 @@ import {
   Search, Filter, ArrowUp, ArrowDown, Download,
 } from 'lucide-react';
 import { api } from '../../api/client';
-import { todayISO } from '../../lib/date';
+import { formatDate, formatTime12h } from '../../lib/date';
 import {
   listUsers, createUser, updateUser, setUserStatus, resetPassword,
   extractApiError, extractFieldErrors, isHttpStatus,
-  listDepartments, listDesignations, listLocations, createLocation,
+  listDepartments, listDesignations, listLocations,
+  createDepartment, createDesignation, createLocation,
+  listShifts,
+  getAdminStats,
 } from '../../api/admin';
-import type { UserDto, CreateUserPayload, UpdateUserPayload, DepartmentDto, DesignationDto, OrgLocationDto } from '../../api/admin';
+import type { UserDto, CreateUserPayload, UpdateUserPayload, DepartmentDto, DesignationDto, OrgLocationDto, ShiftDefinitionDto } from '../../api/admin';
 import { toRole } from '../../api/auth';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 import { Modal } from '../../components/Modal';
@@ -36,14 +39,15 @@ const ROLE_OPTIONS = [
 ];
 
 const EMPLOYMENT_TYPES = [
-  { value: 'FULL_TIME',  label: 'Full Time' },
-  { value: 'PART_TIME',  label: 'Part Time' },
-  { value: 'CONTRACT',   label: 'Contract' },
-  { value: 'INTERN',     label: 'Intern' },
+  { value: 'FULL_TIME',   label: 'Full-time' },
+  { value: 'CONTRACT',    label: 'Contractor' },
+  { value: 'INTERN',      label: 'Intern' },
+  { value: 'CONSULTANT',  label: 'Consultant' },
 ];
 
 const WORK_MODES = [
   { value: 'ONSITE', label: 'Onsite' },
+  { value: 'OFFICE', label: 'Office' },
   { value: 'HYBRID', label: 'Hybrid' },
   { value: 'REMOTE', label: 'Remote' },
 ];
@@ -59,6 +63,18 @@ const inputFocusStyle: React.CSSProperties = {
   ...inputStyle, borderColor: 'var(--brand-bright)',
   boxShadow: '0 0 0 3px rgba(228,55,61,.14)',
 };
+// The closed <select> box renders using the <select> element's OWN color (confirmed via
+// computed styles — it does not pick up the currently-selected <option>'s style), so the
+// muted placeholder look requires dimming the <select> itself while unselected. That color
+// is inherited by every <option> in the popup though, which would mute real choices too
+// (Employee, Full-time, …) — so real <option>s get their own explicit --txt override
+// (realOptionStyle) to opt back out of the inherited dimming; only the placeholder
+// <option> is left to inherit (or duplicate) the dim color.
+function selectStyle(hasValue: boolean): React.CSSProperties {
+  return { ...inputStyle, cursor: 'pointer', color: hasValue ? 'var(--txt)' : 'var(--txt-dim)' };
+}
+const placeholderOptionStyle: React.CSSProperties = { color: 'var(--txt-dim)' };
+const realOptionStyle: React.CSSProperties = { color: 'var(--txt)' };
 const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: 11, fontWeight: 600,
   color: 'var(--txt-mut)', marginBottom: 5,
@@ -110,7 +126,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
-  return <div style={{ fontSize: 11, color: '#f4a5a8', marginTop: 4 }} role="alert">{msg}</div>;
+  return <div style={{ fontSize: 11, color: 'var(--risk)', marginTop: 4 }} role="alert">{msg}</div>;
 }
 
 function ErrorBanner({ message }: { message: string }) {
@@ -119,7 +135,7 @@ function ErrorBanner({ message }: { message: string }) {
       display: 'flex', alignItems: 'flex-start', gap: 8,
       padding: '10px 14px', borderRadius: 7, marginBottom: 14,
       background: 'rgba(228,55,61,.10)', border: '1px solid rgba(228,55,61,.25)',
-      fontSize: 12, color: '#f4a5a8',
+      fontSize: 12, color: 'var(--risk)',
     }} role="alert">
       <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
       {message}
@@ -155,36 +171,53 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-// ── Creatable Location Select ─────────────────────────────────────────────────
+// ── Creatable Select ───────────────────────────────────────────────────────────
+// Generic hybrid combobox: pick an existing org-master value (department,
+// designation, location, …) or type a new one that doesn't exist yet. The new
+// value is created via the API immediately and becomes usable for this user
+// right away, and shows up as an option for future user creation once the
+// underlying list (React Query cache) refreshes.
 
-function CreatableLocationSelect({
-  locations,
+interface CreatableItem { id: number }
+
+function CreatableSelect<T extends CreatableItem>({
+  items,
+  getLabel,
   value,
   onChange,
+  onCreate,
+  invalidateKey,
+  placeholder,
+  noneLabel = 'No matches',
 }: {
-  locations: OrgLocationDto[];
+  items: T[];
+  getLabel: (item: T) => string;
   value: number | null | undefined;
   onChange: (id: number | null) => void;
+  onCreate: (name: string) => Promise<T>;
+  invalidateKey: string[];
+  placeholder: string;
+  noneLabel?: string;
 }) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  const currentName = value != null ? (locations.find(l => l.id === value)?.name ?? '') : '';
+  const currentName = value != null ? (items.find(i => i.id === value) != null ? getLabel(items.find(i => i.id === value)!) : '') : '';
 
   const filtered = query.trim()
-    ? locations.filter(l => l.name.toLowerCase().includes(query.toLowerCase()))
-    : locations;
-  const exactMatch = locations.some(l => l.name.toLowerCase() === query.trim().toLowerCase());
+    ? items.filter(i => getLabel(i).toLowerCase().includes(query.toLowerCase()))
+    : items;
+  const exactMatch = items.some(i => getLabel(i).toLowerCase() === query.trim().toLowerCase());
   const showCreate = query.trim().length > 0 && !exactMatch;
 
   async function handleCreate() {
     setCreating(true);
     try {
-      const newLoc = await createLocation(query.trim());
-      queryClient.invalidateQueries({ queryKey: ['org', 'locations'] });
-      onChange(newLoc.id);
+      const created = await onCreate(query.trim());
+      queryClient.invalidateQueries({ queryKey: invalidateKey });
+      onChange(created.id);
       setOpen(false);
       setQuery('');
     } finally {
@@ -197,7 +230,7 @@ function CreatableLocationSelect({
       <div style={{ position: 'relative' }}>
         <input
           style={{ ...inputStyle, paddingRight: 32 }}
-          placeholder="Select or type a new location…"
+          placeholder={placeholder}
           value={open ? query : currentName}
           onFocus={() => { setOpen(true); setQuery(currentName); }}
           onChange={e => { setQuery(e.target.value); setOpen(true); if (!e.target.value) onChange(null); }}
@@ -215,21 +248,21 @@ function CreatableLocationSelect({
           boxShadow: '0 8px 24px rgba(0,0,0,.3)', zIndex: 100, maxHeight: 200, overflowY: 'auto',
         }}>
           {filtered.length === 0 && !showCreate && (
-            <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--txt-dim)' }}>No locations found</div>
+            <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--txt-dim)' }}>{noneLabel}</div>
           )}
-          {filtered.map(l => (
+          {filtered.map(i => (
             <div
-              key={l.id}
-              onMouseDown={() => { onChange(l.id); setOpen(false); setQuery(''); }}
+              key={i.id}
+              onMouseDown={() => { onChange(i.id); setOpen(false); setQuery(''); }}
               style={{
                 padding: '9px 14px', fontSize: 13, cursor: 'pointer',
-                color: value === l.id ? 'var(--brand-bright)' : 'var(--txt)',
-                background: value === l.id ? 'rgba(176,17,22,.12)' : 'transparent',
+                color: value === i.id ? 'var(--brand-bright)' : 'var(--txt)',
+                background: value === i.id ? 'rgba(176,17,22,.12)' : 'transparent',
               }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--raised)')}
-              onMouseLeave={e => (e.currentTarget.style.background = value === l.id ? 'rgba(176,17,22,.12)' : 'transparent')}
+              onMouseLeave={e => (e.currentTarget.style.background = value === i.id ? 'rgba(176,17,22,.12)' : 'transparent')}
             >
-              {l.name}
+              {getLabel(i)}
             </div>
           ))}
           {showCreate && (
@@ -274,7 +307,7 @@ function formatDateDisplay(iso: string): string {
   if (!iso) return '';
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return '';
-  return `${MONTH_LABELS[m - 1].slice(0, 3)} ${d}, ${y}`;
+  return formatDate(iso);
 }
 
 function JoiningDatePicker({
@@ -344,7 +377,7 @@ function JoiningDatePicker({
           readOnly
           style={{ ...inputStyle, paddingRight: 36, cursor: 'pointer' }}
           value={formatDateDisplay(value)}
-          placeholder="Select a date…"
+          placeholder="Select date"
           onClick={toggleOpen}
         />
         <button
@@ -417,11 +450,17 @@ function useOrgData() {
   const depts = useQuery({ queryKey: ['org', 'departments'], queryFn: listDepartments });
   const desigs = useQuery({ queryKey: ['org', 'designations'], queryFn: listDesignations });
   const locs  = useQuery({ queryKey: ['org', 'locations'],    queryFn: listLocations });
+  const shifts = useQuery({ queryKey: ['business-rules', 'shifts'], queryFn: listShifts });
   return {
     departments:  depts.data  ?? [],
     designations: desigs.data ?? [],
     locations:    locs.data   ?? [],
+    shifts:       shifts.data ?? [],
   };
+}
+
+function formatShiftLabel(s: ShiftDefinitionDto): string {
+  return `${s.name} (${formatTime12h(s.startTime)}–${formatTime12h(s.endTime)})`;
 }
 
 // ── Add User Modal ────────────────────────────────────────────────────────────
@@ -436,14 +475,15 @@ const EMPTY_CREATE: CreateForm = {
   fullName: '',
   email: '',
   employeeCode: '',
-  role: 'EMPLOYEE',
-  joiningDate: todayISO(),
-  workMode: 'ONSITE',
-  employmentType: 'FULL_TIME',
-  departmentId: null,
-  designationId: null,
-  locationId: null,
-  managerId: null,
+  role: '',
+  joiningDate: '',
+  workMode: '',
+  employmentType: '',
+  departmentId: undefined,
+  designationId: undefined,
+  locationId: undefined,
+  shiftId: undefined,
+  managerId: undefined,
 };
 
 function AddModal({
@@ -456,7 +496,7 @@ function AddModal({
   onCreated: (tempPassword: string) => void;
 }) {
   const toast = useToast();
-  const { departments, designations, locations } = useOrgData();
+  const { departments, designations, locations, shifts } = useOrgData();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<CreateForm>(EMPTY_CREATE);
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
@@ -501,6 +541,9 @@ function AddModal({
     if (!normalizedEmail) e.email = 'Email is required.';
     else if (!normalizedEmail.endsWith('@nforceone.com')) e.email = 'Email must end with @nforceone.com.';
     if (!form.role) e.role = 'Role is required.';
+    if (!form.joiningDate) e.joiningDate = 'Joining date is required.';
+    if (!form.employmentType) e.employmentType = 'Employment type is required.';
+    if (!form.workMode) e.workMode = 'Work mode is required.';
 
     // Client-side pre-check only — fast feedback against the already-loaded user
     // list. The server re-validates format and uniqueness authoritatively on submit
@@ -525,6 +568,7 @@ function AddModal({
       departmentId:  form.departmentId  ?? null,
       designationId: form.designationId ?? null,
       locationId:    form.locationId    ?? null,
+      shiftId:       form.shiftId       ?? null,
       managerId:     form.managerId     ?? null,
     };
     mutation.mutate(payload);
@@ -592,7 +636,7 @@ function AddModal({
               <input
                 style={inputStyle}
                 value={form.fullName}
-                placeholder="Jane Smith"
+                placeholder="Enter name"
                 onChange={e => set('fullName', e.target.value)}
                 onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
                 onBlur={e => Object.assign(e.target.style, inputStyle)}
@@ -608,7 +652,7 @@ function AddModal({
                 type="email"
                 style={inputStyle}
                 value={form.email}
-                placeholder="jane@nforceone.com"
+                placeholder="Enter email"
                 onChange={e => set('email', e.target.value.toLowerCase())}
                 onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
                 onBlur={e => { Object.assign(e.target.style, inputStyle); set('email', form.email.trim().toLowerCase()); }}
@@ -620,11 +664,12 @@ function AddModal({
           {/* Role */}
           <Field label="Role *">
             <select
-              style={{ ...inputStyle, cursor: 'pointer' }}
+              style={selectStyle(!!form.role)}
               value={form.role}
               onChange={e => set('role', e.target.value)}
             >
-              {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              <option value="" disabled style={placeholderOptionStyle}>Select role</option>
+              {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value} style={realOptionStyle}>{r.label}</option>)}
             </select>
             <FieldError msg={errors.role} />
           </Field>
@@ -634,7 +679,7 @@ function AddModal({
             <input
               style={inputStyle}
               value={form.employeeCode}
-              placeholder="NF-20240040"
+              placeholder="Enter employee ID"
               onChange={e => set('employeeCode', e.target.value.toUpperCase())}
               onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
               onBlur={e => Object.assign(e.target.style, inputStyle)}
@@ -648,76 +693,133 @@ function AddModal({
               value={form.joiningDate ?? ''}
               onChange={iso => set('joiningDate', iso)}
             />
+            <FieldError msg={errors.joiningDate} />
           </Field>
 
           {/* Employment Type */}
-          <Field label="Employment Type">
+          <Field label="Employment Type *">
             <select
-              style={{ ...inputStyle, cursor: 'pointer' }}
-              value={form.employmentType ?? 'FULL_TIME'}
+              style={selectStyle(!!form.employmentType)}
+              value={form.employmentType ?? ''}
               onChange={e => set('employmentType', e.target.value)}
             >
-              {EMPLOYMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              <option value="" disabled style={placeholderOptionStyle}>Select employment type</option>
+              {EMPLOYMENT_TYPES.map(t => <option key={t.value} value={t.value} style={realOptionStyle}>{t.label}</option>)}
             </select>
+            <FieldError msg={errors.employmentType} />
           </Field>
 
           {/* Work Mode */}
-          <Field label="Work Mode">
+          <Field label="Work Mode *">
             <select
-              style={{ ...inputStyle, cursor: 'pointer' }}
-              value={form.workMode ?? 'ONSITE'}
+              style={selectStyle(!!form.workMode)}
+              value={form.workMode ?? ''}
               onChange={e => set('workMode', e.target.value)}
             >
-              {WORK_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              <option value="" disabled style={placeholderOptionStyle}>Select work mode</option>
+              {WORK_MODES.map(m => <option key={m.value} value={m.value} style={realOptionStyle}>{m.label}</option>)}
             </select>
+            <FieldError msg={errors.workMode} />
           </Field>
 
-          {/* Department */}
+          {/* Department — plain fixed dropdown (no free-text entry). Optional:
+              no-department is a genuinely valid state, so "No department" is a real,
+              explicitly-chosen option — distinct from the untouched placeholder. */}
           <Field label="Department">
             <select
-              style={{ ...inputStyle, cursor: 'pointer' }}
-              value={form.departmentId ?? ''}
-              onChange={e => set('departmentId', e.target.value ? Number(e.target.value) : null)}
+              style={selectStyle(form.departmentId !== undefined)}
+              value={form.departmentId === undefined ? '' : form.departmentId === null ? 'none' : String(form.departmentId)}
+              onChange={e => {
+                const v = e.target.value;
+                set('departmentId', v === 'none' ? null : v ? Number(v) : undefined);
+              }}
             >
-              <option value="">— None —</option>
-              {departments.map((d: DepartmentDto) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              <option value="" disabled style={placeholderOptionStyle}>Select department</option>
+              <option value="none" style={realOptionStyle}>No department</option>
+              {departments.map((d: DepartmentDto) => (
+                <option key={d.id} value={d.id} style={realOptionStyle}>{d.name}</option>
+              ))}
             </select>
           </Field>
 
-          {/* Designation */}
+          {/* Designation — plain fixed dropdown (no free-text entry). Optional:
+              no-designation is a genuinely valid state, so "No designation" is a real,
+              explicitly-chosen option — distinct from the untouched placeholder. */}
           <Field label="Designation">
             <select
-              style={{ ...inputStyle, cursor: 'pointer' }}
-              value={form.designationId ?? ''}
-              onChange={e => set('designationId', e.target.value ? Number(e.target.value) : null)}
+              style={selectStyle(form.designationId !== undefined)}
+              value={form.designationId === undefined ? '' : form.designationId === null ? 'none' : String(form.designationId)}
+              onChange={e => {
+                const v = e.target.value;
+                set('designationId', v === 'none' ? null : v ? Number(v) : undefined);
+              }}
             >
-              <option value="">— None —</option>
-              {designations.map((d: DesignationDto) => <option key={d.id} value={d.id}>{d.title}</option>)}
+              <option value="" disabled style={placeholderOptionStyle}>Select designation</option>
+              <option value="none" style={realOptionStyle}>No designation</option>
+              {designations.map((d: DesignationDto) => (
+                <option key={d.id} value={d.id} style={realOptionStyle}>{d.title}</option>
+              ))}
             </select>
           </Field>
 
-          {/* Location — full width, creatable */}
+          {/* Shift — plain dropdown, managed centrally in Business Rules. Optional: a
+              shift-less user is a genuinely valid state, so "No shift" is a real,
+              explicitly-chosen option — distinct from the untouched placeholder. */}
+          <Field label="Shift">
+            <select
+              style={selectStyle(form.shiftId !== undefined)}
+              value={form.shiftId === undefined ? '' : form.shiftId === null ? 'none' : String(form.shiftId)}
+              onChange={e => {
+                const v = e.target.value;
+                set('shiftId', v === 'none' ? null : v ? Number(v) : undefined);
+              }}
+            >
+              <option value="" disabled style={placeholderOptionStyle}>Select shift</option>
+              <option value="none" style={realOptionStyle}>No shift</option>
+              {shifts.map((s: ShiftDefinitionDto) => <option key={s.id} value={s.id} style={realOptionStyle}>{formatShiftLabel(s)}</option>)}
+            </select>
+          </Field>
+
+          {/* Location — full width. Plain fixed dropdown (no free-text entry, unlike
+              Department/Designation) — locations are a controlled master list here.
+              Optional: no-location is a genuinely valid state, so "No location" is a
+              real, explicitly-chosen option — distinct from the untouched placeholder. */}
           <div style={{ gridColumn: '1/-1' }}>
             <Field label="Location">
-              <CreatableLocationSelect
-                locations={locations}
-                value={form.locationId}
-                onChange={id => set('locationId', id)}
-              />
+              <select
+                style={selectStyle(form.locationId !== undefined)}
+                value={form.locationId === undefined ? '' : form.locationId === null ? 'none' : String(form.locationId)}
+                onChange={e => {
+                  const v = e.target.value;
+                  set('locationId', v === 'none' ? null : v ? Number(v) : undefined);
+                }}
+              >
+                <option value="" disabled style={placeholderOptionStyle}>Select location</option>
+                <option value="none" style={realOptionStyle}>No location</option>
+                {locations.map((l: OrgLocationDto) => (
+                  <option key={l.id} value={l.id} style={realOptionStyle}>{l.name}</option>
+                ))}
+              </select>
             </Field>
           </div>
 
-          {/* Manager — full width */}
+          {/* Manager — full width. Optional: no-manager is a genuinely valid state
+              (e.g. top-level roles), so "No manager" is a real, explicitly-chosen
+              option — distinct from the untouched placeholder. */}
           <div style={{ gridColumn: '1/-1' }}>
             <Field label="Manager">
               <select
-                style={{ ...inputStyle, cursor: 'pointer' }}
-                value={form.managerId ?? ''}
-                onChange={e => set('managerId', e.target.value ? Number(e.target.value) : null)}
+                style={selectStyle(form.managerId !== undefined)}
+                value={form.managerId === undefined ? '' : form.managerId === null ? 'none' : String(form.managerId)}
+                onChange={e => {
+                  const v = e.target.value;
+                  set('managerId', v === 'none' ? null : v ? Number(v) : undefined);
+                }}
               >
-                <option value="">— None —</option>
+                <option value="" disabled style={placeholderOptionStyle}>Select manager</option>
+                <option value="none" style={realOptionStyle}>No manager</option>
                 {managers.map(m => (
-                  <option key={m.id} value={m.id}>{m.fullName} ({m.email})</option>
+                  <option key={m.id} value={m.id} style={realOptionStyle}>{m.fullName} ({m.email})</option>
                 ))}
               </select>
             </Field>
@@ -761,12 +863,12 @@ function EditModal({
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const { departments, designations, locations } = useOrgData();
+  const { departments, designations, locations, shifts } = useOrgData();
 
   const [form, setForm] = useState<UpdateUserPayload>({
     fullName: '', role: 'EMPLOYEE',
     departmentId: null, designationId: null, locationId: null,
-    employmentType: 'FULL_TIME', workMode: 'ONSITE', managerId: null,
+    employmentType: 'FULL_TIME', workMode: 'ONSITE', shiftId: null, managerId: null,
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -783,6 +885,7 @@ function EditModal({
         locationId:     user.locationId    ?? null,
         employmentType: user.employmentType ?? 'FULL_TIME',
         workMode:       user.workMode      ?? 'ONSITE',
+        shiftId:        user.shiftId       ?? null,
         managerId:      user.managerId     ?? null,
       });
       setError(null);
@@ -872,37 +975,58 @@ function EditModal({
             </select>
           </Field>
 
-          {/* Department */}
+          {/* Department — creatable */}
           <Field label="Department">
-            <select
-              style={{ ...inputStyle, cursor: 'pointer' }}
-              value={form.departmentId ?? ''}
-              onChange={e => set('departmentId', e.target.value ? Number(e.target.value) : null)}
-            >
-              <option value="">— None —</option>
-              {departments.map((d: DepartmentDto) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+            <CreatableSelect
+              items={departments}
+              getLabel={(d: DepartmentDto) => d.name}
+              value={form.departmentId}
+              onChange={id => set('departmentId', id)}
+              onCreate={createDepartment}
+              invalidateKey={['org', 'departments']}
+              placeholder="Select or type a new department…"
+              noneLabel="No departments found"
+            />
           </Field>
 
-          {/* Designation */}
+          {/* Designation — creatable */}
           <Field label="Designation">
+            <CreatableSelect
+              items={designations}
+              getLabel={(d: DesignationDto) => d.title}
+              value={form.designationId}
+              onChange={id => set('designationId', id)}
+              onCreate={createDesignation}
+              invalidateKey={['org', 'designations']}
+              placeholder="Select or type a new designation…"
+              noneLabel="No designations found"
+            />
+          </Field>
+
+          {/* Shift — plain dropdown, managed centrally in Business Rules */}
+          <Field label="Shift">
             <select
               style={{ ...inputStyle, cursor: 'pointer' }}
-              value={form.designationId ?? ''}
-              onChange={e => set('designationId', e.target.value ? Number(e.target.value) : null)}
+              value={form.shiftId ?? ''}
+              onChange={e => set('shiftId', e.target.value ? Number(e.target.value) : null)}
             >
               <option value="">— None —</option>
-              {designations.map((d: DesignationDto) => <option key={d.id} value={d.id}>{d.title}</option>)}
+              {shifts.map((s: ShiftDefinitionDto) => <option key={s.id} value={s.id}>{formatShiftLabel(s)}</option>)}
             </select>
           </Field>
 
           {/* Location — full width, creatable */}
           <div style={{ gridColumn: '1/-1' }}>
             <Field label="Location">
-              <CreatableLocationSelect
-                locations={locations}
+              <CreatableSelect
+                items={locations}
+                getLabel={(l: OrgLocationDto) => l.name}
                 value={form.locationId}
                 onChange={id => set('locationId', id)}
+                onCreate={createLocation}
+                invalidateKey={['org', 'locations']}
+                placeholder="Select or type a new location…"
+                noneLabel="No locations found"
               />
             </Field>
           </div>
@@ -1464,7 +1588,7 @@ function exportUsersCsv(
       u.status,
       u.workMode ?? '',
       u.employmentType ?? '',
-      u.joiningDate ?? '',
+      u.joiningDate ? formatDate(u.joiningDate) : '',
     ]),
   ];
 
@@ -1490,6 +1614,12 @@ export default function UserManagement() {
   const { data: users, isPending, isError, refetch } = useQuery({
     queryKey: ['admin', 'users'],
     queryFn: listUsers,
+  });
+
+  // Same source as the Admin Dashboard KPIs, so chip counts never drift from those numbers.
+  const { data: stats } = useQuery({
+    queryKey: ['admin', 'stats'],
+    queryFn: getAdminStats,
   });
 
   // Org data pre-fetched for dropdowns (departments/locations also used for column display)
@@ -1666,6 +1796,10 @@ export default function UserManagement() {
             <div style={{ display: 'flex', gap: 6 }}>
               {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map(s => {
                 const isSelected = statusFilter === s;
+                const label = s === 'ALL' ? 'All' : s === 'ACTIVE' ? 'Active' : 'Inactive';
+                const count = stats && (
+                  s === 'ALL' ? stats.totalUsers : s === 'ACTIVE' ? stats.activeUsers : stats.inactiveUsers
+                );
                 return (
                   <button
                     key={s}
@@ -1677,7 +1811,7 @@ export default function UserManagement() {
                       color: isSelected ? 'var(--brand-bright)' : 'var(--txt-mut)',
                     }}
                   >
-                    {s === 'ALL' ? 'All' : s === 'ACTIVE' ? 'Active' : 'Inactive'}
+                    {label}{count != null ? ` (${count})` : ''}
                   </button>
                 );
               })}

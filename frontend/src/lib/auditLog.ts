@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { AuditLogDto } from '../api/admin';
 import { toRole } from '../api/auth';
 import { ROLE_LABELS } from './nav';
+import { formatDateTime } from './date';
 
 // ── Category taxonomy ──────────────────────────────────────────────────────────
 // Only 'user-management' and 'eod-approval' are produced by the backend today
@@ -139,10 +140,7 @@ export function formatRelative(iso: string): string {
 }
 
 export function formatAuditDate(iso: string): string {
-  return new Date(iso).toLocaleString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
+  return formatDateTime(iso);
 }
 
 export function auditActionBadgeStyle(action: string): { bg: string; color: string } {

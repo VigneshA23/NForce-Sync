@@ -18,6 +18,7 @@ export interface UserDto {
   employmentType: string | null;
   workMode: string | null;
   joiningDate: string | null;
+  shiftId: number | null;
 }
 
 export interface AuditLogDto {
@@ -72,6 +73,7 @@ export interface CreateUserPayload {
   employmentType?: string;
   workMode?: string;
   joiningDate?: string;
+  shiftId?: number | null;
   // Reporting line
   managerId?: number | null;
 }
@@ -91,6 +93,7 @@ export interface UpdateUserPayload {
   // Employee profile
   employmentType?: string;
   workMode?: string;
+  shiftId?: number | null;
   // Reporting line
   managerId: number | null;
 }
@@ -273,6 +276,22 @@ export async function createLocation(name: string): Promise<OrgLocationDto> {
 
 export async function toggleLocation(id: number): Promise<OrgLocationDto> {
   const res = await api.patch<OrgLocationDto>(`/org/locations/${id}`);
+  return res.data;
+}
+
+// ── Shift timings (Business Rules) ─────────────────────────────────────────────
+
+export interface ShiftDefinitionDto {
+  id: number;
+  name: string;
+  startTime: string;
+  endTime: string;
+  active: boolean;
+  assignedEmployeeCount: number;
+}
+
+export async function listShifts(): Promise<ShiftDefinitionDto[]> {
+  const res = await api.get<ShiftDefinitionDto[]>('/admin/business-rules/shifts');
   return res.data;
 }
 

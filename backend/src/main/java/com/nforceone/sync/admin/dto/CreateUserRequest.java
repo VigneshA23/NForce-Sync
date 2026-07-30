@@ -29,10 +29,11 @@ public record CreateUserRequest(
         Long departmentId,
         Long designationId,
         Long locationId,
+        Long shiftId,             // references shift_definition — managed centrally in Business Rules
 
         // Employee profile
-        String employmentType,   // FULL_TIME | PART_TIME | CONTRACT | INTERN (defaults to FULL_TIME)
-        String workMode,         // ONSITE | HYBRID | REMOTE (defaults to ONSITE)
+        String employmentType,   // FULL_TIME | CONTRACT | INTERN | CONSULTANT (defaults to FULL_TIME)
+        String workMode,         // ONSITE | OFFICE | HYBRID | REMOTE (defaults to ONSITE)
         LocalDate joiningDate,
 
         // Reporting line

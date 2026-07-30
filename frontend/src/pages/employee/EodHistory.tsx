@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CheckCircle, Clock, XCircle, MessageSquare, ChevronRight, AlertTriangle } from 'lucide-react';
 import { listEntries } from '../../api/eod';
 import type { EodEntryDto } from '../../api/eod';
+import { formatDate as formatDateDDMMYYYY, formatDateTime } from '../../lib/date';
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
 
@@ -60,10 +61,11 @@ export default function EodHistory() {
   const totalHours = (entry: EodEntryDto) =>
     entry.tasks.reduce((sum, t) => sum + (Number(t.hours) || 0), 0);
 
+  // Weekday kept (useful in a history list scanned day-by-day), date portion
+  // standardized to DD-MM-YYYY.
   function formatDate(iso: string) {
-    return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', {
-      weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
-    });
+    const weekday = new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short' });
+    return `${weekday}, ${formatDateDDMMYYYY(iso)}`;
   }
 
   function handleView(entry: EodEntryDto) {
@@ -124,7 +126,7 @@ export default function EodHistory() {
         <div style={{
           padding: '20px 24px', borderRadius: 8,
           background: 'rgba(228,55,61,.08)', border: '1px solid rgba(228,55,61,.2)',
-          fontSize: 13, color: '#f4a5a8',
+          fontSize: 13, color: 'var(--risk)',
         }}>
           Failed to load history. Please refresh.
         </div>
@@ -184,9 +186,7 @@ export default function EodHistory() {
                 {totalHours(entry).toFixed(1)}h
               </div>
               <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, color: 'var(--txt-dim)' }}>
-                {entry.submittedAt
-                  ? new Date(entry.submittedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-                  : '—'}
+                {entry.submittedAt ? formatDateTime(entry.submittedAt) : '—'}
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <ChevronRight size={14} style={{ color: 'var(--txt-dim)' }} aria-hidden />

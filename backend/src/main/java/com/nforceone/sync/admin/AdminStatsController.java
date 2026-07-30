@@ -12,8 +12,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.concurrent.TimeUnit;
-
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -69,10 +67,13 @@ public class AdminStatsController {
                 OffsetDateTime.now().minusHours(24), "EOD_ENTRY");
 
         AdminStatsDto dto = new AdminStatsDto(total, active, inactive, inactiveNames, byRole, recentEvents, last24h);
-        // Stats change infrequently; allow private (per-user) 5-minute browser cache to skip
-        // the round-trip entirely on repeated dashboard visits in the same session.
+        // No browser caching: this endpoint also backs the User Management filter-chip
+        // counts, which must reflect a deactivate/reactivate/delete immediately. A 5-minute
+        // cache here (fine for the slower-changing Dashboard summary) would otherwise leave
+        // those chips showing stale counts for up to 5 minutes after every action. The
+        // underlying query is already a single GROUP BY (see above), so re-fetching is cheap.
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePrivate())
+                .cacheControl(CacheControl.noStore())
                 .body(dto);
     }
 }

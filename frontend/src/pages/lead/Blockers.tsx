@@ -1,12 +1,9 @@
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { useBlockers, type BlockedTaskDto } from '../../api/team';
+import { formatDate as fmtDate } from '../../lib/date';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
 
 function formatRelative(iso: string | null): string {
   if (!iso) return '—';
