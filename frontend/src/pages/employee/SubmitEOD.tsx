@@ -156,7 +156,7 @@ export default function SubmitEOD() {
   const [selectedDate, setSelectedDate] = useState<string>(() => searchParams.get('date') ?? todayISO());
 
   // Entry state — updated from backend responses
-  const [entryId,     setEntryId]     = useState<number | null>(null);
+  const [, setEntryId] = useState<number | null>(null);
   const [entryStatus, setEntryStatus] = useState<string | null>(null);
 
   // Form fields
@@ -320,13 +320,12 @@ export default function SubmitEOD() {
     const errs = validate();
     if (errs.length > 0) { setErrors(errs); return; }
     setErrors([]);
-    if (entryId) {
-      submitMutation.mutate(entryId);
-    } else {
-      draftMutation.mutate(buildRequest(), {
-        onSuccess: (entry) => submitMutation.mutate(entry.id),
-      });
-    }
+    // Always persist the current in-memory edits first — submitEntry() sends no body and
+    // validates whatever is already in the database, so skipping this when entryId already
+    // exists would submit stale rows instead of what's on screen (e.g. a just-picked project).
+    draftMutation.mutate(buildRequest(), {
+      onSuccess: (entry) => submitMutation.mutate(entry.id),
+    });
   }
 
   // ── Task row mutators ─────────────────────────────────────────────────────

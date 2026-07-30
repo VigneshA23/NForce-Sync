@@ -20,6 +20,7 @@ const AuditLog            = lazy(() => import('./pages/admin/AuditLog'));
 const RolesAccess         = lazy(() => import('./pages/admin/RolesAccess'));
 const OrganizationMasters = lazy(() => import('./pages/admin/OrganizationMasters'));
 const BusinessRules       = lazy(() => import('./pages/admin/BusinessRules'));
+const EmployeeDashboard   = lazy(() => import('./pages/employee/Dashboard'));
 const SubmitEOD           = lazy(() => import('./pages/employee/SubmitEOD'));
 const EodHistory          = lazy(() => import('./pages/employee/EodHistory'));
 const TeamDashboard       = lazy(() => import('./pages/lead/TeamDashboard'));
@@ -52,7 +53,9 @@ function ChunkPrefetcher() {
     import('./pages/employee/SubmitEOD');
     import('./pages/employee/EodHistory');
     // Role-specific heavy chunks
-    if (user.role === 'superadmin') {
+    if (user.role === 'employee') {
+      import('./pages/employee/Dashboard');
+    } else if (user.role === 'superadmin') {
       import('./pages/admin/Dashboard');
       import('./pages/admin/UserManagement');
       import('./pages/admin/AuditLog');
@@ -123,7 +126,7 @@ function AppRoutes() {
           <Route element={<Suspense fallback={<PageFallback />}><Outlet /></Suspense>}>
 
             {/* ── Employee ───────────────────────────── */}
-            <Route path="/dashboard"   element={<Placeholder title="My Dashboard" />} />
+            <Route path="/dashboard"   element={<EmployeeDashboard />} />
             <Route path="/eod/submit"  element={<SubmitEOD />} />
             <Route path="/eod/history" element={<EodHistory />} />
             <Route path="/utilization" element={<Placeholder title="My Utilization" />} />
