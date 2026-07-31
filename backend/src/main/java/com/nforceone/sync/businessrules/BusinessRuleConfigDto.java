@@ -8,7 +8,11 @@ public record BusinessRuleConfigDto(
         String weekendRule,
         LocalTime eodCutoffTime,
         Integer reminderLeadMinutes,
-        Integer escalationSlaHours
+        Integer escalationSlaHours,
+        BigDecimal underutilizedThresholdPct,
+        BigDecimal overloadedThresholdPct,
+        BigDecimal atRiskMissingPct,
+        BigDecimal blockerAgeAlertHours
 ) {
     public static BusinessRuleConfigDto from(BusinessRuleConfig c) {
         return new BusinessRuleConfigDto(
@@ -16,7 +20,11 @@ public record BusinessRuleConfigDto(
                 c.getWeekendRule().name(),
                 c.getEodCutoffTime(),
                 c.getReminderLeadMinutes(),
-                c.getEscalationSlaHours()
+                c.getEscalationSlaHours(),
+                c.getUnderutilizedThresholdPct(),
+                c.getOverloadedThresholdPct(),
+                c.getAtRiskMissingPct(),
+                c.getBlockerAgeAlertHours()
         );
     }
 }

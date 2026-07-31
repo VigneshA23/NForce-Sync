@@ -36,6 +36,20 @@ public class BusinessRuleConfig {
     @Column(name = "escalation_sla_hours", nullable = false)
     private Integer escalationSlaHours;
 
+    // Team Lead Dashboard: individual-utilization flags and the "team at risk" rule read these.
+    @Column(name = "underutilized_threshold_pct", nullable = false)
+    private BigDecimal underutilizedThresholdPct;
+
+    @Column(name = "overloaded_threshold_pct", nullable = false)
+    private BigDecimal overloadedThresholdPct;
+
+    @Column(name = "at_risk_missing_pct", nullable = false)
+    private BigDecimal atRiskMissingPct;
+
+    // How long a blocker can sit open before the Blockers panel highlights it.
+    @Column(name = "blocker_age_alert_hours", nullable = false)
+    private BigDecimal blockerAgeAlertHours;
+
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 

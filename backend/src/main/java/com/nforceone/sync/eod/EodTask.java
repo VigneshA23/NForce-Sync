@@ -1,5 +1,6 @@
 package com.nforceone.sync.eod;
 
+import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.TaskCategory;
 import jakarta.persistence.*;
@@ -7,6 +8,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "eod_task")
@@ -48,6 +50,14 @@ public class EodTask {
 
     @Column(name = "support_needed", columnDefinition = "TEXT")
     private String supportNeeded;
+
+    // Lightweight Team Lead acknowledgement — distinct from ApprovalAction, doesn't resolve the blocker.
+    @Column(name = "acknowledged_at")
+    private OffsetDateTime acknowledgedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "acknowledged_by_id")
+    private AppUser acknowledgedBy;
 
     public enum TaskStatus {
         COMPLETED, IN_PROGRESS, BLOCKED, NOT_STARTED
