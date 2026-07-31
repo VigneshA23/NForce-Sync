@@ -92,24 +92,23 @@ export default function EodHistory() {
         </p>
       </div>
 
-      {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-mut)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Filter</div>
-        {STATUS_FILTERS.map(f => (
-          <button
-            key={f.value}
-            onClick={() => setStatusFilter(f.value)}
-            style={{
-              padding: '4px 12px', borderRadius: 20,
-              background: statusFilter === f.value ? 'var(--raised2)' : 'transparent',
-              border: `1px solid ${statusFilter === f.value ? 'var(--line2)' : 'transparent'}`,
-              color: statusFilter === f.value ? 'var(--txt)' : 'var(--txt-mut)',
-              fontSize: 12, fontWeight: 500, cursor: 'pointer',
-            }}
+      {/* Toolbar — native select, matching the working filter pattern in admin/AuditLog.tsx */}
+      <div style={{
+        display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 16,
+        padding: '14px 16px', background: 'var(--panel)',
+        border: '1px solid var(--line)', borderRadius: 10,
+      }}>
+        <div>
+          <label style={labelStyle} htmlFor="status-filter">Filter</label>
+          <select
+            id="status-filter"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            style={selectStyle}
           >
-            {f.label}
-          </button>
-        ))}
+            {STATUS_FILTERS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+          </select>
+        </div>
         <span style={{ marginLeft: 'auto', fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-dim)' }}>
           {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
         </span>
@@ -230,3 +229,20 @@ function EmptyState({ hasFilter, onClear }: { hasFilter: boolean; onClear: () =>
     </div>
   );
 }
+
+const labelStyle: React.CSSProperties = {
+  display: 'block', fontSize: 11, fontWeight: 550,
+  color: 'var(--txt-dim)', marginBottom: 4, letterSpacing: '0.04em',
+};
+
+const selectStyle: React.CSSProperties = {
+  padding: '7px 10px',
+  background: 'var(--shell)',
+  border: '1px solid var(--line2)',
+  borderRadius: 6,
+  color: 'var(--txt)',
+  fontSize: 12,
+  outline: 'none',
+  cursor: 'pointer',
+  fontFamily: 'Inter, sans-serif',
+};
