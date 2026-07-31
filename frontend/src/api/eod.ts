@@ -21,6 +21,11 @@ export interface EodEntryDto {
   employeeCode: string;
   entryDate: string;
   status: string;
+  dayType: string;
+  timeAdjustmentType: string | null;
+  timeAdjustmentMinutes: number | null;
+  isOvertime: boolean;
+  overtimeHours: number | null;
   workLocation: string | null;
   nextDayPlan: string | null;
   remarks: string | null;
@@ -44,6 +49,9 @@ export interface SaveTaskRequest {
 
 export interface SaveEodRequest {
   entryDate: string;
+  dayType: string;
+  timeAdjustmentType: string | null;
+  timeAdjustmentMinutes: number | null;
   workLocation: string | null;
   nextDayPlan: string | null;
   remarks: string | null;
@@ -67,6 +75,29 @@ export async function listEntries(
 ): Promise<EodEntryDto[]> {
   const res = await api.get<EodEntryDto[]>('/eod', {
     params: { employeeId, from, to },
+  });
+  return res.data;
+}
+
+/** Shift timings, monthly allowances and current usage for the logged-in employee. */
+export interface TimeAdjustmentContextDto {
+  shiftAssigned: boolean;
+  shiftName: string | null;
+  /** 'HH:mm:ss' from the backend's LocalTime. */
+  shiftStart: string | null;
+  shiftEnd: string | null;
+  shiftDurationMinutes: number;
+  lateArrivalAllowance: number;
+  earlyLeaveAllowance: number;
+  interveningAllowance: number;
+  lateArrivalUsed: number;
+  earlyLeaveUsed: number;
+  interveningUsed: number;
+}
+
+export async function getTimeAdjustmentContext(date: string): Promise<TimeAdjustmentContextDto> {
+  const res = await api.get<TimeAdjustmentContextDto>('/eod/time-adjustment-context', {
+    params: { date },
   });
   return res.data;
 }

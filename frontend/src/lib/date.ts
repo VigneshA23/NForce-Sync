@@ -69,6 +69,18 @@ export function formatTime12h(hhmm: string): string {
   return `${h12}:${mStr ?? '00'} ${period}`;
 }
 
+/**
+ * Display-layer only: a minute count as a compact duration — `45 min`, `1 hr`, `1 hr 30 min`,
+ * `2 hrs`. For badges and summary lines where the verbose form ("1 hour 30 minutes") is too long.
+ */
+export function formatDurationMinutes(mins: number): string {
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const rem = mins % 60;
+  const hLabel = h === 1 ? '1 hr' : `${h} hrs`;
+  return rem === 0 ? hLabel : `${hLabel} ${rem} min`;
+}
+
 /** Display-layer only: `DD-MM-YYYY, h:mm AM/PM` for a full ISO timestamp. */
 export function formatDateTime(iso: string): string {
   const d = new Date(iso);

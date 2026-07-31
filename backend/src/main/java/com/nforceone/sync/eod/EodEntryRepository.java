@@ -20,4 +20,26 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
     @Query("SELECT e FROM EodEntry e WHERE e.employee.manager.id = :managerId AND e.status = :status ORDER BY e.entryDate DESC")
     List<EodEntry> findPendingByManagerId(@Param("managerId") Long managerId,
                                           @Param("status") EodEntry.Status status);
+
+    /**
+     * Time-adjustment uses of one type inside a date window, for the monthly allowance check.
+     *
+     * DRAFT is excluded: a draft is an intention, not a use, and a forgotten one silently
+     * eating a monthly slot would be undiagnosable from the UI.
+     *
+     * excludeId skips the entry currently being submitted, so resubmitting an entry that
+     * already counts (e.g. after a changes-request) cannot fail the check against itself.
+     * Pass null to count everything.
+     */
+    @Query("SELECT COUNT(e) FROM EodEntry e "
+         + "WHERE e.employee.id = :employeeId "
+         + "AND e.timeAdjustmentType = :type "
+         + "AND e.status <> com.nforceone.sync.eod.EodEntry.Status.DRAFT "
+         + "AND e.entryDate BETWEEN :from AND :to "
+         + "AND (:excludeId IS NULL OR e.id <> :excludeId)")
+    long countAdjustmentsInPeriod(@Param("employeeId") Long employeeId,
+                                  @Param("type") EodEntry.TimeAdjustmentType type,
+                                  @Param("from") LocalDate from,
+                                  @Param("to") LocalDate to,
+                                  @Param("excludeId") Long excludeId);
 }

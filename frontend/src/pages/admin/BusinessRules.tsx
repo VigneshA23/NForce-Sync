@@ -1,9 +1,9 @@
 import { useEffect, useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Bell, CalendarClock, CalendarDays, Clock, Plus } from 'lucide-react';
+import { AlertTriangle, Bell, CalendarClock, CalendarDays, Clock, Clock3, Plus } from 'lucide-react';
 import {
   getBusinessRuleConfig, updateWorkingHours, updateWeekendRule, updateEodCutoff,
-  updateReminderLeadTime, updateEscalationSla,
+  updateReminderLeadTime, updateEscalationSla, updateAllowances,
   listShifts, createShift, updateShift, toggleShift, deleteShift,
   listHolidays, createHoliday, deleteHoliday,
 } from '../../api/businessRules';
@@ -229,6 +229,9 @@ export default function BusinessRules() {
     name === 'Working Hours Per Day' || name === 'Weekend Rule');
   const notificationsUpdate = findLastUpdate(auditEntries, (name) =>
     name === 'EOD Cutoff Time' || name === 'Reminder Lead Time' || name === 'Escalation SLA');
+  const allowancesUpdate = findLastUpdate(auditEntries, (name) =>
+    name === 'Late Arrival Allowance' || name === 'Early Leave Allowance'
+    || name === 'Intervening Allowance');
   const shiftsUpdate = findLastUpdate(auditEntries, (name) =>
     name != null && shiftNames.has(name));
   const holidaysUpdate = findLastUpdate(auditEntries, (name) =>
@@ -357,6 +360,58 @@ export default function BusinessRules() {
     }
     setSlaError(null);
     slaMutation.mutate(value);
+  }
+
+  // ── 8. Time adjustment allowances ───────────────────────────────────────────
+  // All three save together as one rule, matching how they are stored and audited.
+  // Drafts stay null until the admin actually types, and the rendered value falls back to the
+  // fetched config. That avoids an effect purely to copy server data into state — the sibling
+  // rules above do use that idiom, but it needs no sync here.
+  const [lateArrivalEdit, setLateArrivalEdit] = useState<string | null>(null);
+  const [earlyLeaveEdit,  setEarlyLeaveEdit]  = useState<string | null>(null);
+  const [interveningEdit, setInterveningEdit] = useState<string | null>(null);
+  const [allowancesError, setAllowancesError] = useState<string | null>(null);
+
+  const lateArrivalDraft = lateArrivalEdit
+    ?? (configQuery.data ? String(configQuery.data.lateArrivalAllowance) : '');
+  const earlyLeaveDraft  = earlyLeaveEdit
+    ?? (configQuery.data ? String(configQuery.data.earlyLeaveAllowance) : '');
+  const interveningDraft = interveningEdit
+    ?? (configQuery.data ? String(configQuery.data.interveningAllowance) : '');
+  const setLateArrivalDraft = setLateArrivalEdit;
+  const setEarlyLeaveDraft  = setEarlyLeaveEdit;
+  const setInterveningDraft = setInterveningEdit;
+
+  const allowancesMutation = useMutation({
+    mutationFn: updateAllowances,
+    onSuccess: () => {
+      invalidateConfig();
+      toast.showToast('success', 'Time adjustment allowances updated');
+      setAllowancesError(null);
+      // Drop the local edits so the inputs read back from the freshly saved config.
+      setLateArrivalEdit(null); setEarlyLeaveEdit(null); setInterveningEdit(null);
+    },
+    onError: (err) => {
+      const msg = extractApiError(err, 'Failed to update time adjustment allowances.');
+      setAllowancesError(msg);
+      toast.showToast('error', msg);
+    },
+  });
+
+  function saveAllowances() {
+    const values = {
+      lateArrivalAllowance: Number(lateArrivalDraft),
+      earlyLeaveAllowance:  Number(earlyLeaveDraft),
+      interveningAllowance: Number(interveningDraft),
+    };
+    // 0 is valid — it disables a type outright.
+    const invalid = Object.values(values).some(v => !Number.isInteger(v) || v < 0 || v > 31);
+    if (invalid) {
+      setAllowancesError('Enter a whole number between 0 and 31 for each allowance.');
+      return;
+    }
+    setAllowancesError(null);
+    allowancesMutation.mutate(values);
   }
 
   // ── Grouped-card save handlers ──────────────────────────────────────────────
@@ -590,6 +645,72 @@ export default function BusinessRules() {
           style={{ ...primaryButtonStyle, opacity: notificationsPending ? 0.7 : 1 }}
         >
           {notificationsPending ? 'Saving…' : 'Save'}
+        </button>
+      </RuleCard>
+
+      {/* Time adjustment allowances — how MANY times per month each type may be used.
+          The per-use duration limit (30–120 min) is a fixed policy enforced in EodService. */}
+      <RuleCard
+        title="Time Adjustment Allowances"
+        description="How many times per calendar month an employee may request each type of time adjustment. Applies to everyone — there are no per-role or per-department overrides."
+        icon={<Clock3 size={16} aria-hidden="true" />}
+        accent="var(--info)"
+        footer={<LastUpdatedCaption info={allowancesUpdate} />}
+      >
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 16 }}>
+          <div style={{ minWidth: 160 }}>
+            <label style={labelStyle} htmlFor="late-arrival-allowance">Late arrival</label>
+            <UnitField unit="/mo">
+              <input
+                id="late-arrival-allowance"
+                type="number"
+                min={0}
+                max={31}
+                step={1}
+                value={lateArrivalDraft}
+                onChange={(e) => setLateArrivalDraft(e.target.value)}
+                style={{ ...inputStyle, paddingRight: 44 }}
+              />
+            </UnitField>
+          </div>
+          <div style={{ minWidth: 160 }}>
+            <label style={labelStyle} htmlFor="intervening-allowance">Intervening time-off</label>
+            <UnitField unit="/mo">
+              <input
+                id="intervening-allowance"
+                type="number"
+                min={0}
+                max={31}
+                step={1}
+                value={interveningDraft}
+                onChange={(e) => setInterveningDraft(e.target.value)}
+                style={{ ...inputStyle, paddingRight: 44 }}
+              />
+            </UnitField>
+          </div>
+          <div style={{ minWidth: 160 }}>
+            <label style={labelStyle} htmlFor="early-leave-allowance">Leaving early</label>
+            <UnitField unit="/mo">
+              <input
+                id="early-leave-allowance"
+                type="number"
+                min={0}
+                max={31}
+                step={1}
+                value={earlyLeaveDraft}
+                onChange={(e) => setEarlyLeaveDraft(e.target.value)}
+                style={{ ...inputStyle, paddingRight: 44 }}
+              />
+            </UnitField>
+          </div>
+        </div>
+        <FieldError msg={allowancesError ?? undefined} />
+        <button
+          onClick={saveAllowances}
+          disabled={allowancesMutation.isPending || configQuery.isPending}
+          style={{ ...primaryButtonStyle, opacity: allowancesMutation.isPending ? 0.7 : 1 }}
+        >
+          {allowancesMutation.isPending ? 'Saving…' : 'Save'}
         </button>
       </RuleCard>
 

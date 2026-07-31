@@ -5,7 +5,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   UserPlus, X, Pencil, Power, PowerOff, RotateCcw, Trash2,
   AlertTriangle, Copy, Check, RefreshCw, ChevronDown,
-  Calendar, ChevronLeft, ChevronRight,
   Search, Filter, ArrowUp, ArrowDown, Download,
 } from 'lucide-react';
 import { api } from '../../api/client';
@@ -22,6 +21,7 @@ import type { UserDto, CreateUserPayload, UpdateUserPayload, DepartmentDto, Desi
 import { toRole } from '../../api/auth';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 import { Modal } from '../../components/Modal';
+import { DatePicker } from '../../components/DatePicker';
 import { useToast } from '../../lib/toast';
 import { useBodyScrollLock } from '../../lib/useBodyScrollLock';
 
@@ -291,159 +291,6 @@ function CreatableSelect<T extends CreatableItem>({
   );
 }
 
-// ── Joining Date Picker ────────────────────────────────────────────────────────
-// Custom picker (not a native <input type="date">) so the calendar icon can be a
-// true toggle: click opens, click again on the same icon closes — native date
-// inputs expose no such control (no hidePicker() API), which is what made the
-// icon feel "stuck open" before.
-
-const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const MONTH_LABELS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-
-function formatDateDisplay(iso: string): string {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-').map(Number);
-  if (!y || !m || !d) return '';
-  return formatDate(iso);
-}
-
-function JoiningDatePicker({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (iso: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const selected = value ? new Date(`${value}T00:00:00`) : new Date();
-  const [viewYear, setViewYear]   = useState(selected.getFullYear());
-  const [viewMonth, setViewMonth] = useState(selected.getMonth());
-
-  // Close on click outside — supplements select-to-close and icon-toggle-to-close.
-  useEffect(() => {
-    if (!open) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [open]);
-
-  function toggleOpen() {
-    setOpen(o => {
-      const next = !o;
-      if (next) {
-        const base = value ? new Date(`${value}T00:00:00`) : new Date();
-        setViewYear(base.getFullYear());
-        setViewMonth(base.getMonth());
-      }
-      return next;
-    });
-  }
-
-  function selectDay(day: number) {
-    const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    onChange(iso);
-    setOpen(false);
-  }
-
-  function shiftMonth(delta: number) {
-    let m = viewMonth + delta;
-    let y = viewYear;
-    if (m < 0) { m = 11; y -= 1; }
-    else if (m > 11) { m = 0; y += 1; }
-    setViewMonth(m);
-    setViewYear(y);
-  }
-
-  const firstWeekday = new Date(viewYear, viewMonth, 1).getDay();
-  const daysInMonth  = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const cells: (number | null)[] = [
-    ...Array(firstWeekday).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-
-  return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
-      <div style={{ position: 'relative' }}>
-        <input
-          readOnly
-          style={{ ...inputStyle, paddingRight: 36, cursor: 'pointer' }}
-          value={formatDateDisplay(value)}
-          placeholder="Select date"
-          onClick={toggleOpen}
-        />
-        <button
-          type="button"
-          aria-label={open ? 'Close date picker' : 'Open date picker'}
-          onClick={toggleOpen}
-          style={{
-            position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
-            background: 'none', border: 'none', cursor: 'pointer', padding: 4,
-            display: 'flex', color: 'var(--txt-dim)', borderRadius: 4,
-          }}
-        >
-          <Calendar size={15} />
-        </button>
-      </div>
-      {open && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, marginTop: 4, width: 260,
-          background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8,
-          boxShadow: '0 8px 24px rgba(0,0,0,.3)', zIndex: 100, padding: 12,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <button type="button" onClick={() => shiftMonth(-1)} aria-label="Previous month" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', display: 'flex', padding: 4 }}>
-              <ChevronLeft size={15} />
-            </button>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
-              {MONTH_LABELS[viewMonth]} {viewYear}
-            </span>
-            <button type="button" onClick={() => shiftMonth(1)} aria-label="Next month" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', display: 'flex', padding: 4 }}>
-              <ChevronRight size={15} />
-            </button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
-            {WEEKDAY_LABELS.map((w, i) => (
-              <div key={i} style={{ textAlign: 'center', fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600 }}>{w}</div>
-            ))}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
-            {cells.map((day, i) => {
-              if (day == null) return <div key={i} />;
-              const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              const isSelected = iso === value;
-              return (
-                <button
-                  type="button"
-                  key={i}
-                  onClick={() => selectDay(day)}
-                  style={{
-                    aspectRatio: '1', border: 'none', borderRadius: 5, cursor: 'pointer',
-                    fontSize: 12, background: isSelected ? 'var(--brand)' : 'transparent',
-                    color: isSelected ? '#fff' : 'var(--txt)',
-                  }}
-                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--raised)'; }}
-                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Org data hook ─────────────────────────────────────────────────────────────
 
 function useOrgData() {
@@ -689,9 +536,10 @@ function AddModal({
 
           {/* Joining Date */}
           <Field label="Joining Date *">
-            <JoiningDatePicker
+            <DatePicker
               value={form.joiningDate ?? ''}
               onChange={iso => set('joiningDate', iso)}
+              inputStyle={inputStyle}
             />
             <FieldError msg={errors.joiningDate} />
           </Field>

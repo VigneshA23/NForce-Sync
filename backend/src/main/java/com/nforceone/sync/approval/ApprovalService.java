@@ -82,7 +82,7 @@ public class ApprovalService {
                 "EOD entry rejected",
                 "Your EOD entry for " + entry.getEntryDate() + " was rejected."
                         + (comment != null && !comment.isBlank() ? " Comment: " + comment : ""),
-                "/eod/history");
+                "/eod/submit?date=" + entry.getEntryDate());
         return EodEntryDto.from(entry);
     }
 
@@ -104,7 +104,7 @@ public class ApprovalService {
                 "Changes requested on EOD entry",
                 "Your EOD entry for " + entry.getEntryDate() + " requires changes."
                         + (comment != null && !comment.isBlank() ? " Comment: " + comment : ""),
-                "/eod/history");
+                "/eod/submit?date=" + entry.getEntryDate());
         return EodEntryDto.from(entry);
     }
 

@@ -111,6 +111,27 @@ public class BusinessRuleService {
         return BusinessRuleConfigDto.from(config);
     }
 
+    /** All three monthly time-adjustment allowances, saved as one rule with one audit row. */
+    public BusinessRuleConfigDto updateAllowances(Integer lateArrival, Integer earlyLeave,
+                                                  Integer intervening, String actingEmail) {
+        BusinessRuleConfig config = requireConfig();
+        AppUser actor = requireActorByEmail(actingEmail);
+        Map<String, Object> before = Map.of(
+                "Late Arrival Allowance",  config.getLateArrivalAllowance(),
+                "Early Leave Allowance",   config.getEarlyLeaveAllowance(),
+                "Intervening Allowance",   config.getInterveningAllowance());
+        config.setLateArrivalAllowance(lateArrival);
+        config.setEarlyLeaveAllowance(earlyLeave);
+        config.setInterveningAllowance(intervening);
+        touch(config, actor);
+        Map<String, Object> after = Map.of(
+                "Late Arrival Allowance",  config.getLateArrivalAllowance(),
+                "Early Leave Allowance",   config.getEarlyLeaveAllowance(),
+                "Intervening Allowance",   config.getInterveningAllowance());
+        writeAudit(CONFIG_ID, "UPDATE", before, after, actor);
+        return BusinessRuleConfigDto.from(config);
+    }
+
     private void touch(BusinessRuleConfig config, AppUser actor) {
         config.setUpdatedAt(OffsetDateTime.now());
         config.setUpdatedBy(actor);

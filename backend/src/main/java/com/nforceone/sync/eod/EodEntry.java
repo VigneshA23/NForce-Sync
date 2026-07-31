@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -32,6 +33,25 @@ public class EodEntry {
     @Column(nullable = false, length = 30)
     private Status status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "day_type", nullable = false, length = 20)
+    private DayType dayType = DayType.WORKING_DAY;
+
+    /** Null when no time adjustment was requested. Only ever set on a WORKING_DAY. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "time_adjustment_type", length = 20)
+    private TimeAdjustmentType timeAdjustmentType;
+
+    @Column(name = "time_adjustment_minutes")
+    private Integer timeAdjustmentMinutes;
+
+    /** Hours logged beyond the day's reference. Flagged for the manager, never a rejection. */
+    @Column(name = "is_overtime", nullable = false)
+    private Boolean isOvertime = Boolean.FALSE;
+
+    @Column(name = "overtime_hours", precision = 5, scale = 2)
+    private BigDecimal overtimeHours;
+
     @Column(name = "work_location", length = 100)
     private String workLocation;
 
@@ -56,6 +76,16 @@ public class EodEntry {
 
     public enum Status {
         DRAFT, SUBMITTED, APPROVED, REJECTED, CHANGES_REQUESTED, MISSED
+    }
+
+    /** Day-level classification. HOLIDAY carries no task rows at all. */
+    public enum DayType {
+        WORKING_DAY, LEAVE, HOLIDAY
+    }
+
+    /** Partial-day schedule shift on a working day. Not an absence — that is DayType.LEAVE. */
+    public enum TimeAdjustmentType {
+        LATE_ARRIVAL, INTERVENING, EARLY_LEAVE
     }
 
     public boolean isEditable() {

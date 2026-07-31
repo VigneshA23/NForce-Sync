@@ -12,7 +12,10 @@ public record BusinessRuleConfigDto(
         BigDecimal underutilizedThresholdPct,
         BigDecimal overloadedThresholdPct,
         BigDecimal atRiskMissingPct,
-        BigDecimal blockerAgeAlertHours
+        BigDecimal blockerAgeAlertHours,
+        Integer lateArrivalAllowance,
+        Integer earlyLeaveAllowance,
+        Integer interveningAllowance
 ) {
     public static BusinessRuleConfigDto from(BusinessRuleConfig c) {
         return new BusinessRuleConfigDto(
@@ -24,7 +27,10 @@ public record BusinessRuleConfigDto(
                 c.getUnderutilizedThresholdPct(),
                 c.getOverloadedThresholdPct(),
                 c.getAtRiskMissingPct(),
-                c.getBlockerAgeAlertHours()
+                c.getBlockerAgeAlertHours(),
+                c.getLateArrivalAllowance(),
+                c.getEarlyLeaveAllowance(),
+                c.getInterveningAllowance()
         );
     }
 }

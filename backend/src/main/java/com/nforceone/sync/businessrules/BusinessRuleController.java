@@ -51,6 +51,15 @@ public class BusinessRuleController {
         return businessRuleService.updateEscalationSla(request.slaHours(), actingEmail());
     }
 
+    @PutMapping("/allowances")
+    public BusinessRuleConfigDto updateAllowances(@Valid @RequestBody UpdateAllowancesRequest request) {
+        return businessRuleService.updateAllowances(
+                request.lateArrivalAllowance(),
+                request.earlyLeaveAllowance(),
+                request.interveningAllowance(),
+                actingEmail());
+    }
+
     // ── Shift timings ───────────────────────────────────────────────────────────
 
     @GetMapping("/shifts")

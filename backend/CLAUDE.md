@@ -96,11 +96,16 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   to unlimited overlapping projects, or to the same project twice; a unique employee+project
   guard over overlapping dates is the open follow-up.
 - task_category: id, name (UNIQUE), is_productive BOOLEAN, is_billable_default BOOLEAN, active BOOLEAN
-  Seeded with 19 PRD categories. NOT productive: "Leave / Holiday", "Bench Activity". All others productive.
+  Seeded with 19 PRD categories. NOT productive: "Leave", "Bench Activity". All others productive.
+  "Leave / Holiday" was renamed to "Leave" in V35 (same id 19, no rows repointed) once Holiday
+  became a day type rather than a category.
 - Seed: Priya Nair (id=2, MANAGER) set as manager_id for employees id=3,4,5
 
 ## EOD tables (V4 migration)
 - eod_entry: id, employee_id FK, entry_date DATE, status (DRAFT/SUBMITTED/APPROVED/REJECTED/CHANGES_REQUESTED/MISSED),
+  day_type (WORKING_DAY/LEAVE/HOLIDAY, added V35, DEFAULT 'WORKING_DAY'),
+  time_adjustment_type (LATE_ARRIVAL/INTERVENING/EARLY_LEAVE NULL) + time_adjustment_minutes INT NULL,
+  is_overtime BOOLEAN DEFAULT FALSE + overtime_hours NUMERIC(5,2) NULL   (all added V36),
   work_location, next_day_plan, remarks, submitted_at, created_at, updated_at
   UNIQUE (employee_id, entry_date)
 - eod_task: id, eod_entry_id FK ON DELETE CASCADE, project_id FK NULL, task_category_id FK NULL,
@@ -108,8 +113,31 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   blocker_reason, support_needed
   CHECK: blocked tasks must have blocker_reason
 - Status uppercase to match existing conventions (ACTIVE, SUPERADMIN pattern)
-- Business rules: Leave / Holiday tasks must have hours=0; submitted entries are immutable;
-  edit only allowed in REJECTED or CHANGES_REQUESTED status
+- Business rules: submitted entries are immutable; edit only allowed in REJECTED or
+  CHANGES_REQUESTED status
+- Day type (V35) drives validation in EodService:
+  HOLIDAY  → work_location forced NULL, zero task rows persisted, all task/hours checks skipped
+  LEAVE    → rows with category "Leave" have project/is_billable/task_status forced to
+             NULL/false/COMPLETED in buildTask, so a raw API call cannot set them
+  The old "Leave / Holiday must have hours=0" rule is GONE — leave rows now carry real hours
+  (8 full day, 4 + 4 half day).
+- Time adjustment (V36) — a partial-day schedule shift on a WORKING_DAY, not an absence:
+  Duration limit 30-120 min for ALL THREE types, re-validated server-side; must also not exceed
+  the employee's shift length. Requires an assigned shift (app_user.shift_id) — no shift, no
+  adjustment. Cleared automatically when day type is not WORKING_DAY.
+  Monthly allowance = business_rule_config.{late_arrival,early_leave,intervening}_allowance
+  (global, SUPERADMIN-editable). Usage is COUNTed live per calendar month, EXCLUDING DRAFT
+  entries and excluding the entry being submitted (so resubmitting after a changes-request
+  cannot fail against itself). No reset job — the month window does it.
+  Shift duration adds 1440 when end <= start, so overnight shifts (e.g. 15:30-00:30) measure
+  540 min, not -900.
+- HOURS NEVER REJECT A SUBMISSION. Reference = expectedHours
+  ((shiftDuration - adjustmentMinutes)/60) when an adjustment is active, else
+  standard_hours_per_day. Anything above it sets is_overtime/overtime_hours for the manager
+  (badge on the Approvals row). The flat cap is a reference, not a limit.
+- GET /api/eod/time-adjustment-context is employee-scoped and deliberately NOT under
+  /api/admin/business-rules, which is SUPERADMIN-only — an employee must be able to read their
+  own shift and allowance usage.
 
 ## Utilization snapshot (V6 migration)
 - util_snapshot: id, employee_id FK, snapshot_date DATE, available_hours, approved_productive_hours,

@@ -4,10 +4,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, XCircle, MessageSquare } from 'lucide-react';
 import { useToast } from '../../lib/toast';
 import { useAuth } from '../../lib/auth';
-import { todayISO, formatDate } from '../../lib/date';
+import { todayISO, formatDate, formatTime12h } from '../../lib/date';
 import { listProjects } from '../../api/projects';
 import { listTaskCategories } from '../../api/taskCategories';
-import { saveDraft, submitEntry, listEntries } from '../../api/eod';
+import { saveDraft, submitEntry, listEntries, getTimeAdjustmentContext } from '../../api/eod';
+import { DatePicker } from '../../components/DatePicker';
 import type { EodEntryDto, EodTaskDto } from '../../api/eod';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -20,7 +21,63 @@ const TASK_STATUSES = [
 ];
 
 const WORK_LOCATIONS = ['Office', 'Remote', 'Client Site', 'Field'];
-const LEAVE_HOLIDAY   = 'Leave / Holiday';
+
+/** Category name, renamed from 'Leave / Holiday' in V35 — Holiday is a day type now. */
+const LEAVE = 'Leave';
+
+const DAY_TYPES = [
+  { value: 'WORKING_DAY', label: 'Working day' },
+  { value: 'LEAVE',       label: 'Leave' },
+  { value: 'HOLIDAY',     label: 'Holiday' },
+];
+
+/**
+ * Reference cap for the live "x / y hrs" readout and instant client-side feedback.
+ * The BACKEND is authoritative and reads business_rule_config.standard_hours_per_day;
+ * that config is behind /api/admin/business-rules which is SUPERADMIN-only, so an
+ * employee cannot fetch it. If an admin moves it off 8, this preview drifts until the
+ * server rejects with the real number.
+ */
+const DAILY_HOURS_CAP = 8;
+
+/** Per-use duration limits for a time adjustment. Mirrored server-side in EodService. */
+const MIN_ADJ_MINUTES = 30;
+const MAX_ADJ_MINUTES = 120;
+
+/**
+ * Duration choices for ALL three adjustment types: 30 minutes to 2 hours in 15-minute steps.
+ * A fixed list rather than free text means the 30-120 policy range cannot be violated from the
+ * UI at all. The server still re-checks it — the dropdown is a convenience, not the guarantee.
+ */
+const ADJ_MINUTE_OPTIONS = [30, 45, 60, 75, 90, 105, 120];
+
+const ADJ_TYPES = [
+  { value: 'LATE_ARRIVAL', label: 'Late arrival',         durationLabel: 'Will come late by' },
+  { value: 'INTERVENING',  label: 'Intervening time-off', durationLabel: 'Time away during shift' },
+  { value: 'EARLY_LEAVE',  label: 'Leaving early',        durationLabel: 'Will leave early by' },
+];
+
+function minutesLabel(m: number): string {
+  if (m < 60) return `${m} minutes`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  const hLabel = h === 1 ? '1 hour' : `${h} hours`;
+  return rem === 0 ? hLabel : `${hLabel} ${rem} minutes`;
+}
+
+/** 'HH:mm:ss' → minutes since midnight. */
+function timeToMinutes(hms: string): number {
+  const [h, m] = hms.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+/** Minutes since midnight → 'HH:mm' for formatTime12h, wrapping past midnight. */
+function minutesToHm(mins: number): string {
+  const wrapped = ((mins % 1440) + 1440) % 1440;
+  const h = Math.floor(wrapped / 60);
+  const m = wrapped % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
 
 
 // ── Local task row type ────────────────────────────────────────────────────────
@@ -160,11 +217,18 @@ export default function SubmitEOD() {
   const [entryStatus, setEntryStatus] = useState<string | null>(null);
 
   // Form fields
+  const [dayType,      setDayType]      = useState('WORKING_DAY');
   const [workLocation, setWorkLocation] = useState('');
   const [nextDayPlan,  setNextDayPlan]  = useState('');
   const [remarks,      setRemarks]      = useState('');
   const [tasks,        setTasks]        = useState<TaskRow[]>([newRow()]);
   const [reviewerComment, setReviewerComment] = useState<string | null>(null);
+
+  // Time adjustment (Working day only)
+  const [adjEnabled, setAdjEnabled] = useState(false);
+  const [adjType,    setAdjType]    = useState<string | null>(null);
+  const [adjMinutes, setAdjMinutes] = useState<string>('');
+  const [showBalance, setShowBalance] = useState(false);
 
   // Validation errors (client-side)
   const [errors, setErrors] = useState<string[]>([]);
@@ -192,6 +256,13 @@ export default function SubmitEOD() {
     queryFn:  () => listEntries(undefined, selectedDate, selectedDate),
   });
 
+  // Shift timings + real monthly allowance usage. Keyed by date so the month's counts follow
+  // the entry date rather than today.
+  const { data: adjContext } = useQuery({
+    queryKey: ['eod', 'time-adjustment-context', selectedDate],
+    queryFn:  () => getTimeAdjustmentContext(selectedDate),
+  });
+
   // ── Populate form when entry loads for the selected date ──────────────────
 
   useEffect(() => {
@@ -203,6 +274,10 @@ export default function SubmitEOD() {
     if (entry) {
       setEntryId(entry.id);
       setEntryStatus(entry.status);
+      setDayType(entry.dayType ?? 'WORKING_DAY');
+      setAdjEnabled(entry.timeAdjustmentType != null);
+      setAdjType(entry.timeAdjustmentType ?? null);
+      setAdjMinutes(entry.timeAdjustmentMinutes != null ? String(entry.timeAdjustmentMinutes) : '');
       setWorkLocation(entry.workLocation ?? '');
       setNextDayPlan(entry.nextDayPlan ?? '');
       setRemarks(entry.remarks ?? '');
@@ -216,6 +291,10 @@ export default function SubmitEOD() {
     } else {
       setEntryId(null);
       setEntryStatus(null);
+      setDayType('WORKING_DAY');
+      setAdjEnabled(false);
+      setAdjType(null);
+      setAdjMinutes('');
       setWorkLocation('');
       setNextDayPlan('');
       setRemarks('');
@@ -232,12 +311,104 @@ export default function SubmitEOD() {
     setErrors([]);
   }
 
+  function handleDayTypeChange(next: string) {
+    setDayType(next);
+    // Neither a holiday nor an as-yet-workless leave day carries a work location.
+    if (next !== 'WORKING_DAY') setWorkLocation('');
+    // A time adjustment only exists on a working day — leaving one behind would submit an
+    // adjustment the form no longer shows. The server clears it too.
+    if (next !== 'WORKING_DAY') {
+      setAdjEnabled(false);
+      setAdjType(null);
+      setAdjMinutes('');
+      setShowBalance(false);
+    }
+    setErrors([]);
+  }
+
   // ── Derived state ─────────────────────────────────────────────────────────
 
   const isReadOnly   = entryStatus === 'SUBMITTED' || entryStatus === 'APPROVED' || entryStatus === 'MISSED';
   const isEditable   = !isReadOnly;
+  // Correction flow: the employee must fix THIS day's report. Re-dating it would leave the
+  // flagged entry untouched and write a different day instead, so the date is pinned while
+  // the rest of the form stays editable. Kept separate from isReadOnly, whose dates must stay
+  // navigable.
+  const isDateLocked = entryStatus === 'CHANGES_REQUESTED' || entryStatus === 'REJECTED';
   const totalHours   = tasks.reduce((sum, t) => sum + (parseFloat(t.hours) || 0), 0);
   const catMap       = new Map(categories.map(c => [c.id, c]));
+
+  const isHoliday  = dayType === 'HOLIDAY';
+  const isLeaveDay = dayType === 'LEAVE';
+  /** At least one row is real work rather than leave. */
+  const hasWorkRow = tasks.some(t => t.categoryName !== LEAVE);
+  // On a leave day, Work Location only makes sense if real work actually happened.
+  // Derived rather than stored, so adding or removing a non-Leave row re-evaluates on the
+  // very next render — no effect, no refetch, no resubmit.
+  const workLocDisabled = isHoliday || (isLeaveDay && !hasWorkRow);
+
+  // ── Time adjustment derived state ─────────────────────────────────────────
+  const isWorkingDay  = dayType === 'WORKING_DAY';
+  const shiftAssigned = adjContext?.shiftAssigned === true;
+  // Without a shift there are no timings to compute "reach office by" or expectedHours from,
+  // so the whole feature is unavailable rather than half-working.
+  const canRequestAdj = isWorkingDay && shiftAssigned;
+  const adjMins       = parseInt(adjMinutes, 10) || 0;
+  const adjActive     = canRequestAdj && adjEnabled && adjType != null && adjMins > 0;
+
+  /** Used vs allowance per type, straight from the backend counts. */
+  const adjUsage: Record<string, { used: number; allowance: number }> = {
+    LATE_ARRIVAL: { used: adjContext?.lateArrivalUsed ?? 0, allowance: adjContext?.lateArrivalAllowance ?? 0 },
+    EARLY_LEAVE:  { used: adjContext?.earlyLeaveUsed  ?? 0, allowance: adjContext?.earlyLeaveAllowance  ?? 0 },
+    INTERVENING:  { used: adjContext?.interveningUsed ?? 0, allowance: adjContext?.interveningAllowance ?? 0 },
+  };
+  function isExhausted(type: string): boolean {
+    const u = adjUsage[type];
+    return !!u && u.used >= u.allowance;
+  }
+
+  // Reference hours for the day. Based on the PAID WORKING DAY, not the shift span: a 15:30-00:30
+  // shift spans 540 minutes but only 480 are work, the other 60 being an unpaid break that
+  // shift_definition doesn't model. Deducting from the span would credit the break as work
+  // (a 2-hour early leave would expect 7 hrs instead of 6). Either way this is a REFERENCE —
+  // exceeding it is overtime, not an error. Mirrors EodService.applyOvertime.
+  const shiftMins    = adjContext?.shiftDurationMinutes ?? 0;
+  const expectedHrs  = adjActive ? Math.max(0, DAILY_HOURS_CAP - adjMins / 60) : DAILY_HOURS_CAP;
+  /** Unpaid break implied by the gap between the rostered span and the paid working day. */
+  const breakMins    = Math.max(0, shiftMins - DAILY_HOURS_CAP * 60);
+  const overtimeHrs  = Math.max(0, totalHours - expectedHrs);
+  const hasOvertime  = !isHoliday && overtimeHrs > 0.001;
+
+  /** Live impact line. Exact wording matches the approved prototype. */
+  function adjBanner(): string {
+    if (!adjType) return 'Select a time adjustment type to see the calculated impact.';
+    if (adjMins <= 0) {
+      return adjType === 'LATE_ARRIVAL'
+        ? 'Choose how late you will arrive (30 minutes to 2 hours).'
+        : 'Choose a duration (30 minutes to 2 hours).';
+    }
+    const start = adjContext?.shiftStart ? timeToMinutes(adjContext.shiftStart) : 0;
+    const end   = adjContext?.shiftEnd   ? timeToMinutes(adjContext.shiftEnd)   : 0;
+    if (adjType === 'LATE_ARRIVAL') {
+      return `You will have to reach office by ${formatTime12h(minutesToHm(start + adjMins))}`;
+    }
+    if (adjType === 'EARLY_LEAVE') {
+      return `You can leave office by ${formatTime12h(minutesToHm(end - adjMins))}`;
+    }
+    return `You will be away from office for ${adjMins} minutes during your shift.`;
+  }
+
+  function handleAdjToggle(checked: boolean) {
+    setAdjEnabled(checked);
+    if (!checked) { setAdjType(null); setAdjMinutes(''); setShowBalance(false); }
+    setErrors([]);
+  }
+
+  function handleAdjTypeChange(next: string) {
+    setAdjType(next);
+    setAdjMinutes(''); // the two input styles don't share a scale, so never carry a value over
+    setErrors([]);
+  }
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
@@ -273,20 +444,58 @@ export default function SubmitEOD() {
   // ── Client-side validation ────────────────────────────────────────────────
 
   function validate(): string[] {
+    // A holiday logs nothing, so every task and hours check is skipped outright rather
+    // than satisfied with empty rows.
+    if (isHoliday) return [];
+
     const errs: string[] = [];
-    if (tasks.length === 0) { errs.push('Add at least one task.'); return errs; }
+    if (tasks.length === 0) {
+      errs.push('At least one task row is required for a working/leave day.');
+      return errs;
+    }
     tasks.forEach((t, i) => {
       const n = i + 1;
-      if (!t.projectId)      errs.push(`Task ${n}: project is required.`);
+      const leaveRow = t.categoryName === LEAVE;
       if (!t.taskCategoryId) errs.push(`Task ${n}: category is required.`);
-      if (t.hours === '' || isNaN(parseFloat(t.hours))) {
-        if (t.categoryName !== LEAVE_HOLIDAY) errs.push(`Task ${n}: hours are required.`);
+      // Leave is not project work, so a project is required only on real work rows.
+      if (!leaveRow && !t.projectId) errs.push(`Task ${n}: project is required.`);
+      if (leaveRow && (t.projectId || t.isBillable || t.taskStatus !== 'COMPLETED')) {
+        errs.push(`Row #${n}: Leave rows cannot have a project or billable flag set.`);
       }
+      if (t.hours === '' || isNaN(parseFloat(t.hours))) errs.push(`Task ${n}: hours are required.`);
       if (parseFloat(t.hours) < 0) errs.push(`Task ${n}: hours cannot be negative.`);
       if (t.taskStatus === 'BLOCKED' && !t.blockerReason.trim()) {
         errs.push(`Task ${n}: blocker reason is required when status is Blocked.`);
       }
     });
+    // Hours are deliberately NOT capped. Exceeding the reference is overtime, surfaced to the
+    // manager on submit — never a reason to block the employee.
+    errs.push(...validateAdjustment());
+    return errs;
+  }
+
+  function validateAdjustment(): string[] {
+    if (!canRequestAdj || !adjEnabled) return [];
+    const errs: string[] = [];
+    if (!adjType) {
+      errs.push('Select a time adjustment type (Late arrival, Intervening time-off, or Leaving early).');
+      return errs;
+    }
+    const label = ADJ_TYPES.find(t => t.value === adjType)?.label ?? 'Time adjustment';
+    if (adjMins <= 0) {
+      errs.push('Enter a valid duration for this time adjustment.');
+      return errs;
+    }
+    if (adjMins < MIN_ADJ_MINUTES || adjMins > MAX_ADJ_MINUTES) {
+      errs.push(`${label} must be between 30 minutes and 2 hours (got ${adjMins} minutes).`);
+    }
+    if (shiftMins > 0 && adjMins > shiftMins) {
+      errs.push(`Time adjustment minutes (${adjMins}) cannot exceed the shift length (${shiftMins} minutes).`);
+    }
+    if (isExhausted(adjType)) {
+      const u = adjUsage[adjType];
+      errs.push(`${label}: monthly limit reached (${u.used} of ${u.allowance} used).`);
+    }
     return errs;
   }
 
@@ -295,14 +504,21 @@ export default function SubmitEOD() {
   function buildRequest() {
     return {
       entryDate:    selectedDate,
-      workLocation: workLocation || null,
+      dayType,
+      // Only ever sent on a working day with a shift; the server clears it otherwise anyway.
+      timeAdjustmentType:    adjActive ? adjType  : null,
+      timeAdjustmentMinutes: adjActive ? adjMins  : null,
+      // Never send a location the day type doesn't allow. The server also nulls it for a
+      // holiday, but sending it would be a lie about what the form showed.
+      workLocation: workLocDisabled ? null : (workLocation || null),
       nextDayPlan:  nextDayPlan  || null,
       remarks:      remarks      || null,
-      tasks: tasks.map(t => ({
+      // A holiday carries no rows at all; the server discards any it receives anyway.
+      tasks: isHoliday ? [] : tasks.map(t => ({
         projectId:      t.projectId,
         taskCategoryId: t.taskCategoryId,
         description:    t.description || null,
-        hours:          t.categoryName === LEAVE_HOLIDAY ? 0 : (parseFloat(t.hours) || 0),
+        hours:          parseFloat(t.hours) || 0,
         taskStatus:     t.taskStatus,
         isBillable:     t.isBillable,
         blockerReason:  t.blockerReason || null,
@@ -345,13 +561,18 @@ export default function SubmitEOD() {
   function handleCategoryChange(localId: string, catId: string) {
     const id = catId ? Number(catId) : null;
     const cat = id ? catMap.get(id) : null;
-    const isLeave = cat?.name === LEAVE_HOLIDAY;
+    const isLeave = cat?.name === LEAVE;
     updateTask(localId, {
       taskCategoryId:   id,
       categoryName:     cat?.name ?? null,
       isBillableDefault: cat?.isBillableDefault ?? true,
-      isBillable:        cat?.isBillableDefault ?? true,
-      hours:             isLeave ? '0' : '',
+      // A leave row is not project work: no project, never billable, always complete.
+      // Mirrored server-side in EodService.buildTask, which is what actually enforces it.
+      ...(isLeave
+        ? { projectId: null, projectCode: null, isBillable: false, taskStatus: 'COMPLETED' }
+        : { isBillable: cat?.isBillableDefault ?? true }),
+      // Leave rows now carry real hours (8 full day, 4 half day), so no longer forced to 0.
+      hours: '',
     });
   }
 
@@ -377,7 +598,7 @@ export default function SubmitEOD() {
       {/* Page header */}
       <PageHeader
         selectedDate={selectedDate}
-        onDateChange={isReadOnly ? undefined : handleDateChange}
+        onDateChange={handleDateChange}
         entryStatus={entryStatus}
       />
 
@@ -449,24 +670,42 @@ export default function SubmitEOD() {
       {!loadingEntry && (
         <>
           {/* Meta row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginTop: 24 }}>
             <div>
               <Label>Entry date</Label>
-              <Inp
-                type="date"
-                lang="en-GB"
-                value={selectedDate}
-                onChange={e => handleDateChange(e.target.value)}
-                disabled={isReadOnly}
-                max={todayISO()}
-              />
+              {isDateLocked ? (
+                <div style={{ ...inputStyle, opacity: 0.7 }}>{formatDate(selectedDate)}</div>
+              ) : (
+                <DatePicker
+                  value={selectedDate}
+                  onChange={handleDateChange}
+                  max={todayISO()}
+                  inputStyle={inputStyle}
+                />
+              )}
+            </div>
+            <div>
+              <Label>Day type</Label>
+              {isReadOnly ? (
+                <div style={{ ...inputStyle, opacity: 0.7 }}>
+                  {DAY_TYPES.find(d => d.value === dayType)?.label ?? dayType}
+                </div>
+              ) : (
+                <Sel value={dayType} onChange={e => handleDayTypeChange(e.target.value)}>
+                  {DAY_TYPES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                </Sel>
+              )}
             </div>
             <div>
               <Label>Work location</Label>
               {isReadOnly ? (
                 <div style={{ ...inputStyle, opacity: 0.7 }}>{workLocation || '—'}</div>
               ) : (
-                <Sel value={workLocation} onChange={e => setWorkLocation(e.target.value)}>
+                <Sel
+                  value={workLocDisabled ? '' : workLocation}
+                  onChange={e => setWorkLocation(e.target.value)}
+                  disabled={workLocDisabled}
+                >
                   <option value="">— Select —</option>
                   {WORK_LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
                 </Sel>
@@ -474,15 +713,178 @@ export default function SubmitEOD() {
             </div>
           </div>
 
+          {/* Time adjustment — a partial-day schedule shift on a working day. Hidden entirely
+              for Leave/Holiday, and when no shift is assigned (nothing to compute from). */}
+          {canRequestAdj && isEditable && (
+            <>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 8, marginTop: 20,
+                cursor: 'pointer', userSelect: 'none',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={adjEnabled}
+                  onChange={e => handleAdjToggle(e.target.checked)}
+                  style={{ width: 14, height: 14, accentColor: 'var(--brand)', cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
+                  Request a time adjustment for today (late arrival, early leave, or time away mid-shift)
+                </span>
+              </label>
+
+              {adjEnabled && (
+                <div style={{
+                  marginTop: 12, padding: '16px 18px', borderRadius: 8,
+                  background: 'rgba(76,141,214,.08)', border: '1px solid rgba(76,141,214,.3)',
+                }}>
+                  {/* Shift timings — read-only, from the existing shift assignment */}
+                  <Label>Shift timings</Label>
+                  <div style={{ fontSize: 13, color: 'var(--txt)', marginBottom: 4, fontFamily: '"JetBrains Mono", monospace' }}>
+                    {adjContext?.shiftStart && adjContext?.shiftEnd
+                      ? `${formatTime12h(adjContext.shiftStart)} – ${formatTime12h(adjContext.shiftEnd)}`
+                      : '—'}
+                    {adjContext?.shiftName && (
+                      <span style={{ color: 'var(--txt-dim)', fontFamily: 'inherit' }}> · {adjContext.shiftName}</span>
+                    )}
+                  </div>
+                  {/* Spells out why expected hours come off 8 and not the 9-hour span. */}
+                  <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 14 }}>
+                    {(shiftMins / 60).toFixed(0)}h rostered
+                    {breakMins > 0 && ` · ${breakMins}m unpaid break`}
+                    {' '}· {DAILY_HOURS_CAP} working hours
+                  </div>
+
+                  {/* Mutually exclusive types. One at its monthly limit cannot be picked. */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, marginBottom: 14 }}>
+                    {ADJ_TYPES.map(t => {
+                      const exhausted = isExhausted(t.value);
+                      const u = adjUsage[t.value];
+                      return (
+                        <label
+                          key={t.value}
+                          title={exhausted ? `Monthly limit reached (${u.used} of ${u.allowance} used)` : undefined}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 7, fontSize: 13,
+                            cursor: exhausted ? 'not-allowed' : 'pointer',
+                            opacity: exhausted ? 0.5 : 1,
+                            color: adjType === t.value ? 'var(--txt)' : 'var(--txt-mut)',
+                            fontWeight: adjType === t.value ? 600 : 400,
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="timeAdjType"
+                            checked={adjType === t.value}
+                            disabled={exhausted}
+                            onChange={() => handleAdjTypeChange(t.value)}
+                            style={{ width: 'auto', accentColor: 'var(--info)', cursor: exhausted ? 'not-allowed' : 'pointer' }}
+                          />
+                          <span>{t.label}</span>
+                          {exhausted && (
+                            <span style={{ fontSize: 11, color: 'var(--warn)' }}>
+                              Monthly limit reached ({u.used} of {u.allowance} used)
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {/* Duration — same fixed dropdown for all three types, 30 minutes to 2 hours.
+                      Server re-validates the range regardless. */}
+                  {adjType && (
+                    <div style={{ maxWidth: 240, marginBottom: 14 }}>
+                      <Label>{ADJ_TYPES.find(t => t.value === adjType)?.durationLabel}</Label>
+                      <Sel value={adjMinutes} onChange={e => { setAdjMinutes(e.target.value); setErrors([]); }}>
+                        <option value="">— Select —</option>
+                        {ADJ_MINUTE_OPTIONS.map(m => (
+                          <option key={m} value={m}>{minutesLabel(m)}</option>
+                        ))}
+                      </Sel>
+                    </div>
+                  )}
+
+                  {/* Live calculated impact */}
+                  <div style={{
+                    padding: '10px 12px', borderRadius: 6, marginBottom: 12, fontSize: 13,
+                    background: 'rgba(76,141,214,.08)', border: '1px solid rgba(76,141,214,.3)',
+                    color: 'var(--info)',
+                  }}>
+                    {adjBanner()}
+                  </div>
+
+                  {/* Real usage for the entry's calendar month — not a placeholder */}
+                  <button
+                    type="button"
+                    onClick={() => setShowBalance(s => !s)}
+                    style={{
+                      background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                      fontSize: 12, color: 'var(--info)', borderBottom: '1px dashed var(--line2)',
+                    }}
+                  >
+                    View available balance
+                  </button>
+                  {showBalance && (
+                    <div style={{
+                      marginTop: 10, padding: '10px 12px', borderRadius: 6, fontSize: 12,
+                      background: 'var(--raised2)', border: '1px solid var(--line2)',
+                      color: 'var(--txt-mut)', display: 'flex', flexWrap: 'wrap', gap: 16,
+                    }}>
+                      {ADJ_TYPES.map(t => (
+                        <span key={t.value}>
+                          {t.label} used this month:{' '}
+                          <strong style={{ color: 'var(--txt)' }}>
+                            {adjUsage[t.value].used} of {adjUsage[t.value].allowance}
+                          </strong>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Holiday — nothing to log, so the whole Tasks section is replaced by this.
+              Reuses the same banner shape and the existing --ok role as the approved
+              banner above; no new colors. */}
+          {isHoliday && (
+            <div style={{
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+              padding: '12px 16px', borderRadius: 8, marginTop: 28,
+              background: 'rgba(47,182,124,.08)', border: '1px solid rgba(47,182,124,.3)',
+            }}>
+              <CheckCircle size={15} style={{ color: 'var(--ok)', flexShrink: 0, marginTop: 1 }} aria-hidden />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ok)', marginBottom: 2 }}>
+                  No tasks required
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5 }}>
+                  This is a company holiday. Hours and project fields are skipped.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Tasks section */}
+          {!isHoliday && (
           <div style={{ marginTop: 28 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-mut)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                 Tasks
               </div>
-              <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 13, color: 'var(--txt-mut)' }}>
-                <span style={{ color: 'var(--txt)', fontWeight: 600 }}>{totalHours.toFixed(1)}</span>
-                {' '}hrs total
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Overtime is informational — it never blocks submitting. */}
+                {hasOvertime && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--warn)' }}>
+                    +{overtimeHrs.toFixed(1)} hrs overtime
+                  </span>
+                )}
+                <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 13, color: 'var(--txt-mut)' }}>
+                  <span style={{ color: 'var(--txt)', fontWeight: 600 }}>{totalHours.toFixed(1)}</span>
+                  {' '}/ {expectedHrs.toFixed(adjActive ? 2 : 1)}
+                  {' '}hrs {adjActive ? 'expected' : 'total'}
+                </div>
               </div>
             </div>
 
@@ -528,6 +930,7 @@ export default function SubmitEOD() {
               </button>
             )}
           </div>
+          )}
 
           {/* Next-day plan */}
           <div style={{ marginTop: 24 }}>
@@ -632,7 +1035,9 @@ interface TaskCardProps {
 }
 
 function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onRemove, onCategoryChange, canRemove }: TaskCardProps) {
-  const isLeave   = task.categoryName === LEAVE_HOLIDAY;
+  // A leave row has no project, is never billable, and is always Completed — those three
+  // fields are locked. Hours stay editable (8 full day, 4 half day).
+  const isLeave   = task.categoryName === LEAVE;
   const isBlocked = task.taskStatus === 'BLOCKED';
 
   const statusColor: Record<string, string> = {
@@ -662,7 +1067,11 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
                 {task.projectCode ?? projects.find(p => p.id === task.projectId)?.code ?? '—'}
               </div>
             ) : (
-              <Sel value={task.projectId ?? ''} onChange={e => onUpdate({ projectId: e.target.value ? Number(e.target.value) : null })}>
+              <Sel
+                value={isLeave ? '' : (task.projectId ?? '')}
+                onChange={e => onUpdate({ projectId: e.target.value ? Number(e.target.value) : null })}
+                disabled={isLeave}
+              >
                 <option value="">— Project —</option>
                 {projects.map(p => (
                   <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
@@ -698,9 +1107,9 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
               type="number"
               min={0}
               step={0.5}
-              value={isLeave ? '0' : task.hours}
+              value={task.hours}
               onChange={e => onUpdate({ hours: e.target.value })}
-              disabled={isReadOnly || isLeave}
+              disabled={isReadOnly}
               style={{ fontFamily: '"JetBrains Mono", monospace' }}
               placeholder="0"
             />
@@ -713,7 +1122,11 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
                 {TASK_STATUSES.find(s => s.value === task.taskStatus)?.label ?? task.taskStatus}
               </div>
             ) : (
-              <Sel value={task.taskStatus} onChange={e => onUpdate({ taskStatus: e.target.value })}>
+              <Sel
+                value={isLeave ? 'COMPLETED' : task.taskStatus}
+                onChange={e => onUpdate({ taskStatus: e.target.value })}
+                disabled={isLeave}
+              >
                 {TASK_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </Sel>
             )}
@@ -725,10 +1138,10 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
               <input
                 type="checkbox"
                 id={`bill-${task.localId}`}
-                checked={task.isBillable}
+                checked={isLeave ? false : task.isBillable}
                 onChange={e => onUpdate({ isBillable: e.target.checked })}
-                disabled={isReadOnly}
-                style={{ width: 14, height: 14, accentColor: 'var(--brand)', cursor: isReadOnly ? 'not-allowed' : 'pointer' }}
+                disabled={isReadOnly || isLeave}
+                style={{ width: 14, height: 14, accentColor: 'var(--brand)', cursor: (isReadOnly || isLeave) ? 'not-allowed' : 'pointer' }}
               />
               {!isReadOnly && canRemove && (
                 <button

@@ -10,6 +10,10 @@ export interface BusinessRuleConfigDto {
   eodCutoffTime: string; // "HH:mm:ss"
   reminderLeadMinutes: number;
   escalationSlaHours: number;
+  /** Time-adjustment uses permitted per calendar month, per type. Global — no overrides. */
+  lateArrivalAllowance: number;
+  earlyLeaveAllowance: number;
+  interveningAllowance: number;
 }
 
 export interface ShiftDefinitionDto {
@@ -58,6 +62,17 @@ export async function updateReminderLeadTime(leadMinutes: number): Promise<Busin
 
 export async function updateEscalationSla(slaHours: number): Promise<BusinessRuleConfigDto> {
   const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/escalation-sla', { slaHours });
+  return res.data;
+}
+
+export interface AllowancesPayload {
+  lateArrivalAllowance: number;
+  earlyLeaveAllowance: number;
+  interveningAllowance: number;
+}
+
+export async function updateAllowances(payload: AllowancesPayload): Promise<BusinessRuleConfigDto> {
+  const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/allowances', payload);
   return res.data;
 }
 

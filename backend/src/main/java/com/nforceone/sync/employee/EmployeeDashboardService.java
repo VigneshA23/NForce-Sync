@@ -104,6 +104,11 @@ public class EmployeeDashboardService {
     // Working days with no eod_entry row at all for this employee, up to (not including)
     // today — there is no scheduled job that ever writes EodEntry.Status.MISSED, so this
     // has to be derived on read rather than queried directly.
+    //
+    // Company holidays are skipped exactly like weekends: nothing is owed on a day the company
+    // is closed, so an employee must not have to submit an empty report just to clear a count.
+    // Submitting on a holiday (or a weekend) stays fully available for anyone who does work —
+    // this only decides what counts as MISSING, never what is allowed.
     private List<LocalDate> computeMissedDates(Long employeeId, LocalDate monthStart, LocalDate today) {
         List<EodEntry> monthEntries = entryRepository
                 .findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(
@@ -112,10 +117,15 @@ public class EmployeeDashboardService {
                 .map(EodEntry::getEntryDate)
                 .collect(Collectors.toSet());
 
+        Set<LocalDate> holidays = holidayRepository.findAllByOrderByHolidayDateAsc().stream()
+                .map(h -> h.getHolidayDate())
+                .collect(Collectors.toSet());
+
         List<LocalDate> missed = new ArrayList<>();
         for (LocalDate d = monthStart; d.isBefore(today); d = d.plusDays(1)) {
             DayOfWeek dow = d.getDayOfWeek();
             if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) continue;
+            if (holidays.contains(d)) continue;
             if (coveredDates.contains(d)) continue;
             missed.add(d);
         }

@@ -3,6 +3,7 @@ package com.nforceone.sync.eod;
 import com.nforceone.sync.eod.dto.BlockedTaskDto;
 import com.nforceone.sync.eod.dto.EodEntryDto;
 import com.nforceone.sync.eod.dto.SaveEodRequest;
+import com.nforceone.sync.eod.dto.TimeAdjustmentContextDto;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -49,6 +50,17 @@ public class EodController {
     @GetMapping("/blocked")
     public List<BlockedTaskDto> getBlocked(@RequestParam Long managerId) {
         return eodService.getBlockedTasks(managerId, actingEmail());
+    }
+
+    /**
+     * Shift timings, monthly allowances and current usage for the caller. Lives here rather
+     * than under /api/admin/business-rules because that controller is SUPERADMIN-only and an
+     * employee needs to read their own shift. Always scoped to the caller — no employeeId param.
+     */
+    @GetMapping("/time-adjustment-context")
+    public TimeAdjustmentContextDto getTimeAdjustmentContext(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return eodService.getTimeAdjustmentContext(date, actingEmail());
     }
 
     private String actingEmail() {

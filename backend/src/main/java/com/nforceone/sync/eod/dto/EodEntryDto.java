@@ -2,6 +2,7 @@ package com.nforceone.sync.eod.dto;
 
 import com.nforceone.sync.eod.EodEntry;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -13,6 +14,11 @@ public record EodEntryDto(
         String             employeeCode,
         LocalDate        entryDate,
         String           status,
+        String           dayType,
+        String           timeAdjustmentType,
+        Integer          timeAdjustmentMinutes,
+        Boolean          isOvertime,
+        BigDecimal       overtimeHours,
         String           workLocation,
         String           nextDayPlan,
         String           remarks,
@@ -36,6 +42,11 @@ public record EodEntryDto(
                 e.getEmployee().getEmployeeCode(),
                 e.getEntryDate(),
                 e.getStatus().name(),
+                e.getDayType() != null ? e.getDayType().name() : EodEntry.DayType.WORKING_DAY.name(),
+                e.getTimeAdjustmentType() != null ? e.getTimeAdjustmentType().name() : null,
+                e.getTimeAdjustmentMinutes(),
+                Boolean.TRUE.equals(e.getIsOvertime()),
+                e.getOvertimeHours(),
                 e.getWorkLocation(),
                 e.getNextDayPlan(),
                 e.getRemarks(),

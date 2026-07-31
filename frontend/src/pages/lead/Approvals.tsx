@@ -2,10 +2,77 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, CheckCheck, Check, X, RotateCcw, RefreshCw } from 'lucide-react';
 import { usePendingApprovals, useApprove, useReject, useRequestChanges, useBatchApprove } from '../../api/approvals';
 import { useToast } from '../../lib/toast';
-import { formatDate as fmtDate } from '../../lib/date';
+import { formatDate as fmtDate, formatDurationMinutes } from '../../lib/date';
 import type { EodEntryDto, EodTaskDto } from '../../api/eod';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
+
+/** Category name for leave rows — renamed from 'Leave / Holiday' in V35. */
+const LEAVE_CATEGORY = 'Leave';
+
+function sumHours(tasks: EodTaskDto[]): number {
+  return tasks.reduce((s, t) => s + (Number(t.hours) || 0), 0);
+}
+
+/** Drops a pointless trailing .0 — "4 hrs", not "4.0 hrs". */
+function hrs(v: number): string {
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
+/**
+ * One plain-language summary of the day: leave taken, hours worked, and how much of that was
+ * overtime.
+ *
+ * Overtime is stated as a SPLIT of the hours worked, never as a separate addend. Showing
+ * "5 hrs worked" and "Overtime +1.0 hrs" side by side reads as 5 + 1 = 6, when the 1 is already
+ * inside the 5 — so it is spelled out as "worked 4 hrs + 1 hr OT = 5 hrs".
+ *
+ * regular = worked - overtime, which always lands on the day's expected hours: with 4 hrs leave
+ * the expected work is 8 - 4 = 4, so logging 5 gives 4 regular + 1 OT.
+ *
+ * Returns null for an ordinary working day with no overtime — nothing to clarify there.
+ */
+function daySummary(entry: EodEntryDto): string | null {
+  if (entry.dayType === 'HOLIDAY') return 'Holiday — no tasks';
+
+  const leaveHours = sumHours(entry.tasks.filter(t => t.categoryName === LEAVE_CATEGORY));
+  const worked     = sumHours(entry.tasks.filter(t => t.categoryName !== LEAVE_CATEGORY));
+  const overtime   = entry.isOvertime && entry.overtimeHours != null
+    ? Number(entry.overtimeHours)
+    : 0;
+
+  const parts: string[] = [];
+  if (entry.dayType === 'LEAVE' && leaveHours > 0) {
+    parts.push(worked > 0
+      ? `Half-day leave ${hrs(leaveHours)} hrs`
+      : `Full-day leave ${hrs(leaveHours)} hrs`);
+  }
+
+  if (overtime > 0) {
+    const regular = Math.max(0, worked - overtime);
+    parts.push(`worked ${hrs(regular)} hrs + ${hrs(overtime)} hr${overtime === 1 ? '' : 's'} OT = ${hrs(worked)} hrs total`);
+  } else if (parts.length > 0 && worked > 0) {
+    parts.push(`worked ${hrs(worked)} hrs`);
+  }
+
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/**
+ * A time adjustment in the manager's words — "2 hrs late log-in" rather than
+ * "LATE_ARRIVAL / 120". Returns null when the entry has no adjustment.
+ */
+function timeAdjustmentLabel(entry: EodEntryDto): string | null {
+  const { timeAdjustmentType: type, timeAdjustmentMinutes: mins } = entry;
+  if (!type || mins == null || mins <= 0) return null;
+  const dur = formatDurationMinutes(mins);
+  switch (type) {
+    case 'LATE_ARRIVAL': return `${dur} late log-in`;
+    case 'EARLY_LEAVE':  return `${dur} early log-off`;
+    case 'INTERVENING':  return `${dur} away mid-shift`;
+    default:             return `${dur} time adjustment`;
+  }
+}
 
 function formatRelative(iso: string | null): string {
   if (!iso) return '—';
@@ -250,6 +317,19 @@ function EntryRow({ entry }: { entry: EodEntryDto }) {
         </div>
         <div style={{ fontSize: 12, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
           {formatRelative(entry.submittedAt)} · {entry.tasks.length} task{entry.tasks.length !== 1 ? 's' : ''}
+          {/* Day type, time adjustment and overtime are all visible without expanding the row —
+              the manager decides from here, and a shortened day changes what "enough hours"
+              means. Without these, a 4-hour submission just looks incomplete. */}
+          {daySummary(entry) && (
+            <span style={{ color: 'var(--warn)', fontWeight: 600 }}>
+              {' '}· {daySummary(entry)}
+            </span>
+          )}
+          {timeAdjustmentLabel(entry) && (
+            <span style={{ color: 'var(--info)', fontWeight: 600 }}>
+              {' '}· {timeAdjustmentLabel(entry)}
+            </span>
+          )}
         </div>
         {/* Action buttons — stop propagation so row expand doesn't fire */}
         <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
