@@ -3,7 +3,7 @@ package com.nforceone.sync.config;
 import com.nforceone.sync.auth.JwtFilter;
 import com.nforceone.sync.auth.JwtService;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpServletResponse;
+// import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
