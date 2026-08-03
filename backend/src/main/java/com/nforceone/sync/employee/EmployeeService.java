@@ -43,7 +43,7 @@ public class EmployeeService {
     }
 
     @Transactional(readOnly = true)
-    public DashboardSummaryDto getDashboardSummary(Long employeeId) {
+    public DashboardSummaryDto getDashboardSummary(Long employeeId, LocalDate calendarFrom, LocalDate calendarTo) {
         LocalDate today = LocalDate.now();
         LocalTime cutoffTime = getCutoffTime();
 
@@ -80,8 +80,8 @@ public class EmployeeService {
         // ── Recent entries: last 5 ─────────────────────────────────────────────
         List<DashboardSummaryDto.RecentEntry> recentEntries = buildRecentEntries(employeeId, today);
 
-        // ── Calendar: 35 days back (5 full Mon–Sun weeks) ──────────────────────
-        List<DashboardSummaryDto.CalendarDay> calendarData = buildCalendarData(employeeId, today);
+        // ── Calendar: full displayed month ─────────────────────────────────────
+        List<DashboardSummaryDto.CalendarDay> calendarData = buildCalendarData(employeeId, calendarFrom, calendarTo);
 
         return new DashboardSummaryDto(cutoffStatus, quickStats, blockedTasks, recentEntries, calendarData);
     }
@@ -202,7 +202,7 @@ public class EmployeeService {
                 .collect(Collectors.toMap(UtilSnapshot::getSnapshotDate, s -> s));
 
         return entries.stream()
-                .limit(5)
+                .limit(10)
                 .map(e -> {
                     BigDecimal total = e.getTasks().stream()
                             .map(EodTask::getHours)
@@ -225,10 +225,8 @@ public class EmployeeService {
                 .toList();
     }
 
-    private List<DashboardSummaryDto.CalendarDay> buildCalendarData(Long employeeId, LocalDate today) {
-        // Start from the Monday of the week 5 weeks ago (35-day grid)
-        LocalDate gridStart = today.with(DayOfWeek.MONDAY).minusWeeks(4);
-        LocalDate gridEnd   = gridStart.plusDays(34);
+    private List<DashboardSummaryDto.CalendarDay> buildCalendarData(Long employeeId, LocalDate gridStart, LocalDate gridEnd) {
+        LocalDate realToday = LocalDate.now();
 
         List<EodEntry> entries = entryRepository
                 .findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(employeeId, gridStart, gridEnd);
@@ -244,7 +242,7 @@ public class EmployeeService {
         LocalDate cursor = gridStart;
         while (!cursor.isAfter(gridEnd)) {
             boolean weekend = isWeekend(cursor);
-            boolean future  = cursor.isAfter(today);
+            boolean future  = cursor.isAfter(realToday);
             String status   = statusMap.get(cursor);
             if (weekend) status = "WEEKEND";
             else if (future) status = "FUTURE";

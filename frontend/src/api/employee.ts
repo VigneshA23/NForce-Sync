@@ -50,11 +50,14 @@ export interface DashboardSummary {
   calendarData: CalendarDay[];
 }
 
-export function useDashboardSummary() {
+export function useDashboardSummary(calendarFrom?: string, calendarTo?: string) {
   return useQuery({
-    queryKey: ['employee', 'dashboard-summary'],
-    queryFn: () => api.get<DashboardSummary>('/employee/dashboard-summary').then(r => r.data),
+    queryKey: ['employee', 'dashboard-summary', calendarFrom ?? 'cur', calendarTo ?? 'cur'],
+    queryFn: () => api.get<DashboardSummary>('/employee/dashboard-summary', {
+      params: calendarFrom && calendarTo ? { calendarFrom, calendarTo } : undefined,
+    }).then(r => r.data),
     staleTime: 60_000,
+    placeholderData: (prev) => prev,
   });
 }
 

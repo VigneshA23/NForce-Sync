@@ -1,5 +1,9 @@
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Clock, CheckCircle2, TrendingUp, Zap, Activity, ArrowRight } from 'lucide-react';
+import {
+  AlertCircle, Clock, CheckCircle2, TrendingUp, Zap, Activity,
+  ArrowRight, ChevronLeft, ChevronRight,
+} from 'lucide-react';
 import { useDashboardSummary } from '../../api/employee';
 import type { CalendarDay, BlockedTask, RecentEntry } from '../../api/employee';
 import { utilColor, fmtPct } from '../../lib/rules';
@@ -23,37 +27,61 @@ function Card({
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <div style={{
       fontSize: 11, fontWeight: 700, color: 'var(--txt-dim)',
       textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14,
+      ...style,
     }}>
       {children}
     </div>
   );
 }
 
-// ── Calendar status helpers ────────────────────────────────────────────────────
+// ── Calendar cell helpers ──────────────────────────────────────────────────────
 
-function calendarCellColor(day: CalendarDay): string {
+function cellTint(day: CalendarDay): string {
   if (day.isWeekend || day.isFuture || day.status === 'EMPTY') return 'var(--raised2)';
   switch (day.status) {
-    case 'APPROVED':
-      return utilColor(day.utilizationPct ?? null);
-    case 'SUBMITTED':   return 'var(--info)';
-    case 'DRAFT':       return 'var(--txt-dim)';
-    case 'CHANGES_REQUESTED': return 'var(--warn)';
-    case 'REJECTED':    return 'var(--risk)';
-    case 'MISSED':      return 'var(--risk)';
-    default:            return 'var(--raised2)';
+    case 'APPROVED': {
+      const pct = day.utilizationPct ?? 0;
+      if (pct >= 100) return 'color-mix(in srgb, var(--ok) 60%, var(--raised2))';
+      if (pct >= 60)  return 'color-mix(in srgb, var(--ok) 35%, var(--raised2))';
+      return             'color-mix(in srgb, var(--ok) 16%, var(--raised2))';
+    }
+    case 'SUBMITTED':         return 'color-mix(in srgb, var(--info) 28%, var(--raised2))';
+    case 'DRAFT':             return 'color-mix(in srgb, var(--txt-dim) 18%, var(--raised2))';
+    case 'CHANGES_REQUESTED': return 'color-mix(in srgb, var(--warn) 32%, var(--raised2))';
+    case 'REJECTED':          return 'color-mix(in srgb, var(--risk) 32%, var(--raised2))';
+    case 'MISSED':            return 'color-mix(in srgb, var(--risk) 50%, var(--raised2))';
+    default:                  return 'var(--raised2)';
   }
 }
 
-function calendarCellOpacity(day: CalendarDay): number {
-  if (day.isWeekend || day.isFuture || day.status === 'EMPTY') return 1;
-  if (day.status === 'DRAFT') return 0.5;
-  return 1;
+function cellBorderColor(day: CalendarDay, isToday: boolean): string {
+  if (isToday) return 'color-mix(in srgb, var(--txt) 55%, transparent)';
+  if (day.status === 'SUBMITTED') return 'color-mix(in srgb, var(--info) 40%, transparent)';
+  return 'transparent';
+}
+
+function cellTextColor(day: CalendarDay): string {
+  if (day.isWeekend || day.isFuture || day.status === 'EMPTY') return 'var(--txt-dim)';
+  if (day.status === 'APPROVED' && (day.utilizationPct ?? 0) >= 60) return 'rgba(255,255,255,0.85)';
+  if (day.status === 'MISSED') return 'rgba(255,255,255,0.75)';
+  return 'var(--txt-mut)';
+}
+
+function cellDotColor(day: CalendarDay): string {
+  switch (day.status) {
+    case 'APPROVED':          return 'rgba(255,255,255,0.45)';
+    case 'SUBMITTED':         return 'var(--info)';
+    case 'DRAFT':             return 'var(--txt-dim)';
+    case 'MISSED':            return 'rgba(255,255,255,0.55)';
+    case 'REJECTED':          return 'var(--risk)';
+    case 'CHANGES_REQUESTED': return 'var(--warn)';
+    default:                  return 'transparent';
+  }
 }
 
 function calendarTooltip(day: CalendarDay): string {
@@ -63,17 +91,16 @@ function calendarTooltip(day: CalendarDay): string {
   if (day.isFuture)  return `${label} — Future`;
   if (day.status === 'EMPTY') return `${label} — No entry`;
   if (day.status === 'APPROVED') {
-    const pct = fmtPct(day.utilizationPct ?? null);
-    return `${label} — Approved · ${pct}`;
+    return `${label} — Approved · ${fmtPct(day.utilizationPct ?? null)}`;
   }
-  const statusLabel: Record<string, string> = {
-    SUBMITTED: 'Submitted (pending)',
-    DRAFT: 'Draft (not submitted)',
+  const labels: Record<string, string> = {
+    SUBMITTED: 'Submitted (pending review)',
+    DRAFT: 'Draft — not submitted',
     MISSED: 'Missed',
-    REJECTED: 'Rejected',
-    CHANGES_REQUESTED: 'Changes requested',
+    REJECTED: 'Rejected — needs resubmission',
+    CHANGES_REQUESTED: 'Changes requested by manager',
   };
-  return `${label} — ${statusLabel[day.status] ?? day.status}`;
+  return `${label} — ${labels[day.status] ?? day.status}`;
 }
 
 // ── Status badge ───────────────────────────────────────────────────────────────
@@ -114,7 +141,7 @@ function KpiTile({
 }) {
   return (
     <Card>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+      <div style={{ marginBottom: 14 }}>
         <div style={{
           width: 36, height: 36, borderRadius: 8,
           background: 'var(--raised2)', display: 'flex',
@@ -137,55 +164,132 @@ function KpiTile({
   );
 }
 
-// ── Calendar heatmap ───────────────────────────────────────────────────────────
+// ── Calendar heatmap (month view) ──────────────────────────────────────────────
 
 const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const CELL_PX  = 52;
+const CELL_GAP = 5;
 
-function CalendarHeatmap({ days }: { days: CalendarDay[] }) {
+function navBtnStyle(disabled: boolean): React.CSSProperties {
+  return {
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    padding: '5px 12px', borderRadius: 6,
+    background: disabled ? 'transparent' : 'var(--raised2)',
+    border: `1px solid ${disabled ? 'transparent' : 'var(--line)'}`,
+    color: disabled ? 'var(--line2)' : 'var(--txt-mut)',
+    cursor: disabled ? 'default' : 'pointer',
+    fontSize: 11, fontWeight: 600, flexShrink: 0,
+  };
+}
+
+function CalendarHeatmap({
+  days, monthOffset, onPrev, onNext, maxOffset, todayStr,
+}: {
+  days: CalendarDay[];
+  monthOffset: number;
+  onPrev: () => void;
+  onNext: () => void;
+  maxOffset: number;
+  todayStr: string;
+}) {
+  const firstDate  = days[0]?.date;
+  const monthLabel = firstDate
+    ? new Date(firstDate + 'T12:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+    : '';
+
+  // leading empty cells so the first day lands on the correct weekday column (Mon=0)
+  const leadingEmpties = (() => {
+    if (!firstDate) return 0;
+    const dow = new Date(firstDate + 'T12:00:00').getDay(); // 0=Sun
+    return dow === 0 ? 6 : dow - 1;
+  })();
+
+  const gridWidth = CELL_PX * 7 + CELL_GAP * 6;
+  const prevDisabled = monthOffset >= maxOffset;
+  const nextDisabled = monthOffset === 0;
+
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      {/* Navigation */}
+      <div style={{ display: 'flex', alignItems: 'center', width: gridWidth, marginBottom: 16 }}>
+        <button onClick={onPrev} disabled={prevDisabled} style={navBtnStyle(prevDisabled)}>
+          <ChevronLeft size={13} /> Previous
+        </button>
+        <span style={{
+          flex: 1, textAlign: 'center',
+          fontSize: 14, fontWeight: 700, color: 'var(--txt)',
+          fontFamily: '"Space Grotesk", sans-serif', letterSpacing: '-0.01em',
+        }}>
+          {monthLabel}
+        </span>
+        <button onClick={onNext} disabled={nextDisabled} style={navBtnStyle(nextDisabled)}>
+          Next <ChevronRight size={13} />
+        </button>
+      </div>
+
       {/* Day-of-week headers */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 4 }}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: `repeat(7, ${CELL_PX}px)`,
+        gap: CELL_GAP, marginBottom: CELL_GAP, width: gridWidth,
+      }}>
         {DAY_HEADERS.map(d => (
           <div key={d} style={{
             textAlign: 'center', fontSize: 9, color: 'var(--txt-dim)',
-            fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
+            fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em',
           }}>
             {d}
           </div>
         ))}
       </div>
 
-      {/* 35-cell grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-        {days.map((day) => {
-          const color   = calendarCellColor(day);
-          const opacity = calendarCellOpacity(day);
-          const dayNum = new Date(day.date + 'T12:00:00').getDate();
+      {/* Month grid */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: `repeat(7, ${CELL_PX}px)`,
+        gap: CELL_GAP, width: gridWidth,
+      }}>
+        {/* Leading empty cells for weekday offset */}
+        {Array.from({ length: leadingEmpties }).map((_, i) => (
+          <div key={`pad-${i}`} style={{ width: CELL_PX, height: CELL_PX }} />
+        ))}
 
+        {/* Day cells */}
+        {days.map((day) => {
+          const isToday = day.date === todayStr;
+          const dayNum  = new Date(day.date + 'T12:00:00').getDate();
+          const showDot = !day.isWeekend && !day.isFuture && day.status !== 'EMPTY';
           return (
             <div
               key={day.date}
               title={calendarTooltip(day)}
               style={{
-                aspectRatio: '1',
-                borderRadius: 4,
-                background: color,
-                opacity,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 9,
-                color: day.isWeekend || day.isFuture || day.status === 'EMPTY'
-                  ? 'var(--txt-dim)'
-                  : 'rgba(0,0,0,0.6)',
-                fontWeight: 600,
-                cursor: 'default',
-                transition: 'opacity 0.15s',
-                outline: day.status === 'SUBMITTED' ? '1px solid var(--info)' : undefined,
+                width: CELL_PX, height: CELL_PX,
+                borderRadius: 7,
+                background: cellTint(day),
+                border: `1.5px solid ${cellBorderColor(day, isToday)}`,
+                boxSizing: 'border-box',
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                gap: 3, cursor: 'default',
+                transition: 'filter 0.1s',
+                boxShadow: isToday
+                  ? '0 0 0 2px color-mix(in srgb, var(--txt) 20%, transparent)'
+                  : undefined,
               }}
+              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.filter = 'brightness(1.2)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.filter = ''; }}
             >
-              {dayNum}
+              <span style={{
+                fontSize: 13, fontWeight: 600, lineHeight: 1,
+                color: cellTextColor(day), fontVariantNumeric: 'tabular-nums',
+              }}>
+                {dayNum}
+              </span>
+              {showDot && (
+                <span style={{
+                  width: 4, height: 4, borderRadius: '50%',
+                  background: cellDotColor(day), flexShrink: 0,
+                }} />
+              )}
             </div>
           );
         })}
@@ -193,23 +297,158 @@ function CalendarHeatmap({ days }: { days: CalendarDay[] }) {
 
       {/* Legend */}
       <div style={{
-        marginTop: 12, display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 10, color: 'var(--txt-mut)',
+        marginTop: 16, display: 'flex', gap: 12, flexWrap: 'wrap',
+        fontSize: 9, color: 'var(--txt-dim)', width: gridWidth,
       }}>
         {[
-          { color: 'var(--ok)',      label: 'Healthy' },
-          { color: 'var(--warn)',    label: 'Under / CR' },
-          { color: 'var(--risk)',    label: 'Over / Missed' },
-          { color: 'var(--info)',    label: 'Pending' },
-          { color: 'var(--txt-dim)', label: 'Draft' },
-          { color: 'var(--raised2)', label: 'No data' },
-        ].map(({ color, label }) => (
-          <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 9, height: 9, borderRadius: 2, background: color, flexShrink: 0 }} />
+          { bg: 'color-mix(in srgb, var(--ok) 60%, var(--raised2))',   label: 'Healthy ≥100%' },
+          { bg: 'color-mix(in srgb, var(--ok) 35%, var(--raised2))',   label: 'On track 60–99%' },
+          { bg: 'color-mix(in srgb, var(--ok) 16%, var(--raised2))',   label: 'Under <60%' },
+          { bg: 'color-mix(in srgb, var(--risk) 50%, var(--raised2))', label: 'Missed' },
+          { bg: 'color-mix(in srgb, var(--warn) 32%, var(--raised2))', label: 'CR / Rejected' },
+          { bg: 'color-mix(in srgb, var(--info) 28%, var(--raised2))', label: 'Pending' },
+          { bg: 'var(--raised2)', label: 'No entry', border: '1px solid var(--line)' },
+        ].map(({ bg, label, border }) => (
+          <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{
+              width: 9, height: 9, borderRadius: 2, flexShrink: 0,
+              background: bg, border: border ?? 'none', boxSizing: 'border-box',
+            }} />
             {label}
           </span>
         ))}
       </div>
     </div>
+  );
+}
+
+// ── Month Stats panel (inline — no Card wrapper) ───────────────────────────────
+
+function MonthStatsPanel({ days }: { days: CalendarDay[] }) {
+  const workingDays  = days.filter(d => !d.isWeekend).length;
+  const pastDays     = days.filter(d => !d.isWeekend && !d.isFuture).length;
+  const approved     = days.filter(d => d.status === 'APPROVED').length;
+  const submitted    = days.filter(d => d.status === 'SUBMITTED').length;
+  const missed       = days.filter(d => d.status === 'MISSED').length;
+  const needsAction  = days.filter(d => d.status === 'REJECTED' || d.status === 'CHANGES_REQUESTED').length;
+  const empty        = days.filter(d => !d.isWeekend && !d.isFuture && d.status === 'EMPTY').length;
+  const upcoming     = days.filter(d => !d.isWeekend && d.isFuture).length;
+  const completePct  = pastDays > 0 ? Math.round((approved + submitted) / pastDays * 100) : 0;
+  const barPct = (n: number) => workingDays > 0 ? `${(n / workingDays * 100).toFixed(1)}%` : '0%';
+
+  return (
+    <div>
+      <SectionLabel>Month Overview</SectionLabel>
+
+      {/* Completion % */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{
+          fontSize: 28, fontWeight: 700, color: 'var(--txt)',
+          fontFamily: '"Space Grotesk", sans-serif', letterSpacing: '-0.02em',
+        }}>
+          {completePct}%
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
+          {approved + submitted} / {pastDays} days
+        </span>
+      </div>
+
+      {/* Segmented bar */}
+      <div style={{
+        height: 6, borderRadius: 3, background: 'var(--raised2)',
+        overflow: 'hidden', display: 'flex', marginBottom: 20,
+      }}>
+        <div style={{ width: barPct(approved),    background: 'var(--ok)',   transition: 'width 0.4s' }} />
+        <div style={{ width: barPct(submitted),   background: 'var(--info)', transition: 'width 0.4s' }} />
+        <div style={{ width: barPct(needsAction), background: 'var(--warn)', transition: 'width 0.4s' }} />
+        <div style={{ width: barPct(missed),      background: 'var(--risk)', transition: 'width 0.4s' }} />
+      </div>
+
+      {/* Breakdown rows */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+        {([
+          { color: 'var(--ok)',      count: approved,    label: 'Approved' },
+          { color: 'var(--info)',    count: submitted,   label: 'Pending review' },
+          { color: 'var(--warn)',    count: needsAction, label: 'Needs action' },
+          { color: 'var(--risk)',    count: missed,      label: 'Missed' },
+          { color: 'var(--txt-dim)', count: empty,       label: 'Not submitted' },
+          { color: 'var(--line2)',   count: upcoming,    label: 'Upcoming' },
+        ] as { color: string; count: number; label: string }[]).map(({ color, count, label }) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 12, color: 'var(--txt-mut)' }}>{label}</span>
+            <span style={{
+              fontSize: 12, fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums',
+              color: count === 0 ? 'var(--txt-dim)' : 'var(--txt)', fontWeight: count > 0 ? 600 : 400,
+              minWidth: 28, textAlign: 'right',
+            }}>
+              {count}d
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Action Required ────────────────────────────────────────────────────────────
+
+function ActionRequired({ entries }: { entries: RecentEntry[] }) {
+  const items = entries.filter(e =>
+    e.status === 'REJECTED' || e.status === 'CHANGES_REQUESTED' || e.status === 'MISSED'
+  );
+  if (items.length === 0) return null;
+
+  return (
+    <Card pad={0}>
+      <div style={{
+        padding: '12px 16px 8px',
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <AlertCircle size={13} color="var(--warn)" style={{ flexShrink: 0 }} />
+        <SectionLabel style={{ marginBottom: 0, color: 'var(--warn)' }}>Needs Attention</SectionLabel>
+        <span style={{
+          marginLeft: 'auto',
+          fontSize: 10, fontWeight: 700,
+          padding: '1px 7px', borderRadius: 10,
+          background: 'color-mix(in srgb, var(--warn) 15%, transparent)',
+          color: 'var(--warn)',
+        }}>
+          {items.length}
+        </span>
+      </div>
+      {items.slice(0, 3).map(entry => {
+        const d = new Date(entry.date + 'T12:00:00');
+        const dateLabel = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+        const isCR = entry.status === 'CHANGES_REQUESTED';
+        const statusColor = entry.status === 'MISSED' ? 'var(--risk)' : isCR ? 'var(--warn)' : 'var(--risk)';
+        const statusText  = isCR ? 'Changes Req.' : entry.status === 'REJECTED' ? 'Rejected' : 'Missed';
+        return (
+          <div key={entry.id} style={{
+            padding: '9px 16px', borderTop: '1px solid var(--line)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', marginBottom: 2 }}>
+                {dateLabel}
+              </div>
+              <div style={{ fontSize: 10, color: statusColor, fontWeight: 700 }}>{statusText}</div>
+            </div>
+            {entry.status !== 'MISSED' && (
+              <a href="/eod/history" style={{
+                fontSize: 10, fontWeight: 600, color: 'var(--info)',
+                textDecoration: 'none', padding: '3px 10px', whiteSpace: 'nowrap',
+                background: 'color-mix(in srgb, var(--info) 10%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--info) 25%, transparent)',
+                borderRadius: 5,
+              }}>
+                Fix →
+              </a>
+            )}
+          </div>
+        );
+      })}
+    </Card>
   );
 }
 
@@ -273,8 +512,7 @@ function CutoffBanner({
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '6px 12px', borderRadius: 6,
           background: 'var(--warn)', color: '#000',
-          fontSize: 12, fontWeight: 600, textDecoration: 'none',
-          flexShrink: 0,
+          fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0,
         }}
       >
         Submit <ArrowRight size={12} />
@@ -290,11 +528,8 @@ function BlockersPanel({ tasks }: { tasks: BlockedTask[] }) {
     return (
       <Card>
         <SectionLabel>My Blockers</SectionLabel>
-        <div style={{
-          textAlign: 'center', padding: '20px 0',
-          fontSize: 13, color: 'var(--txt-dim)',
-        }}>
-          <CheckCircle2 size={28} style={{ color: 'var(--ok)', marginBottom: 8, display: 'block', margin: '0 auto 8px' }} />
+        <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 12, color: 'var(--txt-dim)' }}>
+          <CheckCircle2 size={24} style={{ color: 'var(--ok)', display: 'block', margin: '0 auto 8px' }} />
           No active blockers
         </div>
       </Card>
@@ -303,7 +538,7 @@ function BlockersPanel({ tasks }: { tasks: BlockedTask[] }) {
 
   return (
     <Card pad={0}>
-      <div style={{ padding: '14px 16px 10px' }}>
+      <div style={{ padding: '12px 16px 8px' }}>
         <SectionLabel>My Blockers</SectionLabel>
       </div>
       {tasks.map((t, i) => {
@@ -311,28 +546,24 @@ function BlockersPanel({ tasks }: { tasks: BlockedTask[] }) {
         const dateLabel = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
         return (
           <div key={`${t.entryId}-${i}`} style={{
-            padding: '10px 16px',
-            borderTop: '1px solid var(--line)',
-            display: 'flex', gap: 12, alignItems: 'flex-start',
+            padding: '9px 16px', borderTop: '1px solid var(--line)',
+            display: 'flex', gap: 10, alignItems: 'flex-start',
           }}>
             <div style={{
               width: 6, height: 6, borderRadius: 3,
-              background: 'var(--risk)', marginTop: 6, flexShrink: 0,
+              background: 'var(--risk)', marginTop: 5, flexShrink: 0,
             }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, color: 'var(--txt)', lineHeight: 1.4, marginBottom: 4 }}>
+              <div style={{ fontSize: 11, color: 'var(--txt)', lineHeight: 1.4, marginBottom: 3 }}>
                 {t.description}
               </div>
               {t.blockerReason && (
-                <div style={{ fontSize: 11, color: 'var(--txt-mut)', fontStyle: 'italic', lineHeight: 1.4, marginBottom: 4 }}>
+                <div style={{ fontSize: 10, color: 'var(--txt-mut)', fontStyle: 'italic', lineHeight: 1.4, marginBottom: 3 }}>
                   {t.blockerReason}
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--txt-dim)' }}>
-                <span style={{
-                  padding: '1px 6px', borderRadius: 3,
-                  background: 'var(--raised2)', color: 'var(--txt-mut)',
-                }}>
+              <div style={{ display: 'flex', gap: 6, fontSize: 10, color: 'var(--txt-dim)' }}>
+                <span style={{ padding: '1px 5px', borderRadius: 3, background: 'var(--raised2)', color: 'var(--txt-mut)' }}>
                   {t.projectName}
                 </span>
                 <span>{dateLabel}</span>
@@ -349,6 +580,7 @@ function BlockersPanel({ tasks }: { tasks: BlockedTask[] }) {
 
 function RecentActivity({ entries }: { entries: RecentEntry[] }) {
   const navigate = useNavigate();
+  const display = entries.slice(0, 5);
 
   return (
     <Card pad={0}>
@@ -370,40 +602,32 @@ function RecentActivity({ entries }: { entries: RecentEntry[] }) {
         </button>
       </div>
 
-      {entries.length === 0 ? (
+      {display.length === 0 ? (
         <div style={{ padding: '20px 16px', fontSize: 12, color: 'var(--txt-dim)', textAlign: 'center' }}>
           No recent entries
         </div>
       ) : (
-        entries.map((entry) => {
+        display.map((entry) => {
           const d = new Date(entry.date + 'T12:00:00');
           const dateLabel = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
           const utilAccent = utilColor(entry.utilizationPct ?? null);
           return (
             <div key={entry.id} style={{
-              padding: '10px 16px',
-              borderTop: '1px solid var(--line)',
-              display: 'grid',
-              gridTemplateColumns: '140px 1fr auto auto',
+              padding: '10px 16px', borderTop: '1px solid var(--line)',
+              display: 'grid', gridTemplateColumns: '150px 1fr auto auto',
               gap: 12, alignItems: 'center',
             }}>
               <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
                 {dateLabel}
               </div>
               <StatusBadge status={entry.status} />
-              {entry.status === 'APPROVED' && (
-                <span style={{
-                  fontSize: 11, color: utilAccent,
-                  fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums',
-                }}>
-                  {fmtPct(entry.utilizationPct ?? null)}
-                </span>
-              )}
-              {entry.status !== 'APPROVED' && <span />}
-              <span style={{
-                fontSize: 11, color: 'var(--txt-dim)',
-                fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums',
-              }}>
+              {entry.status === 'APPROVED'
+                ? <span style={{ fontSize: 11, color: utilAccent, fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtPct(entry.utilizationPct ?? null)}
+                  </span>
+                : <span />
+              }
+              <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
                 {entry.totalHours.toFixed(1)}h
               </span>
             </div>
@@ -426,7 +650,7 @@ function LoadingSkeleton() {
       <Skel h={48} />
       <div style={{ height: 16 }} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
-        {[0,1,2,3].map(i => (
+        {[0, 1, 2, 3].map(i => (
           <div key={i} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
             <Skel h={36} w={36} /><div style={{ marginTop: 12 }} />
             <Skel h={28} w="55%" /><div style={{ marginTop: 8 }} />
@@ -434,18 +658,19 @@ function LoadingSkeleton() {
           </div>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, marginBottom: 16 }}>
         <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
-          <Skel h={14} w={120} />
-          <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-            {Array.from({ length: 35 }).map((_, i) => <Skel key={i} h={28} />)}
+          <Skel h={32} w={200} />
+          <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(7, 44px)', gap: 5 }}>
+            {Array.from({ length: 35 }).map((_, i) => <Skel key={i} h={44} />)}
           </div>
         </div>
-        <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
-          <Skel h={14} w={100} />
-          <div style={{ marginTop: 12 }}>
-            {[0,1,2].map(i => <div key={i} style={{ marginBottom: 12 }}><Skel h={48} /></div>)}
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 16 }}>
+              <Skel h={14} w={100} /><div style={{ marginTop: 12 }} /><Skel h={48} />
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -454,9 +679,23 @@ function LoadingSkeleton() {
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
+const MAX_MONTH_OFFSET = 12;
+
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { data, isPending, isError, refetch } = useDashboardSummary();
+  const [monthOffset, setMonthOffset] = useState(0);
+
+  // Compute first and last day of the displayed month
+  const { calendarFrom, calendarTo } = useMemo(() => {
+    const now  = new Date();
+    const ref  = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
+    const from = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, '0')}-01`;
+    const last = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
+    const to   = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
+    return { calendarFrom: monthOffset === 0 ? undefined : from, calendarTo: monthOffset === 0 ? undefined : to };
+  }, [monthOffset]);
+
+  const { data, isPending, isError, refetch } = useDashboardSummary(calendarFrom, calendarTo);
 
   if (isPending) return <LoadingSkeleton />;
 
@@ -489,20 +728,17 @@ export default function Dashboard() {
 
   const { cutoffStatus, quickStats, blockedTasks, recentEntries, calendarData } = data;
 
-  const today = new Date(cutoffStatus.today + 'T12:00:00');
+  const today      = new Date(cutoffStatus.today + 'T12:00:00');
   const todayLabel = today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-  const isWeekend = today.getDay() === 0 || today.getDay() === 6;
+  const isWeekend  = today.getDay() === 0 || today.getDay() === 6;
 
-  // streak label
   const streakLabel = quickStats.streak === 0
     ? 'No streak'
     : `${quickStats.streak} day${quickStats.streak === 1 ? '' : 's'}`;
 
-  // days since last issue
   const dsiLabel = quickStats.daysSinceLastIssue < 0
     ? 'No issues'
-    : quickStats.daysSinceLastIssue === 0
-    ? 'Today'
+    : quickStats.daysSinceLastIssue === 0 ? 'Today'
     : `${quickStats.daysSinceLastIssue}d ago`;
 
   const monthAvgColor = utilColor(quickStats.monthAvgUtil ?? null);
@@ -518,12 +754,10 @@ export default function Dashboard() {
         }}>
           My Dashboard
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-          {todayLabel}
-        </p>
+        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>{todayLabel}</p>
       </div>
 
-      {/* Cutoff banner — only if not weekend */}
+      {/* Cutoff banner */}
       {!isWeekend && (
         <CutoffBanner
           status={cutoffStatus.entryStatus}
@@ -532,7 +766,7 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Quick stats */}
+      {/* KPI tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
         <KpiTile
           icon={<Clock size={18} />}
@@ -558,20 +792,20 @@ export default function Dashboard() {
           label="Last issue"
           value={dsiLabel}
           sub={quickStats.daysSinceLastIssue < 0 ? 'in past 90 days' : undefined}
-          accent={quickStats.daysSinceLastIssue < 0 || quickStats.daysSinceLastIssue > 7
-            ? 'var(--ok)'
-            : quickStats.daysSinceLastIssue <= 2
-            ? 'var(--risk)'
-            : 'var(--warn)'}
+          accent={
+            quickStats.daysSinceLastIssue < 0 || quickStats.daysSinceLastIssue > 7 ? 'var(--ok)'
+            : quickStats.daysSinceLastIssue <= 2 ? 'var(--risk)' : 'var(--warn)'
+          }
         />
       </div>
 
-      {/* Calendar + Blockers row */}
+      {/* Calendar card + Right panel */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, marginBottom: 16 }}>
-        {/* Calendar heatmap */}
+        {/* Single card: calendar left + stats right */}
         <Card>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <SectionLabel>5-Week Activity</SectionLabel>
+          {/* Card header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <SectionLabel style={{ marginBottom: 0 }}>Monthly Activity</SectionLabel>
             <button
               onClick={() => navigate('/utilization')}
               style={{
@@ -584,11 +818,36 @@ export default function Dashboard() {
               Full report <ArrowRight size={11} />
             </button>
           </div>
-          <CalendarHeatmap days={calendarData} />
+
+          {/* Body: calendar | divider | month stats */}
+          <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start' }}>
+            {/* Calendar */}
+            <div style={{ flexShrink: 0 }}>
+              <CalendarHeatmap
+                days={calendarData}
+                monthOffset={monthOffset}
+                onPrev={() => setMonthOffset(o => Math.min(o + 1, MAX_MONTH_OFFSET))}
+                onNext={() => setMonthOffset(o => Math.max(o - 1, 0))}
+                maxOffset={MAX_MONTH_OFFSET}
+                todayStr={cutoffStatus.today}
+              />
+            </div>
+
+            {/* Vertical divider */}
+            <div style={{ width: 1, background: 'var(--line)', alignSelf: 'stretch', flexShrink: 0 }} />
+
+            {/* Month stats */}
+            <div style={{ flex: 1, paddingTop: 4 }}>
+              <MonthStatsPanel days={calendarData} />
+            </div>
+          </div>
         </Card>
 
-        {/* Blockers */}
-        <BlockersPanel tasks={blockedTasks} />
+        {/* Right: Needs Attention + Blockers */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <ActionRequired entries={recentEntries} />
+          <BlockersPanel tasks={blockedTasks} />
+        </div>
       </div>
 
       {/* Recent entries */}

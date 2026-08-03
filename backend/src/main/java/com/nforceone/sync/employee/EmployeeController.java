@@ -25,9 +25,14 @@ public class EmployeeController {
     }
 
     @GetMapping("/dashboard-summary")
-    public DashboardSummaryDto dashboardSummary() {
+    public DashboardSummaryDto dashboardSummary(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate calendarFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate calendarTo) {
         AppUser user = currentUser();
-        return employeeService.getDashboardSummary(user.getId());
+        LocalDate today = LocalDate.now();
+        LocalDate from  = calendarFrom != null ? calendarFrom : today.withDayOfMonth(1);
+        LocalDate to    = calendarTo   != null ? calendarTo   : today.withDayOfMonth(1).plusMonths(1).minusDays(1);
+        return employeeService.getDashboardSummary(user.getId(), from, to);
     }
 
     @GetMapping("/utilization-detail")
