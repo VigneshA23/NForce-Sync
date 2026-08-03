@@ -8,8 +8,14 @@ import com.nforceone.sync.org.OrgLocationRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.io.IOException;
+import java.time.LocalDate;
+import java.util.Base64;
 
 @RestController
 @RequestMapping("/api/profile")
@@ -31,17 +37,45 @@ public class ProfileController {
     }
 
     @GetMapping
+    @Transactional(readOnly = true)
     public ProfileDto getProfile() {
-        AppUser user = requireCurrentUser();
-        return buildDto(user);
+        return buildDto(requireCurrentUser());
     }
 
     @PatchMapping
+    @Transactional
     public ProfileDto updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
         AppUser user = requireCurrentUser();
-        user.setPhone(request.phone());
-        user.setEmergencyContactName(request.emergencyContactName());
-        user.setEmergencyContactPhone(request.emergencyContactPhone());
+        if (request.phone() != null)                 user.setPhone(request.phone());
+        if (request.emergencyContactName() != null)  user.setEmergencyContactName(request.emergencyContactName());
+        if (request.emergencyContactPhone() != null) user.setEmergencyContactPhone(request.emergencyContactPhone());
+        if (request.workMode() != null)              user.setWorkMode(request.workMode());
+        if (request.personalEmail() != null)         user.setPersonalEmail(request.personalEmail());
+        if (request.gender() != null)                user.setGender(request.gender());
+        if (request.address() != null)               user.setAddress(request.address());
+        if (request.dateOfBirth() != null && !request.dateOfBirth().isBlank()) {
+            try {
+                user.setDateOfBirth(LocalDate.parse(request.dateOfBirth()));
+            } catch (Exception ignored) {}
+        }
+        userRepository.save(user);
+        return buildDto(user);
+    }
+
+    @PostMapping("/photo")
+    @Transactional
+    public ProfileDto uploadPhoto(@RequestParam("file") MultipartFile file) throws IOException {
+        if (file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No file provided");
+        }
+        long maxSize = 2L * 1024 * 1024; // 2 MB limit
+        if (file.getSize() > maxSize) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Image must be smaller than 2 MB");
+        }
+        AppUser user = requireCurrentUser();
+        String mediaType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
+        String dataUrl = "data:" + mediaType + ";base64," + Base64.getEncoder().encodeToString(file.getBytes());
+        user.setPhotoData(dataUrl);
         userRepository.save(user);
         return buildDto(user);
     }

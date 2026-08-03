@@ -163,7 +163,7 @@ export default function Notifications() {
   const total         = data?.totalElements ?? 0;
 
   return (
-    <div style={{ maxWidth: 680, margin: '0 auto' }}>
+    <div style={{ maxWidth: 680 }}>
 
       {/* Page header */}
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>

@@ -29,6 +29,7 @@ const Blockers            = lazy(() => import('./pages/lead/Blockers'));
 const ProjectsAllocation  = lazy(() => import('./pages/pm/ProjectsAllocation'));
 const Profile             = lazy(() => import('./pages/Profile'));
 const Notifications       = lazy(() => import('./pages/Notifications'));
+const ChangePassword      = lazy(() => import('./pages/ChangePassword'));
 
 function PageFallback() {
   return (
@@ -182,8 +183,9 @@ function AppRoutes() {
             <Route path="/admin/audit"        element={<AuditLog />} />
 
             {/* ── Shared ─────────────────────────────── */}
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/profile"       element={<Profile />} />
+            <Route path="/notifications"   element={<Notifications />} />
+            <Route path="/profile"         element={<Profile />} />
+            <Route path="/change-password" element={<ChangePassword />} />
 
             {/* Catch-all → 403 inside shell */}
             <Route path="*" element={<NotAuthorized />} />

@@ -11,6 +11,8 @@ public record ProfileDto(
         String role,
         String employeeCode,
         String status,
+        boolean active,
+        boolean hasEmployeeRecord,
         // HR-controlled (read-only)
         Long   managerId,
         String managerName,
@@ -21,13 +23,18 @@ public record ProfileDto(
         Long   locationId,
         String locationName,
         String employmentType,
-        String workMode,
         LocalDate joiningDate,
         OffsetDateTime createdAt,
         // Self-service (editable)
+        String workMode,
         String phone,
+        String dateOfBirth,
+        String gender,
+        String personalEmail,
+        String address,
         String emergencyContactName,
-        String emergencyContactPhone
+        String emergencyContactPhone,
+        String photoDataUrl
 ) {
     public static ProfileDto from(AppUser u,
                                    String managerName,
@@ -41,6 +48,8 @@ public record ProfileDto(
                 u.getRole().name(),
                 u.getEmployeeCode(),
                 u.getStatus().name(),
+                u.getStatus() == AppUser.Status.ACTIVE,
+                u.getEmployeeCode() != null,
                 u.getManager() != null ? u.getManager().getId() : null,
                 managerName,
                 u.getDepartmentId(),
@@ -50,12 +59,17 @@ public record ProfileDto(
                 u.getLocationId(),
                 locationName,
                 u.getEmploymentType(),
-                u.getWorkMode(),
                 u.getJoiningDate(),
                 u.getCreatedAt(),
+                u.getWorkMode(),
                 u.getPhone(),
+                u.getDateOfBirth() != null ? u.getDateOfBirth().toString() : null,
+                u.getGender(),
+                u.getPersonalEmail(),
+                u.getAddress(),
                 u.getEmergencyContactName(),
-                u.getEmergencyContactPhone()
+                u.getEmergencyContactPhone(),
+                u.getPhotoData()
         );
     }
 }
