@@ -199,7 +199,7 @@ public class ApprovalService {
     }
 
     private EodEntry requireEntryById(Long id) {
-        return entryRepository.findById(id)
+        return entryRepository.findWithDetailsById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "EOD entry not found"));
     }

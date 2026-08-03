@@ -18,7 +18,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -127,10 +129,17 @@ public class UtilizationService {
     @Transactional(readOnly = true)
     public List<TeamUtilDto> getForTeam(Long managerId, LocalDate date) {
         List<AppUser> reports = userRepository.findByManagerId(managerId);
+        if (reports.isEmpty()) return List.of();
+
+        // Fetch all snapshots for all team members in one query
+        List<Long> ids = reports.stream().map(AppUser::getId).toList();
+        Map<Long, UtilSnapshot> snapByEmployee = snapshotRepository
+                .findByEmployeeIdInAndSnapshotDate(ids, date)
+                .stream()
+                .collect(Collectors.toMap(UtilSnapshot::getEmployeeId, s -> s));
+
         return reports.stream().map(emp -> {
-            UtilSnapshot snap = snapshotRepository
-                    .findByEmployeeIdAndSnapshotDate(emp.getId(), date)
-                    .orElse(null);
+            UtilSnapshot snap = snapByEmployee.get(emp.getId());
             return new TeamUtilDto(
                     emp.getId(),
                     emp.getFullName(),

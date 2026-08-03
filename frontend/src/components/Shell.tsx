@@ -382,7 +382,9 @@ export function Shell() {
 
   const role         = user!.role;
   const allowedPaths = getNavPaths(role);
-  const isAllowed    = allowedPaths.includes(location.pathname) || location.pathname === '/';
+  const isAllowed    = allowedPaths.includes(location.pathname)
+    || location.pathname === '/'
+    || location.pathname === '/change-password';
 
   // FIX 4: derive breadcrumb label from nav map
   const navInfo  = getNavItem(role, location.pathname);

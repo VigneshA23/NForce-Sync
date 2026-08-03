@@ -21,6 +21,7 @@ const RolesAccess         = lazy(() => import('./pages/admin/RolesAccess'));
 const OrganizationMasters = lazy(() => import('./pages/admin/OrganizationMasters'));
 const BusinessRules       = lazy(() => import('./pages/admin/BusinessRules'));
 const EmployeeDashboard   = lazy(() => import('./pages/employee/Dashboard'));
+const MyUtilization       = lazy(() => import('./pages/employee/MyUtilization'));
 const SubmitEOD           = lazy(() => import('./pages/employee/SubmitEOD'));
 const EodHistory          = lazy(() => import('./pages/employee/EodHistory'));
 const TeamDashboard       = lazy(() => import('./pages/lead/TeamDashboard'));
@@ -30,6 +31,7 @@ const Blockers            = lazy(() => import('./pages/lead/Blockers'));
 const ProjectsAllocation  = lazy(() => import('./pages/pm/ProjectsAllocation'));
 const Profile             = lazy(() => import('./pages/Profile'));
 const Notifications       = lazy(() => import('./pages/Notifications'));
+const ChangePassword      = lazy(() => import('./pages/ChangePassword'));
 
 function PageFallback() {
   return (
@@ -50,6 +52,8 @@ function ChunkPrefetcher() {
     // Shared — everyone uses these
     import('./pages/Profile');
     import('./pages/Notifications');
+    import('./pages/employee/Dashboard');
+    import('./pages/employee/MyUtilization');
     import('./pages/employee/SubmitEOD');
     import('./pages/employee/EodHistory');
     // Role-specific heavy chunks
@@ -129,7 +133,7 @@ function AppRoutes() {
             <Route path="/dashboard"   element={<EmployeeDashboard />} />
             <Route path="/eod/submit"  element={<SubmitEOD />} />
             <Route path="/eod/history" element={<EodHistory />} />
-            <Route path="/utilization" element={<Placeholder title="My Utilization" />} />
+            <Route path="/utilization" element={<MyUtilization />} />
 
             {/* ── Team Lead ──────────────────────────── */}
             <Route path="/team/dashboard"   element={<TeamDashboard />} />
@@ -185,8 +189,9 @@ function AppRoutes() {
             <Route path="/admin/audit"        element={<AuditLog />} />
 
             {/* ── Shared ─────────────────────────────── */}
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/profile"       element={<Profile />} />
+            <Route path="/notifications"   element={<Notifications />} />
+            <Route path="/profile"         element={<Profile />} />
+            <Route path="/change-password" element={<ChangePassword />} />
 
             {/* Catch-all → 403 inside shell */}
             <Route path="*" element={<NotAuthorized />} />

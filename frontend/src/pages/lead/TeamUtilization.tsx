@@ -3,7 +3,8 @@ import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { toLocalISODate, todayISO as localTodayISO, formatDate } from '../../lib/date';
 import { useTeamUtil } from '../../api/utilization';
-import { RULES, utilState, utilColor, fmtPct, isWorkingDay } from '../../lib/rules';
+import { utilState, utilColor, isWorkingDay } from '../../lib/rules';
+import { UtilBar, UtilLegend } from '../../components/UtilBar';
 import type { TeamUtilDto } from '../../api/utilization';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -39,63 +40,6 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, ...style }}>
       {children}
-    </div>
-  );
-}
-
-// ── UtilBar ────────────────────────────────────────────────────────────────────
-
-function UtilBar({ pct }: { pct: number | null }) {
-  const color = utilColor(pct);
-  const capAt = 120;
-  const fill  = pct === null ? 0 : Math.min(pct, capAt);
-  const tick60  = (60  / capAt) * 100;
-  const tick100 = (100 / capAt) * 100;
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ position: 'relative', flex: 1, height: 6, background: 'var(--raised2)', borderRadius: 3, overflow: 'hidden' }}>
-        {/* threshold ticks */}
-        <div style={{ position: 'absolute', left: `${tick60}%`,  top: 0, bottom: 0, width: 1, background: 'var(--line2)', zIndex: 1 }} />
-        <div style={{ position: 'absolute', left: `${tick100}%`, top: 0, bottom: 0, width: 1, background: 'var(--line2)', zIndex: 1 }} />
-        {/* fill */}
-        <div style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0,
-          width: `${(fill / capAt) * 100}%`,
-          background: color, borderRadius: 3,
-          transition: 'width 0.4s ease',
-        }} />
-      </div>
-      <span style={{
-        fontFamily: '"JetBrains Mono", monospace', fontSize: 12,
-        color, minWidth: 42, textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-      }}>
-        {fmtPct(pct)}
-      </span>
-    </div>
-  );
-}
-
-// ── UtilLegend ─────────────────────────────────────────────────────────────────
-
-function UtilLegend() {
-  const items = [
-    { color: 'var(--ok)',      label: `Healthy (${RULES.util.under}–${RULES.util.over}%)` },
-    { color: 'var(--warn)',    label: `Under (< ${RULES.util.under}%)` },
-    { color: 'var(--risk)',    label: `Over (> ${RULES.util.over}%)` },
-    { color: 'var(--txt-dim)', label: 'N/A (weekend / no data)' },
-  ];
-  return (
-    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '12px 16px', borderTop: '1px solid var(--line)' }}>
-      {items.map(({ color, label }) => (
-        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--txt-mut)' }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
-          {label}
-        </div>
-      ))}
-      <div style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)' }}>
-        Tick marks at {RULES.util.under}% and {RULES.util.over}%
-      </div>
     </div>
   );
 }

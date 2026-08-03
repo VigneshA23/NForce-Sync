@@ -85,6 +85,21 @@ public class AppUser {
     @Column(name = "emergency_contact_phone", length = 30)
     private String emergencyContactPhone;
 
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
+
+    @Column(name = "gender", length = 50)
+    private String gender;
+
+    @Column(name = "personal_email", length = 200)
+    private String personalEmail;
+
+    @Column(name = "address", columnDefinition = "TEXT")
+    private String address;
+
+    @Column(name = "photo_data", columnDefinition = "TEXT")
+    private String photoData;
+
     public enum Role {
         EMPLOYEE, MANAGER, HR, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP
     }
