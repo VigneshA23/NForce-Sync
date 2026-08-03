@@ -2,11 +2,27 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type { EodEntryDto } from './eod';
 
-export function usePendingApprovals() {
+export function usePendingApprovals(enabled = true) {
   return useQuery({
     queryKey: ['approvals', 'pending'],
     queryFn: () => api.get<EodEntryDto[]>('/approvals/pending').then(r => r.data),
+    enabled,
   });
+}
+
+/**
+ * Live pending-approval count, sharing the same query cache as `usePendingApprovals`
+ * (same queryKey — one network call feeds both) so the sidebar badge, Team Dashboard
+ * KPI, and Approvals page can never disagree.
+ */
+export function usePendingApprovalsCount(enabled = true) {
+  const { data } = useQuery({
+    queryKey: ['approvals', 'pending'],
+    queryFn: () => api.get<EodEntryDto[]>('/approvals/pending').then(r => r.data),
+    enabled,
+    select: (d) => d.length,
+  });
+  return data ?? 0;
 }
 
 export function useApprove() {

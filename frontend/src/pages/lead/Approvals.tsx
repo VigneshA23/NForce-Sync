@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, CheckCheck, Check, X, RotateCcw, RefreshCw } from 'lucide-react';
 import { usePendingApprovals, useApprove, useReject, useRequestChanges, useBatchApprove } from '../../api/approvals';
+import { DropdownMenu } from '../../components/DropdownMenu';
 import { useToast } from '../../lib/toast';
 import { formatDate as fmtDate, formatDurationMinutes } from '../../lib/date';
 import type { EodEntryDto, EodTaskDto } from '../../api/eod';
@@ -298,7 +299,7 @@ function EntryRow({ entry }: { entry: EodEntryDto }) {
     <div style={{ borderBottom: '1px solid var(--line)' }}>
       {/* Summary row */}
       <div
-        style={{ display: 'grid', gridTemplateColumns: '32px 1fr 120px 100px 220px', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer' }}
+        style={{ display: 'grid', gridTemplateColumns: '32px 1fr 120px 100px 48px', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer' }}
         onClick={() => { setExpanded(e => !e); if (action) setAction(null); }}
       >
         <div style={{ color: 'var(--txt-dim)', display: 'flex', alignItems: 'center' }}>
@@ -331,17 +332,16 @@ function EntryRow({ entry }: { entry: EodEntryDto }) {
             </span>
           )}
         </div>
-        {/* Action buttons — stop propagation so row expand doesn't fire */}
-        <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
-          <Btn variant="primary" onClick={() => openAction('approve')} style={{ padding: '5px 10px' }}>
-            <Check size={12} /> Approve
-          </Btn>
-          <Btn variant="danger" onClick={() => openAction('reject')} style={{ padding: '5px 10px' }}>
-            <X size={12} /> Reject
-          </Btn>
-          <Btn variant="warn" onClick={() => openAction('request-changes')} style={{ padding: '5px 10px' }}>
-            <RotateCcw size={12} /> Changes
-          </Btn>
+        {/* Row actions menu — stop propagation so row expand doesn't fire */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
+          <DropdownMenu
+            ariaLabel={`Actions for ${(entry as EodEntryDto & { employeeName?: string }).employeeName ?? `Employee #${entry.employeeId}`}`}
+            items={[
+              { key: 'approve', label: 'Approve', icon: Check, color: 'var(--ok)', onSelect: () => openAction('approve') },
+              { key: 'reject', label: 'Reject', icon: X, color: 'var(--risk)', onSelect: () => openAction('reject') },
+              { key: 'request-changes', label: 'Request changes', icon: RotateCcw, color: 'var(--warn)', onSelect: () => openAction('request-changes') },
+            ]}
+          />
         </div>
       </div>
 
@@ -375,8 +375,15 @@ function EntryRow({ entry }: { entry: EodEntryDto }) {
 
 // ── main ───────────────────────────────────────────────────────────────────────
 
+/** Most recent EOD date first; same-date entries ordered by employee name so reloads don't shuffle. */
+function sortEntries(list: EodEntryDto[]): EodEntryDto[] {
+  return [...list].sort((a, b) =>
+    b.entryDate.localeCompare(a.entryDate) || a.employeeName.localeCompare(b.employeeName));
+}
+
 export default function Approvals() {
-  const { data: entries, isPending, isError, refetch } = usePendingApprovals();
+  const { data: rawEntries, isPending, isError, refetch } = usePendingApprovals();
+  const entries = useMemo(() => rawEntries && sortEntries(rawEntries), [rawEntries]);
   const batchApprove = useBatchApprove();
   const { show } = useToast();
 
@@ -465,12 +472,12 @@ export default function Approvals() {
       ) : (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           {/* Column headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 120px 100px 220px', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 120px 100px 48px', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             <span />
             <span>Employee</span>
             <span>Date</span>
             <span>Submitted</span>
-            <span>Actions</span>
+            <span style={{ textAlign: 'right' }}>Actions</span>
           </div>
           {entries!.map(entry => <EntryRow key={entry.id} entry={entry} />)}
         </Card>

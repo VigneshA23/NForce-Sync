@@ -1,8 +1,11 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { ThemeProvider } from './lib/theme';
 import { AuthProvider, useAuth, ROLE_LANDING } from './lib/auth';
 import { ToastProvider } from './lib/toast';
+import { todayISO } from './lib/date';
+import { prefetchTeamLeadLanding } from './api/teamLead';
 import { Shell } from './components/Shell';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotAuthorized } from './pages/NotAuthorized';
@@ -47,6 +50,7 @@ function PageFallback() {
 // Runs once after login; by the time the user navigates, the chunk is cached.
 function ChunkPrefetcher() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   useEffect(() => {
     if (!user) return;
     // Shared — everyone uses these
@@ -71,6 +75,9 @@ function ChunkPrefetcher() {
       import('./pages/lead/Approvals');
       import('./pages/lead/TeamUtilization');
       import('./pages/lead/Blockers');
+      // Also warm today's dashboard data in parallel with the chunk import, so the landing
+      // page renders with data already in flight instead of waiting for chunk-load-then-fetch.
+      prefetchTeamLeadLanding(queryClient, todayISO());
     } else if (user.role === 'pm') {
       import('./pages/pm/ProjectsAllocation');
     }

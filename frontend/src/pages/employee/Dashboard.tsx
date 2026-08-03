@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, Clock, CheckCircle2, TrendingUp, Zap, Activity,
   ArrowRight, ChevronLeft, ChevronRight,
@@ -435,7 +435,7 @@ function ActionRequired({ entries }: { entries: RecentEntry[] }) {
               <div style={{ fontSize: 10, color: statusColor, fontWeight: 700 }}>{statusText}</div>
             </div>
             {entry.status !== 'MISSED' && (
-              <a href="/eod/history" style={{
+              <Link to="/eod/history" style={{
                 fontSize: 10, fontWeight: 600, color: 'var(--info)',
                 textDecoration: 'none', padding: '3px 10px', whiteSpace: 'nowrap',
                 background: 'color-mix(in srgb, var(--info) 10%, transparent)',
@@ -443,7 +443,7 @@ function ActionRequired({ entries }: { entries: RecentEntry[] }) {
                 borderRadius: 5,
               }}>
                 Fix →
-              </a>
+              </Link>
             )}
           </div>
         );
@@ -506,8 +506,8 @@ function CutoffBanner({
           Cutoff at {fmt}.
         </span>
       </div>
-      <a
-        href="/eod/submit"
+      <Link
+        to="/eod/submit"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '6px 12px', borderRadius: 6,
@@ -516,7 +516,7 @@ function CutoffBanner({
         }}
       >
         Submit <ArrowRight size={12} />
-      </a>
+      </Link>
     </div>
   );
 }
