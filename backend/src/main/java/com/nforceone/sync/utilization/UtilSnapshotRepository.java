@@ -19,4 +19,9 @@ public interface UtilSnapshotRepository extends JpaRepository<UtilSnapshot, Long
            "AND s.employeeId IN (SELECT u.id FROM AppUser u WHERE u.manager.id = :managerId)")
     List<UtilSnapshot> findByManagerIdAndDate(@Param("managerId") Long managerId,
                                                @Param("date") LocalDate date);
+
+    // Batch fetch — eliminates N per-member queries in getForTeam()
+    @Query("SELECT s FROM UtilSnapshot s WHERE s.snapshotDate = :date AND s.employeeId IN :employeeIds")
+    List<UtilSnapshot> findByEmployeeIdInAndSnapshotDate(@Param("employeeIds") List<Long> employeeIds,
+                                                          @Param("date") LocalDate date);
 }

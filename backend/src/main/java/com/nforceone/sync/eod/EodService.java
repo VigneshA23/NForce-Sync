@@ -21,6 +21,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -152,7 +154,7 @@ public class EodService {
                 ? entryRepository.findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(targetId, from, to)
                 : entryRepository.findByEmployeeIdOrderByEntryDateDesc(targetId);
 
-        return entries.stream().map(e -> EodEntryDto.from(e, latestReviewerComment(e))).toList();
+        return mapWithBatchedComments(entries);
     }
 
     @Transactional(readOnly = true)
@@ -226,6 +228,7 @@ public class EodService {
             || actor.getRole() == AppUser.Role.LEADERSHIP;
     }
 
+    // Single-entry path: still used by getEntry()
     private String latestReviewerComment(EodEntry entry) {
         if (!NEEDS_COMMENT.contains(entry.getStatus())) return null;
         return actionRepository.findByEodEntryIdOrderByActedAtDesc(entry.getId())
@@ -237,6 +240,28 @@ public class EodService {
                 .orElse(null);
     }
 
+    // Batch path: replaces N per-entry queries with a single IN query
+    private List<EodEntryDto> mapWithBatchedComments(List<EodEntry> entries) {
+        List<Long> needsComment = entries.stream()
+                .filter(e -> NEEDS_COMMENT.contains(e.getStatus()))
+                .map(EodEntry::getId)
+                .toList();
+
+        Map<Long, String> commentMap = needsComment.isEmpty()
+                ? Map.of()
+                : actionRepository.findReviewerCommentsByEntryIds(needsComment)
+                        .stream()
+                        // already ordered DESC per entry; toMap keeps the first (most recent)
+                        .collect(Collectors.toMap(
+                                a -> a.getEodEntry().getId(),
+                                ApprovalAction::getComment,
+                                (existing, ignored) -> existing));
+
+        return entries.stream()
+                .map(e -> EodEntryDto.from(e, commentMap.get(e.getId())))
+                .toList();
+    }
+
     private AppUser requireUserByEmail(String email) {
         return userRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -244,7 +269,7 @@ public class EodService {
     }
 
     private EodEntry requireEntryById(Long id) {
-        return entryRepository.findById(id)
+        return entryRepository.findWithDetailsById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "EOD entry not found"));
     }
