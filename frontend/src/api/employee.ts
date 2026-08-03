@@ -1,67 +1,118 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from './client';
 
-export interface TodayStatusDto {
-  status: string;
-  submittedAt: string | null;
-  remarks: string | null;
+// ── Dashboard Summary ──────────────────────────────────────────────────────────
+
+export interface CutoffStatus {
+  today: string;
+  entryStatus: string | null;
+  cutoffPassed: boolean;
+  cutoffTime: string;
 }
 
-export interface PendingCorrectionDto {
+export interface QuickStats {
+  weekApprovedHours: number;
+  monthAvgUtil: number | null;
+  streak: number;
+  daysSinceLastIssue: number;
+}
+
+export interface BlockedTask {
   entryId: number;
   entryDate: string;
-  status: string;
-  reviewerComment: string | null;
-  updatedAt: string;
-}
-
-export interface EmployeeDashboardStatsDto {
-  todayStatus: TodayStatusDto;
-  pendingCorrections: PendingCorrectionDto[];
-  missedDates: string[];
-  missedCount: number;
-}
-
-export interface EmployeeProjectDto {
-  projectId: number;
-  projectCode: string;
   projectName: string;
-  pmName: string | null;
-  projectStatus: string;
-  assignedFrom: string;
-  assignedTo: string | null;
+  description: string;
+  blockerReason: string | null;
 }
 
-export interface HolidayDto {
+export interface RecentEntry {
   id: number;
-  name: string;
-  holidayDate: string;
+  date: string;
+  status: string;
+  totalHours: number;
+  blockedTaskCount: number;
+  utilizationPct: number | null;
 }
 
-export function useEmployeeDashboardStats(employeeId: number | undefined) {
+export interface CalendarDay {
+  date: string;
+  status: string;
+  utilizationPct: number | null;
+  isWeekend: boolean;
+  isFuture: boolean;
+}
+
+export interface DashboardSummary {
+  cutoffStatus: CutoffStatus;
+  quickStats: QuickStats;
+  blockedTasks: BlockedTask[];
+  recentEntries: RecentEntry[];
+  calendarData: CalendarDay[];
+}
+
+export function useDashboardSummary(calendarFrom?: string, calendarTo?: string) {
   return useQuery({
-    queryKey: ['employee', 'dashboard-stats', employeeId],
-    queryFn: () =>
-      api.get<EmployeeDashboardStatsDto>(`/employee/${employeeId}/dashboard-stats`).then(r => r.data),
-    enabled: employeeId != null,
-    refetchInterval: 60_000,
+    queryKey: ['employee', 'dashboard-summary', calendarFrom ?? 'cur', calendarTo ?? 'cur'],
+    queryFn: () => api.get<DashboardSummary>('/employee/dashboard-summary', {
+      params: calendarFrom && calendarTo ? { calendarFrom, calendarTo } : undefined,
+    }).then(r => r.data),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
   });
 }
 
-export function useMyProjects(employeeId: number | undefined) {
-  return useQuery({
-    queryKey: ['employee', 'projects', employeeId],
-    queryFn: () =>
-      api.get<EmployeeProjectDto[]>(`/employee/${employeeId}/projects`).then(r => r.data),
-    enabled: employeeId != null,
-  });
+// ── Utilization Detail ─────────────────────────────────────────────────────────
+
+export interface WeekTrend {
+  weekStart: string;
+  weekEnd: string;
+  avgUtilPct: number | null;
+  totalApproved: number;
+  totalAvailable: number;
+  workingDays: number;
+  approvedDays: number;
 }
 
-export function useUpcomingHolidays() {
+export interface CurrentPeriod {
+  from: string;
+  to: string;
+  avgUtilPct: number | null;
+  totalApproved: number;
+  totalAvailable: number;
+  workingDays: number;
+  approvedDays: number;
+}
+
+export interface CategoryBreakdown {
+  billableHours: number;
+  nonBillableHours: number;
+  benchHours: number;
+  totalApproved: number;
+}
+
+export interface HistoryDay {
+  date: string;
+  availableHours: number;
+  approvedHours: number;
+  billableHours: number;
+  nonBillableHours: number;
+  benchHours: number;
+  utilizationPct: number | null;
+}
+
+export interface UtilizationDetail {
+  weeklyTrend: WeekTrend[];
+  currentPeriod: CurrentPeriod;
+  categoryBreakdown: CategoryBreakdown;
+  history: HistoryDay[];
+}
+
+export function useUtilizationDetail(from: string, to: string) {
   return useQuery({
-    queryKey: ['employee', 'holidays', 'upcoming'],
+    queryKey: ['employee', 'utilization-detail', from, to],
     queryFn: () =>
-      api.get<HolidayDto[]>('/employee/holidays/upcoming').then(r => r.data),
-    staleTime: 5 * 60 * 1000,
+      api.get<UtilizationDetail>('/employee/utilization-detail', { params: { from, to } })
+        .then(r => r.data),
+    staleTime: 60_000,
   });
 }
