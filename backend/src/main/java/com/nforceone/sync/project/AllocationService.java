@@ -73,6 +73,7 @@ public class AllocationService {
         allocation.setProject(project);
         allocation.setEffectiveFrom(req.effectiveFrom());
         allocation.setEffectiveTo(req.effectiveTo());
+        allocation.setAllocationPct(req.allocationPct() != null ? req.allocationPct() : 100);
         allocation.setCreatedAt(OffsetDateTime.now());
 
         return AllocationDto.from(allocationRepository.save(allocation));
@@ -90,6 +91,7 @@ public class AllocationService {
 
         allocation.setEffectiveFrom(req.effectiveFrom());
         allocation.setEffectiveTo(req.effectiveTo());
+        allocation.setAllocationPct(req.allocationPct() != null ? req.allocationPct() : 100);
 
         return AllocationDto.from(allocationRepository.save(allocation));
     }

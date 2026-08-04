@@ -26,6 +26,14 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
     @EntityGraph(attributePaths = {"employee", "tasks", "tasks.project", "tasks.taskCategory"})
     List<EodEntry> findByEmployeeIdOrderByEntryDateDesc(Long employeeId);
 
+    // Project Dashboard missing-EOD breakdown: one batch query for every employee in scope,
+    // rather than one query per employee per day.
+    @Query("SELECT e FROM EodEntry e WHERE e.employee.id IN :employeeIds " +
+           "AND e.entryDate BETWEEN :from AND :to")
+    List<EodEntry> findByEmployeeIdInAndEntryDateBetween(@Param("employeeIds") List<Long> employeeIds,
+                                                          @Param("from") LocalDate from,
+                                                          @Param("to") LocalDate to);
+
     // Pending approvals for a manager — custom JPQL with EntityGraph-equivalent JOIN FETCH
     @Query("""
         SELECT DISTINCT e FROM EodEntry e
