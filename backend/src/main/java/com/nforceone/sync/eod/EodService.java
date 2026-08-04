@@ -26,6 +26,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -501,15 +502,19 @@ public class EodService {
                 .map(EodEntry::getId)
                 .toList();
 
-        Map<Long, String> commentMap = needsComment.isEmpty()
-                ? Map.of()
-                : actionRepository.findReviewerCommentsByEntryIds(needsComment)
-                        .stream()
-                        // already ordered DESC per entry; toMap keeps the first (most recent)
-                        .collect(Collectors.toMap(
-                                a -> a.getEodEntry().getId(),
-                                ApprovalAction::getComment,
-                                (existing, ignored) -> existing));
+        // Explicit loop rather than Collectors.toMap: comment is nullable, and toMap throws NPE on
+        // a null VALUE — one reject recorded without a comment would 500 the whole EOD list.
+        // containsKey (not putIfAbsent, which treats a null value as absent) keeps the same
+        // "first wins = most recent" semantics, since the query is ordered actedAt DESC per entry.
+        Map<Long, String> commentMap = new HashMap<>();
+        if (!needsComment.isEmpty()) {
+            for (ApprovalAction action : actionRepository.findReviewerCommentsByEntryIds(needsComment)) {
+                Long entryId = action.getEodEntry().getId();
+                if (!commentMap.containsKey(entryId)) {
+                    commentMap.put(entryId, action.getComment());
+                }
+            }
+        }
 
         return entries.stream()
                 .map(e -> EodEntryDto.from(e, commentMap.get(e.getId())))

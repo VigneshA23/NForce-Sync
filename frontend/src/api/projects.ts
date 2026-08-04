@@ -74,6 +74,7 @@ export interface AllocationDto {
   effectiveFrom: string;
   /** Null means the assignment is open-ended. */
   effectiveTo: string | null;
+  allocationPct: number;
 }
 
 /** Assigns one employee to one project for a date range. */
@@ -83,12 +84,15 @@ export interface CreateAllocationPayload {
   effectiveFrom: string;
   /** Null leaves the assignment open-ended. */
   effectiveTo?: string | null;
+  /** 1-100. Omitted defaults to 100 (full-time) server-side. */
+  allocationPct?: number;
 }
 
-/** In-place edit of an allocation's dates. Employee and project are not changeable. */
+/** In-place edit of an allocation's dates and percentage. Employee and project are not changeable. */
 export interface UpdateAllocationPayload {
   effectiveFrom: string;
   effectiveTo?: string | null;
+  allocationPct?: number;
 }
 
 export async function listAllProjects(): Promise<ProjectFullDto[]> {

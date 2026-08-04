@@ -122,19 +122,22 @@ public class ProjectService {
         return ProjectFullDto.from(saved, (int) allocationRepository.countByProjectIdAndEmployeeRole(saved.getId(), AppUser.Role.EMPLOYEE));
     }
 
+    private static final java.util.Set<String> VALID_PROJECT_TYPES = java.util.Set.of(
+            "CLIENT", "INTERNAL", "PRODUCT_DEVELOPMENT", "SUPPORT", "BENCH");
+
     /**
      * Validates the project type and returns the client name to store.
      *
-     * <p>A CLIENT project must name its client. An INTERNAL project never stores one — returning
-     * null here is what clears a stale name when an existing client project is switched to
-     * internal, so a value hidden in the UI can never be silently retained.
+     * <p>Only a CLIENT project names a client. Every other type never stores one — returning null
+     * here is what clears a stale name when an existing client project is switched to another
+     * type, so a value hidden in the UI can never be silently retained.
      */
     private String resolveClient(String projectType, String client) {
-        if (!"CLIENT".equals(projectType) && !"INTERNAL".equals(projectType)) {
+        if (!VALID_PROJECT_TYPES.contains(projectType)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Invalid project type: " + projectType);
         }
-        if ("INTERNAL".equals(projectType)) {
+        if (!"CLIENT".equals(projectType)) {
             return null;
         }
         if (client == null || client.isBlank()) {

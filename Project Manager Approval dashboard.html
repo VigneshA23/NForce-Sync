@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>N-Force Sync — Approvals (Enhanced Mockup)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    --bg:#0b0b0f;
+    --panel:#141319;
+    --panel-2:#1b1a21;
+    --panel-3:#221f27;
+    --border:#2a2831;
+    --border-soft:#232129;
+    --text:#f2f1f4;
+    --text-dim:#9d9aa6;
+    --text-faint:#6f6c78;
+    --red:#dc2b3e;
+    --red-dark:#a3212f;
+    --red-glow: rgba(220,43,62,.35);
+    --amber:#f0a63c;
+    --amber-bg: rgba(240,166,60,.12);
+    --amber-border: rgba(240,166,60,.4);
+    --green:#3fbd76;
+    --green-bg: rgba(63,189,118,.12);
+    --blue:#4f8ff0;
+    --blue-bg: rgba(79,143,240,.12);
+    --gray-bg: rgba(255,255,255,.06);
+    --radius:10px;
+    --radius-lg:14px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);height:100%;}
+  body{font-size:14px;line-height:1.45;}
+  a{color:inherit;}
+  button{font-family:inherit;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 20px;
+    background:linear-gradient(90deg, #2b0b10 0%, #470f18 45%, #1a0509 100%);
+    border-bottom:1px solid #3a1218;
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand-mark{
+    width:34px;height:34px;border-radius:9px;
+    background:linear-gradient(135deg,var(--red),var(--red-dark));
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;
+    box-shadow:0 0 0 1px rgba(255,255,255,.08) inset;
+  }
+  .brand-text .name{font-weight:700;font-size:14.5px;letter-spacing:.3px;}
+  .brand-text .sub{font-size:10.5px;color:var(--text-dim);letter-spacing:1.2px;}
+  .topbar-right{display:flex;align-items:center;gap:14px;}
+  .search-box{
+    display:flex;align-items:center;gap:8px;
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);
+    padding:7px 12px;border-radius:8px;min-width:260px;color:var(--text-dim);
+  }
+  .search-box input{
+    background:transparent;border:none;outline:none;color:var(--text);font-size:13px;width:100%;
+  }
+  .icon-btn{
+    width:34px;height:34px;border-radius:8px;border:1px solid rgba(255,255,255,.08);
+    background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;
+    color:var(--text-dim);cursor:pointer;position:relative;
+  }
+  .icon-btn .dot{
+    position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--red);
+  }
+  .avatar-pill{
+    width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7a3ee0,#4b1fb0);
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;
+  }
+
+  /* ---------- Layout ---------- */
+  .app{display:flex;min-height:calc(100vh - 56px);}
+  .sidebar{
+    width:230px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);
+    padding:18px 12px;display:flex;flex-direction:column;justify-content:space-between;
+  }
+  .nav-group{margin-bottom:18px;}
+  .nav-label{
+    font-size:10.5px;letter-spacing:1.2px;color:var(--text-faint);padding:0 10px 8px;font-weight:700;
+  }
+  .nav-item{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:9px 10px;border-radius:8px;color:var(--text-dim);font-size:13.5px;cursor:pointer;margin-bottom:2px;
+  }
+  .nav-item:hover{background:var(--panel-2);color:var(--text);}
+  .nav-item.active{background:rgba(220,43,62,.14);color:#ff8b95;border:1px solid rgba(220,43,62,.3);}
+  .nav-item .left{display:flex;align-items:center;gap:9px;}
+  .badge-count{
+    background:var(--red);color:#fff;font-size:10.5px;font-weight:700;
+    padding:1px 7px;border-radius:20px;
+  }
+  .profile-card{
+    display:flex;align-items:center;gap:10px;padding:10px;border-top:1px solid var(--border);
+  }
+  .profile-card .avatar-pill{background:linear-gradient(135deg,var(--red),var(--red-dark));width:32px;height:32px;font-size:11px;}
+  .profile-card .who .who-name{font-size:13px;font-weight:600;}
+  .profile-card .who .who-role{font-size:11px;color:var(--text-dim);}
+
+  .main{flex:1;padding:22px 26px 60px;overflow-x:hidden;}
+  .breadcrumb{font-size:12px;color:var(--text-faint);margin-bottom:10px;}
+  .page-head{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:18px;}
+  .page-head h1{margin:0 0 4px;font-size:22px;}
+  .page-head p{margin:0;color:var(--text-dim);font-size:13px;}
+  .head-actions{display:flex;align-items:center;gap:10px;}
+
+  .btn{
+    border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);
+    padding:8px 14px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-weight:600;
+    transition:background .15s ease;
+  }
+  .btn:hover{background:var(--panel-3);}
+  .btn-primary{
+    background:linear-gradient(135deg,var(--red),var(--red-dark));border:none;color:#fff;
+    box-shadow:0 4px 14px var(--red-glow);
+  }
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-ghost{background:transparent;border:1px solid var(--border);}
+  .btn-danger-outline{border:1px solid rgba(220,43,62,.5);color:#ff8b95;background:rgba(220,43,62,.08);}
+  .btn-sm{padding:6px 11px;font-size:12.5px;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+
+  /* ---------- Escalation banner ---------- */
+  .banner{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+    background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:var(--radius-lg);
+    padding:13px 18px;margin-bottom:18px;
+  }
+  .banner .left{display:flex;align-items:center;gap:12px;}
+  .banner .icon{
+    width:32px;height:32px;border-radius:8px;background:rgba(240,166,60,.18);display:flex;align-items:center;
+    justify-content:center;color:var(--amber);flex-shrink:0;font-size:16px;
+  }
+  .banner strong{color:#ffd8a3;}
+  .banner .sub{color:#d8c19a;font-size:12.5px;}
+
+  /* ---------- Tabs ---------- */
+  .tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+  .tab{
+    padding:8px 15px;border-radius:20px;border:1px solid var(--border);background:var(--panel-2);
+    color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;
+  }
+  .tab .count{background:rgba(255,255,255,.1);padding:1px 7px;border-radius:20px;font-size:11.5px;}
+  .tab.active{background:var(--red);border-color:var(--red);color:#fff;}
+  .tab.active .count{background:rgba(255,255,255,.25);}
+  .tab.escalated-tab.active{background:var(--amber);border-color:var(--amber);color:#241a06;}
+  .tab.escalated-tab.active .count{background:rgba(0,0,0,.15);}
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);
+    padding:10px 12px;margin-bottom:14px;
+  }
+  .filter-chip{
+    position:relative;
+  }
+  .filter-btn{
+    border:1px solid var(--border);background:var(--panel-2);color:var(--text-dim);
+    padding:7px 12px;border-radius:8px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;gap:6px;
+  }
+  .filter-btn.set{color:var(--text);border-color:rgba(220,43,62,.5);background:rgba(220,43,62,.08);}
+  .filter-panel{
+    display:none;position:absolute;top:calc(100% + 6px);left:0;min-width:210px;z-index:20;
+    background:var(--panel-3);border:1px solid var(--border);border-radius:10px;padding:12px;
+    box-shadow:0 12px 30px rgba(0,0,0,.5);
+  }
+  .filter-panel.open{display:block;}
+  .filter-panel label{
+    display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);padding:5px 2px;cursor:pointer;
+  }
+  .filter-panel .apply-row{margin-top:8px;display:flex;justify-content:flex-end;}
+  .toolbar .spacer{flex:1;}
+  .density-toggle{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .density-toggle button{
+    border:none;background:var(--panel-2);color:var(--text-dim);padding:7px 11px;font-size:12px;cursor:pointer;font-weight:600;
+  }
+  .density-toggle button.active{background:var(--red);color:#fff;}
+  select.sort-select{
+    background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:7px 10px;font-size:12.5px;
+  }
+
+  /* ---------- Bulk bar ---------- */
+  .bulk-bar{
+    display:none;align-items:center;justify-content:space-between;gap:12px;
+    background:var(--panel-3);border:1px solid rgba(220,43,62,.4);border-radius:var(--radius-lg);
+    padding:10px 16px;margin-bottom:14px;position:sticky;top:10px;z-index:15;
+  }
+  .bulk-bar.show{display:flex;}
+  .bulk-bar .left{display:flex;align-items:center;gap:10px;font-size:13px;}
+  .bulk-bar .actions{display:flex;gap:8px;}
+
+  /* ---------- Groups & rows ---------- */
+  .group{margin-bottom:14px;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--panel);}
+  .group-head{
+    display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;background:var(--panel-2);
+    border-bottom:1px solid var(--border);
+  }
+  .group-head .chev{transition:transform .15s ease;color:var(--text-dim);}
+  .group.collapsed .chev{transform:rotate(-90deg);}
+  .group.collapsed .rows{display:none;}
+  .group-head .title{font-weight:700;font-size:13.5px;}
+  .group-head .count{color:var(--text-dim);font-size:12px;}
+
+  .row{
+    display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border-soft);
+  }
+  .row:last-child{border-bottom:none;}
+  .row.escalated{background:linear-gradient(90deg, rgba(240,166,60,.06), transparent 40%);}
+  .compact .row{padding:9px 16px;}
+  .compact .avatar{width:28px !important;height:28px !important;font-size:11px !important;}
+  .compact .who-name{font-size:12.5px;}
+  .compact .chips{gap:6px !important;}
+  .compact .meta-row{margin-top:2px !important;}
+
+  .row-check{margin-top:14px;}
+  .row-check input{width:16px;height:16px;accent-color:var(--red);cursor:pointer;}
+
+  .avatar{
+    width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    font-size:12.5px;font-weight:700;background:linear-gradient(135deg,#454152,#2a2732);color:#e7e5ec;
+    border:1px solid rgba(255,255,255,.08);
+  }
+  .row-body{flex:1;min-width:0;}
+  .who-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .who-name{font-weight:700;font-size:13.5px;}
+  .who-id{color:var(--text-faint);font-size:11.5px;}
+  .esc-badge{
+    display:inline-flex;align-items:center;gap:5px;background:var(--amber-bg);border:1px solid var(--amber-border);
+    color:var(--amber);font-size:11px;font-weight:700;padding:2px 9px 2px 7px;border-radius:20px;cursor:help;
+  }
+  .meta-row{display:flex;align-items:center;gap:6px;color:var(--text-dim);font-size:11.5px;margin-top:3px;flex-wrap:wrap;}
+  .dot-sep{width:3px;height:3px;border-radius:50%;background:var(--text-faint);}
+
+  .chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px;}
+  .chip{
+    display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;
+    border:1px solid transparent;
+  }
+  .chip-cat{background:var(--gray-bg);color:var(--text-dim);}
+  .chip-status-completed{background:var(--green-bg);color:var(--green);}
+  .chip-status-progress{background:var(--blue-bg);color:var(--blue);}
+  .chip-billable{background:var(--gray-bg);color:var(--text-dim);}
+  .chip-billable .dot-fill{width:7px;height:7px;border-radius:50%;background:var(--green);}
+  .chip-billable.non .dot-fill{background:transparent;border:1.5px solid var(--text-faint);}
+  .chip-ot{background:rgba(240,166,60,.14);color:var(--amber);font-weight:700;}
+  .chip-under{background:rgba(79,143,240,.12);color:#9fc1f5;border:1px solid rgba(79,143,240,.35);font-weight:700;}
+  .tag-anomaly{
+    background:transparent;border:1px dashed var(--border);color:var(--text-faint);font-size:11px;
+    padding:2px 8px;border-radius:20px;
+  }
+  .tl-tag{color:var(--text-dim);}
+  .tl-tag b{color:var(--text);font-weight:600;}
+
+  /* ---------- Inline task/project breakdown ---------- */
+  .task-breakdown{
+    margin-top:9px;border:1px solid var(--border-soft);border-radius:9px;overflow:hidden;background:rgba(255,255,255,.015);
+  }
+  .task-line{
+    display:flex;align-items:center;gap:10px;padding:7px 11px;font-size:12px;color:var(--text-dim);
+    border-bottom:1px solid var(--border-soft);
+  }
+  .task-line:last-child{border-bottom:none;}
+  .task-line .t-proj{color:var(--text);font-weight:600;min-width:130px;flex-shrink:0;}
+  .task-line .t-cat{flex:1;color:var(--text-dim);}
+  .task-line .t-bill{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;}
+  .task-line .t-bill.non{background:transparent;border:1.5px solid var(--text-faint);}
+  .task-line .t-hours{color:var(--text);font-weight:700;flex-shrink:0;min-width:36px;text-align:right;}
+  .compact .task-line{padding:4px 11px;font-size:11px;}
+  .compact .task-breakdown{margin-top:6px;}
+
+  .row-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;}
+  .row-actions{display:flex;gap:7px;}
+  .expand-btn{
+    background:none;border:none;color:var(--text-faint);cursor:pointer;padding:4px;display:flex;align-items:center;
+  }
+  .expand-btn svg{transition:transform .15s ease;}
+  .row.expanded .expand-btn svg{transform:rotate(180deg);}
+
+  .detail-panel{display:none;padding:14px 16px 16px 66px;border-bottom:1px solid var(--border-soft);background:rgba(255,255,255,.015);}
+  .row.expanded + .detail-panel{display:block;}
+  .detail-panel h4{margin:0 0 8px;font-size:11.5px;letter-spacing:.6px;color:var(--text-faint);text-transform:uppercase;}
+  .timeline{list-style:none;margin:0;padding:0;border-left:2px solid var(--border);max-width:520px;}
+  .timeline li{position:relative;padding:0 0 14px 16px;font-size:12.5px;color:var(--text-dim);}
+  .timeline li:last-child{padding-bottom:0;}
+  .timeline li::before{
+    content:"";position:absolute;left:-5px;top:3px;width:8px;height:8px;border-radius:50%;background:var(--red);
+    border:2px solid var(--bg);
+  }
+  .timeline li b{color:var(--text);font-weight:600;}
+  .timeline li .ts{color:var(--text-faint);font-size:11px;display:block;}
+  .reject-reason-box{
+    background:rgba(220,43,62,.08);border:1px solid rgba(220,43,62,.3);border-radius:8px;padding:10px 12px;font-size:12.5px;
+    color:#f3b9c0;margin-top:10px;
+  }
+  .task-list{list-style:none;margin:0;padding:0;}
+  .task-list li{
+    display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border-soft);font-size:12.5px;
+    color:var(--text-dim);
+  }
+  .task-list li:last-child{border-bottom:none;}
+  .task-list li span.t-name{color:var(--text);}
+
+  .empty-state{
+    text-align:center;padding:60px 20px;color:var(--text-dim);border:1px dashed var(--border);border-radius:var(--radius-lg);
+  }
+  .empty-state .big{font-size:32px;margin-bottom:8px;}
+  .empty-state h3{margin:6px 0 4px;color:var(--text);}
+
+  /* ---------- Modal ---------- */
+  .modal-overlay{
+    display:none;position:fixed;inset:0;background:rgba(4,3,6,.6);z-index:100;align-items:center;justify-content:center;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal{
+    width:420px;max-width:92vw;background:var(--panel-3);border:1px solid var(--border);border-radius:14px;
+    padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.5);
+  }
+  .modal h3{margin:0 0 4px;font-size:16px;}
+  .modal p.hint{margin:0 0 12px;color:var(--text-dim);font-size:12.5px;}
+  .modal textarea{
+    width:100%;min-height:90px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;
+    padding:10px;color:var(--text);font-size:13px;resize:vertical;font-family:inherit;
+  }
+  .modal .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;}
+  .toast{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--panel-3);
+    border:1px solid var(--border);padding:10px 18px;border-radius:10px;font-size:13px;display:none;z-index:200;
+    box-shadow:0 10px 30px rgba(0,0,0,.4);
+  }
+  .toast.show{display:block;}
+
+  ::selection{background:rgba(220,43,62,.35);}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">NF</div>
+    <div class="brand-text">
+      <div class="name">N-FORCE SYNC</div>
+      <div class="sub">EOD &amp; UTILIZATION</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="search-box">
+      🔍 <input id="topSearch" placeholder="Search projects, people…">
+    </div>
+    <div class="icon-btn">🔔<span class="dot"></span></div>
+    <div class="avatar-pill">PM</div>
+  </div>
+</div>
+
+<div class="app">
+  <div class="sidebar">
+    <div>
+      <div class="nav-group">
+        <div class="nav-label">PROJECTS</div>
+        <div class="nav-item"><div class="left">📊 Project Dashboard</div></div>
+        <div class="nav-item"><div class="left">📁 Projects &amp; Allocation</div></div>
+        <div class="nav-item"><div class="left">📈 Planned vs Actual</div><span class="badge-count" style="background:#3a3742;">P2</span></div>
+        <div class="nav-item"><div class="left">⚠️ Blockers</div></div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">WORK</div>
+        <div class="nav-item active"><div class="left">✅ Approvals</div><span class="badge-count" id="sidebarBadge">4</span></div>
+        <div class="nav-item"><div class="left">📄 Reports</div></div>
+        <div class="nav-item"><div class="left">🔔 Notifications</div></div>
+        <div class="nav-item"><div class="left">👤 Profile</div></div>
+      </div>
+    </div>
+    <div class="profile-card">
+      <div class="avatar-pill">PM</div>
+      <div class="who">
+        <div class="who-name">Project Manager</div>
+        <div class="who-role">Project Manager</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="breadcrumb">Sync / Approvals</div>
+    <div class="page-head">
+      <div>
+        <h1>Approvals</h1>
+        <p>Review and act on your team's EOD submissions</p>
+      </div>
+      <div class="head-actions">
+        <div class="density-toggle">
+          <button class="active" id="densComfort" onclick="setDensity('comfortable')">Comfortable</button>
+          <button id="densCompact" onclick="setDensity('compact')">Compact</button>
+        </div>
+        <button class="btn btn-primary" onclick="approveAllVisible()">✓ Approve all (<span id="approveAllCount">0</span>)</button>
+      </div>
+    </div>
+
+    <div class="banner" id="escBanner">
+      <div class="left">
+        <div class="icon">⚠</div>
+        <div>
+          <div><strong id="escBannerCount">2 entries</strong> need your review — assigned Team Lead hasn't responded within SLA.</div>
+          <div class="sub" id="escBannerSub">Covering for Neha Kapoor (TL) — inactive since Jul 30.</div>
+        </div>
+      </div>
+      <button class="btn btn-sm" style="background:rgba(240,166,60,.18);border:1px solid var(--amber-border);color:#ffd8a3;" onclick="switchTab('escalated')">Review now →</button>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="pending" onclick="switchTab('pending')">Pending <span class="count" id="cnt-pending">0</span></div>
+      <div class="tab escalated-tab" data-tab="escalated" onclick="switchTab('escalated')">⚠ Escalated <span class="count" id="cnt-escalated">0</span></div>
+      <div class="tab" data-tab="approved" onclick="switchTab('approved')">Approved <span class="count" id="cnt-approved">0</span></div>
+      <div class="tab" data-tab="rejected" onclick="switchTab('rejected')">Rejected <span class="count" id="cnt-rejected">0</span></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="filter-chip">
+        <button class="filter-btn" onclick="toggleFilter('project')">📁 Project <span id="projLabel"></span> ▾</button>
+        <div class="filter-panel" id="panel-project"></div>
+      </div>
+      <div class="filter-chip">
+        <button class="filter-btn" onclick="toggleFilter('category')">🏷 Category <span id="catLabel"></span> ▾</button>
+        <div class="filter-panel" id="panel-category"></div>
+      </div>
+      <div class="filter-chip">
+        <button class="filter-btn" onclick="toggleFilter('billable')">💳 Billable <span id="billLabel"></span> ▾</button>
+        <div class="filter-panel" id="panel-billable"></div>
+      </div>
+      <div class="filter-chip">
+        <button class="filter-btn" onclick="toggleFilter('date')">📅 All days ▾</button>
+        <div class="filter-panel" id="panel-date" style="min-width:230px;">
+          <label><input type="radio" name="daterange" checked> All days</label>
+          <label><input type="radio" name="daterange"> Today</label>
+          <label><input type="radio" name="daterange"> Yesterday</label>
+          <div class="apply-row"><button class="btn btn-sm btn-primary" onclick="toggleFilter('date')">Apply</button></div>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <select class="sort-select" id="sortSelect" onchange="render()">
+        <option value="oldest">Sort: Oldest first</option>
+        <option value="hours">Sort: Most hours</option>
+        <option value="name">Sort: Employee A–Z</option>
+      </select>
+    </div>
+
+    <div class="bulk-bar" id="bulkBar">
+      <div class="left">
+        <span id="bulkCount">0 selected</span>
+      </div>
+      <div class="actions">
+        <button class="btn btn-sm" onclick="clearSelection()">Clear</button>
+        <button class="btn btn-sm btn-danger-outline" onclick="openRejectModal(null)">✕ Reject selected</button>
+        <button class="btn btn-sm btn-primary" onclick="approveSelected()">✓ Approve selected</button>
+      </div>
+    </div>
+
+    <div id="listRoot"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="rejectModal">
+  <div class="modal">
+    <h3>Reject entry</h3>
+    <p class="hint">This reason is shared with the employee and their Team Lead.</p>
+    <textarea id="rejectReasonInput" placeholder="e.g. Missing task description for the overtime hours logged"></textarea>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeRejectModal()">Cancel</button>
+      <button class="btn btn-primary" style="background:linear-gradient(135deg,var(--red),var(--red-dark));" onclick="confirmReject()">Confirm reject</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------- Config ---------------- */
+const STANDARD_HOURS = 8;         // standard shift length — should be a backend setting, not hardcoded
+const LATE_START_GRACE_MIN = 15;  // grace window before "late start" is flagged
+
+/* ---------------- Data ----------------
+   One entry = one employee's whole day. `tasks` can span multiple projects;
+   the day is still approved/rejected as a single unit by the employee's one
+   assigned TL (`tl`). Escalation is per-employee, driven by that TL's
+   inactivity — never by project. */
+let entries = [
+  {
+    id:'e1', name:'sravani', empId:'NF-99876567', tl:'Priya Nair', tlInactiveDays:0, escalated:false,
+    date:'03-08-2026', submitted:'7h ago', status:'In Progress',
+    lateStartMinutes:0, midShiftGapMinutes:0, resubmission:false,
+    tasks:[
+      {project:'Atlas Logistics', category:'Development', hours:5, billable:true},
+      {project:'Vantage CRM', category:'Support', hours:3, billable:false}
+    ],
+    history:[{label:'Submitted', ts:'Aug 3, 2:10 PM'}],
+    group:'pending'
+  },
+  {
+    id:'e2', name:'Sai Ganesh Rodda', empId:'NF-20240071', tl:'Neha Kapoor', tlInactiveDays:3, escalated:true,
+    date:'09-07-2026', submitted:'3d ago', status:'In Progress',
+    lateStartMinutes:0, midShiftGapMinutes:90, resubmission:false,
+    tasks:[
+      {project:'NOC Support', category:'Test Execution', hours:7.5, billable:true}
+    ],
+    history:[{label:'Submitted', ts:'Jul 9, 9:12 PM'},{label:'Escalated to PM', ts:'Jul 12, 9:00 AM — TL inactive 3d'}],
+    group:'pending'
+  },
+  {
+    id:'e3', name:'Sai Ganesh Rodda', empId:'NF-20240071', tl:'Neha Kapoor', tlInactiveDays:5, escalated:true,
+    date:'05-06-2026', submitted:'2d ago', status:'Completed',
+    lateStartMinutes:0, midShiftGapMinutes:0, resubmission:true,
+    priorRejectReason:'Overtime hours logged without a task description — please add detail on what the extra 2h covered.',
+    tasks:[
+      {project:'NOC Support', category:'Bench Activity', hours:8, billable:false},
+      {project:'NOC Support', category:'Incident Response (OT)', hours:2, billable:false}
+    ],
+    history:[
+      {label:'Submitted', ts:'Jun 5, 8:40 PM'},
+      {label:'Rejected by TL', ts:'Jun 6, 10:02 AM — missing OT detail'},
+      {label:'Edited & resubmitted', ts:'Aug 1, 6:15 PM'},
+      {label:'Escalated to PM', ts:'Aug 3, 9:00 AM — TL inactive 5d'}
+    ],
+    group:'pending'
+  },
+  {
+    id:'e4', name:'Aarav Mehta', empId:'NF-10021', tl:'Kabir Verma (TL)', tlInactiveDays:0, escalated:false,
+    date:'14-07-2026', submitted:'1h ago', status:'Completed',
+    lateStartMinutes:0, midShiftGapMinutes:0, resubmission:false,
+    tasks:[{project:'Meridian Bank', category:'Development', hours:8, billable:true}],
+    history:[{label:'Submitted', ts:'Jul 14, 6:02 PM'}],
+    group:'pending'
+  },
+  {
+    id:'e5', name:'Kabir Shah', empId:'NF-10022', tl:'Kabir Verma (TL)', tlInactiveDays:0, escalated:false,
+    date:'14-07-2026', submitted:'2h ago', status:'In Progress',
+    lateStartMinutes:45, midShiftGapMinutes:0, resubmission:false,
+    tasks:[{project:'Meridian Bank', category:'Test Execution', hours:7.5, billable:true}],
+    history:[{label:'Submitted', ts:'Jul 14, 5:40 PM'},{label:'Late start flagged', ts:'Jul 14, 9:45 AM — 45m after shift start'}],
+    group:'pending'
+  },
+  {
+    id:'e6', name:'Farah Khan', empId:'NF-10045', tl:'Riya Malhotra (TL)', tlInactiveDays:0, escalated:false,
+    date:'14-07-2026', submitted:'3h ago', status:'Completed',
+    lateStartMinutes:0, midShiftGapMinutes:0, resubmission:false,
+    tasks:[
+      {project:'Nordic Retail', category:'Development', hours:4, billable:true},
+      {project:'Atlas Logistics', category:'Support', hours:2, billable:false}
+    ],
+    history:[{label:'Submitted', ts:'Jul 14, 5:00 PM'}],
+    group:'pending'
+  },
+  {
+    id:'e7', name:'Riya Sen', empId:'NF-10046', tl:'Riya Malhotra (TL)', tlInactiveDays:0, escalated:false,
+    date:'14-07-2026', submitted:'4h ago', status:'Completed',
+    lateStartMinutes:0, midShiftGapMinutes:0, resubmission:false,
+    tasks:[{project:'Nordic Retail', category:'Requirement Analysis', hours:8, billable:true}],
+    history:[{label:'Submitted', ts:'Jul 14, 4:20 PM'}],
+    group:'pending'
+  },
+  {
+    id:'e8', name:'Manav Joshi', empId:'NF-10078', tl:'Arjun Bhatt (TL)', tlInactiveDays:0, escalated:false,
+    date:'14-07-2026', submitted:'5h ago', status:'In Progress',
+    lateStartMinutes:0, midShiftGapMinutes:0, resubmission:false,
+    tasks:[{project:'Bench — Training', category:'Bench Activity', hours:6, billable:false}],
+    history:[{label:'Submitted', ts:'Jul 14, 3:10 PM'}],
+    group:'pending'
+  }
+];
+
+/* ---------------- Derived per-entry totals ---------------- */
+function totals(e){
+  const total = e.tasks.reduce((s,t)=>s+t.hours,0);
+  const ot = Math.max(0, +(total-STANDARD_HOURS).toFixed(2));
+  const under = (e.status==='Completed') ? Math.max(0, +(STANDARD_HOURS-total).toFixed(2)) : 0;
+  return {total:+total.toFixed(2), ot, under};
+}
+function entryProjects(e){ return [...new Set(e.tasks.map(t=>t.project))]; }
+function entryCategories(e){ return [...new Set(e.tasks.map(t=>t.category))]; }
+function fmtH(n){ return (n%1===0 ? n : n.toFixed(1)) + 'h'; }
+
+let selected = new Set();
+let expanded = new Set();
+let activeTab = 'pending';
+let density = 'comfortable';
+let filters = { project: new Set(), category: new Set(), billable: new Set() };
+let pendingRejectTarget = null; // null = bulk
+
+const PROJECTS = [...new Set(entries.flatMap(entryProjects))];
+const CATEGORIES = [...new Set(entries.flatMap(entryCategories))];
+
+/* ---------------- Filter panels ---------------- */
+function buildFilterPanels(){
+  document.getElementById('panel-project').innerHTML =
+    PROJECTS.map(p=>`<label><input type="checkbox" value="${p}" onchange="toggleFilterVal('project','${p}')"> ${p}</label>`).join('') +
+    `<div class="apply-row"><button class="btn btn-sm btn-primary" onclick="toggleFilter('project')">Apply</button></div>`;
+  document.getElementById('panel-category').innerHTML =
+    CATEGORIES.map(c=>`<label><input type="checkbox" value="${c}" onchange="toggleFilterVal('category','${c}')"> ${c}</label>`).join('') +
+    `<div class="apply-row"><button class="btn btn-sm btn-primary" onclick="toggleFilter('category')">Apply</button></div>`;
+  document.getElementById('panel-billable').innerHTML =
+    `<label><input type="checkbox" value="Billable" onchange="toggleFilterVal('billable','Billable')"> Billable</label>` +
+    `<label><input type="checkbox" value="Non-billable" onchange="toggleFilterVal('billable','Non-billable')"> Non-billable</label>` +
+    `<div class="apply-row"><button class="btn btn-sm btn-primary" onclick="toggleFilter('billable')">Apply</button></div>`;
+}
+function toggleFilter(key){
+  document.querySelectorAll('.filter-panel').forEach(p=>{
+    if(p.id === 'panel-'+key){ p.classList.toggle('open'); } else { p.classList.remove('open'); }
+  });
+}
+function toggleFilterVal(key,val){
+  if(filters[key].has(val)) filters[key].delete(val); else filters[key].add(val);
+  document.getElementById(key==='project'?'projLabel':key==='category'?'catLabel':'billLabel').textContent =
+    filters[key].size ? `(${filters[key].size})` : '';
+  const btn = document.querySelector(`#panel-${key}`).previousElementSibling;
+  btn.classList.toggle('set', filters[key].size>0);
+  render();
+}
+
+/* ---------------- Tabs / density ---------------- */
+function switchTab(tab){
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===tab));
+  clearSelection();
+  render();
+}
+function setDensity(d){
+  density = d;
+  document.getElementById('densComfort').classList.toggle('active', d==='comfortable');
+  document.getElementById('densCompact').classList.toggle('active', d==='compact');
+  render();
+}
+
+/* ---------------- Derived views ---------------- */
+function visibleEntries(){
+  let list = entries.slice();
+  if(activeTab==='pending') list = list.filter(e=>e.group==='pending');
+  else if(activeTab==='escalated') list = list.filter(e=>e.group==='pending' && e.escalated);
+  else if(activeTab==='approved') list = list.filter(e=>e.group==='approved');
+  else if(activeTab==='rejected') list = list.filter(e=>e.group==='rejected');
+
+  if(filters.project.size) list = list.filter(e=> entryProjects(e).some(p=>filters.project.has(p)));
+  if(filters.category.size) list = list.filter(e=> entryCategories(e).some(c=>filters.category.has(c)));
+  if(filters.billable.size){
+    list = list.filter(e=>{
+      const labels = new Set(e.tasks.map(t=> t.billable ? 'Billable':'Non-billable'));
+      return [...filters.billable].some(f=>labels.has(f));
+    });
+  }
+  const q = (document.getElementById('topSearch').value||'').toLowerCase().trim();
+  if(q) list = list.filter(e=> e.name.toLowerCase().includes(q) || e.empId.toLowerCase().includes(q));
+
+  const sortMode = document.getElementById('sortSelect').value;
+  if(sortMode==='hours'){
+    list.sort((a,b)=> totals(b).total - totals(a).total);
+  } else if(sortMode==='name'){
+    list.sort((a,b)=> a.name.localeCompare(b.name));
+  } else {
+    // oldest first: escalated + higher tlInactiveDays first, then by submitted text roughly
+    list.sort((a,b)=> (b.tlInactiveDays||0) - (a.tlInactiveDays||0));
+  }
+  return list;
+}
+
+function groupByTL(list){
+  const map = new Map();
+  list.forEach(e=>{
+    if(!map.has(e.tl)) map.set(e.tl, []);
+    map.get(e.tl).push(e);
+  });
+  return map;
+}
+
+/* ---------------- Rendering ---------------- */
+function render(){
+  updateCounts();
+  const list = visibleEntries();
+  const root = document.getElementById('listRoot');
+  root.className = density==='compact' ? 'compact' : '';
+  root.innerHTML = '';
+
+  if(list.length===0){
+    root.innerHTML = emptyStateHtml();
+    updateBulkBar();
+    return;
+  }
+
+  const groups = groupByTL(list);
+  groups.forEach((rows, tlName)=>{
+    const escInGroup = rows.filter(e=>e.escalated).length;
+    const groupEl = document.createElement('div');
+    groupEl.className = 'group';
+    groupEl.innerHTML = `
+      <div class="group-head" onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="chev">▾</span>
+        <span class="title">👤 ${tlName}</span>
+        <span class="count">${rows.length} ${rows.length===1?'entry':'entries'}</span>
+        ${escInGroup ? `<span class="esc-badge" style="margin-left:auto;">⚠ ${escInGroup} escalated</span>` : ''}
+      </div>
+      <div class="rows">
+        ${rows.map(rowHtml).join('')}
+      </div>
+    `;
+    root.appendChild(groupEl);
+  });
+
+  updateBulkBar();
+  document.getElementById('approveAllCount').textContent = visibleEntries().filter(e=>e.group==='pending').length;
+}
+
+function emptyStateHtml(){
+  const copy = {
+    pending: ['🎉','You\'re all caught up','No pending entries match your current filters.'],
+    escalated: ['✅','No escalated entries','All Team Leads are current — nothing has breached SLA.'],
+    approved: ['📄','No approved entries yet','Approved entries will appear here.'],
+    rejected: ['📄','No rejected entries','Rejected entries will appear here with the reason given.']
+  }[activeTab];
+  return `<div class="empty-state"><div class="big">${copy[0]}</div><h3>${copy[1]}</h3><p>${copy[2]}</p></div>`;
+}
+
+function rowHtml(e){
+  const isExpanded = expanded.has(e.id);
+  const {total, ot, under} = totals(e);
+  const statusChipClass = e.status==='Completed' ? 'chip-status-completed' : 'chip-status-progress';
+  const otChip = ot ? `<span class="chip chip-ot" title="Total logged hours exceed the standard ${STANDARD_HOURS}h shift">OT +${fmtH(ot)}</span>` : '';
+  const underChip = under ? `<span class="chip chip-under" title="Day marked Completed with fewer than ${STANDARD_HOURS}h logged">Under −${fmtH(under)}</span>` : '';
+  const lateTag = e.lateStartMinutes ? `<span class="tag-anomaly" title="First task started ${e.lateStartMinutes}m after the expected shift start">Late start ${e.lateStartMinutes}m</span>` : '';
+  const gapTag = e.midShiftGapMinutes ? `<span class="tag-anomaly" title="Unexplained gap between tasks during the shift">Away ${Math.floor(e.midShiftGapMinutes/60)}h ${e.midShiftGapMinutes%60}m mid-shift</span>` : '';
+  const resubTag = e.resubmission ? `<span class="tag-anomaly">Resubmitted after rejection</span>` : '';
+  const escBadge = e.escalated
+    ? `<span class="esc-badge" title="${e.tl} hasn't reviewed since this was submitted. Escalated to you per SLA.">⚠ Escalated · TL inactive ${e.tlInactiveDays}d</span>`
+    : '';
+  const showActions = e.group==='pending';
+  const projList = entryProjects(e);
+
+  const actions = showActions ? `
+      <div class="row-actions">
+        <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation()">✎ Changes</button>
+        <button class="btn btn-sm btn-danger-outline" onclick="event.stopPropagation(); openRejectModal('${e.id}')">✕ Reject</button>
+        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); approveOne('${e.id}')">✓ Approve</button>
+      </div>` : `
+      <div class="row-actions">
+        <span class="chip ${e.group==='approved'?'chip-status-completed':'chip-ot'}">${e.group==='approved'?'Approved':'Rejected'}</span>
+      </div>`;
+
+  const checkbox = showActions ? `
+      <div class="row-check">
+        <input type="checkbox" ${selected.has(e.id)?'checked':''} onchange="toggleSelect('${e.id}')">
+      </div>` : `<div class="row-check"></div>`;
+
+  const taskBreakdown = `
+    <div class="task-breakdown">
+      ${e.tasks.map(t=>`
+        <div class="task-line">
+          <span class="t-proj">${t.project}</span>
+          <span class="t-cat">${t.category}</span>
+          <span class="t-bill ${t.billable?'':'non'}" title="${t.billable?'Billable':'Non-billable'}"></span>
+          <span class="t-hours">${fmtH(t.hours)}</span>
+        </div>
+      `).join('')}
+    </div>`;
+
+  const detail = `
+    <div class="detail-panel">
+      <h4>Submission history</h4>
+      <ul class="timeline">
+        ${e.history.map(h=>`<li><b>${h.label}</b><span class="ts">${h.ts}</span></li>`).join('')}
+      </ul>
+      ${e.priorRejectReason ? `<div class="reject-reason-box"><strong>Previous reject reason:</strong> ${e.priorRejectReason}</div>` : ''}
+    </div>`;
+
+  return `
+    <div class="row ${e.escalated?'escalated':''} ${isExpanded?'expanded':''}" id="row-${e.id}">
+      ${checkbox}
+      <div class="avatar">${initials(e.name)}</div>
+      <div class="row-body">
+        <div class="who-line">
+          <span class="who-name">${e.name}</span>
+          <span class="who-id">${e.empId}</span>
+          ${escBadge}
+        </div>
+        <div class="meta-row">
+          <span>${e.date}</span><span class="dot-sep"></span>
+          <span class="tl-tag">TL: <b>${e.tl}</b></span><span class="dot-sep"></span>
+          <span>Submitted ${e.submitted}</span><span class="dot-sep"></span>
+          <span>${e.tasks.length} ${e.tasks.length===1?'task':'tasks'} · ${projList.length} ${projList.length===1?'project':'projects'}</span>
+        </div>
+        ${taskBreakdown}
+        <div class="chips">
+          <span class="chip ${statusChipClass}">${e.status} · ${fmtH(total)} total</span>
+          ${otChip}
+          ${underChip}
+          ${lateTag}
+          ${gapTag}
+          ${resubTag}
+        </div>
+      </div>
+      <div class="row-right">
+        ${actions}
+        <button class="expand-btn" onclick="toggleExpand('${e.id}')" title="View audit trail">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+    </div>
+    ${detail}
+  `;
+}
+
+function initials(name){
+  return name.split(' ').map(p=>p[0]).slice(0,2).join('').toUpperCase();
+}
+
+/* ---------------- Actions ---------------- */
+function toggleExpand(id){
+  if(expanded.has(id)) expanded.delete(id); else expanded.add(id);
+  render();
+}
+function toggleSelect(id){
+  if(selected.has(id)) selected.delete(id); else selected.add(id);
+  render();
+}
+function clearSelection(){ selected.clear(); render(); }
+
+function updateBulkBar(){
+  const bar = document.getElementById('bulkBar');
+  const n = selected.size;
+  bar.classList.toggle('show', n>0);
+  document.getElementById('bulkCount').textContent = `${n} selected`;
+}
+
+function approveOne(id){
+  const e = entries.find(x=>x.id===id);
+  if(!e) return;
+  e.group='approved';
+  e.history.push({label:'Approved by PM', ts:'Just now'});
+  selected.delete(id);
+  showToast(`Approved ${e.name}'s entry`);
+  render();
+}
+function approveSelected(){
+  const ids = [...selected];
+  ids.forEach(id=>{
+    const e = entries.find(x=>x.id===id);
+    if(e){ e.group='approved'; e.history.push({label:'Approved by PM', ts:'Just now'}); }
+  });
+  selected.clear();
+  showToast(`Approved ${ids.length} entries`);
+  render();
+}
+function approveAllVisible(){
+  const list = visibleEntries().filter(e=>e.group==='pending');
+  if(list.length===0) return;
+  const projects = [...new Set(list.flatMap(entryProjects))];
+  const escCount = list.filter(e=>e.escalated).length;
+  const msg = `Approve ${list.length} entries across ${projects.length} project(s)` + (escCount ? `, including ${escCount} escalated` : '') + '?';
+  if(confirm(msg)){
+    list.forEach(e=>{ e.group='approved'; e.history.push({label:'Approved by PM', ts:'Just now'}); });
+    showToast(`Approved ${list.length} entries`);
+    render();
+  }
+}
+
+function openRejectModal(id){
+  pendingRejectTarget = id; // null means bulk selection
+  document.getElementById('rejectReasonInput').value = '';
+  document.getElementById('rejectModal').classList.add('open');
+}
+function closeRejectModal(){
+  document.getElementById('rejectModal').classList.remove('open');
+  pendingRejectTarget = null;
+}
+function confirmReject(){
+  const reason = document.getElementById('rejectReasonInput').value.trim() || 'No reason provided';
+  if(pendingRejectTarget){
+    const e = entries.find(x=>x.id===pendingRejectTarget);
+    if(e){ e.group='rejected'; e.priorRejectReason=reason; e.history.push({label:'Rejected by PM', ts:'Just now'}); }
+    selected.delete(pendingRejectTarget);
+  } else {
+    const ids = [...selected];
+    ids.forEach(id=>{
+      const e = entries.find(x=>x.id===id);
+      if(e){ e.group='rejected'; e.priorRejectReason=reason; e.history.push({label:'Rejected by PM', ts:'Just now'}); }
+    });
+    selected.clear();
+  }
+  closeRejectModal();
+  showToast('Entry rejected — reason sent to employee & TL');
+  render();
+}
+
+function updateCounts(){
+  const pend = entries.filter(e=>e.group==='pending');
+  document.getElementById('cnt-pending').textContent = pend.length;
+  document.getElementById('cnt-escalated').textContent = pend.filter(e=>e.escalated).length;
+  document.getElementById('cnt-approved').textContent = entries.filter(e=>e.group==='approved').length;
+  document.getElementById('cnt-rejected').textContent = entries.filter(e=>e.group==='rejected').length;
+  document.getElementById('sidebarBadge').textContent = pend.length;
+
+  const escEntries = pend.filter(e=>e.escalated);
+  const escN = escEntries.length;
+  document.getElementById('escBanner').style.display = escN>0 ? 'flex' : 'none';
+  document.getElementById('escBannerCount').textContent = `${escN} ${escN===1?'entry':'entries'}`;
+  const escTLs = [...new Set(escEntries.map(e=>e.tl))];
+  if(escTLs.length){
+    const maxDays = Math.max(...escEntries.map(e=>e.tlInactiveDays||0));
+    document.getElementById('escBannerSub').textContent =
+      `Covering for ${escTLs.join(', ')} — inactive ${maxDays}d.`;
+  }
+}
+
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.classList.remove('show'), 2600);
+}
+
+document.getElementById('topSearch').addEventListener('input', render);
+document.addEventListener('click', (ev)=>{
+  if(!ev.target.closest('.filter-chip')){
+    document.querySelectorAll('.filter-panel').forEach(p=>p.classList.remove('open'));
+  }
+});
+
+buildFilterPanels();
+render();
+</script>
+</body>
+</html>

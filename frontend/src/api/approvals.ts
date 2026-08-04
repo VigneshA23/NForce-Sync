@@ -2,22 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type { EodEntryDto } from './eod';
 
-/** Optional entryDate window — when supplied, both hooks below scope to it instead of the
- * full all-time backlog. Deliberately a plain {from,to} rather than importing teamLead's
- * DateRange, so this general approvals module doesn't depend on a lead-page-specific type. */
-export interface PendingApprovalsRange {
-  from: string;
-  to: string;
+export interface ApprovalActionDto {
+  id: number;
+  eodEntryId: number;
+  actorId: number;
+  actorName: string;
+  action: 'APPROVE' | 'REJECT' | 'REQUEST_CHANGES';
+  comment: string | null;
+  billableOverride: boolean | null;
+  actedAt: string;
 }
 
-// Undefined range collapses to a stable 'all' key/no query params — this is what keeps every
-// unscoped caller (Shell's badge outside the dashboard, other pages) on the same cache entry
-// they always shared, rather than splintering into one query per call site.
-function pendingQueryKey(range?: PendingApprovalsRange) {
-  return ['approvals', 'pending', range ? range.from : 'all', range ? range.to : 'all'] as const;
-}
-
-export function usePendingApprovals(enabled = true, range?: PendingApprovalsRange) {
+export function usePendingApprovals(enabled = true) {
   return useQuery({
     queryKey: pendingQueryKey(range),
     queryFn: () => api.get<EodEntryDto[]>('/approvals/pending', { params: range }).then(r => r.data),
@@ -79,6 +75,24 @@ export function useRequestChanges() {
   });
 }
 
+/** PM-only — entries this PM has personally decided on. Powers the Approved/Rejected/Changes Requested tabs. */
+export function useDecidedApprovals(status: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED', enabled = true) {
+  return useQuery({
+    queryKey: ['approvals', 'decided', status],
+    queryFn: () => api.get<EodEntryDto[]>('/approvals/history', { params: { status } }).then(r => r.data),
+    enabled,
+  });
+}
+
+/** Full approve/reject/request-changes audit trail for one entry — fetched lazily on row expand. */
+export function useApprovalHistory(entryId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['approvals', 'history', entryId],
+    queryFn: () => api.get<ApprovalActionDto[]>(`/approvals/${entryId}/history`).then(r => r.data),
+    enabled,
+  });
+}
+
 export function useBatchApprove() {
   const qc = useQueryClient();
   return useMutation({
@@ -90,3 +104,7 @@ export function useBatchApprove() {
     },
   });
 }
+function pendingQueryKey(range: any): unknown {
+  throw new Error('Function not implemented.');
+}
+

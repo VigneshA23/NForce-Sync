@@ -1,14 +1,18 @@
 package com.nforceone.sync.approval;
 
 import tools.jackson.databind.ObjectMapper;
+import com.nforceone.sync.approval.dto.ApprovalActionDto;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.auth.AuditLog;
 import com.nforceone.sync.auth.AuditLogRepository;
+import com.nforceone.sync.businessrules.BusinessRuleConfig;
+import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
 import com.nforceone.sync.eod.dto.EodEntryDto;
+import com.nforceone.sync.eod.dto.EodEntryEnrichment;
 import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.utilization.UtilizationService;
@@ -17,15 +21,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDate;
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
 public class ApprovalService {
+
+    private static final long BUSINESS_RULE_CONFIG_ID = 1L;
+    private static final BigDecimal FALLBACK_HOURS_PER_DAY = BigDecimal.valueOf(8);
+    private static final int FALLBACK_ESCALATION_SLA_HOURS = 48;
 
     private final EodEntryRepository     entryRepository;
     private final AppUserRepository      userRepository;
@@ -34,6 +45,7 @@ public class ApprovalService {
     private final UtilizationService     utilizationService;
     private final ObjectMapper           objectMapper;
     private final NotificationService    notificationService;
+    private final BusinessRuleConfigRepository configRepository;
 
     public ApprovalService(EodEntryRepository entryRepository,
                            AppUserRepository userRepository,
@@ -41,7 +53,8 @@ public class ApprovalService {
                            AuditLogRepository auditLogRepository,
                            UtilizationService utilizationService,
                            ObjectMapper objectMapper,
-                           NotificationService notificationService) {
+                           NotificationService notificationService,
+                           BusinessRuleConfigRepository configRepository) {
         this.entryRepository     = entryRepository;
         this.userRepository      = userRepository;
         this.actionRepository    = actionRepository;
@@ -49,6 +62,7 @@ public class ApprovalService {
         this.utilizationService  = utilizationService;
         this.objectMapper        = objectMapper;
         this.notificationService = notificationService;
+        this.configRepository    = configRepository;
     }
 
     // from/to are both null or both present — enforced by the controller, which only forwards
@@ -57,16 +71,34 @@ public class ApprovalService {
     @Transactional(readOnly = true)
     public List<EodEntryDto> getPendingForActor(String actorEmail, LocalDate from, LocalDate to) {
         AppUser actor = requireUserByEmail(actorEmail);
-        List<EodEntry> entries;
         if (actor.getRole() == AppUser.Role.PM) {
-            entries = entryRepository.findPendingByProjectManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
-        } else if (from != null && to != null) {
-            entries = entryRepository.findPendingByManagerIdAndEntryDateBetween(
-                    actor.getId(), EodEntry.Status.SUBMITTED, from, to);
-        } else {
-            entries = entryRepository.findPendingByManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
+            List<EodEntry> entries = entryRepository.findPendingByProjectManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
+            return enrichAll(entries);
         }
+        List<EodEntry> entries = entryRepository.findPendingByManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
         return entries.stream().map(EodEntryDto::from).toList();
+    }
+
+    /** PM-only: entries this PM has personally approved/rejected, for the Approved/Rejected tabs. */
+    @Transactional(readOnly = true)
+    public List<EodEntryDto> getDecidedForActor(String actorEmail, EodEntry.Status status) {
+        AppUser actor = requireUserByEmail(actorEmail);
+        if (actor.getRole() != AppUser.Role.PM) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only a Project Manager can view decided-entry history");
+        }
+        List<EodEntry> entries = entryRepository.findDecidedByProjectManagerId(actor.getId(), status);
+        return enrichAll(entries);
+    }
+
+    /** Full audit trail for one entry — every approve/reject/request-changes action, oldest first. */
+    @Transactional(readOnly = true)
+    public List<ApprovalActionDto> getHistory(Long entryId, String actorEmail) {
+        AppUser actor = requireUserByEmail(actorEmail);
+        EodEntry entry = requireEntryById(entryId);
+        checkManagerAuthorization(actor, entry);
+        return actionRepository.findByEodEntryIdIn(List.of(entryId)).stream()
+                .map(ApprovalActionDto::from)
+                .toList();
     }
 
     public EodEntryDto approve(Long entryId, String actorEmail,
@@ -125,6 +157,77 @@ public class ApprovalService {
         return entryIds.stream()
                 .map(id -> approveEntry(requireEntryById(id), actor, null, null))
                 .toList();
+    }
+
+    // ── PM enrichment (escalation, undertime, TL, resubmission) ────────
+
+    /**
+     * Enriches a batch of entries in one extra query (all their ApprovalActions) instead of
+     * one query per row. Only ever called for a PM's own views — the Team Lead's pending list
+     * keeps calling {@code EodEntryDto::from(e)} unchanged.
+     */
+    private List<EodEntryDto> enrichAll(List<EodEntry> entries) {
+        if (entries.isEmpty()) return List.of();
+
+        BusinessRuleConfig config = configRepository.findById(BUSINESS_RULE_CONFIG_ID).orElse(null);
+        int slaHours = config != null ? config.getEscalationSlaHours() : FALLBACK_ESCALATION_SLA_HOURS;
+        BigDecimal standardHours = config != null ? config.getWorkingHoursPerDay() : FALLBACK_HOURS_PER_DAY;
+
+        List<Long> entryIds = entries.stream().map(EodEntry::getId).toList();
+        Map<Long, List<ApprovalAction>> actionsByEntry = actionRepository.findByEodEntryIdIn(entryIds).stream()
+                .collect(Collectors.groupingBy(a -> a.getEodEntry().getId()));
+
+        OffsetDateTime now = OffsetDateTime.now();
+        return entries.stream()
+                .map(e -> EodEntryDto.from(e, latestReviewerComment(actionsByEntry.get(e.getId())),
+                        enrich(e, actionsByEntry.getOrDefault(e.getId(), List.of()), slaHours, standardHours, now)))
+                .toList();
+    }
+
+    private EodEntryEnrichment enrich(EodEntry entry, List<ApprovalAction> actions,
+                                       int slaHours, BigDecimal standardHours, OffsetDateTime now) {
+        AppUser tl = entry.getEmployee().getManager();
+        boolean isResubmission = actions.stream().anyMatch(a ->
+                a.getAction() == ApprovalAction.Action.REJECT || a.getAction() == ApprovalAction.Action.REQUEST_CHANGES);
+
+        boolean escalated;
+        Integer tlInactivityHours = null;
+        if (tl == null) {
+            // No TL assigned — nobody to wait on, so escalate immediately.
+            escalated = entry.getStatus() == EodEntry.Status.SUBMITTED;
+        } else {
+            boolean tlActed = actions.stream().anyMatch(a -> a.getActor().getId().equals(tl.getId()));
+            long hoursSinceSubmit = entry.getSubmittedAt() == null
+                    ? 0 : Duration.between(entry.getSubmittedAt(), now).toHours();
+            escalated = entry.getStatus() == EodEntry.Status.SUBMITTED && !tlActed && hoursSinceSubmit >= slaHours;
+            if (escalated) tlInactivityHours = (int) hoursSinceSubmit;
+        }
+
+        BigDecimal totalHours = entry.getTasks().stream()
+                .map(EodTask::getHours).filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal undertimeHours = entry.getDayType() == EodEntry.DayType.WORKING_DAY
+                ? standardHours.subtract(totalHours).max(BigDecimal.ZERO)
+                : BigDecimal.ZERO;
+
+        return new EodEntryEnrichment(
+                escalated,
+                tlInactivityHours,
+                tl != null ? tl.getFullName() : null,
+                tl != null ? tl.getId() : null,
+                undertimeHours,
+                isResubmission
+        );
+    }
+
+    /** Most recent REJECT/REQUEST_CHANGES comment, or null if the entry has never been rejected/changes-requested. */
+    private String latestReviewerComment(List<ApprovalAction> actions) {
+        if (actions == null) return null;
+        return actions.stream()
+                .filter(a -> a.getAction() == ApprovalAction.Action.REJECT || a.getAction() == ApprovalAction.Action.REQUEST_CHANGES)
+                .max(Comparator.comparing(ApprovalAction::getActedAt))
+                .map(ApprovalAction::getComment)
+                .orElse(null);
     }
 
     // ── private helpers ─────────────────────────────────────────────

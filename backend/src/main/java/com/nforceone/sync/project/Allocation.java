@@ -32,6 +32,9 @@ public class Allocation {
     @Column(name = "effective_to")
     private LocalDate effectiveTo;
 
+    @Column(name = "allocation_pct", nullable = false)
+    private Integer allocationPct = 100;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 }
