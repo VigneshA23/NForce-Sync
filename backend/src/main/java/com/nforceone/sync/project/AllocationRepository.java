@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface AllocationRepository extends JpaRepository<Allocation, Long> {
@@ -27,4 +28,15 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
     @Query("SELECT COUNT(a) FROM Allocation a WHERE a.project.id = :projectId AND a.employee.role = :role")
     long countByProjectIdAndEmployeeRole(@Param("projectId") Long projectId,
                                         @Param("role") AppUser.Role role);
+
+    // Project Dashboard: every allocation on one of a PM's projects whose effective window
+    // overlaps the requested date range, with employee+project JOIN FETCHed to avoid N+1.
+    @Query("SELECT a FROM Allocation a JOIN FETCH a.employee JOIN FETCH a.project " +
+           "WHERE a.project.id IN :projectIds " +
+           "AND a.effectiveFrom <= :to " +
+           "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :from) " +
+           "ORDER BY a.project.name ASC, a.employee.fullName ASC")
+    List<Allocation> findActiveInRangeForProjects(@Param("projectIds") List<Long> projectIds,
+                                                   @Param("from") LocalDate from,
+                                                   @Param("to") LocalDate to);
 }

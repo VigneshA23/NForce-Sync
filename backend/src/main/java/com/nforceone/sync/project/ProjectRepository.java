@@ -27,4 +27,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     @org.springframework.data.jpa.repository.Query(
             "SELECT p FROM Project p LEFT JOIN FETCH p.pm ORDER BY p.name ASC")
     List<Project> findAllWithPmOrderByNameAsc();
+
+    // The Project Dashboard is scoped to the projects a given PM owns.
+    List<Project> findByPmIdOrderByNameAsc(Long pmId);
 }

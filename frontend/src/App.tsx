@@ -32,6 +32,7 @@ const Approvals           = lazy(() => import('./pages/Approvals'));
 const TeamUtilization     = lazy(() => import('./pages/lead/TeamUtilization'));
 const Blockers            = lazy(() => import('./pages/lead/Blockers'));
 const ProjectsAllocation  = lazy(() => import('./pages/pm/ProjectsAllocation'));
+const ProjectDashboard    = lazy(() => import('./pages/pm/ProjectDashboard'));
 const Profile             = lazy(() => import('./pages/Profile'));
 const Notifications       = lazy(() => import('./pages/Notifications'));
 const ChangePassword      = lazy(() => import('./pages/ChangePassword'));
@@ -78,10 +79,11 @@ function ChunkPrefetcher() {
       // Also warm today's dashboard data in parallel with the chunk import, so the landing
       // page renders with data already in flight instead of waiting for chunk-load-then-fetch.
       prefetchTeamLeadLanding(queryClient, todayISO());
-    } else if (user.role === 'pm') {
-      import('./pages/pm/ProjectsAllocation');
-      import('./pages/Approvals');
-    }
+} else if (user.role === 'pm') {
+  import('./pages/pm/ProjectsAllocation');
+  import('./pages/pm/ProjectDashboard');
+  import('./pages/Approvals');
+}
   }, [user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
@@ -151,7 +153,7 @@ function AppRoutes() {
             <Route path="/team/reports"     element={<Placeholder title="Reports" />} />
 
             {/* ── Project Manager ────────────────────── */}
-            <Route path="/projects/dashboard"      element={<Placeholder title="Project Dashboard" />} />
+            <Route path="/projects/dashboard"      element={<ProjectDashboard />} />
             <Route path="/projects"                element={<ProjectsAllocation />} />
             <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
             <Route path="/projects/planned-actual" element={<Placeholder title="Planned vs Actual" />} />
