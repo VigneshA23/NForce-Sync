@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api } from './client';
 
 // ── types (mirror backend DTOs in com.nforceone.sync.teamlead) ────────────────────
@@ -43,11 +43,16 @@ export interface MemberEodStatusDto {
   employeeCode: string;
   status: MemberEodStatus;
   eodEntryId: number | null;
-  projectName: string | null;
+  projectNames: string[];
   utilizationPct: number | null;
   underutilized: boolean;
   overloaded: boolean;
   hasOpenBlocker: boolean;
+}
+
+export interface DateRange {
+  from: string;
+  to: string;
 }
 
 export interface TeamBlockerDto {
@@ -71,30 +76,69 @@ export interface TeamBlockerDto {
   acknowledgedByName: string | null;
 }
 
+/**
+ * Warms today's dashboard queries right after login, in parallel with the lazy JS chunk
+ * import — otherwise the first visit to Team Dashboard pays a full chunk-load-then-fetch
+ * waterfall instead of the two overlapping.
+ */
+export function prefetchTeamLeadLanding(queryClient: QueryClient, today: string): void {
+  const range: DateRange = { from: today, to: today };
+  queryClient.prefetchQuery({
+    queryKey: ['team-lead', 'summary', range.from, range.to],
+    queryFn: () => api.get<TeamLeadSummaryDto>('/team-lead/dashboard/summary', { params: range }).then(r => r.data),
+  });
+  queryClient.prefetchQuery({
+    queryKey: ['team-lead', 'member-status', range.from, range.to],
+    queryFn: () => api.get<MemberEodStatusDto[]>('/team-lead/team-members/status', { params: range }).then(r => r.data),
+  });
+  queryClient.prefetchQuery({
+    queryKey: ['team-lead', 'blockers', range.from, range.to],
+    queryFn: () => api.get<TeamBlockerDto[]>('/team-lead/blockers', { params: range }).then(r => r.data),
+  });
+}
+
 // ── hooks ───────────────────────────────────────────────────────────────────────
 
-export function useTeamLeadSummary(date: string) {
+// `live` enables 60s polling — pass it only while the Team Lead is viewing "today";
+// polling a historical date/range would silently overwrite the snapshot they asked to see.
+// A historical date/range can't change once its day is over, so it's cached far longer than
+// "today" — matches the staleTime convention already used by useTeamLeadTrend/useThresholds.
+function rangeStaleTime(live: boolean): number {
+  return live ? 30_000 : 5 * 60_000;
+}
+
+export function useTeamLeadSummary(range: DateRange, live = false) {
   return useQuery({
-    queryKey: ['team-lead', 'summary', date],
+    queryKey: ['team-lead', 'summary', range.from, range.to],
     queryFn: () =>
-      api.get<TeamLeadSummaryDto>('/team-lead/dashboard/summary', { params: { date } }).then(r => r.data),
-    refetchInterval: 60_000,
+      api.get<TeamLeadSummaryDto>('/team-lead/dashboard/summary', { params: range }).then(r => r.data),
+    staleTime: rangeStaleTime(live),
+    refetchInterval: live ? 60_000 : false,
+    // Keep showing the previous range's data while a newly-picked range loads, instead of
+    // unmounting the whole dashboard to a loading skeleton on every date/range change.
+    placeholderData: keepPreviousData,
   });
 }
 
-export function useTeamMemberStatuses(date: string) {
+export function useTeamMemberStatuses(range: DateRange, live = false) {
   return useQuery({
-    queryKey: ['team-lead', 'member-status', date],
+    queryKey: ['team-lead', 'member-status', range.from, range.to],
     queryFn: () =>
-      api.get<MemberEodStatusDto[]>('/team-lead/team-members/status', { params: { date } }).then(r => r.data),
+      api.get<MemberEodStatusDto[]>('/team-lead/team-members/status', { params: range }).then(r => r.data),
+    staleTime: rangeStaleTime(live),
+    refetchInterval: live ? 60_000 : false,
+    placeholderData: keepPreviousData,
   });
 }
 
-export function useTeamLeadBlockers(date: string) {
+export function useTeamLeadBlockers(range: DateRange, live = false) {
   return useQuery({
-    queryKey: ['team-lead', 'blockers', date],
+    queryKey: ['team-lead', 'blockers', range.from, range.to],
     queryFn: () =>
-      api.get<TeamBlockerDto[]>('/team-lead/blockers', { params: { date } }).then(r => r.data),
+      api.get<TeamBlockerDto[]>('/team-lead/blockers', { params: range }).then(r => r.data),
+    staleTime: rangeStaleTime(live),
+    refetchInterval: live ? 60_000 : false,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -115,15 +159,15 @@ export function useThresholds() {
   });
 }
 
-export function useAcknowledgeBlocker(date: string) {
+export function useAcknowledgeBlocker(range: DateRange) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (taskId: number) =>
       api.patch<TeamBlockerDto>(`/team-lead/blockers/${taskId}/acknowledge`).then(r => r.data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['team-lead', 'blockers', date] });
-      qc.invalidateQueries({ queryKey: ['team-lead', 'member-status', date] });
-      qc.invalidateQueries({ queryKey: ['team-lead', 'summary', date] });
+      qc.invalidateQueries({ queryKey: ['team-lead', 'blockers', range.from, range.to] });
+      qc.invalidateQueries({ queryKey: ['team-lead', 'member-status', range.from, range.to] });
+      qc.invalidateQueries({ queryKey: ['team-lead', 'summary', range.from, range.to] });
     },
   });
 }

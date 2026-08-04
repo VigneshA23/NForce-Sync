@@ -11,6 +11,7 @@ import { NotAuthorized } from '../pages/NotAuthorized';
 import { searchUsers, listLocations } from '../api/admin';
 import { toRole } from '../api/auth';
 import { fetchUnreadCount } from '../api/notifications';
+import { usePendingApprovalsCount } from '../api/approvals';
 
 // ─── Workspace search (top nav) ────────────────────────────────────────────────
 // Only wired up for superadmin — the destination (User Management) and the
@@ -179,6 +180,12 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const role = user!.role;
   const navSections = NAV[role];
 
+  // Sidebar Approvals badge, the Team Dashboard "Pending Approval" KPI, and the
+  // Approvals page count all read this same live query — see api/approvals.ts.
+  // Shared by both roles that have an Approvals page (Team Lead and Project Manager) —
+  // the query itself resolves "pending for me" differently server-side per role.
+  const pendingApprovalsCount = usePendingApprovalsCount(role === 'lead' || role === 'pm');
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
@@ -234,6 +241,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
             {section.items.map((item) => {
               const isActive = location.pathname === item.path;
               const Icon = item.icon;
+              const badge = (role === 'lead' || role === 'pm') && item.key === 'approvals' ? pendingApprovalsCount : item.badge;
               return (
                 <Link
                   key={item.key}
@@ -274,9 +282,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                     {item.label}
                   </span>
 
-                  {item.badge !== undefined && item.badge > 0 && (
+                  {badge !== undefined && badge > 0 && (
                     <span
-                      aria-label={`${item.badge} unread`}
+                      aria-label={`${badge} unread`}
                       style={{
                         background: '#B11116',
                         color: '#fff',
@@ -290,7 +298,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                         flexShrink: 0,
                       }}
                     >
-                      {item.badge}
+                      {badge}
                     </span>
                   )}
 

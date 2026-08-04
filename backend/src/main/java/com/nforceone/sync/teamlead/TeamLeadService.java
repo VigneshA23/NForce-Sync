@@ -71,10 +71,15 @@ public class TeamLeadService {
         return toThresholds(requireConfig());
     }
 
-    public TeamLeadSummaryDto getSummary(LocalDate date, String actingEmail) {
+    /**
+     * {@code from}/{@code to} bound the window shown in the Blockers panel (accumulated
+     * over the range); per-member snapshot fields (status, utilization) are always read
+     * as of {@code to} — a single status/util field can't represent more than one day.
+     */
+    public TeamLeadSummaryDto getSummary(LocalDate from, LocalDate to, String actingEmail) {
         AppUser lead = requireLead(actingEmail);
         BusinessRuleConfig config = requireConfig();
-        boolean holidayToday = holidayRepository.existsByHolidayDate(date);
+        boolean holidayToday = holidayRepository.existsByHolidayDate(to);
 
         List<AppUser> members = activeMembers(lead.getId());
         int onLeave = 0, missing = 0, pending = 0, submitted = 0;
@@ -83,7 +88,7 @@ public class TeamLeadService {
         int utilCount = 0;
 
         for (AppUser member : members) {
-            Optional<EodEntry> entry = entryRepository.findByEmployeeIdAndEntryDate(member.getId(), date);
+            Optional<EodEntry> entry = entryRepository.findByEmployeeIdAndEntryDate(member.getId(), to);
             String status = resolveStatus(entry, holidayToday);
             switch (status) {
                 case "ON_LEAVE" -> onLeave++;
@@ -93,7 +98,7 @@ public class TeamLeadService {
                 default -> { }
             }
 
-            BigDecimal pct = utilizationPct(member.getId(), date);
+            BigDecimal pct = utilizationPct(member.getId(), to);
             if (pct != null) {
                 utilSum = utilSum.add(pct);
                 utilCount++;
@@ -108,7 +113,7 @@ public class TeamLeadService {
 
         int activeBlockers = (int) taskRepository.findBlockedByManagerId(lead.getId())
                 .stream()
-                .filter(t -> t.getEodEntry().getEntryDate().equals(date))
+                .filter(t -> inRange(t.getEodEntry().getEntryDate(), from, to))
                 .filter(t -> t.getAcknowledgedAt() == null)
                 .count();
 
@@ -118,18 +123,18 @@ public class TeamLeadService {
                 toThresholds(config));
     }
 
-    public List<MemberEodStatusDto> getMemberStatuses(LocalDate date, String actingEmail) {
+    public List<MemberEodStatusDto> getMemberStatuses(LocalDate from, LocalDate to, String actingEmail) {
         AppUser lead = requireLead(actingEmail);
         BusinessRuleConfig config = requireConfig();
-        boolean holidayToday = holidayRepository.existsByHolidayDate(date);
+        boolean holidayToday = holidayRepository.existsByHolidayDate(to);
 
         List<AppUser> members = activeMembers(lead.getId());
-        List<TeamBlockerDto> openBlockers = getBlockers(date, actingEmail);
+        List<TeamBlockerDto> openBlockers = getBlockers(from, to, actingEmail);
 
         return members.stream().map(member -> {
-            Optional<EodEntry> entry = entryRepository.findByEmployeeIdAndEntryDate(member.getId(), date);
+            Optional<EodEntry> entry = entryRepository.findByEmployeeIdAndEntryDate(member.getId(), to);
             String status = resolveStatus(entry, holidayToday);
-            BigDecimal pct = utilizationPct(member.getId(), date);
+            BigDecimal pct = utilizationPct(member.getId(), to);
             boolean underutilized = pct != null && pct.compareTo(config.getUnderutilizedThresholdPct()) < 0;
             boolean overloaded    = pct != null && pct.compareTo(config.getOverloadedThresholdPct()) > 0;
             boolean hasOpenBlocker = openBlockers.stream()
@@ -137,20 +142,24 @@ public class TeamLeadService {
 
             return new MemberEodStatusDto(
                     member.getId(), member.getFullName(), member.getEmployeeCode(),
-                    status, entry.map(EodEntry::getId).orElse(null), projectNameFor(entry),
+                    status, entry.map(EodEntry::getId).orElse(null), projectNamesFor(entry),
                     pct, underutilized, overloaded, hasOpenBlocker);
         }).sorted(TeamLeadService::compareByStatusPriority).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<TeamBlockerDto> getBlockers(LocalDate date, String actingEmail) {
+    public List<TeamBlockerDto> getBlockers(LocalDate from, LocalDate to, String actingEmail) {
         AppUser lead = requireLead(actingEmail);
         return taskRepository.findBlockedByManagerId(lead.getId())
                 .stream()
-                .filter(t -> t.getEodEntry().getEntryDate().equals(date))
+                .filter(t -> inRange(t.getEodEntry().getEntryDate(), from, to))
                 .filter(t -> t.getAcknowledgedAt() == null)
                 .map(TeamBlockerDto::from)
                 .toList();
+    }
+
+    private boolean inRange(LocalDate d, LocalDate from, LocalDate to) {
+        return !d.isBefore(from) && !d.isAfter(to);
     }
 
     @Transactional
@@ -247,15 +256,13 @@ public class TeamLeadService {
                 t.getTaskCategory() != null && LEAVE_HOLIDAY_CATEGORY.equals(t.getTaskCategory().getName()));
     }
 
-    private String projectNameFor(Optional<EodEntry> entryOpt) {
-        if (entryOpt.isEmpty()) return null;
-        List<String> names = entryOpt.get().getTasks().stream()
+    private List<String> projectNamesFor(Optional<EodEntry> entryOpt) {
+        if (entryOpt.isEmpty()) return List.of();
+        return entryOpt.get().getTasks().stream()
                 .map(t -> t.getProject() != null ? t.getProject().getName() : null)
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .toList();
-        if (names.isEmpty()) return null;
-        return names.size() == 1 ? names.get(0) : "Multiple projects";
     }
 
     private BigDecimal utilizationPct(Long employeeId, LocalDate date) {

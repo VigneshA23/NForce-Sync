@@ -6,8 +6,10 @@ import com.nforceone.sync.teamlead.dto.TeamBlockerDto;
 import com.nforceone.sync.teamlead.dto.TeamLeadSummaryDto;
 import com.nforceone.sync.teamlead.dto.ThresholdsDto;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -24,20 +26,32 @@ public class TeamLeadController {
 
     @GetMapping("/dashboard/summary")
     public TeamLeadSummaryDto getSummary(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return teamLeadService.getSummary(date, actingEmail());
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        validateRange(from, to);
+        return teamLeadService.getSummary(from, to, actingEmail());
     }
 
     @GetMapping("/team-members/status")
     public List<MemberEodStatusDto> getMemberStatuses(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return teamLeadService.getMemberStatuses(date, actingEmail());
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        validateRange(from, to);
+        return teamLeadService.getMemberStatuses(from, to, actingEmail());
     }
 
     @GetMapping("/blockers")
     public List<TeamBlockerDto> getBlockers(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return teamLeadService.getBlockers(date, actingEmail());
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        validateRange(from, to);
+        return teamLeadService.getBlockers(from, to, actingEmail());
+    }
+
+    private void validateRange(LocalDate from, LocalDate to) {
+        if (from.isAfter(to)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "'from' must not be after 'to'");
+        }
     }
 
     @GetMapping("/dashboard/trend")

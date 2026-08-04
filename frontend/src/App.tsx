@@ -1,8 +1,11 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { ThemeProvider } from './lib/theme';
 import { AuthProvider, useAuth, ROLE_LANDING } from './lib/auth';
 import { ToastProvider } from './lib/toast';
+import { todayISO } from './lib/date';
+import { prefetchTeamLeadLanding } from './api/teamLead';
 import { Shell } from './components/Shell';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotAuthorized } from './pages/NotAuthorized';
@@ -25,7 +28,7 @@ const MyUtilization       = lazy(() => import('./pages/employee/MyUtilization'))
 const SubmitEOD           = lazy(() => import('./pages/employee/SubmitEOD'));
 const EodHistory          = lazy(() => import('./pages/employee/EodHistory'));
 const TeamDashboard       = lazy(() => import('./pages/lead/TeamDashboard'));
-const Approvals           = lazy(() => import('./pages/lead/Approvals'));
+const Approvals           = lazy(() => import('./pages/Approvals'));
 const TeamUtilization     = lazy(() => import('./pages/lead/TeamUtilization'));
 const Blockers            = lazy(() => import('./pages/lead/Blockers'));
 const ProjectsAllocation  = lazy(() => import('./pages/pm/ProjectsAllocation'));
@@ -48,6 +51,7 @@ function PageFallback() {
 // Runs once after login; by the time the user navigates, the chunk is cached.
 function ChunkPrefetcher() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   useEffect(() => {
     if (!user) return;
     // Shared — everyone uses these
@@ -69,13 +73,17 @@ function ChunkPrefetcher() {
       import('./pages/admin/BusinessRules');
     } else if (user.role === 'lead') {
       import('./pages/lead/TeamDashboard');
-      import('./pages/lead/Approvals');
+      import('./pages/Approvals');
       import('./pages/lead/TeamUtilization');
       import('./pages/lead/Blockers');
-    } else if (user.role === 'pm') {
-      import('./pages/pm/ProjectsAllocation');
-      import('./pages/pm/ProjectDashboard');
-    }
+      // Also warm today's dashboard data in parallel with the chunk import, so the landing
+      // page renders with data already in flight instead of waiting for chunk-load-then-fetch.
+      prefetchTeamLeadLanding(queryClient, todayISO());
+} else if (user.role === 'pm') {
+  import('./pages/pm/ProjectsAllocation');
+  import('./pages/pm/ProjectDashboard');
+  import('./pages/Approvals');
+}
   }, [user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
@@ -150,7 +158,7 @@ function AppRoutes() {
             <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
             <Route path="/projects/planned-actual" element={<Placeholder title="Planned vs Actual" />} />
             <Route path="/projects/blockers"       element={<Placeholder title="Blockers" />} />
-            <Route path="/projects/approvals"      element={<Placeholder title="Approvals" />} />
+            <Route path="/projects/approvals"      element={<Approvals />} />
             <Route path="/projects/reports"        element={<Placeholder title="Reports" />} />
 
             {/* ── Delivery Manager ───────────────────── */}

@@ -1,16 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ResponsiveContainer, LineChart, Line } from 'recharts';
 import {
-  Ban, Calendar, ChevronDown, ChevronRight, Flag, TrendingDown, TrendingUp,
+  Ban, Calendar, ChevronDown, ChevronRight, Flag, Loader2, TrendingDown, TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
-import { todayISO as localTodayISO } from '../../lib/date';
+import { todayISO as localTodayISO, yesterdayISO } from '../../lib/date';
 import { getEntry } from '../../api/eod';
 import {
   useAcknowledgeBlocker, useTeamLeadBlockers, useTeamLeadSummary, useTeamLeadTrend, useTeamMemberStatuses,
-  type MemberEodStatus, type MemberEodStatusDto, type TeamBlockerDto, type TrendPointDto,
+  type DateRange, type MemberEodStatus, type MemberEodStatusDto, type TeamBlockerDto, type TrendPointDto,
 } from '../../api/teamLead';
 
 // ── status config ──────────────────────────────────────────────────────────────
@@ -33,6 +33,14 @@ function fmtPct(pct: number | null): string {
 
 function fmtLongDate(iso: string): string {
   return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function fmtShortDate(iso: string): string {
+  return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function rangeLabel(range: DateRange, fmt: (iso: string) => string): string {
+  return range.from === range.to ? fmt(range.from) : `${fmt(range.from)} – ${fmt(range.to)}`;
 }
 
 // ── trend helpers ──────────────────────────────────────────────────────────────
@@ -219,6 +227,27 @@ function MemberDetail({ eodEntryId }: { eodEntryId: number }) {
   );
 }
 
+// ── project names cell (truncated, full list via native tooltip) ──────────────────
+
+function ProjectsCell({ names }: { names: string[] }) {
+  if (names.length === 0) {
+    return <span style={{ fontSize: 12, color: 'var(--txt-mut)' }}>—</span>;
+  }
+  const shown = names.slice(0, 2);
+  const extra = names.length - shown.length;
+  return (
+    <div
+      title={extra > 0 ? names.join(', ') : undefined}
+      style={{
+        fontSize: 12, color: 'var(--txt-mut)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        cursor: extra > 0 ? 'help' : 'default',
+      }}
+    >
+      {shown.join(', ')}{extra > 0 && ` +${extra}`}
+    </div>
+  );
+}
+
 // ── team status row ──────────────────────────────────────────────────────────────
 
 function MemberRow({ member, isLast, expanded, onToggle }: {
@@ -250,9 +279,7 @@ function MemberRow({ member, isLast, expanded, onToggle }: {
             </div>
           </div>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--txt-mut)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {member.projectName ?? '—'}
-        </div>
+        <ProjectsCell names={member.projectNames} />
         <UtilBar pct={member.utilizationPct} underutilized={member.underutilized} overloaded={member.overloaded} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} aria-hidden="true" />
@@ -338,18 +365,117 @@ function BlockerRow({ b, isLast, flagged, expanded, onToggle, onAcknowledge, ack
 
 // ── main ─────────────────────────────────────────────────────────────────────────────
 
+type DateMode = 'today' | 'yesterday' | 'range';
+
+// Backs up the URL-held date selection so it also survives navigation that drops the query
+// string entirely (e.g. clicking the "Team Dashboard" sidebar link, which points at the bare
+// path) — the URL stays the source of truth whenever it has the params, this is only the
+// fallback so a plain nav-away-and-back doesn't silently reset to "Today".
+const DATE_FILTER_STORAGE_KEY = 'nfsync_team_dashboard_date';
+
+interface StoredDateFilter {
+  mode: DateMode;
+  from?: string;
+  to?: string;
+}
+
+function readStoredDateFilter(): StoredDateFilter | null {
+  try {
+    const raw = sessionStorage.getItem(DATE_FILTER_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as StoredDateFilter) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredDateFilter(filter: StoredDateFilter): void {
+  try {
+    sessionStorage.setItem(DATE_FILTER_STORAGE_KEY, JSON.stringify(filter));
+  } catch {}
+}
+
 export default function TeamDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const todayISO = localTodayISO();
-  const [dateISO, setDateISO] = useState(todayISO);
-  const isToday = dateISO === todayISO;
 
-  const { data: summary, isPending: summaryPending, isError: summaryError, refetch: refetchSummary } = useTeamLeadSummary(dateISO);
-  const { data: members, isPending: membersPending, isError: membersError, refetch: refetchMembers } = useTeamMemberStatuses(dateISO);
-  const { data: blockers, isPending: blockersPending } = useTeamLeadBlockers(dateISO);
-  const { data: trend } = useTeamLeadTrend(dateISO, 7);
-  const acknowledge = useAcknowledgeBlocker(dateISO);
+  // Selected date/range lives in the URL (?mode=today|yesterday|range&from=&to=) so it survives
+  // navigation within the session, is shareable/bookmarkable, and only ever changes on an
+  // explicit user action — never as a side effect of remounting this page.
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // If the URL doesn't carry a selection (e.g. we arrived via a plain nav link rather than the
+  // browser back button / a bookmarked URL), fall back to the last explicit selection in
+  // sessionStorage instead of defaulting straight to "today".
+  const stored = searchParams.get('mode') ? null : readStoredDateFilter();
+  const modeParam = searchParams.get('mode') ?? stored?.mode ?? null;
+  const fromParam = searchParams.get('from') ?? stored?.from ?? null;
+  const toParam = searchParams.get('to') ?? stored?.to ?? null;
+  const mode: DateMode = modeParam === 'yesterday'
+    ? 'yesterday'
+    : modeParam === 'range' && fromParam && toParam
+      ? 'range'
+      : 'today';
+
+  const singleISO = mode === 'yesterday' ? yesterdayISO() : todayISO;
+  const rangeFrom = mode === 'range' ? fromParam! : todayISO;
+  const rangeTo = mode === 'range' ? toParam! : todayISO;
+
+  // Mirror a storage-only fallback back into the URL so it stays shareable/bookmarkable too.
+  // Runs once on mount; a no-op whenever the URL already carries the selection.
+  useEffect(() => {
+    if (searchParams.get('mode')) return;
+    const saved = readStoredDateFilter();
+    if (!saved) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('mode', saved.mode);
+    if (saved.mode === 'range' && saved.from && saved.to) {
+      next.set('from', saved.from);
+      next.set('to', saved.to);
+    }
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [draftFrom, setDraftFrom] = useState(todayISO);
+  const [draftTo, setDraftTo] = useState(todayISO);
+
+  const range: DateRange = mode === 'range' ? { from: rangeFrom, to: rangeTo } : { from: singleISO, to: singleISO };
+  const isToday = mode !== 'range' && singleISO === todayISO;
+
+  function selectQuick(kind: 'today' | 'yesterday') {
+    const next = new URLSearchParams(searchParams);
+    next.set('mode', kind);
+    next.delete('from');
+    next.delete('to');
+    setSearchParams(next, { replace: true });
+    writeStoredDateFilter({ mode: kind });
+    setPickerOpen(false);
+  }
+
+  function applyRange() {
+    if (draftFrom > draftTo) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('mode', 'range');
+    next.set('from', draftFrom);
+    next.set('to', draftTo);
+    setSearchParams(next, { replace: true });
+    writeStoredDateFilter({ mode: 'range', from: draftFrom, to: draftTo });
+    setPickerOpen(false);
+  }
+
+  function openPicker() {
+    setDraftFrom(mode === 'range' ? rangeFrom : singleISO);
+    setDraftTo(mode === 'range' ? rangeTo : singleISO);
+    setPickerOpen(true);
+  }
+
+  const { data: summary, isPending: summaryPending, isFetching: summaryFetching, isError: summaryError, refetch: refetchSummary } = useTeamLeadSummary(range, isToday);
+  const { data: members, isPending: membersPending, isFetching: membersFetching, isError: membersError, refetch: refetchMembers } = useTeamMemberStatuses(range, isToday);
+  const { data: blockers, isPending: blockersPending, isFetching: blockersFetching } = useTeamLeadBlockers(range, isToday);
+  const { data: trend } = useTeamLeadTrend(range.to, 7);
+  const acknowledge = useAcknowledgeBlocker(range);
 
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
   const [expandedBlockerId, setExpandedBlockerId] = useState<number | null>(null);
@@ -362,6 +488,9 @@ export default function TeamDashboard() {
 
   const isPending = summaryPending || membersPending;
   const isError = summaryError || membersError;
+  // True only for a background refresh (e.g. after applying a new date/range) where prior data
+  // is still on screen — distinct from isPending, which is the true first-load/no-data case.
+  const isRefreshing = !isPending && (summaryFetching || membersFetching || blockersFetching);
 
   if (isPending) {
     return (
@@ -422,25 +551,110 @@ export default function TeamDashboard() {
             Team Dashboard
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-            {user?.name} · {summary.activeMembers} direct report{summary.activeMembers !== 1 ? 's' : ''} · {fmtLongDate(dateISO)}
+            {user?.name} · {summary.activeMembers} direct report{summary.activeMembers !== 1 ? 's' : ''} · {rangeLabel(range, fmtLongDate)}
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            onClick={() => setDateISO(todayISO)}
-            disabled={isToday}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '8px 14px', fontSize: 12, fontWeight: 600,
-              color: isToday ? 'var(--info)' : 'var(--txt)',
-              background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8,
-              cursor: isToday ? 'default' : 'pointer',
-            }}
-          >
-            <Calendar size={13} aria-hidden="true" />
-            Today
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => (pickerOpen ? setPickerOpen(false) : openPicker())}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '8px 14px', fontSize: 12, fontWeight: 600,
+                color: isToday ? 'var(--info)' : 'var(--txt)',
+                background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8,
+                cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              <Calendar size={13} aria-hidden="true" />
+              {mode === 'today' ? 'Today' : mode === 'yesterday' ? 'Yesterday' : rangeLabel(range, fmtShortDate)}
+              {isRefreshing
+                ? <Loader2 size={12} aria-hidden="true" style={{ animation: 'spin 1s linear infinite' }} />
+                : <ChevronDown size={12} aria-hidden="true" />}
+            </button>
+
+            {pickerOpen && (
+              <>
+                <div
+                  onClick={() => setPickerOpen(false)}
+                  style={{ position: 'fixed', inset: 0, zIndex: 19 }}
+                />
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 260,
+                  background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
+                  boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
+                }}>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                    <button
+                      onClick={() => selectQuick('today')}
+                      style={{
+                        flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
+                        background: mode === 'today' ? 'var(--info)' : 'var(--raised2)',
+                        color: mode === 'today' ? '#fff' : 'var(--txt)',
+                        border: '1px solid var(--line2)',
+                      }}
+                    >
+                      Today
+                    </button>
+                    <button
+                      onClick={() => selectQuick('yesterday')}
+                      style={{
+                        flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
+                        background: mode === 'yesterday' ? 'var(--info)' : 'var(--raised2)',
+                        color: mode === 'yesterday' ? '#fff' : 'var(--txt)',
+                        border: '1px solid var(--line2)',
+                      }}
+                    >
+                      Yesterday
+                    </button>
+                  </div>
+
+                  <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                    Custom range
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <input
+                      type="date"
+                      value={draftFrom}
+                      max={todayISO}
+                      onChange={(e) => setDraftFrom(e.target.value)}
+                      style={{
+                        flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
+                        background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
+                      }}
+                    />
+                    <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>to</span>
+                    <input
+                      type="date"
+                      value={draftTo}
+                      max={todayISO}
+                      onChange={(e) => setDraftTo(e.target.value)}
+                      style={{
+                        flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
+                        background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
+                      }}
+                    />
+                  </div>
+                  {draftFrom > draftTo && (
+                    <div style={{ fontSize: 11, color: 'var(--risk)', marginBottom: 10 }}>"From" must not be after "to".</div>
+                  )}
+                  <button
+                    onClick={applyRange}
+                    disabled={draftFrom > draftTo}
+                    style={{
+                      width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
+                      background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
+                      cursor: draftFrom > draftTo ? 'default' : 'pointer',
+                      opacity: draftFrom > draftTo ? 0.6 : 1,
+                    }}
+                  >
+                    Apply
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
 
           <button
             onClick={() => navigate('/team/approvals')}
@@ -501,7 +715,9 @@ export default function TeamDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 16 }}>
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>Today's team status</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+              {isToday ? "Today's team status" : `Team status — ${rangeLabel(range, fmtShortDate)}`}
+            </div>
             <button
               onClick={() => navigate('/team/utilization')}
               style={{ fontSize: 11, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer' }}
@@ -533,8 +749,12 @@ export default function TeamDashboard() {
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>Blockers today</div>
-              <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 2 }}>Unacknowledged blockers for {fmtLongDate(dateISO)}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+                {isToday ? 'Blockers today' : `Blockers — ${rangeLabel(range, fmtShortDate)}`}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 2 }}>
+                Unacknowledged blockers for {rangeLabel(range, fmtLongDate)}
+              </div>
             </div>
             <button
               onClick={() => navigate('/team/blockers')}
@@ -546,7 +766,9 @@ export default function TeamDashboard() {
           {blockersPending ? (
             <div style={{ padding: 16 }}><Skel h={60} /></div>
           ) : !blockers || blockers.length === 0 ? (
-            <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No blockers reported today.</div>
+            <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>
+              {isToday ? 'No blockers reported today.' : `No blockers for ${rangeLabel(range, fmtShortDate)}.`}
+            </div>
           ) : (
             blockers.map((b, i) => (
               <BlockerRow
@@ -563,6 +785,8 @@ export default function TeamDashboard() {
           )}
         </Card>
       </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
