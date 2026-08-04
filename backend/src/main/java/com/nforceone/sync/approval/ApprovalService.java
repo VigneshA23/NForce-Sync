@@ -7,8 +7,10 @@ import com.nforceone.sync.auth.AuditLog;
 import com.nforceone.sync.auth.AuditLogRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
+import com.nforceone.sync.eod.EodTask;
 import com.nforceone.sync.eod.dto.EodEntryDto;
 import com.nforceone.sync.notification.NotificationService;
+import com.nforceone.sync.project.Project;
 import com.nforceone.sync.utilization.UtilizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 @Transactional
@@ -49,13 +52,12 @@ public class ApprovalService {
     }
 
     @Transactional(readOnly = true)
-    public List<EodEntryDto> getPendingForManager(String actorEmail) {
-        AppUser manager = requireUserByEmail(actorEmail);
-        return entryRepository
-                .findPendingByManagerId(manager.getId(), EodEntry.Status.SUBMITTED)
-                .stream()
-                .map(EodEntryDto::from)
-                .toList();
+    public List<EodEntryDto> getPendingForActor(String actorEmail) {
+        AppUser actor = requireUserByEmail(actorEmail);
+        List<EodEntry> entries = actor.getRole() == AppUser.Role.PM
+                ? entryRepository.findPendingByProjectManagerId(actor.getId(), EodEntry.Status.SUBMITTED)
+                : entryRepository.findPendingByManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
+        return entries.stream().map(EodEntryDto::from).toList();
     }
 
     // from/to are both null or both present — enforced by the controller, which only forwards
@@ -153,20 +155,21 @@ public class ApprovalService {
     }
 
     private void checkManagerAuthorization(AppUser actor, EodEntry entry) {
+        if (actor.getRole() == AppUser.Role.SUPERADMIN) return;
+
         AppUser manager = entry.getEmployee().getManager();
-        if (manager == null) {
-            // No manager assigned — only SUPERADMIN can act
-            if (actor.getRole() != AppUser.Role.SUPERADMIN) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                        "Employee has no assigned manager; only Super Admin can approve");
-            }
-            return;
-        }
-        boolean isDirectManager = manager.getId().equals(actor.getId());
-        boolean isSuperAdmin    = actor.getRole() == AppUser.Role.SUPERADMIN;
-        if (!isDirectManager && !isSuperAdmin) {
+        boolean isDirectManager = manager != null && manager.getId().equals(actor.getId());
+
+        boolean isProjectManager = entry.getTasks().stream()
+                .map(EodTask::getProject)
+                .filter(Objects::nonNull)
+                .map(Project::getPm)
+                .filter(Objects::nonNull)
+                .anyMatch(pm -> pm.getId().equals(actor.getId()));
+
+        if (!isDirectManager && !isProjectManager) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Only the employee's direct manager can perform this action");
+                    "Only the employee's direct manager or a project manager on this entry can perform this action");
         }
     }
 

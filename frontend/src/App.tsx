@@ -28,7 +28,7 @@ const MyUtilization       = lazy(() => import('./pages/employee/MyUtilization'))
 const SubmitEOD           = lazy(() => import('./pages/employee/SubmitEOD'));
 const EodHistory          = lazy(() => import('./pages/employee/EodHistory'));
 const TeamDashboard       = lazy(() => import('./pages/lead/TeamDashboard'));
-const Approvals           = lazy(() => import('./pages/lead/Approvals'));
+const Approvals           = lazy(() => import('./pages/Approvals'));
 const TeamUtilization     = lazy(() => import('./pages/lead/TeamUtilization'));
 const Blockers            = lazy(() => import('./pages/lead/Blockers'));
 const ProjectsAllocation  = lazy(() => import('./pages/pm/ProjectsAllocation'));
@@ -72,7 +72,7 @@ function ChunkPrefetcher() {
       import('./pages/admin/BusinessRules');
     } else if (user.role === 'lead') {
       import('./pages/lead/TeamDashboard');
-      import('./pages/lead/Approvals');
+      import('./pages/Approvals');
       import('./pages/lead/TeamUtilization');
       import('./pages/lead/Blockers');
       // Also warm today's dashboard data in parallel with the chunk import, so the landing
@@ -80,6 +80,7 @@ function ChunkPrefetcher() {
       prefetchTeamLeadLanding(queryClient, todayISO());
     } else if (user.role === 'pm') {
       import('./pages/pm/ProjectsAllocation');
+      import('./pages/Approvals');
     }
   }, [user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
@@ -155,7 +156,7 @@ function AppRoutes() {
             <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
             <Route path="/projects/planned-actual" element={<Placeholder title="Planned vs Actual" />} />
             <Route path="/projects/blockers"       element={<Placeholder title="Blockers" />} />
-            <Route path="/projects/approvals"      element={<Placeholder title="Approvals" />} />
+            <Route path="/projects/approvals"      element={<Approvals />} />
             <Route path="/projects/reports"        element={<Placeholder title="Reports" />} />
 
             {/* ── Delivery Manager ───────────────────── */}

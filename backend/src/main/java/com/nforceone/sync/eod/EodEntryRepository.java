@@ -54,6 +54,24 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
                                                              @Param("from") LocalDate from,
                                                              @Param("to") LocalDate to);
 
+    // Pending approvals for a Project Manager — any entry with at least one task on a project
+    // this PM owns (Project.pm). An entry can span multiple projects, so this is an EXISTS
+    // check rather than a strict join, and DISTINCT dedupes entries matching on >1 task.
+    @Query("""
+        SELECT DISTINCT e FROM EodEntry e
+        JOIN FETCH e.employee emp
+        LEFT JOIN FETCH e.tasks t
+        LEFT JOIN FETCH t.project
+        LEFT JOIN FETCH t.taskCategory
+        WHERE e.status = :status
+          AND EXISTS (
+            SELECT 1 FROM EodTask pt
+            WHERE pt.eodEntry = e AND pt.project.pm.id = :pmId
+          )
+        """)
+    List<EodEntry> findPendingByProjectManagerId(@Param("pmId") Long pmId,
+                                                 @Param("status") EodEntry.Status status);
+
     /**
      * Time-adjustment uses of one type inside a date window, for the monthly allowance check.
      *

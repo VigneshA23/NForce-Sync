@@ -180,13 +180,11 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const role = user!.role;
   const navSections = NAV[role];
 
-  // Sidebar Approvals badge — always the full all-time "how many yet to approve" count,
-  // deliberately UNSCOPED by any date/range filter selected on the Team Dashboard or applied
-  // on the Approvals page. Those two surfaces intentionally scope their own numbers to the
-  // selected date/range (see TeamDashboard.tsx / Approvals.tsx); the sidebar is global chrome
-  // visible on every route and must keep one stable meaning regardless of what date a Team
-  // Lead happens to be looking at elsewhere.
-  const pendingApprovalsCount = usePendingApprovalsCount(role === 'lead');
+  // Sidebar Approvals badge, the Team Dashboard "Pending Approval" KPI, and the
+  // Approvals page count all read this same live query — see api/approvals.ts.
+  // Shared by both roles that have an Approvals page (Team Lead and Project Manager) —
+  // the query itself resolves "pending for me" differently server-side per role.
+  const pendingApprovalsCount = usePendingApprovalsCount(role === 'lead' || role === 'pm');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -243,7 +241,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
             {section.items.map((item) => {
               const isActive = location.pathname === item.path;
               const Icon = item.icon;
-              const badge = role === 'lead' && item.key === 'approvals' ? pendingApprovalsCount : item.badge;
+              const badge = (role === 'lead' || role === 'pm') && item.key === 'approvals' ? pendingApprovalsCount : item.badge;
               return (
                 <Link
                   key={item.key}

@@ -104,7 +104,7 @@ export const NAV: Record<Role, RoleNav> = {
     {
       section: 'Work',
       items: [
-        { key: 'approvals',     label: 'Approvals',      path: '/projects/approvals', icon: ClipboardCheck, badge: 4 },
+        { key: 'approvals',     label: 'Approvals',      path: '/projects/approvals', icon: ClipboardCheck },
         { key: 'reports',       label: 'Reports',         path: '/projects/reports',   icon: BarChart3 },
         { key: 'notifications', label: 'Notifications',  path: '/notifications',       icon: Bell },
         { key: 'profile',       label: 'Profile',         path: '/profile',             icon: User },

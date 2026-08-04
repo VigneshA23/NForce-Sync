@@ -24,6 +24,13 @@ export function todayISO(): string {
   return toLocalISODate(new Date());
 }
 
+/** Yesterday as `yyyy-MM-dd` in the browser's local timezone. */
+export function yesterdayISO(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return toLocalISODate(d);
+}
+
 /**
  * Parses a calendar-date-only string (`yyyy-MM-dd`) as LOCAL midnight, not UTC —
  * `new Date('2026-07-30')` parses as UTC midnight, which renders as the previous
