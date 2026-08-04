@@ -23,7 +23,7 @@ public class ApprovalController {
 
     @GetMapping("/pending")
     public List<EodEntryDto> getPending() {
-        return approvalService.getPendingForManager(actingEmail());
+        return approvalService.getPendingForActor(actingEmail());
     }
 
     @PostMapping("/{entryId}/approve")

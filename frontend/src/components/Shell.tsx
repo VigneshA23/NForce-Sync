@@ -182,7 +182,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 
   // Sidebar Approvals badge, the Team Dashboard "Pending Approval" KPI, and the
   // Approvals page count all read this same live query — see api/approvals.ts.
-  const pendingApprovalsCount = usePendingApprovalsCount(role === 'lead');
+  // Shared by both roles that have an Approvals page (Team Lead and Project Manager) —
+  // the query itself resolves "pending for me" differently server-side per role.
+  const pendingApprovalsCount = usePendingApprovalsCount(role === 'lead' || role === 'pm');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -239,7 +241,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
             {section.items.map((item) => {
               const isActive = location.pathname === item.path;
               const Icon = item.icon;
-              const badge = role === 'lead' && item.key === 'approvals' ? pendingApprovalsCount : item.badge;
+              const badge = (role === 'lead' || role === 'pm') && item.key === 'approvals' ? pendingApprovalsCount : item.badge;
               return (
                 <Link
                   key={item.key}

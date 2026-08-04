@@ -6,7 +6,7 @@ import {
   Ban, Calendar, ChevronDown, ChevronRight, Flag, Loader2, TrendingDown, TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
-import { todayISO as localTodayISO, toLocalISODate } from '../../lib/date';
+import { todayISO as localTodayISO, yesterdayISO } from '../../lib/date';
 import { getEntry } from '../../api/eod';
 import {
   useAcknowledgeBlocker, useTeamLeadBlockers, useTeamLeadSummary, useTeamLeadTrend, useTeamMemberStatuses,
@@ -41,12 +41,6 @@ function fmtShortDate(iso: string): string {
 
 function rangeLabel(range: DateRange, fmt: (iso: string) => string): string {
   return range.from === range.to ? fmt(range.from) : `${fmt(range.from)} – ${fmt(range.to)}`;
-}
-
-function yesterdayISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return toLocalISODate(d);
 }
 
 // ── trend helpers ──────────────────────────────────────────────────────────────
