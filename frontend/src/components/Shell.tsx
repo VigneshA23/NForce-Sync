@@ -10,7 +10,7 @@ import { useTheme } from '../lib/theme';
 import { NotAuthorized } from '../pages/NotAuthorized';
 import { searchUsers, listLocations } from '../api/admin';
 import { toRole } from '../api/auth';
-import { fetchUnreadCount } from '../api/notifications';
+import { useUnreadNotificationsCount } from '../api/notifications';
 import { usePendingApprovalsCount } from '../api/approvals';
 
 // ─── Workspace search (top nav) ────────────────────────────────────────────────
@@ -186,6 +186,10 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   // the query itself resolves "pending for me" differently server-side per role.
   const pendingApprovalsCount = usePendingApprovalsCount(role === 'lead' || role === 'pm');
 
+  // Sidebar Notifications badge — same live query that feeds the topbar bell
+  // and the Notifications page header, so all three stay in sync. See api/notifications.ts.
+  const unreadNotificationsCount = useUnreadNotificationsCount();
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
@@ -241,7 +245,11 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
             {section.items.map((item) => {
               const isActive = location.pathname === item.path;
               const Icon = item.icon;
-              const badge = (role === 'lead' || role === 'pm') && item.key === 'approvals' ? pendingApprovalsCount : item.badge;
+              const badge = (role === 'lead' || role === 'pm') && item.key === 'approvals'
+                ? pendingApprovalsCount
+                : item.key === 'notifications'
+                  ? unreadNotificationsCount
+                  : item.badge;
               return (
                 <Link
                   key={item.key}
@@ -398,13 +406,7 @@ export function Shell() {
   const navInfo  = getNavItem(role, location.pathname);
   const pageLabel = navInfo?.item.label ?? 'Home';
 
-  const { data: unreadCountData } = useQuery({
-    queryKey: ['notifications', 'unread-count'],
-    queryFn: fetchUnreadCount,
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-  });
-  const bellBadge = unreadCountData ?? 0;
+  const bellBadge = useUnreadNotificationsCount();
 
   // Close drawer + profile on route change
   useEffect(() => {

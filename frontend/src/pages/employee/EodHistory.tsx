@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle, Clock, XCircle, MessageSquare, ChevronRight, AlertTriangle } from 'lucide-react';
+import {
+  CheckCircle, Clock, XCircle, MessageSquare, ChevronRight, AlertTriangle,
+  Search, ArrowUpDown, ChevronLeft,
+} from 'lucide-react';
 import { listEntries } from '../../api/eod';
 import type { EodEntryDto } from '../../api/eod';
 import { formatDate as formatDateDDMMYYYY, formatDateTime } from '../../lib/date';
@@ -43,23 +46,66 @@ const STATUS_FILTERS = [
   { value: 'DRAFT',            label: 'Draft' },
 ];
 
+const PAGE_SIZE = 10;
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function EodHistory() {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
+  const [page, setPage] = useState(0);
 
   const { data: entries = [], isLoading, isError } = useQuery({
-    queryKey: ['eod-history'],
-    queryFn:  () => listEntries(),
+    queryKey: ['eod-history', dateFrom, dateTo],
+    queryFn:  () => listEntries(undefined, dateFrom || undefined, dateTo || undefined),
   });
-
-  const filtered = statusFilter
-    ? entries.filter(e => e.status === statusFilter)
-    : entries;
 
   const totalHours = (entry: EodEntryDto) =>
     entry.tasks.reduce((sum, t) => sum + (Number(t.hours) || 0), 0);
+
+  const projectSummary = (entry: EodEntryDto): string => {
+    const codes = Array.from(new Set(entry.tasks.map(t => t.projectCode).filter(Boolean))) as string[];
+    if (codes.length === 0) return '—';
+    return codes.length === 1 ? codes[0] : `${codes[0]} +${codes.length - 1}`;
+  };
+
+  const taskSummary = (entry: EodEntryDto): string => {
+    if (entry.tasks.length === 0) return entry.dayType !== 'WORKING_DAY' ? entry.dayType.replace('_', ' ') : '—';
+    const labels = entry.tasks.map(t => t.categoryName || t.description || 'Task');
+    return labels.length === 1 ? labels[0] : `${labels[0]} +${labels.length - 1} more`;
+  };
+
+  const filtered = useMemo(() => {
+    let rows = statusFilter ? entries.filter(e => e.status === statusFilter) : entries;
+    const q = search.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter(e => {
+        const haystack = [
+          e.entryDate,
+          ...e.tasks.map(t => t.projectCode ?? ''),
+          ...e.tasks.map(t => t.categoryName ?? ''),
+          ...e.tasks.map(t => t.description ?? ''),
+        ].join(' ').toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+    const sorted = [...rows].sort((a, b) =>
+      sortDir === 'desc' ? b.entryDate.localeCompare(a.entryDate) : a.entryDate.localeCompare(b.entryDate)
+    );
+    return sorted;
+  }, [entries, statusFilter, search, sortDir]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageSafe = Math.min(page, pageCount - 1);
+  const paged = filtered.slice(pageSafe * PAGE_SIZE, (pageSafe + 1) * PAGE_SIZE);
+
+  function resetPage<T>(setter: (v: T) => void) {
+    return (v: T) => { setter(v); setPage(0); };
+  }
 
   // Weekday kept (useful in a history list scanned day-by-day), date portion
   // standardized to DD-MM-YYYY.
@@ -94,21 +140,53 @@ export default function EodHistory() {
 
       {/* Toolbar — native select, matching the working filter pattern in admin/AuditLog.tsx */}
       <div style={{
-        display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 16,
+        display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap',
         padding: '14px 16px', background: 'var(--panel)',
         border: '1px solid var(--line)', borderRadius: 10,
       }}>
         <div>
-          <label style={labelStyle} htmlFor="status-filter">Filter</label>
+          <label style={labelStyle} htmlFor="eod-search">Search</label>
+          <div style={{ position: 'relative' }}>
+            <Search size={13} style={{ position: 'absolute', left: 9, top: 9, color: 'var(--txt-dim)' }} aria-hidden />
+            <input
+              id="eod-search"
+              placeholder="Project, category, description…"
+              value={search}
+              onChange={e => resetPage(setSearch)(e.target.value)}
+              style={{ ...selectStyle, paddingLeft: 28, width: 220, cursor: 'text' }}
+            />
+          </div>
+        </div>
+        <div>
+          <label style={labelStyle} htmlFor="status-filter">Status</label>
           <select
             id="status-filter"
             value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
+            onChange={e => resetPage(setStatusFilter)(e.target.value)}
             style={selectStyle}
           >
             {STATUS_FILTERS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
         </div>
+        <div>
+          <label style={labelStyle} htmlFor="date-from">From</label>
+          <input id="date-from" type="date" value={dateFrom} onChange={e => resetPage(setDateFrom)(e.target.value)} style={{ ...selectStyle, cursor: 'text' }} />
+        </div>
+        <div>
+          <label style={labelStyle} htmlFor="date-to">To</label>
+          <input id="date-to" type="date" value={dateTo} onChange={e => resetPage(setDateTo)(e.target.value)} style={{ ...selectStyle, cursor: 'text' }} />
+        </div>
+        <button
+          onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
+          title="Toggle sort order"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '7px 10px', background: 'var(--shell)', border: '1px solid var(--line2)',
+            borderRadius: 6, color: 'var(--txt-mut)', fontSize: 12, cursor: 'pointer',
+          }}
+        >
+          <ArrowUpDown size={12} /> {sortDir === 'desc' ? 'Newest first' : 'Oldest first'}
+        </button>
         <span style={{ marginLeft: 'auto', fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-dim)' }}>
           {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
         </span>
@@ -130,7 +208,10 @@ export default function EodHistory() {
           Failed to load history. Please refresh.
         </div>
       ) : filtered.length === 0 ? (
-        <EmptyState hasFilter={!!statusFilter} onClear={() => setStatusFilter('')} />
+        <EmptyState
+          hasFilter={!!statusFilter || !!search || !!dateFrom || !!dateTo}
+          onClear={() => { setStatusFilter(''); setSearch(''); setDateFrom(''); setDateTo(''); setPage(0); }}
+        />
       ) : (
         <div style={{
           background: 'var(--panel)', border: '1px solid var(--line)',
@@ -138,11 +219,11 @@ export default function EodHistory() {
         }}>
           {/* Table header */}
           <div style={{
-            display: 'grid', gridTemplateColumns: '1.8fr 1fr 60px 80px 1fr 36px',
+            display: 'grid', gridTemplateColumns: '1.3fr 0.8fr 1.5fr 70px 1fr 1fr 32px',
             padding: '8px 16px', borderBottom: '1px solid var(--line)',
             gap: 12,
           }}>
-            {['Date', 'Status', 'Tasks', 'Hours', 'Submitted at', ''].map((h, i) => (
+            {['Date', 'Project', 'Task Summary', 'Hours', 'Status', 'Submitted at', ''].map((h, i) => (
               <div key={i} style={{ fontSize: 10, fontWeight: 600, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {h}
               </div>
@@ -150,7 +231,7 @@ export default function EodHistory() {
           </div>
 
           {/* Rows */}
-          {filtered.map((entry, i) => (
+          {paged.map((entry, i) => (
             <div
               key={entry.id}
               onClick={() => handleView(entry)}
@@ -158,9 +239,9 @@ export default function EodHistory() {
               tabIndex={0}
               onKeyDown={e => e.key === 'Enter' && handleView(entry)}
               style={{
-                display: 'grid', gridTemplateColumns: '1.8fr 1fr 60px 80px 1fr 36px',
+                display: 'grid', gridTemplateColumns: '1.3fr 0.8fr 1.5fr 70px 1fr 1fr 32px',
                 padding: '12px 16px', gap: 12, alignItems: 'center',
-                borderBottom: i < filtered.length - 1 ? '1px solid var(--line)' : 'none',
+                borderBottom: i < paged.length - 1 ? '1px solid var(--line)' : 'none',
                 cursor: 'pointer',
                 transition: 'background 120ms',
               }}
@@ -172,18 +253,21 @@ export default function EodHistory() {
                   {formatDate(entry.entryDate)}
                 </div>
                 {entry.reviewerComment && (
-                  <div style={{ fontSize: 11, color: '#E0A93B', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 260 }}>
+                  <div style={{ fontSize: 11, color: '#E0A93B', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
                     "{entry.reviewerComment}"
                   </div>
                 )}
               </div>
-              <div><StatusBadge status={entry.status} /></div>
               <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-mut)' }}>
-                {entry.tasks.length}
+                {projectSummary(entry)}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--txt-mut)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {taskSummary(entry)}
               </div>
               <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-mut)' }}>
                 {totalHours(entry).toFixed(1)}h
               </div>
+              <div><StatusBadge status={entry.status} /></div>
               <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, color: 'var(--txt-dim)' }}>
                 {entry.submittedAt ? formatDateTime(entry.submittedAt) : '—'}
               </div>
@@ -192,6 +276,32 @@ export default function EodHistory() {
               </div>
             </div>
           ))}
+
+          {/* Pagination */}
+          {pageCount > 1 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 16px', borderTop: '1px solid var(--line)',
+            }}>
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={pageSafe === 0}
+                style={pagerBtnStyle(pageSafe === 0)}
+              >
+                <ChevronLeft size={13} /> Prev
+              </button>
+              <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+                Page {pageSafe + 1} of {pageCount}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
+                disabled={pageSafe >= pageCount - 1}
+                style={pagerBtnStyle(pageSafe >= pageCount - 1)}
+              >
+                Next <ChevronRight size={13} />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -246,3 +356,15 @@ const selectStyle: React.CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'Inter, sans-serif',
 };
+
+function pagerBtnStyle(disabled: boolean): React.CSSProperties {
+  return {
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    padding: '5px 10px', borderRadius: 6,
+    background: disabled ? 'transparent' : 'var(--raised2)',
+    border: `1px solid ${disabled ? 'transparent' : 'var(--line2)'}`,
+    color: disabled ? 'var(--line2)' : 'var(--txt-mut)',
+    cursor: disabled ? 'default' : 'pointer',
+    fontSize: 11, fontWeight: 600,
+  };
+}

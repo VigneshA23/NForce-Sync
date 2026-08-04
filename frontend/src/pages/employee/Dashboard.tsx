@@ -2,11 +2,20 @@ import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, Clock, CheckCircle2, TrendingUp, Zap, Activity,
-  ArrowRight, ChevronLeft, ChevronRight,
+  ArrowRight, ChevronLeft, ChevronRight, CalendarDays, FolderKanban,
+  MessageSquare, CalendarX,
 } from 'lucide-react';
-import { useDashboardSummary } from '../../api/employee';
-import type { CalendarDay, BlockedTask, RecentEntry } from '../../api/employee';
+import {
+  useDashboardSummary, useEmployeeDashboardStats, useEmployeeProjects,
+  useUpcomingHolidays, useUtilizationDetail,
+} from '../../api/employee';
+import type {
+  CalendarDay, BlockedTask, RecentEntry, PendingCorrectionDto, EmployeeProjectDto, HolidayDto,
+} from '../../api/employee';
+import { useAuth } from '../../lib/auth';
+import { UtilBar } from '../../components/UtilBar';
 import { utilColor, fmtPct } from '../../lib/rules';
+import { formatDate, formatDateTime, toLocalISODate, todayISO } from '../../lib/date';
 
 // ── Primitives ─────────────────────────────────────────────────────────────────
 
@@ -391,63 +400,315 @@ function MonthStatsPanel({ days }: { days: CalendarDay[] }) {
   );
 }
 
-// ── Action Required ────────────────────────────────────────────────────────────
+// ── Pending Corrections ─────────────────────────────────────────────────────────
+// Replaces the old recentEntries-derived "Needs Attention" strip: sources the
+// dedicated dashboard-stats endpoint (30-day lookback, includes the reviewer's
+// actual comment) instead of scanning the 10-entry recent-activity list.
 
-function ActionRequired({ entries }: { entries: RecentEntry[] }) {
-  const items = entries.filter(e =>
-    e.status === 'REJECTED' || e.status === 'CHANGES_REQUESTED' || e.status === 'MISSED'
+function PendingCorrectionsPanel({ corrections }: { corrections: PendingCorrectionDto[] }) {
+  return (
+    <Card pad={0}>
+      <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <MessageSquare size={13} color="var(--warn)" style={{ flexShrink: 0 }} />
+        <SectionLabel style={{ marginBottom: 0, color: corrections.length ? 'var(--warn)' : 'var(--txt-dim)' }}>
+          Pending Corrections
+        </SectionLabel>
+        {corrections.length > 0 && (
+          <span style={{
+            marginLeft: 'auto', fontSize: 10, fontWeight: 700,
+            padding: '1px 7px', borderRadius: 10,
+            background: 'color-mix(in srgb, var(--warn) 15%, transparent)',
+            color: 'var(--warn)',
+          }}>
+            {corrections.length}
+          </span>
+        )}
+      </div>
+      {corrections.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '16px 0 20px', fontSize: 12, color: 'var(--txt-dim)' }}>
+          <CheckCircle2 size={24} style={{ color: 'var(--ok)', display: 'block', margin: '0 auto 8px' }} />
+          Nothing needs correction
+        </div>
+      ) : (
+        corrections.slice(0, 4).map(c => {
+          const isCR = c.status === 'CHANGES_REQUESTED';
+          return (
+            <div key={c.entryId} style={{
+              padding: '9px 16px', borderTop: '1px solid var(--line)',
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                  <span style={{ fontSize: 11, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
+                    {formatDate(c.entryDate)}
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: isCR ? 'var(--warn)' : 'var(--risk)' }}>
+                    {isCR ? 'Changes Requested' : 'Rejected'}
+                  </span>
+                </div>
+                {c.reviewerComment && (
+                  <div style={{ fontSize: 11, color: 'var(--txt-mut)', fontStyle: 'italic', lineHeight: 1.4 }}>
+                    "{c.reviewerComment}"
+                  </div>
+                )}
+              </div>
+              <Link to={`/eod/submit?date=${c.entryDate}`} style={{
+                fontSize: 10, fontWeight: 600, color: 'var(--info)',
+                textDecoration: 'none', padding: '3px 10px', whiteSpace: 'nowrap',
+                background: 'color-mix(in srgb, var(--info) 10%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--info) 25%, transparent)',
+                borderRadius: 5, flexShrink: 0,
+              }}>
+                Resubmit →
+              </Link>
+            </div>
+          );
+        })
+      )}
+    </Card>
   );
-  if (items.length === 0) return null;
+}
+
+// ── Missed Submissions ──────────────────────────────────────────────────────────
+
+function MissedSubmissionsPanel({ dates, count }: { dates: string[]; count: number }) {
+  const severity = count === 0 ? 'ok' : count <= 2 ? 'warn' : 'risk';
+  const severityColor = severity === 'ok' ? 'var(--ok)' : severity === 'warn' ? 'var(--warn)' : 'var(--risk)';
+  const shown = dates.slice(0, 4);
 
   return (
     <Card pad={0}>
-      <div style={{
-        padding: '12px 16px 8px',
-        display: 'flex', alignItems: 'center', gap: 8,
-      }}>
-        <AlertCircle size={13} color="var(--warn)" style={{ flexShrink: 0 }} />
-        <SectionLabel style={{ marginBottom: 0, color: 'var(--warn)' }}>Needs Attention</SectionLabel>
-        <span style={{
-          marginLeft: 'auto',
-          fontSize: 10, fontWeight: 700,
-          padding: '1px 7px', borderRadius: 10,
-          background: 'color-mix(in srgb, var(--warn) 15%, transparent)',
-          color: 'var(--warn)',
-        }}>
-          {items.length}
-        </span>
-      </div>
-      {items.slice(0, 3).map(entry => {
-        const d = new Date(entry.date + 'T12:00:00');
-        const dateLabel = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-        const isCR = entry.status === 'CHANGES_REQUESTED';
-        const statusColor = entry.status === 'MISSED' ? 'var(--risk)' : isCR ? 'var(--warn)' : 'var(--risk)';
-        const statusText  = isCR ? 'Changes Req.' : entry.status === 'REJECTED' ? 'Rejected' : 'Missed';
-        return (
-          <div key={entry.id} style={{
-            padding: '9px 16px', borderTop: '1px solid var(--line)',
-            display: 'flex', alignItems: 'center', gap: 10,
+      <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <CalendarX size={13} color={severityColor} style={{ flexShrink: 0 }} />
+        <SectionLabel style={{ marginBottom: 0, color: count ? severityColor : 'var(--txt-dim)' }}>
+          Missed Submissions
+        </SectionLabel>
+        {count > 0 && (
+          <span style={{
+            marginLeft: 'auto', fontSize: 10, fontWeight: 700,
+            padding: '1px 7px', borderRadius: 10,
+            background: `color-mix(in srgb, ${severityColor} 15%, transparent)`,
+            color: severityColor,
           }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', marginBottom: 2 }}>
-                {dateLabel}
-              </div>
-              <div style={{ fontSize: 10, color: statusColor, fontWeight: 700 }}>{statusText}</div>
-            </div>
-            {entry.status !== 'MISSED' && (
-              <Link to="/eod/history" style={{
+            {count}
+          </span>
+        )}
+      </div>
+      {count === 0 ? (
+        <div style={{ textAlign: 'center', padding: '16px 0 20px', fontSize: 12, color: 'var(--txt-dim)' }}>
+          <CheckCircle2 size={24} style={{ color: 'var(--ok)', display: 'block', margin: '0 auto 8px' }} />
+          No missed days this month
+        </div>
+      ) : (
+        <>
+          {shown.map(date => (
+            <div key={date} style={{
+              padding: '9px 16px', borderTop: '1px solid var(--line)',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <span style={{ flex: 1, fontSize: 12, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
+                {formatDate(date)}
+              </span>
+              <Link to={`/eod/submit?date=${date}`} style={{
                 fontSize: 10, fontWeight: 600, color: 'var(--info)',
                 textDecoration: 'none', padding: '3px 10px', whiteSpace: 'nowrap',
                 background: 'color-mix(in srgb, var(--info) 10%, transparent)',
                 border: '1px solid color-mix(in srgb, var(--info) 25%, transparent)',
                 borderRadius: 5,
               }}>
-                Fix →
+                Submit →
               </Link>
-            )}
+            </div>
+          ))}
+          {count > shown.length && (
+            <div style={{ padding: '7px 16px 10px', fontSize: 11, color: 'var(--txt-dim)', borderTop: '1px solid var(--line)' }}>
+              +{count - shown.length} more this month
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ── Assigned Projects ────────────────────────────────────────────────────────────
+
+function projectStatusColor(status: string): string {
+  switch (status) {
+    case 'ACTIVE':    return 'var(--ok)';
+    case 'COMPLETED': return 'var(--txt-dim)';
+    case 'ON_HOLD':   return 'var(--warn)';
+    case 'CANCELLED': return 'var(--risk)';
+    default:          return 'var(--txt-mut)';
+  }
+}
+
+function AssignedProjectsPanel({ projects }: { projects: EmployeeProjectDto[] }) {
+  return (
+    <Card pad={0}>
+      <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <FolderKanban size={13} color="var(--txt-mut)" style={{ flexShrink: 0 }} />
+        <SectionLabel style={{ marginBottom: 0 }}>Assigned Projects</SectionLabel>
+        {projects.length > 0 && (
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+            {projects.length}
+          </span>
+        )}
+      </div>
+      {projects.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '16px 0 20px', fontSize: 12, color: 'var(--txt-dim)' }}>
+          No active project assignments
+        </div>
+      ) : (
+        projects.map(p => (
+          <div key={p.projectId} style={{
+            padding: '9px 16px', borderTop: '1px solid var(--line)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500, marginBottom: 2 }}>
+                {p.projectName}
+                <span style={{ fontSize: 10, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', marginLeft: 6 }}>
+                  {p.projectCode}
+                </span>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--txt-dim)' }}>
+                {p.pmName ? `PM: ${p.pmName} · ` : ''}
+                {formatDate(p.assignedFrom)} – {p.assignedTo ? formatDate(p.assignedTo) : 'Ongoing'}
+              </div>
+            </div>
+            <span style={{
+              fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
+              padding: '2px 7px', borderRadius: 4, flexShrink: 0,
+              color: projectStatusColor(p.projectStatus),
+              background: `color-mix(in srgb, ${projectStatusColor(p.projectStatus)} 12%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${projectStatusColor(p.projectStatus)} 30%, transparent)`,
+            }}>
+              {p.projectStatus}
+            </span>
           </div>
-        );
-      })}
+        ))
+      )}
+    </Card>
+  );
+}
+
+// ── Holidays ─────────────────────────────────────────────────────────────────────
+// No leave-request/leave-balance module exists in the backend yet — only company
+// holidays are backed by a real endpoint. Weekend visibility already lives on the
+// monthly calendar heatmap above, so this panel doesn't repeat it.
+
+function HolidaysPanel({ holidays }: { holidays: HolidayDto[] }) {
+  return (
+    <Card pad={0}>
+      <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <CalendarDays size={13} color="var(--txt-mut)" style={{ flexShrink: 0 }} />
+        <SectionLabel style={{ marginBottom: 0 }}>Upcoming Holidays</SectionLabel>
+      </div>
+      {holidays.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '16px 0 20px', fontSize: 12, color: 'var(--txt-dim)' }}>
+          No upcoming holidays
+        </div>
+      ) : (
+        holidays.slice(0, 5).map(h => (
+          <div key={h.id} style={{
+            padding: '9px 16px', borderTop: '1px solid var(--line)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ flex: 1, fontSize: 12, color: 'var(--txt)' }}>{h.name}</span>
+            <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+              {formatDate(h.holidayDate)}
+            </span>
+          </div>
+        ))
+      )}
+      <div style={{ padding: '8px 16px', fontSize: 10, color: 'var(--txt-dim)', borderTop: '1px solid var(--line)' }}>
+        Weekends are shown on the monthly calendar above.
+      </div>
+    </Card>
+  );
+}
+
+// ── Weekly / Monthly Utilization cards ──────────────────────────────────────────
+
+function UtilPeriodCard({
+  title, avgUtilPct, approvedHours, availableHours, billableHours, nonBillableHours, benchHours, breakdown, onViewFull,
+}: {
+  title: string;
+  avgUtilPct: number | null;
+  approvedHours: number;
+  availableHours: number;
+  billableHours: number;
+  nonBillableHours: number;
+  benchHours: number;
+  breakdown?: { label: string; pct: number | null }[];
+  onViewFull: () => void;
+}) {
+  const totalCat = billableHours + nonBillableHours + benchHours;
+  const catPct = (n: number) => totalCat > 0 ? `${(n / totalCat * 100).toFixed(1)}%` : '0%';
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <SectionLabel style={{ marginBottom: 0 }}>{title}</SectionLabel>
+        <button onClick={onViewFull} style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--info)', fontSize: 11, fontWeight: 500, padding: '2px 4px', borderRadius: 4,
+        }}>
+          Full report <ArrowRight size={11} />
+        </button>
+      </div>
+
+      <div style={{ marginBottom: 10 }}>
+        <UtilBar pct={avgUtilPct} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: 11 }}>
+        <div>
+          <span style={{ color: 'var(--txt-dim)' }}>Approved </span>
+          <span style={{ color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>{approvedHours.toFixed(1)}h</span>
+        </div>
+        <div>
+          <span style={{ color: 'var(--txt-dim)' }}>Available </span>
+          <span style={{ color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>{availableHours.toFixed(1)}h</span>
+        </div>
+      </div>
+
+      {breakdown && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+          {breakdown.map(b => (
+            <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 62, fontSize: 10, color: 'var(--txt-dim)', flexShrink: 0 }}>{b.label}</span>
+              <div style={{ flex: 1, height: 5, borderRadius: 3, background: 'var(--raised2)', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', width: b.pct == null ? '0%' : `${Math.min(b.pct, 120)}%`,
+                  background: utilColor(b.pct), borderRadius: 3, transition: 'width 0.4s',
+                }} />
+              </div>
+              <span style={{ fontSize: 10, color: utilColor(b.pct), fontFamily: '"JetBrains Mono", monospace', width: 38, textAlign: 'right' }}>
+                {fmtPct(b.pct)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+          Billable vs Non-Billable
+        </div>
+        <div style={{ height: 6, borderRadius: 3, background: 'var(--raised2)', overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
+          <div style={{ width: catPct(billableHours), background: 'var(--ok)' }} />
+          <div style={{ width: catPct(nonBillableHours), background: 'var(--info)' }} />
+          <div style={{ width: catPct(benchHours), background: 'var(--txt-dim)' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--txt-mut)', flexWrap: 'wrap' }}>
+          <span><span style={{ color: 'var(--ok)' }}>●</span> Billable {billableHours.toFixed(1)}h</span>
+          <span><span style={{ color: 'var(--info)' }}>●</span> Non-billable {nonBillableHours.toFixed(1)}h</span>
+          <span><span style={{ color: 'var(--txt-dim)' }}>●</span> Bench {benchHours.toFixed(1)}h</span>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -638,6 +899,79 @@ function RecentActivity({ entries }: { entries: RecentEntry[] }) {
   );
 }
 
+// ── Today's EOD Status ──────────────────────────────────────────────────────────
+// Always visible (unlike CutoffBanner, which only renders when action is needed) so
+// "what's today's status" has one persistent, unambiguous answer on the dashboard.
+
+const TODAY_STATUS_META: Record<string, { color: string; label: string }> = {
+  APPROVED:          { color: 'var(--ok)',     label: 'Approved' },
+  SUBMITTED:         { color: 'var(--info)',   label: 'Pending Review' },
+  DRAFT:             { color: 'var(--txt-dim)', label: 'Draft Saved' },
+  REJECTED:          { color: 'var(--risk)',   label: 'Rejected' },
+  CHANGES_REQUESTED: { color: 'var(--warn)',   label: 'Changes Requested' },
+  MISSING:           { color: 'var(--txt-dim)', label: 'Not Submitted' },
+};
+
+function TodayStatusCard({
+  status, submittedAt, cutoffTime, isWeekend,
+}: {
+  status: string;
+  submittedAt: string | null;
+  cutoffTime: string;
+  isWeekend: boolean;
+}) {
+  const meta = TODAY_STATUS_META[status] ?? { color: 'var(--txt-dim)', label: status };
+  const actionable = !isWeekend && (status === 'MISSING' || status === 'DRAFT' || status === 'REJECTED' || status === 'CHANGES_REQUESTED');
+  const [h, m] = cutoffTime.split(':');
+
+  return (
+    <Card style={{ marginBottom: 20 }} pad={16}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 9, flexShrink: 0,
+          background: `color-mix(in srgb, ${meta.color} 14%, var(--raised2))`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {status === 'APPROVED'
+            ? <CheckCircle2 size={19} color={meta.color} />
+            : status === 'MISSING'
+            ? <AlertCircle size={19} color={meta.color} />
+            : <Clock size={19} color={meta.color} />}
+        </div>
+
+        <div style={{ minWidth: 160 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
+            Today's EOD Status
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: meta.color, fontFamily: '"Space Grotesk", sans-serif' }}>
+            {meta.label}
+          </div>
+        </div>
+
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
+            Submitted At
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
+            {submittedAt ? formatDateTime(submittedAt) : isWeekend ? 'Weekend — not required' : `Not yet · cutoff ${parseInt(h)}:${m}`}
+          </div>
+        </div>
+
+        {actionable && (
+          <Link to="/eod/submit" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '8px 14px', borderRadius: 7, flexShrink: 0,
+            background: 'var(--brand)', color: '#fff',
+            fontSize: 12, fontWeight: 600, textDecoration: 'none',
+          }}>
+            {status === 'DRAFT' ? 'Continue Draft' : status === 'MISSING' ? 'Submit Now' : 'Fix & Resubmit'} <ArrowRight size={12} />
+          </Link>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 // ── Loading skeleton ───────────────────────────────────────────────────────────
 
 function LoadingSkeleton() {
@@ -681,8 +1015,23 @@ function LoadingSkeleton() {
 
 const MAX_MONTH_OFFSET = 12;
 
+// Monday-start week, matching the backend's WeekTrend.weekStart convention.
+function currentWeekStartISO(): string {
+  const d = new Date();
+  const dow = d.getDay(); // 0=Sun
+  const diff = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + diff);
+  return toLocalISODate(d);
+}
+
+function currentMonthStartISO(): string {
+  const d = new Date();
+  return toLocalISODate(new Date(d.getFullYear(), d.getMonth(), 1));
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [monthOffset, setMonthOffset] = useState(0);
 
   // Compute first and last day of the displayed month
@@ -696,6 +1045,16 @@ export default function Dashboard() {
   }, [monthOffset]);
 
   const { data, isPending, isError, refetch } = useDashboardSummary(calendarFrom, calendarTo);
+
+  const weekStart   = useMemo(() => currentWeekStartISO(), []);
+  const monthStart  = useMemo(() => currentMonthStartISO(), []);
+  const todayStr    = useMemo(() => todayISO(), []);
+
+  const { data: weekUtil }    = useUtilizationDetail(weekStart, todayStr);
+  const { data: monthUtil }   = useUtilizationDetail(monthStart, todayStr);
+  const { data: dashStats }   = useEmployeeDashboardStats(user?.id);
+  const { data: projects }    = useEmployeeProjects(user?.id);
+  const { data: holidays }    = useUpcomingHolidays();
 
   if (isPending) return <LoadingSkeleton />;
 
@@ -757,6 +1116,14 @@ export default function Dashboard() {
         <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>{todayLabel}</p>
       </div>
 
+      {/* Today's EOD status — always visible */}
+      <TodayStatusCard
+        status={dashStats?.todayStatus.status ?? (cutoffStatus.entryStatus ?? 'MISSING')}
+        submittedAt={dashStats?.todayStatus.submittedAt ?? null}
+        cutoffTime={cutoffStatus.cutoffTime}
+        isWeekend={isWeekend}
+      />
+
       {/* Cutoff banner */}
       {!isWeekend && (
         <CutoffBanner
@@ -796,6 +1163,34 @@ export default function Dashboard() {
             quickStats.daysSinceLastIssue < 0 || quickStats.daysSinceLastIssue > 7 ? 'var(--ok)'
             : quickStats.daysSinceLastIssue <= 2 ? 'var(--risk)' : 'var(--warn)'
           }
+        />
+      </div>
+
+      {/* Weekly / Monthly utilization */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <UtilPeriodCard
+          title="Weekly Utilization"
+          avgUtilPct={weekUtil?.currentPeriod.avgUtilPct ?? null}
+          approvedHours={weekUtil?.currentPeriod.totalApproved ?? 0}
+          availableHours={weekUtil?.currentPeriod.totalAvailable ?? 0}
+          billableHours={weekUtil?.categoryBreakdown.billableHours ?? 0}
+          nonBillableHours={weekUtil?.categoryBreakdown.nonBillableHours ?? 0}
+          benchHours={weekUtil?.categoryBreakdown.benchHours ?? 0}
+          onViewFull={() => navigate('/utilization')}
+        />
+        <UtilPeriodCard
+          title="Monthly Utilization"
+          avgUtilPct={monthUtil?.currentPeriod.avgUtilPct ?? null}
+          approvedHours={monthUtil?.currentPeriod.totalApproved ?? 0}
+          availableHours={monthUtil?.currentPeriod.totalAvailable ?? 0}
+          billableHours={monthUtil?.categoryBreakdown.billableHours ?? 0}
+          nonBillableHours={monthUtil?.categoryBreakdown.nonBillableHours ?? 0}
+          benchHours={monthUtil?.categoryBreakdown.benchHours ?? 0}
+          breakdown={monthUtil?.weeklyTrend.map(w => ({
+            label: new Date(w.weekStart + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+            pct: w.avgUtilPct,
+          }))}
+          onViewFull={() => navigate('/utilization')}
         />
       </div>
 
@@ -843,11 +1238,18 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        {/* Right: Needs Attention + Blockers */}
+        {/* Right: Pending corrections + Missed submissions + Blockers */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <ActionRequired entries={recentEntries} />
+          <PendingCorrectionsPanel corrections={dashStats?.pendingCorrections ?? []} />
+          <MissedSubmissionsPanel dates={dashStats?.missedDates ?? []} count={dashStats?.missedCount ?? 0} />
           <BlockersPanel tasks={blockedTasks} />
         </div>
+      </div>
+
+      {/* Assigned projects + Holidays */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <AssignedProjectsPanel projects={projects ?? []} />
+        <HolidaysPanel holidays={holidays ?? []} />
       </div>
 
       {/* Recent entries */}
