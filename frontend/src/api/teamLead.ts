@@ -17,6 +17,8 @@ export interface ThresholdsDto {
 export interface TrendPointDto {
   date: string;
   value: number | null;
+  /** False on weekends/company holidays — value carries no real signal on those days. */
+  workingDay: boolean;
 }
 
 export interface DashboardTrendDto {
@@ -37,6 +39,8 @@ export interface TeamLeadSummaryDto {
   overloadedCount: number;
   activeBlockersCount: number;
   thresholds: ThresholdsDto;
+  /** False on weekends/company holidays — avgUtilization/underutilizedCount/overloadedCount carry no real signal. */
+  workingDay: boolean;
 }
 
 export interface MemberEodStatusDto {

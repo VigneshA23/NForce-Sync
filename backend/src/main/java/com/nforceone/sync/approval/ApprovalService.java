@@ -51,26 +51,22 @@ public class ApprovalService {
         this.notificationService = notificationService;
     }
 
-    @Transactional(readOnly = true)
-    public List<EodEntryDto> getPendingForActor(String actorEmail) {
-        AppUser actor = requireUserByEmail(actorEmail);
-        List<EodEntry> entries = actor.getRole() == AppUser.Role.PM
-                ? entryRepository.findPendingByProjectManagerId(actor.getId(), EodEntry.Status.SUBMITTED)
-                : entryRepository.findPendingByManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
-        return entries.stream().map(EodEntryDto::from).toList();
-    }
-
     // from/to are both null or both present — enforced by the controller, which only forwards
-    // the pair when the caller supplied both query params.
+    // the pair when the caller supplied both query params. PM entries aren't date-scoped —
+    // no PM+date repository query exists yet — so a PM actor always gets the full backlog.
     @Transactional(readOnly = true)
-    public List<EodEntryDto> getPendingForManager(String actorEmail, LocalDate from, LocalDate to) {
-        if (from == null || to == null) return getPendingForManager(actorEmail);
-        AppUser manager = requireUserByEmail(actorEmail);
-        return entryRepository
-                .findPendingByManagerIdAndEntryDateBetween(manager.getId(), EodEntry.Status.SUBMITTED, from, to)
-                .stream()
-                .map(EodEntryDto::from)
-                .toList();
+    public List<EodEntryDto> getPendingForActor(String actorEmail, LocalDate from, LocalDate to) {
+        AppUser actor = requireUserByEmail(actorEmail);
+        List<EodEntry> entries;
+        if (actor.getRole() == AppUser.Role.PM) {
+            entries = entryRepository.findPendingByProjectManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
+        } else if (from != null && to != null) {
+            entries = entryRepository.findPendingByManagerIdAndEntryDateBetween(
+                    actor.getId(), EodEntry.Status.SUBMITTED, from, to);
+        } else {
+            entries = entryRepository.findPendingByManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
+        }
+        return entries.stream().map(EodEntryDto::from).toList();
     }
 
     public EodEntryDto approve(Long entryId, String actorEmail,

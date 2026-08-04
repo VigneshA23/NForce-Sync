@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -147,6 +148,36 @@ public class UtilizationService {
         computeSnapshot(entry.getEmployee().getId(), entry.getEntryDate());
     }
 
+    // Single source of truth for "is this a day utilization is even meaningful for" — the
+    // same weekend + company-holiday rule computeAvailableHours already applies when zeroing
+    // out available hours. Exposed so callers can gate on it BEFORE trusting a value, rather
+    // than each duplicating the weekend/holiday check (or silently trusting a persisted
+    // snapshot that predates this rule / was seeded directly and never passed through it).
+    @Transactional(readOnly = true)
+    public boolean isWorkingDay(LocalDate date) {
+        DayOfWeek dow = date.getDayOfWeek();
+        if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) return false;
+        return !holidayRepository.existsByHolidayDate(date);
+    }
+
+    // Persisted snapshots only exist once an EOD has been approved for that employee/date
+    // (recomputeForEntry runs on approval). Callers averaging utilization across a whole
+    // team must not treat "no approval yet" as "exclude this member" — that silently shrinks
+    // the denominator to just the approved subset and inflates the average. Falls back to
+    // the same on-demand computation getForTeam uses, so a member with no EOD/not yet
+    // approved resolves to a real 0% (or null on a weekend/holiday/approved leave day).
+    //
+    // Non-working days always resolve to null regardless of what's persisted — a stray
+    // snapshot row with a non-null pct on a weekend/holiday (e.g. seeded directly, or written
+    // before this rule existed) must never surface as a real computed percentage.
+    @Transactional(readOnly = true)
+    public BigDecimal resolveUtilizationPct(Long employeeId, LocalDate date) {
+        if (!isWorkingDay(date)) return null;
+        return snapshotRepository.findByEmployeeIdAndSnapshotDate(employeeId, date)
+                .map(UtilSnapshot::getUtilizationPct)
+                .orElseGet(() -> buildSnapshot(employeeId, date).getUtilizationPct());
+    }
+
     @Transactional(readOnly = true)
     public List<UtilSnapshotDto> getForEmployee(Long employeeId, LocalDate from, LocalDate to) {
         return snapshotRepository
@@ -158,7 +189,13 @@ public class UtilizationService {
 
     @Transactional(readOnly = true)
     public List<TeamUtilDto> getForTeam(Long managerId, LocalDate date) {
-        List<AppUser> reports = userRepository.findByManagerId(managerId);
+        // Matches the active-member definition used everywhere else on the Team Dashboard
+        // (TeamLeadService.activeMembers) — without this filter, terminated/deleted direct
+        // reports would still show up here even though they're excluded from the dashboard's
+        // KPI card, 7-day trend, and Utilization Overview donut.
+        List<AppUser> reports = userRepository.findByManagerId(managerId).stream()
+                .filter(u -> u.getStatus() == AppUser.Status.ACTIVE && u.getDeletedAt() == null)
+                .toList();
         if (reports.isEmpty()) return List.of();
 
         // Fetch all snapshots for all team members in one query

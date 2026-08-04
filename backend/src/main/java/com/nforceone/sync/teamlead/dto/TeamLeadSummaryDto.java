@@ -12,5 +12,7 @@ public record TeamLeadSummaryDto(
         int        underutilizedCount,
         int        overloadedCount,
         int        activeBlockersCount,
-        ThresholdsDto thresholds
+        ThresholdsDto thresholds,
+        boolean    workingDay        // false on weekends/company holidays — avgUtilization/
+                                      // underutilizedCount/overloadedCount carry no real signal
 ) {}

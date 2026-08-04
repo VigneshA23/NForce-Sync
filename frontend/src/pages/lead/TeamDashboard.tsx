@@ -15,9 +15,9 @@ import { getEntry } from '../../api/eod';
 import { usePendingApprovalsCount } from '../../api/approvals';
 import { readStoredDateFilter, resolveTeamDashboardDateFilter, writeStoredDateFilter } from '../../lib/teamDashboardDateFilter';
 import {
-  useAcknowledgeBlocker, useTeamLeadBlockers, useTeamLeadSummary, useTeamLeadTrend, useTeamMemberStatuses,
+  useTeamLeadBlockers, useTeamLeadSummary, useTeamLeadTrend, useTeamMemberStatuses,
   type DateRange, type MemberEodStatus, type MemberEodStatusDto, type TeamBlockerDto, type TeamLeadSummaryDto,
-  type ThresholdsDto, type TrendPointDto,
+  type TrendPointDto,
 } from '../../api/teamLead';
 
 // ── status config ──────────────────────────────────────────────────────────────
@@ -62,37 +62,6 @@ function formatOpenHours(hours: number): string {
   const rem = total % 24;
   if (days === 0) return `${rem}h`;
   return rem === 0 ? `${days}d` : `${days}d ${rem}h`;
-}
-
-// ── utilization tiering ──────────────────────────────────────────────────────────
-// ThresholdsDto only carries two real boundaries (underutilizedPct / overloadedPct) — there is
-// no backend concept of a third "severely" over/under line. To render the reference's 3-shade
-// (green/amber/red) bar and ring, "significantly" outside is defined as a documented multiplier
-// of the existing configured thresholds below — a presentation-only judgment call, not a new
-// fabricated data value.
-
-type UtilTier = 'na' | 'severeUnder' | 'under' | 'optimal' | 'over' | 'severeOver';
-
-function utilTier(pct: number | null, t: ThresholdsDto): UtilTier {
-  if (pct === null) return 'na';
-  const severeUnderBound = t.underutilizedPct * 0.5;
-  const severeOverBound  = t.overloadedPct * 1.3;
-  if (pct < severeUnderBound) return 'severeUnder';
-  if (pct < t.underutilizedPct) return 'under';
-  if (pct <= t.overloadedPct) return 'optimal';
-  if (pct <= severeOverBound) return 'over';
-  return 'severeOver';
-}
-
-function utilTierColor(tier: UtilTier): string {
-  switch (tier) {
-    case 'optimal': return 'var(--ok)';
-    case 'under':
-    case 'over': return 'var(--warn)';
-    case 'severeUnder':
-    case 'severeOver': return 'var(--risk)';
-    default: return 'var(--txt-dim)';
-  }
 }
 
 // ── primitives (local — matches the per-page Card convention used across lead pages) ──
@@ -296,18 +265,11 @@ function MemberRow({ member, isLast, expanded, onToggle, onOpenApproval }: {
 
 // ── Blockers Today row ────────────────────────────────────────────────────────────
 
-function BlockerRow({ b, isLast, flagged, expanded, onToggle, onAcknowledge, acking }: {
-  b: TeamBlockerDto; isLast: boolean; flagged: boolean; expanded: boolean;
-  onToggle: () => void; onAcknowledge: () => void; acking: boolean;
+function BlockerRow({ b, isLast, flagged, onView }: {
+  b: TeamBlockerDto; isLast: boolean; flagged: boolean; onView: () => void;
 }) {
-  // No `impact` field exists on TeamBlockerDto — reusing the same openHours vs.
-  // blockerAgeAlertHours threshold the app already uses elsewhere to flag stale blockers,
-  // rather than inventing a new severity field.
-  const impactLabel = flagged ? 'High Impact' : 'Medium Impact';
-  const impactColor = flagged ? 'var(--risk)' : 'var(--warn)';
-
   return (
-    <div style={{ borderBottom: isLast && !expanded ? 'none' : '1px solid var(--line)', padding: '12px 20px' }}>
+    <div style={{ borderBottom: isLast ? 'none' : '1px solid var(--line)', padding: '12px 20px' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <div style={{
           width: 30, height: 30, borderRadius: 7, flexShrink: 0, marginTop: 1,
@@ -324,12 +286,10 @@ function BlockerRow({ b, isLast, flagged, expanded, onToggle, onAcknowledge, ack
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--txt-dim)' }}>
             <span>Since {formatOpenHours(b.openHours)}</span>
-            <span>·</span>
-            <span style={{ color: impactColor, fontWeight: 600 }}>{impactLabel}</span>
           </div>
         </div>
         <button
-          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          onClick={onView}
           style={{
             padding: '5px 12px', fontSize: 11, fontWeight: 600, borderRadius: 6, flexShrink: 0,
             background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: 'pointer',
@@ -338,29 +298,6 @@ function BlockerRow({ b, isLast, flagged, expanded, onToggle, onAcknowledge, ack
           View
         </button>
       </div>
-      {expanded && (
-        <div style={{ padding: '10px 0 0 40px' }}>
-          {b.description && <div style={{ fontSize: 12, color: 'var(--txt-mut)', marginBottom: 8, lineHeight: 1.5 }}>{b.description}</div>}
-          {b.projectName && (
-            <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 8 }}>Project: {b.projectName}</div>
-          )}
-          {b.acknowledged ? (
-            <span style={{ fontSize: 11, color: 'var(--ok)', fontWeight: 600 }}>Acknowledged</span>
-          ) : (
-            <button
-              onClick={(e) => { e.stopPropagation(); onAcknowledge(); }}
-              disabled={acking}
-              style={{
-                padding: '5px 12px', fontSize: 11, fontWeight: 600, borderRadius: 6,
-                background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                cursor: acking ? 'default' : 'pointer', opacity: acking ? 0.6 : 1,
-              }}
-            >
-              Acknowledge
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -371,6 +308,7 @@ function WeeklyUtilChart({ points }: { points: TrendPointDto[] }) {
   const data = points.map(p => ({
     day: new Date(p.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short' }),
     value: p.value != null ? Math.round(p.value) : null,
+    workingDay: p.workingDay,
   }));
 
   const CustomDot = (props: { cx?: number; cy?: number; payload?: { value: number | null } }) => {
@@ -384,6 +322,39 @@ function WeeklyUtilChart({ points }: { points: TrendPointDto[] }) {
         </text>
         <circle cx={cx} cy={cy} r={4} fill="var(--risk)" stroke="var(--panel)" strokeWidth={2} />
       </g>
+    );
+  };
+
+  // Dims the day label for non-working days (weekend/company holiday). The line still
+  // bridges over them (connectNulls, below) so the trend reads as one continuous series,
+  // but those points never get a dot or a computed percentage — the axis is what marks
+  // them as distinct from a real 0%.
+  const XAxisTick = (props: { x?: number; y?: number; payload?: { value: string }; index?: number }) => {
+    const { x, y, payload, index } = props;
+    if (x == null || y == null || payload == null || index == null) return <g />;
+    const isWorkingDay = data[index]?.workingDay !== false;
+    return (
+      <text x={x} y={y + 12} textAnchor="middle" fontSize={11} fill="var(--txt-dim)" opacity={isWorkingDay ? 1 : 0.45}>
+        {payload.value}
+      </text>
+    );
+  };
+
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { payload: { value: number | null; workingDay: boolean } }[]; label?: string }) => {
+    if (!active || !label) return null;
+    // A non-working day has no dot/value of its own (CustomDot skips it), so Recharts can
+    // report an empty payload there even though the bridged line passes through its x
+    // position — fall back to the day's own record instead of bailing out silently, so
+    // hovering Sat/Sun/a holiday still says why there's no value.
+    const point = payload?.[0]?.payload ?? data.find(d => d.day === label);
+    if (!point) return null;
+    return (
+      <div style={{ background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 7, fontSize: 12, padding: '6px 10px' }}>
+        <div style={{ color: 'var(--txt-mut)', marginBottom: 2 }}>{label}</div>
+        <div style={{ color: 'var(--txt)' }}>
+          {point.workingDay === false ? 'Non-working day' : `${point.value}% Utilization`}
+        </div>
+      </div>
     );
   };
 
@@ -412,21 +383,17 @@ function WeeklyUtilChart({ points }: { points: TrendPointDto[] }) {
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
-          <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} tickLine={false} axisLine={false} />
+          <XAxis dataKey="day" tick={<XAxisTick />} tickLine={false} axisLine={false} />
           <YAxis
             domain={[0, axisMax]} ticks={axisTicks}
             tick={{ fontSize: 10, fill: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}
             tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}%`} width={40}
           />
-          <Tooltip
-            contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 7, fontSize: 12 }}
-            labelStyle={{ color: 'var(--txt-mut)' }}
-            formatter={(v: number) => [`${v}%`, 'Utilization']}
-          />
+          <Tooltip content={<CustomTooltip />} />
           <Area
             type="monotone" dataKey="value"
             stroke="var(--risk)" strokeWidth={2} fill="url(#weeklyUtilGrad)"
-            connectNulls={false} dot={<CustomDot />} activeDot={{ r: 5, fill: 'var(--risk)' }}
+            connectNulls dot={<CustomDot />} activeDot={{ r: 5, fill: 'var(--risk)' }}
           />
         </ComposedChart>
       </ResponsiveContainer>
@@ -482,21 +449,29 @@ function StatusDistributionDonut({ summary }: { summary: TeamLeadSummaryDto }) {
 // ── Utilization Overview ring ─────────────────────────────────────────────────────
 
 function UtilizationOverviewRing({ summary }: { summary: TeamLeadSummaryDto }) {
+  // Weekends/company holidays never have real per-member utilization (see TeamLeadService/
+  // UtilizationService.isWorkingDay) — underutilizedCount and overloadedCount are both 0 on
+  // those days simply because nothing was computed, not because everyone is "Optimal".
+  // Showing the ring as if 100% of the team is optimal would be exactly the false-positive
+  // this component exists to avoid, so render a distinct non-working-day state instead.
+  if (!summary.workingDay) {
+    return (
+      <div style={{ height: 130, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontSize: 13, color: 'var(--txt-dim)' }}>Non-working day — no utilization data</span>
+      </div>
+    );
+  }
+
   const avg = summary.avgUtilization;
-  const tier = utilTier(avg, summary.thresholds);
-  const color = utilTierColor(tier);
-  const capAt = Math.max(summary.thresholds.overloadedPct * 1.3, 120);
-  const filled = avg === null ? 0 : Math.min(avg, capAt);
-  const data = [
-    { name: 'filled', value: filled },
-    { name: 'rest', value: Math.max(capAt - filled, 0) },
-  ];
 
   const optimalCount = Math.max(summary.activeMembers - summary.underutilizedCount - summary.overloadedCount, 0);
+  // The Pie is bound directly to this same array the legend renders below — no separate/
+  // derived dataset — so a 0-count bucket is a 0-value slice (Recharts renders it as zero
+  // arc length) and every other slice's arc is exactly count/total, matching the legend.
   const buckets = [
-    { color: 'var(--warn)', label: `Underutilized (<${summary.thresholds.underutilizedPct}%)`, count: summary.underutilizedCount },
-    { color: 'var(--ok)',   label: `Optimal (${summary.thresholds.underutilizedPct}% – ${summary.thresholds.overloadedPct}%)`, count: optimalCount },
-    { color: 'var(--risk)', label: `Overutilized (>${summary.thresholds.overloadedPct}%)`, count: summary.overloadedCount },
+    { key: 'under',   color: 'var(--warn)', label: `Underutilized (<${summary.thresholds.underutilizedPct}%)`, count: summary.underutilizedCount },
+    { key: 'optimal', color: 'var(--ok)',   label: `Optimal (${summary.thresholds.underutilizedPct}% – ${summary.thresholds.overloadedPct}%)`, count: optimalCount },
+    { key: 'over',    color: 'var(--risk)', label: `Overutilized (>${summary.thresholds.overloadedPct}%)`, count: summary.overloadedCount },
   ];
 
   return (
@@ -504,9 +479,8 @@ function UtilizationOverviewRing({ summary }: { summary: TeamLeadSummaryDto }) {
       <div style={{ width: 130, height: 130, flexShrink: 0, position: 'relative' }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={data} cx="50%" cy="50%" innerRadius={40} outerRadius={58} startAngle={90} endAngle={-270} paddingAngle={0} dataKey="value" strokeWidth={0}>
-              <Cell fill={color} />
-              <Cell fill="var(--raised2)" />
+            <Pie data={buckets} cx="50%" cy="50%" innerRadius={40} outerRadius={58} startAngle={90} endAngle={-270} paddingAngle={0} dataKey="count" strokeWidth={0}>
+              {buckets.map(b => <Cell key={b.key} fill={b.color} />)}
             </Pie>
           </PieChart>
         </ResponsiveContainer>
@@ -520,7 +494,7 @@ function UtilizationOverviewRing({ summary }: { summary: TeamLeadSummaryDto }) {
       </div>
       <div style={{ flex: 1 }}>
         {buckets.map(b => (
-          <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <div key={b.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: b.color, flexShrink: 0 }} />
             <span style={{ flex: 1, fontSize: 12, color: 'var(--txt-mut)' }}>{b.label}</span>
             <span style={{ fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
@@ -566,6 +540,7 @@ function QuickActionTile({ icon: Icon, accent, title, subtitle, onClick, disable
 // ── main ─────────────────────────────────────────────────────────────────────────────
 
 const ROSTER_COLLAPSED_COUNT = 6;
+const BLOCKERS_COLLAPSED_COUNT = 2;
 
 function agoLabel(ms: number): string {
   const mins = Math.max(0, Math.round(ms / 60_000));
@@ -641,7 +616,6 @@ export default function TeamDashboard() {
   const { data: members, isPending: membersPending, isFetching: membersFetching, isError: membersError, refetch: refetchMembers } = useTeamMemberStatuses(range, isToday);
   const { data: blockers, isPending: blockersPending, isFetching: blockersFetching } = useTeamLeadBlockers(range, isToday);
   const { data: trend, isPending: trendPending } = useTeamLeadTrend(anchorDate, 7);
-  const acknowledge = useAcknowledgeBlocker(range);
 
   // Shared cache with the sidebar badge and Approvals page (see usePendingApprovalsCount's own
   // doc comment) — scoped to the dashboard's own selected `range` so the "Review approvals"
@@ -651,20 +625,21 @@ export default function TeamDashboard() {
   const pendingApprovalsCount = usePendingApprovalsCount(true, range);
 
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
-  const [expandedBlockerId, setExpandedBlockerId] = useState<number | null>(null);
-  const [ackingId, setAckingId] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [rosterExpanded, setRosterExpanded] = useState(false);
+  const [blockersExpanded, setBlockersExpanded] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 30_000);
     return () => clearInterval(id);
   }, []);
 
-  // Collapse the roster back to the default 6 rows whenever the selected date/range changes
-  // (a fresh load already starts collapsed via the initial state above).
+  // Collapse the roster and blockers list back to their default row counts whenever the
+  // selected date/range changes (a fresh load already starts collapsed via the initial
+  // state above).
   useEffect(() => {
     setRosterExpanded(false);
+    setBlockersExpanded(false);
   }, [range.from, range.to]);
 
   const sortedMembers = useMemo(() => {
@@ -945,14 +920,8 @@ export default function TeamDashboard() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <Card style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--line)' }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Blockers Today</div>
-              <button
-                onClick={() => navigate('/team/blockers')}
-                style={{ fontSize: 12, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              >
-                View all <ChevronRight size={12} aria-hidden="true" />
-              </button>
             </div>
             {blockersPending ? (
               <div style={{ padding: 16 }}><Skel h={60} /></div>
@@ -961,18 +930,28 @@ export default function TeamDashboard() {
                 No blockers reported.
               </div>
             ) : (
-              blockers.map((b, i) => (
-                <BlockerRow
-                  key={b.taskId}
-                  b={b}
-                  isLast={i === blockers.length - 1}
-                  flagged={flaggedBlockerIds.has(b.taskId)}
-                  expanded={expandedBlockerId === b.taskId}
-                  onToggle={() => setExpandedBlockerId(id => (id === b.taskId ? null : b.taskId))}
-                  acking={ackingId === b.taskId && acknowledge.isPending}
-                  onAcknowledge={() => { setAckingId(b.taskId); acknowledge.mutate(b.taskId, { onSettled: () => setAckingId(null) }); }}
-                />
-              ))
+              <>
+                {(blockersExpanded ? blockers : blockers.slice(0, BLOCKERS_COLLAPSED_COUNT)).map((b, i, visible) => (
+                  <BlockerRow
+                    key={b.taskId}
+                    b={b}
+                    isLast={i === visible.length - 1}
+                    flagged={flaggedBlockerIds.has(b.taskId)}
+                    onView={() => navigate(`/team/blockers?highlight=${b.taskId}`)}
+                  />
+                ))}
+                {blockers.length > BLOCKERS_COLLAPSED_COUNT && (
+                  <div style={{ padding: '12px 20px', textAlign: 'center', borderTop: '1px solid var(--line)' }}>
+                    <button
+                      onClick={() => setBlockersExpanded(e => !e)}
+                      style={{ fontSize: 12, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    >
+                      {blockersExpanded ? 'Show less' : 'View all'}
+                      {blockersExpanded ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </Card>
 

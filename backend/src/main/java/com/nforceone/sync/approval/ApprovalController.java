@@ -25,8 +25,9 @@ public class ApprovalController {
     // from/to are optional — omitted (or only one supplied) falls back to the full all-time
     // backlog, preserving today's behavior everywhere this endpoint is already used unscoped.
     @GetMapping("/pending")
-    public List<EodEntryDto> getPending() {
-        return approvalService.getPendingForActor(actingEmail());
+    public List<EodEntryDto> getPending(@RequestParam(required = false) LocalDate from,
+                                        @RequestParam(required = false) LocalDate to) {
+        return approvalService.getPendingForActor(actingEmail(), from, to);
     }
 
     @PostMapping("/{entryId}/approve")

@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { useBlockers, type BlockedTaskDto } from '../../api/team';
@@ -41,15 +43,30 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
 
 // ── blocker card ───────────────────────────────────────────────────────────────
 
-function BlockerCard({ b, isLast }: { b: BlockedTaskDto; isLast: boolean }) {
+function BlockerCard({ b, isLast, highlighted }: { b: BlockedTaskDto; isLast: boolean; highlighted?: boolean }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Arrived here via the dashboard's "Blockers Today" panel, which links a specific
+  // blocker task — scroll it into view so it's unmistakable which one was clicked.
+  useEffect(() => {
+    if (!highlighted) return;
+    cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlighted]);
+
   return (
-    <div style={{
-      padding: '14px 16px',
-      borderBottom: isLast ? 'none' : '1px solid var(--line)',
-      display: 'grid',
-      gridTemplateColumns: '1fr auto',
-      gap: 12,
-    }}>
+    <div
+      ref={cardRef}
+      style={{
+        padding: '14px 16px',
+        borderBottom: isLast ? 'none' : '1px solid var(--line)',
+        display: 'grid',
+        gridTemplateColumns: '1fr auto',
+        gap: 12,
+        background: highlighted ? 'color-mix(in srgb, var(--info) 12%, transparent)' : undefined,
+        boxShadow: highlighted ? 'inset 3px 0 0 var(--info)' : undefined,
+        transition: 'background 0.3s ease',
+      }}
+    >
       <div>
         {/* Who / when */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -130,7 +147,7 @@ function BlockerCard({ b, isLast }: { b: BlockedTaskDto; isLast: boolean }) {
 
 // ── project group ──────────────────────────────────────────────────────────────
 
-function ProjectGroup({ name, blockers }: { name: string; blockers: BlockedTaskDto[] }) {
+function ProjectGroup({ name, blockers, highlightId }: { name: string; blockers: BlockedTaskDto[]; highlightId: number | null }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{
@@ -151,7 +168,9 @@ function ProjectGroup({ name, blockers }: { name: string; blockers: BlockedTaskD
         </span>
       </div>
       <Card style={{ borderRadius: '0 0 10px 10px', padding: 0, overflow: 'hidden' }}>
-        {blockers.map((b, i) => <BlockerCard key={b.taskId} b={b} isLast={i === blockers.length - 1} />)}
+        {blockers.map((b, i) => (
+          <BlockerCard key={b.taskId} b={b} isLast={i === blockers.length - 1} highlighted={b.taskId === highlightId} />
+        ))}
       </Card>
     </div>
   );
@@ -162,6 +181,12 @@ function ProjectGroup({ name, blockers }: { name: string; blockers: BlockedTaskD
 export default function Blockers() {
   const { user } = useAuth();
   const { data: blockers, isPending, isError, refetch } = useBlockers(user?.id);
+
+  // Set by the dashboard's "Blockers Today" panel — identifies which blocker task to
+  // scroll to and highlight, so it's unmistakable which one was clicked.
+  const [searchParams] = useSearchParams();
+  const highlightParam = searchParams.get('highlight');
+  const highlightId = highlightParam ? Number(highlightParam) : null;
 
   if (isPending) {
     return (
@@ -235,7 +260,7 @@ export default function Blockers() {
         </Card>
       ) : (
         groups.map(([name, items]) => (
-          <ProjectGroup key={name} name={name} blockers={items} />
+          <ProjectGroup key={name} name={name} blockers={items} highlightId={highlightId} />
         ))
       )}
     </div>

@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, ChevronDown, ChevronRight, CheckCheck, Check, X, RotateCcw, RefreshCw } from 'lucide-react';
-import { usePendingApprovals, useApprove, useReject, useRequestChanges, useBatchApprove } from '../api/approvals';
+import { usePendingApprovals, useApprove, useReject, useRequestChanges, useBatchApprove, type PendingApprovalsRange } from '../api/approvals';
 import { DropdownMenu } from '../components/DropdownMenu';
 import { useToast } from '../lib/toast';
 import { formatDate as fmtDate, formatDurationMinutes, todayISO, yesterdayISO } from '../lib/date';
 import type { EodEntryDto, EodTaskDto } from '../api/eod';
+import { useSearchParams } from 'react-router-dom';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 

@@ -15,8 +15,7 @@ import com.nforceone.sync.teamlead.dto.TeamBlockerDto;
 import com.nforceone.sync.teamlead.dto.TeamLeadSummaryDto;
 import com.nforceone.sync.teamlead.dto.ThresholdsDto;
 import com.nforceone.sync.teamlead.dto.TrendPointDto;
-import com.nforceone.sync.utilization.UtilSnapshot;
-import com.nforceone.sync.utilization.UtilSnapshotRepository;
+import com.nforceone.sync.utilization.UtilizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,22 +48,22 @@ public class TeamLeadService {
     private final AppUserRepository            userRepository;
     private final EodEntryRepository           entryRepository;
     private final EodTaskRepository            taskRepository;
-    private final UtilSnapshotRepository       snapshotRepository;
     private final HolidayRepository            holidayRepository;
     private final BusinessRuleConfigRepository configRepository;
+    private final UtilizationService           utilizationService;
 
     public TeamLeadService(AppUserRepository userRepository,
                             EodEntryRepository entryRepository,
                             EodTaskRepository taskRepository,
-                            UtilSnapshotRepository snapshotRepository,
                             HolidayRepository holidayRepository,
-                            BusinessRuleConfigRepository configRepository) {
+                            BusinessRuleConfigRepository configRepository,
+                            UtilizationService utilizationService) {
         this.userRepository    = userRepository;
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
-        this.snapshotRepository = snapshotRepository;
         this.holidayRepository = holidayRepository;
         this.configRepository  = configRepository;
+        this.utilizationService = utilizationService;
     }
 
     public ThresholdsDto getThresholds() {
@@ -120,7 +119,7 @@ public class TeamLeadService {
         return new TeamLeadSummaryDto(
                 members.size(), onLeave, missing, pending, submitted,
                 avgUtil, underutilized, overloaded, activeBlockers,
-                toThresholds(config));
+                toThresholds(config), utilizationService.isWorkingDay(to));
     }
 
     public List<MemberEodStatusDto> getMemberStatuses(LocalDate from, LocalDate to, String actingEmail) {
@@ -190,6 +189,7 @@ public class TeamLeadService {
         for (int i = days - 1; i >= 0; i--) {
             LocalDate date = endDate.minusDays(i);
             boolean holidayToday = holidayRepository.existsByHolidayDate(date);
+            boolean workingDay = utilizationService.isWorkingDay(date);
 
             int submittedCount = 0, pendingCount = 0;
             BigDecimal utilSum = BigDecimal.ZERO;
@@ -216,10 +216,10 @@ public class TeamLeadService {
                     .filter(t -> t.getAcknowledgedAt() == null)
                     .count();
 
-            avgUtil.add(new TrendPointDto(date, avg));
-            submitted.add(new TrendPointDto(date, (double) submittedCount));
-            pending.add(new TrendPointDto(date, (double) pendingCount));
-            blockers.add(new TrendPointDto(date, (double) blockedCount));
+            avgUtil.add(new TrendPointDto(date, avg, workingDay));
+            submitted.add(new TrendPointDto(date, (double) submittedCount, workingDay));
+            pending.add(new TrendPointDto(date, (double) pendingCount, workingDay));
+            blockers.add(new TrendPointDto(date, (double) blockedCount, workingDay));
         }
 
         return new DashboardTrendDto(avgUtil, submitted, pending, blockers);
@@ -266,9 +266,7 @@ public class TeamLeadService {
     }
 
     private BigDecimal utilizationPct(Long employeeId, LocalDate date) {
-        return snapshotRepository.findByEmployeeIdAndSnapshotDate(employeeId, date)
-                .map(UtilSnapshot::getUtilizationPct)
-                .orElse(null);
+        return utilizationService.resolveUtilizationPct(employeeId, date);
     }
 
     private static int compareByStatusPriority(MemberEodStatusDto a, MemberEodStatusDto b) {
