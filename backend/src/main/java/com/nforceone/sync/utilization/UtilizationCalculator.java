@@ -9,9 +9,12 @@ class UtilizationCalculator {
 
     static final BigDecimal STANDARD_DAY_HOURS = BigDecimal.valueOf(8);
 
-    static BigDecimal computeAvailableHours(LocalDate date) {
+    static BigDecimal computeAvailableHours(LocalDate date, boolean isCompanyHoliday, boolean isApprovedFullDayLeave) {
         DayOfWeek dow = date.getDayOfWeek();
         if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
+            return BigDecimal.ZERO;
+        }
+        if (isCompanyHoliday || isApprovedFullDayLeave) {
             return BigDecimal.ZERO;
         }
         return STANDARD_DAY_HOURS;

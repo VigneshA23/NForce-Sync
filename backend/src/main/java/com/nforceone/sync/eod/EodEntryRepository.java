@@ -38,6 +38,22 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
     List<EodEntry> findPendingByManagerId(@Param("managerId") Long managerId,
                                           @Param("status") EodEntry.Status status);
 
+    // Same as findPendingByManagerId, scoped to entries whose entryDate falls within [from, to] —
+    // backs the Team Dashboard's date-filtered "Review approvals" count.
+    @Query("""
+        SELECT DISTINCT e FROM EodEntry e
+        JOIN FETCH e.employee emp
+        LEFT JOIN FETCH e.tasks t
+        LEFT JOIN FETCH t.project
+        LEFT JOIN FETCH t.taskCategory
+        WHERE emp.manager.id = :managerId AND e.status = :status
+        AND e.entryDate BETWEEN :from AND :to
+        """)
+    List<EodEntry> findPendingByManagerIdAndEntryDateBetween(@Param("managerId") Long managerId,
+                                                             @Param("status") EodEntry.Status status,
+                                                             @Param("from") LocalDate from,
+                                                             @Param("to") LocalDate to);
+
     /**
      * Time-adjustment uses of one type inside a date window, for the monthly allowance check.
      *

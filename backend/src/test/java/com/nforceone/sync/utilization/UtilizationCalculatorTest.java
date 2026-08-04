@@ -12,10 +12,35 @@ class UtilizationCalculatorTest {
     @Test
     void weekend_returns_null_utilization() {
         LocalDate saturday = LocalDate.of(2026, 7, 18); // confirmed Saturday
-        BigDecimal available = UtilizationCalculator.computeAvailableHours(saturday);
+        BigDecimal available = UtilizationCalculator.computeAvailableHours(saturday, false, false);
         BigDecimal pct = UtilizationCalculator.computeUtilizationPct(BigDecimal.ZERO, available);
         // available == 0 → N/A, never 0%
         assertNull(pct, "weekend must return null, not 0.00");
+    }
+
+    @Test
+    void company_holiday_returns_null_utilization() {
+        LocalDate monday = LocalDate.of(2026, 7, 20); // confirmed weekday
+        BigDecimal available = UtilizationCalculator.computeAvailableHours(monday, true, false);
+        BigDecimal pct = UtilizationCalculator.computeUtilizationPct(BigDecimal.ZERO, available);
+        assertNull(pct, "company holiday must return null, not 0.00");
+    }
+
+    @Test
+    void approved_full_day_leave_returns_null_utilization() {
+        LocalDate monday = LocalDate.of(2026, 7, 20); // confirmed weekday
+        BigDecimal available = UtilizationCalculator.computeAvailableHours(monday, false, true);
+        BigDecimal pct = UtilizationCalculator.computeUtilizationPct(BigDecimal.ZERO, available);
+        assertNull(pct, "approved full-day leave must return null, not 0.00");
+    }
+
+    @Test
+    void normal_workday_with_no_approved_hours_yet_is_0_not_null() {
+        LocalDate monday = LocalDate.of(2026, 7, 20); // confirmed weekday
+        BigDecimal available = UtilizationCalculator.computeAvailableHours(monday, false, false);
+        BigDecimal pct = UtilizationCalculator.computeUtilizationPct(BigDecimal.ZERO, available);
+        assertNotNull(pct, "workday with no approved hours yet must be 0.00, not N/A");
+        assertEquals(new BigDecimal("0.00"), pct);
     }
 
     @Test

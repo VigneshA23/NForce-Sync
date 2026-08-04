@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -21,9 +22,12 @@ public class ApprovalController {
         this.approvalService = approvalService;
     }
 
+    // from/to are optional — omitted (or only one supplied) falls back to the full all-time
+    // backlog, preserving today's behavior everywhere this endpoint is already used unscoped.
     @GetMapping("/pending")
-    public List<EodEntryDto> getPending() {
-        return approvalService.getPendingForManager(actingEmail());
+    public List<EodEntryDto> getPending(@RequestParam(required = false) LocalDate from,
+                                        @RequestParam(required = false) LocalDate to) {
+        return approvalService.getPendingForManager(actingEmail(), from, to);
     }
 
     @PostMapping("/{entryId}/approve")

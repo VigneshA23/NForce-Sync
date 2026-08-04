@@ -180,8 +180,12 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const role = user!.role;
   const navSections = NAV[role];
 
-  // Sidebar Approvals badge, the Team Dashboard "Pending Approval" KPI, and the
-  // Approvals page count all read this same live query — see api/approvals.ts.
+  // Sidebar Approvals badge — always the full all-time "how many yet to approve" count,
+  // deliberately UNSCOPED by any date/range filter selected on the Team Dashboard or applied
+  // on the Approvals page. Those two surfaces intentionally scope their own numbers to the
+  // selected date/range (see TeamDashboard.tsx / Approvals.tsx); the sidebar is global chrome
+  // visible on every route and must keep one stable meaning regardless of what date a Team
+  // Lead happens to be looking at elsewhere.
   const pendingApprovalsCount = usePendingApprovalsCount(role === 'lead');
 
   return (

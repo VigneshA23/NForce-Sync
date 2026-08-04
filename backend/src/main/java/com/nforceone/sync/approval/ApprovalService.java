@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +53,19 @@ public class ApprovalService {
         AppUser manager = requireUserByEmail(actorEmail);
         return entryRepository
                 .findPendingByManagerId(manager.getId(), EodEntry.Status.SUBMITTED)
+                .stream()
+                .map(EodEntryDto::from)
+                .toList();
+    }
+
+    // from/to are both null or both present — enforced by the controller, which only forwards
+    // the pair when the caller supplied both query params.
+    @Transactional(readOnly = true)
+    public List<EodEntryDto> getPendingForManager(String actorEmail, LocalDate from, LocalDate to) {
+        if (from == null || to == null) return getPendingForManager(actorEmail);
+        AppUser manager = requireUserByEmail(actorEmail);
+        return entryRepository
+                .findPendingByManagerIdAndEntryDateBetween(manager.getId(), EodEntry.Status.SUBMITTED, from, to)
                 .stream()
                 .map(EodEntryDto::from)
                 .toList();

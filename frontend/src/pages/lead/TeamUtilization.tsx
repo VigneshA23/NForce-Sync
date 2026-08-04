@@ -82,7 +82,8 @@ function Distribution({ members }: { members: TeamUtilDto[] }) {
 // ── member util row ────────────────────────────────────────────────────────────
 
 function MemberUtilRow({ member, isLast }: { member: TeamUtilDto; isLast: boolean }) {
-  const pct   = member.snapshot?.utilizationPct ?? null;
+  const snap  = member.snapshot;
+  const pct   = snap?.utilizationPct ?? null;
   const color = utilColor(pct);
 
   return (
@@ -101,16 +102,10 @@ function MemberUtilRow({ member, isLast }: { member: TeamUtilDto; isLast: boolea
       </div>
       <UtilBar pct={pct} />
       <div style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color, textAlign: 'right' }}>
-        {member.snapshot
-          ? `${member.snapshot.approvedProductiveHours}/${member.snapshot.availableHours}h`
-          : '—'}
+        {snap ? `${snap.approvedProductiveHours}/${snap.availableHours}h` : '—'}
       </div>
       <div style={{ fontSize: 11, color: 'var(--txt-dim)', textAlign: 'right' }}>
-        {!member.snapshot
-          ? 'No snapshot'
-          : member.snapshot.availableHours === 0
-          ? 'Non-working day'
-          : null}
+        {snap && snap.availableHours === 0 ? 'Non-working day' : null}
       </div>
     </div>
   );
@@ -177,7 +172,7 @@ export default function TeamUtilization() {
             Team Utilization
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-            Only APPROVED hours count · snapshots written at approval time
+            Only APPROVED hours count · 0% shown until hours are approved
           </p>
         </div>
 

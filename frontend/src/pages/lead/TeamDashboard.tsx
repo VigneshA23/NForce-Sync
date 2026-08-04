@@ -1,25 +1,36 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ResponsiveContainer, LineChart, Line } from 'recharts';
 import {
-  Ban, Calendar, ChevronDown, ChevronRight, Flag, Loader2, TrendingDown, TrendingUp,
+  ArrowDown, ArrowUp, Ban, Calendar, ChevronDown, ChevronRight, ClipboardCheck, ClipboardList,
+  Download, Flag, Gauge, Hourglass, Loader2, RefreshCw, Scale,
 } from 'lucide-react';
-import { useAuth } from '../../lib/auth';
-import { todayISO as localTodayISO, toLocalISODate } from '../../lib/date';
+import type { LucideIcon } from 'lucide-react';
+import {
+  LineChart, Line, ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell,
+} from 'recharts';
+import { todayISO as localTodayISO } from '../../lib/date';
 import { getEntry } from '../../api/eod';
+import { usePendingApprovalsCount } from '../../api/approvals';
+import { readStoredDateFilter, resolveTeamDashboardDateFilter, writeStoredDateFilter } from '../../lib/teamDashboardDateFilter';
 import {
   useAcknowledgeBlocker, useTeamLeadBlockers, useTeamLeadSummary, useTeamLeadTrend, useTeamMemberStatuses,
-  type DateRange, type MemberEodStatus, type MemberEodStatusDto, type TeamBlockerDto, type TrendPointDto,
+  type DateRange, type MemberEodStatus, type MemberEodStatusDto, type TeamBlockerDto, type TeamLeadSummaryDto,
+  type ThresholdsDto, type TrendPointDto,
 } from '../../api/teamLead';
 
 // ── status config ──────────────────────────────────────────────────────────────
+// SUBMITTED here means the entry has been through review and is APPROVED (backend
+// naming quirk — see UtilizationService/TeamLeadService.resolveStatus) — "Approved" is
+// the correct user-facing label. The reference mock labels this pill "Submitted"; kept as
+// "Approved" here deliberately (see comment above) rather than reintroducing that leak.
 
 const STATUS_CFG: Record<MemberEodStatus, { color: string; label: string }> = {
-  SUBMITTED:         { color: 'var(--ok)',      label: 'Submitted' },
-  PENDING_APPROVAL:  { color: 'var(--warn)',    label: 'Pending' },
-  MISSING:           { color: 'var(--risk)',    label: 'Missing' },
-  ON_LEAVE:          { color: 'var(--txt-dim)', label: 'On Leave' },
+  SUBMITTED:         { color: 'var(--ok)',   label: 'Approved' },
+  PENDING_APPROVAL:  { color: 'var(--warn)', label: 'Pending' },
+  MISSING:           { color: 'var(--risk)', label: 'Missing' },
+  ON_LEAVE:          { color: 'var(--info)', label: 'On Leave' },
 };
 
 // Missing -> Pending Approval -> Submitted -> On Leave
@@ -43,24 +54,45 @@ function rangeLabel(range: DateRange, fmt: (iso: string) => string): string {
   return range.from === range.to ? fmt(range.from) : `${fmt(range.from)} – ${fmt(range.to)}`;
 }
 
-function yesterdayISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return toLocalISODate(d);
+// "52.3" open hours -> "2d 4h". Same unit (openHours) the app already uses elsewhere for
+// blocker age — just formatted for display instead of compared against a threshold.
+function formatOpenHours(hours: number): string {
+  const total = Math.floor(hours);
+  const days = Math.floor(total / 24);
+  const rem = total % 24;
+  if (days === 0) return `${rem}h`;
+  return rem === 0 ? `${days}d` : `${days}d ${rem}h`;
 }
 
-// ── trend helpers ──────────────────────────────────────────────────────────────
+// ── utilization tiering ──────────────────────────────────────────────────────────
+// ThresholdsDto only carries two real boundaries (underutilizedPct / overloadedPct) — there is
+// no backend concept of a third "severely" over/under line. To render the reference's 3-shade
+// (green/amber/red) bar and ring, "significantly" outside is defined as a documented multiplier
+// of the existing configured thresholds below — a presentation-only judgment call, not a new
+// fabricated data value.
 
-function lastTwo(points: TrendPointDto[] | undefined): [number | null, number | null] {
-  if (!points || points.length < 2) return [null, null];
-  return [points[points.length - 1].value, points[points.length - 2].value];
+type UtilTier = 'na' | 'severeUnder' | 'under' | 'optimal' | 'over' | 'severeOver';
+
+function utilTier(pct: number | null, t: ThresholdsDto): UtilTier {
+  if (pct === null) return 'na';
+  const severeUnderBound = t.underutilizedPct * 0.5;
+  const severeOverBound  = t.overloadedPct * 1.3;
+  if (pct < severeUnderBound) return 'severeUnder';
+  if (pct < t.underutilizedPct) return 'under';
+  if (pct <= t.overloadedPct) return 'optimal';
+  if (pct <= severeOverBound) return 'over';
+  return 'severeOver';
 }
 
-function fmtDelta(delta: number | null, suffix = ''): string {
-  if (delta === null) return '';
-  const rounded = Math.round(delta);
-  if (rounded === 0) return `±0${suffix}`;
-  return `${rounded > 0 ? '+' : ''}${rounded}${suffix}`;
+function utilTierColor(tier: UtilTier): string {
+  switch (tier) {
+    case 'optimal': return 'var(--ok)';
+    case 'under':
+    case 'over': return 'var(--warn)';
+    case 'severeUnder':
+    case 'severeOver': return 'var(--risk)';
+    default: return 'var(--txt-dim)';
+  }
 }
 
 // ── primitives (local — matches the per-page Card convention used across lead pages) ──
@@ -77,124 +109,82 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
   );
 }
 
-function Pill({ color, label }: { color: string; label: string }) {
+function Avatar({ name, color }: { name: string; color: string }) {
+  const initials = name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+  return (
+    <div style={{
+      width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+      background: `color-mix(in srgb, ${color} 22%, var(--raised2))`,
+      color, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 11, fontWeight: 700, fontFamily: '"Space Grotesk", sans-serif',
+    }}>
+      {initials}
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: MemberEodStatus }) {
+  const { color, label } = STATUS_CFG[status];
   return (
     <span style={{
-      display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-      background: `color-mix(in srgb, ${color} 14%, transparent)`,
-      border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
-      color, fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+      display: 'inline-flex', alignItems: 'center',
+      padding: '3px 10px', borderRadius: 5,
+      background: `color-mix(in srgb, ${color} 16%, transparent)`,
+      color, fontSize: 11, fontWeight: 600,
     }}>
       {label}
     </span>
   );
 }
 
-// Deterministic per-person identity color (not a status/semantic color, so it lives
-// outside the --ok/--warn/--risk/--info token set) — same person always gets the same hue.
-const AVATAR_PALETTE = [
-  '#3FB68A', '#E8935B', '#D6A93B', '#E06A8B', '#8B7FE0', '#5FA8DE', '#4FA37A', '#D9707A',
-];
+// ── KPI card w/ sparkline ─────────────────────────────────────────────────────────
 
-function avatarColor(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
-}
-
-function Avatar({ name, seed }: { name: string; seed: string }) {
+function KpiSparkline({ points, color }: { points: (number | null)[]; color: string }) {
+  const data = points.map((v, i) => ({ i, v }));
   return (
-    <div style={{
-      width: 30, height: 30, borderRadius: '50%', flexShrink: 0, background: avatarColor(seed),
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 11, fontWeight: 700, color: '#fff',
-    }}>
-      {name.split(' ').map(w => w[0]).slice(0, 2).join('')}
-    </div>
-  );
-}
-
-// ── sparkline ──────────────────────────────────────────────────────────────────
-
-function Sparkline({ points, color }: { points: TrendPointDto[] | undefined; color: string }) {
-  const data = (points ?? []).map(p => ({ v: p.value ?? 0 }));
-  if (data.length < 2) return <div style={{ width: 72, height: 28 }} />;
-  return (
-    <div style={{ width: 72, height: 28 }}>
+    <div style={{ width: 84, height: 42 }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={1.75} dot={false} isAnimationActive={false} />
+        <LineChart data={data} margin={{ top: 4, right: 2, bottom: 2, left: 2 }}>
+          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={1.75} dot={false} connectNulls isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
-// ── KPI card with trend delta + sparkline ───────────────────────────────────────
-
-function TrendKpiCard({
-  label, value, delta, deltaSuffix = '', deltaLabel, deltaGoodDirection, accent, sparkline, sparklineColor, showDelta = true,
+function KpiCard({
+  icon: Icon, accent, label, value, deltaIcon: DeltaIcon, deltaText, deltaColor, sparkline,
 }: {
-  label: string;
-  value: React.ReactNode;
-  delta: number | null;
-  deltaSuffix?: string;
-  deltaLabel?: (n: number) => string;
-  deltaGoodDirection: 'up' | 'down';
-  accent: string;
-  sparkline: TrendPointDto[] | undefined;
-  sparklineColor: string;
-  showDelta?: boolean;
+  icon: LucideIcon; accent: string; label: string; value: React.ReactNode;
+  deltaIcon: LucideIcon; deltaText: string; deltaColor: string; sparkline: (number | null)[];
 }) {
-  const deltaUp = delta !== null && delta > 0;
-  const deltaDown = delta !== null && delta < 0;
-  const deltaColor = delta === null || delta === 0
-    ? 'var(--txt-dim)'
-    : (deltaUp ? deltaGoodDirection === 'up' : deltaGoodDirection === 'down')
-      ? 'var(--ok)' : 'var(--risk)';
-  const deltaText = delta === null ? null : deltaLabel ? deltaLabel(delta) : fmtDelta(delta, deltaSuffix);
-
   return (
-    <div style={{
-      background: 'var(--panel)', borderRadius: 10, padding: 18,
-      border: `1px solid color-mix(in srgb, ${accent} 25%, var(--line))`,
-    }}>
-      <div style={{ fontSize: 11, color: 'var(--txt-mut)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-        {label}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
-        <div>
-          <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 28, fontWeight: 700, color: 'var(--txt)', letterSpacing: '-0.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+    <Card style={{ padding: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 7, marginBottom: 12,
+            background: `color-mix(in srgb, ${accent} 18%, transparent)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
+          }}>
+            <Icon size={15} aria-hidden="true" />
+          </div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, whiteSpace: 'nowrap' }}>
+            {label}
+          </div>
+          <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 25, fontWeight: 700, color: 'var(--txt)', letterSpacing: '-0.02em', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
             {value}
           </div>
-          {showDelta && deltaText && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: deltaColor, marginTop: 6, fontWeight: 600 }}>
-              {deltaUp ? <TrendingUp size={11} aria-hidden="true" /> : deltaDown ? <TrendingDown size={11} aria-hidden="true" /> : null}
-              {deltaText}
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: deltaColor, whiteSpace: 'nowrap' }}>
+            <DeltaIcon size={11} aria-hidden="true" />
+            {deltaText}
+          </div>
         </div>
-        <Sparkline points={sparkline} color={sparklineColor} />
+        <div style={{ flexShrink: 0, marginTop: 2 }}>
+          <KpiSparkline points={sparkline} color={accent} />
+        </div>
       </div>
-    </div>
-  );
-}
-
-// ── util bar (color driven by real thresholds, not fixed bands) ────────────────
-
-function UtilBar({ pct, underutilized, overloaded }: { pct: number | null; underutilized: boolean; overloaded: boolean }) {
-  const color = pct === null ? 'var(--txt-dim)' : overloaded ? 'var(--risk)' : underutilized ? 'var(--warn)' : 'var(--ok)';
-  const capAt = 120;
-  const fill = pct === null ? 0 : Math.min(pct, capAt);
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ flex: 1, height: 6, background: 'var(--raised2)', borderRadius: 3, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${(fill / capAt) * 100}%`, background: color, borderRadius: 3, transition: 'width 0.4s ease' }} />
-      </div>
-      <span style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color, minWidth: 34, textAlign: 'right' }}>
-        {fmtPct(pct)}
-      </span>
-    </div>
+    </Card>
   );
 }
 
@@ -233,66 +223,70 @@ function MemberDetail({ eodEntryId }: { eodEntryId: number }) {
   );
 }
 
-// ── project names cell (truncated, full list via native tooltip) ──────────────────
+// ── project cell (truncated, full list via native tooltip) ───────────────────────
 
 function ProjectsCell({ names }: { names: string[] }) {
   if (names.length === 0) {
-    return <span style={{ fontSize: 12, color: 'var(--txt-mut)' }}>—</span>;
+    return <span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>—</span>;
   }
-  const shown = names.slice(0, 2);
-  const extra = names.length - shown.length;
   return (
-    <div
-      title={extra > 0 ? names.join(', ') : undefined}
-      style={{
-        fontSize: 12, color: 'var(--txt-mut)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        cursor: extra > 0 ? 'help' : 'default',
-      }}
-    >
-      {shown.join(', ')}{extra > 0 && ` +${extra}`}
+    <div style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.4 }}>
+      {names.join(', ')}
     </div>
   );
 }
 
-// ── team status row ──────────────────────────────────────────────────────────────
+// ── Team Status table row ─────────────────────────────────────────────────────────
 
-function MemberRow({ member, isLast, expanded, onToggle }: {
+function MemberRow({ member, isLast, expanded, onToggle, onOpenApproval }: {
   member: MemberEodStatusDto; isLast: boolean; expanded: boolean; onToggle: () => void;
+  onOpenApproval: (eodEntryId: number) => void;
 }) {
-  const { color, label } = STATUS_CFG[member.status];
-  const canExpand = member.eodEntryId != null;
+  const { color } = STATUS_CFG[member.status];
+  const hasEntry = member.eodEntryId != null;
+  // A pending entry needs the Team Lead to actually act on it (approve/reject/request
+  // changes) — that only happens on the Approvals page, so clicking it navigates there
+  // (highlighted) instead of expanding an inline, read-only task list.
+  const isPending = member.status === 'PENDING_APPROVAL';
+  const canExpand = hasEntry && !isPending;
+  const canOpenApproval = hasEntry && isPending;
+  const clickable = canExpand || canOpenApproval;
+
+  function handleClick() {
+    if (canOpenApproval) onOpenApproval(member.eodEntryId!);
+    else if (canExpand) onToggle();
+  }
 
   return (
     <div style={{ borderBottom: isLast && !expanded ? 'none' : '1px solid var(--line)' }}>
       <div
-        onClick={canExpand ? onToggle : undefined}
-        role={canExpand ? 'button' : undefined}
-        tabIndex={canExpand ? 0 : undefined}
-        onKeyDown={canExpand ? (e) => { if (e.key === 'Enter') onToggle(); } : undefined}
+        onClick={clickable ? handleClick : undefined}
+        role={clickable ? 'button' : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        onKeyDown={clickable ? (e) => { if (e.key === 'Enter') handleClick(); } : undefined}
         style={{
-          display: 'grid', gridTemplateColumns: '1.6fr 1.2fr 1fr 110px', gap: 12, alignItems: 'center',
-          padding: '11px 16px', cursor: canExpand ? 'pointer' : 'default',
+          display: 'grid', gridTemplateColumns: '1.8fr 1.4fr 110px', gap: 12, alignItems: 'center',
+          padding: '12px 20px', cursor: clickable ? 'pointer' : 'default',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <Avatar name={member.fullName} seed={member.employeeCode} />
+          <Avatar name={member.fullName} color={color} />
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {member.fullName}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+            <div style={{ fontSize: 10, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
               {member.employeeCode}
             </div>
           </div>
         </div>
         <ProjectsCell names={member.projectNames} />
-        <UtilBar pct={member.utilizationPct} underutilized={member.underutilized} overloaded={member.overloaded} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} aria-hidden="true" />
-          <span style={{ fontSize: 12, color, fontWeight: 600, whiteSpace: 'nowrap' }}>{label}</span>
+          <StatusPill status={member.status} />
           {canExpand && (expanded
             ? <ChevronDown size={13} style={{ color: 'var(--txt-dim)' }} aria-hidden="true" />
             : <ChevronRight size={13} style={{ color: 'var(--txt-dim)' }} aria-hidden="true" />)}
+          {canOpenApproval && <ChevronRight size={13} style={{ color: 'var(--txt-dim)' }} aria-hidden="true" />}
         </div>
       </div>
       {expanded && canExpand && <MemberDetail eodEntryId={member.eodEntryId!} />}
@@ -300,57 +294,59 @@ function MemberRow({ member, isLast, expanded, onToggle }: {
   );
 }
 
-// ── blockers-today row ────────────────────────────────────────────────────────────
+// ── Blockers Today row ────────────────────────────────────────────────────────────
 
 function BlockerRow({ b, isLast, flagged, expanded, onToggle, onAcknowledge, acking }: {
   b: TeamBlockerDto; isLast: boolean; flagged: boolean; expanded: boolean;
   onToggle: () => void; onAcknowledge: () => void; acking: boolean;
 }) {
-  const rowContent = (
-    <div
-      onClick={onToggle}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter') onToggle(); }}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: flagged ? '10px 12px' : '12px 16px', cursor: 'pointer' }}
-    >
-      {flagged
-        ? <Flag size={14} style={{ color: 'var(--warn)', flexShrink: 0 }} aria-hidden="true" />
-        : <Ban size={14} style={{ color: 'var(--txt-dim)', flexShrink: 0 }} aria-hidden="true" />}
-      <div style={{ flex: 1, minWidth: 0, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        <strong style={{ color: 'var(--txt)', fontWeight: 600 }}>{b.employeeName}</strong>
-        <span style={{ color: 'var(--txt-mut)' }}> — {b.blockerReason ?? b.description ?? 'No detail provided'}</span>
-      </div>
-      {b.acknowledged
-        ? <Pill color="var(--ok)" label="Acknowledged" />
-        : <span style={{ fontSize: 10, color: flagged ? 'var(--warn)' : 'var(--txt-dim)', whiteSpace: 'nowrap' }}>{b.openHours}h open</span>}
-    </div>
-  );
+  // No `impact` field exists on TeamBlockerDto — reusing the same openHours vs.
+  // blockerAgeAlertHours threshold the app already uses elsewhere to flag stale blockers,
+  // rather than inventing a new severity field.
+  const impactLabel = flagged ? 'High Impact' : 'Medium Impact';
+  const impactColor = flagged ? 'var(--risk)' : 'var(--warn)';
 
   return (
-    <div style={{ borderBottom: isLast && !expanded ? 'none' : '1px solid var(--line)', padding: flagged ? '8px 16px' : 0 }}>
-      {flagged ? (
+    <div style={{ borderBottom: isLast && !expanded ? 'none' : '1px solid var(--line)', padding: '12px 20px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <div style={{
-          background: 'color-mix(in srgb, var(--warn) 10%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--warn) 26%, transparent)',
-          borderRadius: 8,
+          width: 30, height: 30, borderRadius: 7, flexShrink: 0, marginTop: 1,
+          background: 'var(--raised2)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: flagged ? 'var(--risk)' : 'var(--warn)',
         }}>
-          {rowContent}
+          {flagged ? <Ban size={14} aria-hidden="true" /> : <Flag size={14} aria-hidden="true" />}
         </div>
-      ) : rowContent}
-      {expanded && (
-        <div style={{ padding: '0 16px 14px 40px' }}>
-          {b.projectName && <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6 }}>{b.projectName}</div>}
-          {b.description && <div style={{ fontSize: 12, color: 'var(--txt-mut)', marginBottom: 8, lineHeight: 1.5 }}>{b.description}</div>}
-          <div style={{
-            background: 'color-mix(in srgb, var(--risk) 8%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--risk) 22%, transparent)',
-            borderRadius: 6, padding: '8px 12px', marginBottom: b.acknowledged ? 0 : 10,
-          }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--risk)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Blocker</div>
-            <div style={{ fontSize: 12, color: 'var(--txt)', lineHeight: 1.5 }}>{b.blockerReason ?? '—'}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--txt)', lineHeight: 1.4, marginBottom: 4 }}>
+            <span style={{ fontWeight: 600 }}>{b.employeeName}</span>
+            {' — '}
+            <span style={{ color: 'var(--txt-mut)' }}>{b.blockerReason ?? b.description ?? 'No detail provided'}</span>
           </div>
-          {!b.acknowledged && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--txt-dim)' }}>
+            <span>Since {formatOpenHours(b.openHours)}</span>
+            <span>·</span>
+            <span style={{ color: impactColor, fontWeight: 600 }}>{impactLabel}</span>
+          </div>
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          style={{
+            padding: '5px 12px', fontSize: 11, fontWeight: 600, borderRadius: 6, flexShrink: 0,
+            background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: 'pointer',
+          }}
+        >
+          View
+        </button>
+      </div>
+      {expanded && (
+        <div style={{ padding: '10px 0 0 40px' }}>
+          {b.description && <div style={{ fontSize: 12, color: 'var(--txt-mut)', marginBottom: 8, lineHeight: 1.5 }}>{b.description}</div>}
+          {b.projectName && (
+            <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 8 }}>Project: {b.projectName}</div>
+          )}
+          {b.acknowledged ? (
+            <span style={{ fontSize: 11, color: 'var(--ok)', fontWeight: 600 }}>Acknowledged</span>
+          ) : (
             <button
               onClick={(e) => { e.stopPropagation(); onAcknowledge(); }}
               disabled={acking}
@@ -369,39 +365,216 @@ function BlockerRow({ b, isLast, flagged, expanded, onToggle, onAcknowledge, ack
   );
 }
 
+// ── 7-day utilization area chart ──────────────────────────────────────────────────
+
+function WeeklyUtilChart({ points }: { points: TrendPointDto[] }) {
+  const data = points.map(p => ({
+    day: new Date(p.date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short' }),
+    value: p.value != null ? Math.round(p.value) : null,
+  }));
+
+  const CustomDot = (props: { cx?: number; cy?: number; payload?: { value: number | null } }) => {
+    const { cx, cy, payload } = props;
+    const value = payload?.value;
+    if (value == null || cx == null || cy == null) return <g />;
+    return (
+      <g>
+        <text x={cx} y={cy - 12} textAnchor="middle" fontSize={11} fontWeight={600} fill="var(--txt-mut)">
+          {value}%
+        </text>
+        <circle cx={cx} cy={cy} r={4} fill="var(--risk)" stroke="var(--panel)" strokeWidth={2} />
+      </g>
+    );
+  };
+
+  if (data.every(d => d.value == null)) {
+    return (
+      <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontSize: 13, color: 'var(--txt-dim)' }}>No utilization data in this range</span>
+      </div>
+    );
+  }
+
+  // Utilization is uncapped server-side (a member can be well over 100%) — a fixed [0,100]
+  // domain would silently clip any day above it. Scale to whatever the data actually needs.
+  const maxValue = Math.max(100, ...data.map(d => d.value ?? 0));
+  const axisMax = Math.ceil(maxValue / 25) * 25;
+  const axisTicks = Array.from({ length: axisMax / 25 + 1 }, (_, i) => i * 25);
+
+  return (
+    <div style={{ height: 220 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 24, right: 16, bottom: 0, left: 4 }}>
+          <defs>
+            <linearGradient id="weeklyUtilGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="var(--risk)" stopOpacity={0.35} />
+              <stop offset="95%" stopColor="var(--risk)" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+          <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} tickLine={false} axisLine={false} />
+          <YAxis
+            domain={[0, axisMax]} ticks={axisTicks}
+            tick={{ fontSize: 10, fill: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}
+            tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}%`} width={40}
+          />
+          <Tooltip
+            contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 7, fontSize: 12 }}
+            labelStyle={{ color: 'var(--txt-mut)' }}
+            formatter={(v: number) => [`${v}%`, 'Utilization']}
+          />
+          <Area
+            type="monotone" dataKey="value"
+            stroke="var(--risk)" strokeWidth={2} fill="url(#weeklyUtilGrad)"
+            connectNulls={false} dot={<CustomDot />} activeDot={{ r: 5, fill: 'var(--risk)' }}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ── Status Distribution donut ─────────────────────────────────────────────────────
+
+function StatusDistributionDonut({ summary }: { summary: TeamLeadSummaryDto }) {
+  const segments = [
+    { key: 'approved', color: 'var(--ok)',   label: 'Approved',       count: summary.submittedCount },
+    { key: 'pending',  color: 'var(--warn)', label: 'Pending Approval', count: summary.pendingApprovalCount },
+    { key: 'missing',  color: 'var(--risk)', label: 'Missing',        count: summary.missingCount },
+    { key: 'leave',    color: 'var(--info)', label: 'On Leave',       count: summary.onLeaveCount },
+  ];
+  const total = summary.activeMembers;
+  const data = segments.filter(s => s.count > 0).map(s => ({ name: s.label, value: s.count, color: s.color }));
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+      <div style={{ width: 130, height: 130, flexShrink: 0, position: 'relative' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={data} cx="50%" cy="50%" innerRadius={38} outerRadius={58} paddingAngle={3} dataKey="value" strokeWidth={0}>
+              {data.map(d => <Cell key={d.name} fill={d.color} />)}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+        }}>
+          <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>{total}</div>
+          <div style={{ fontSize: 10, color: 'var(--txt-dim)' }}>Total</div>
+        </div>
+      </div>
+      <div style={{ flex: 1 }}>
+        {segments.map(s => (
+          <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: s.color, flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 12, color: 'var(--txt-mut)' }}>{s.label}</span>
+            <span style={{ fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
+              {s.count} <span style={{ color: 'var(--txt-dim)' }}>({total > 0 ? Math.round((s.count / total) * 100) : 0}%)</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Utilization Overview ring ─────────────────────────────────────────────────────
+
+function UtilizationOverviewRing({ summary }: { summary: TeamLeadSummaryDto }) {
+  const avg = summary.avgUtilization;
+  const tier = utilTier(avg, summary.thresholds);
+  const color = utilTierColor(tier);
+  const capAt = Math.max(summary.thresholds.overloadedPct * 1.3, 120);
+  const filled = avg === null ? 0 : Math.min(avg, capAt);
+  const data = [
+    { name: 'filled', value: filled },
+    { name: 'rest', value: Math.max(capAt - filled, 0) },
+  ];
+
+  const optimalCount = Math.max(summary.activeMembers - summary.underutilizedCount - summary.overloadedCount, 0);
+  const buckets = [
+    { color: 'var(--warn)', label: `Underutilized (<${summary.thresholds.underutilizedPct}%)`, count: summary.underutilizedCount },
+    { color: 'var(--ok)',   label: `Optimal (${summary.thresholds.underutilizedPct}% – ${summary.thresholds.overloadedPct}%)`, count: optimalCount },
+    { color: 'var(--risk)', label: `Overutilized (>${summary.thresholds.overloadedPct}%)`, count: summary.overloadedCount },
+  ];
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+      <div style={{ width: 130, height: 130, flexShrink: 0, position: 'relative' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={data} cx="50%" cy="50%" innerRadius={40} outerRadius={58} startAngle={90} endAngle={-270} paddingAngle={0} dataKey="value" strokeWidth={0}>
+              <Cell fill={color} />
+              <Cell fill="var(--raised2)" />
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+        }}>
+          <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>{fmtPct(avg)}</div>
+          <div style={{ fontSize: 10, color: 'var(--txt-dim)' }}>Avg Utilization</div>
+        </div>
+      </div>
+      <div style={{ flex: 1 }}>
+        {buckets.map(b => (
+          <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: b.color, flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 12, color: 'var(--txt-mut)' }}>{b.label}</span>
+            <span style={{ fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
+              {b.count}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Quick Actions ─────────────────────────────────────────────────────────────────
+
+function QuickActionTile({ icon: Icon, accent, title, subtitle, onClick, disabled }: {
+  icon: LucideIcon; accent: string; title: string; subtitle: string; onClick?: () => void; disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={disabled ? 'Not available yet' : undefined}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8,
+        padding: 14, borderRadius: 9, textAlign: 'left',
+        background: 'var(--raised2)', border: '1px solid var(--line)',
+        cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.55 : 1,
+      }}
+    >
+      <div style={{
+        width: 28, height: 28, borderRadius: 7,
+        background: `color-mix(in srgb, ${accent} 18%, transparent)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
+      }}>
+        <Icon size={14} aria-hidden="true" />
+      </div>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)' }}>{title}</div>
+      <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>{subtitle}</div>
+    </button>
+  );
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────────────
 
-type DateMode = 'today' | 'yesterday' | 'range';
+const ROSTER_COLLAPSED_COUNT = 6;
 
-// Backs up the URL-held date selection so it also survives navigation that drops the query
-// string entirely (e.g. clicking the "Team Dashboard" sidebar link, which points at the bare
-// path) — the URL stays the source of truth whenever it has the params, this is only the
-// fallback so a plain nav-away-and-back doesn't silently reset to "Today".
-const DATE_FILTER_STORAGE_KEY = 'nfsync_team_dashboard_date';
-
-interface StoredDateFilter {
-  mode: DateMode;
-  from?: string;
-  to?: string;
-}
-
-function readStoredDateFilter(): StoredDateFilter | null {
-  try {
-    const raw = sessionStorage.getItem(DATE_FILTER_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as StoredDateFilter) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredDateFilter(filter: StoredDateFilter): void {
-  try {
-    sessionStorage.setItem(DATE_FILTER_STORAGE_KEY, JSON.stringify(filter));
-  } catch {}
+function agoLabel(ms: number): string {
+  const mins = Math.max(0, Math.round(ms / 60_000));
+  if (mins < 1) return 'just now';
+  if (mins === 1) return '1 min ago';
+  return `${mins} mins ago`;
 }
 
 export default function TeamDashboard() {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const todayISO = localTodayISO();
 
@@ -410,25 +583,8 @@ export default function TeamDashboard() {
   // explicit user action — never as a side effect of remounting this page.
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // If the URL doesn't carry a selection (e.g. we arrived via a plain nav link rather than the
-  // browser back button / a bookmarked URL), fall back to the last explicit selection in
-  // sessionStorage instead of defaulting straight to "today".
-  const stored = searchParams.get('mode') ? null : readStoredDateFilter();
-  const modeParam = searchParams.get('mode') ?? stored?.mode ?? null;
-  const fromParam = searchParams.get('from') ?? stored?.from ?? null;
-  const toParam = searchParams.get('to') ?? stored?.to ?? null;
-  const mode: DateMode = modeParam === 'yesterday'
-    ? 'yesterday'
-    : modeParam === 'range' && fromParam && toParam
-      ? 'range'
-      : 'today';
+  const { mode, range, isToday } = resolveTeamDashboardDateFilter(searchParams);
 
-  const singleISO = mode === 'yesterday' ? yesterdayISO() : todayISO;
-  const rangeFrom = mode === 'range' ? fromParam! : todayISO;
-  const rangeTo = mode === 'range' ? toParam! : todayISO;
-
-  // Mirror a storage-only fallback back into the URL so it stays shareable/bookmarkable too.
-  // Runs once on mount; a no-op whenever the URL already carries the selection.
   useEffect(() => {
     if (searchParams.get('mode')) return;
     const saved = readStoredDateFilter();
@@ -447,8 +603,9 @@ export default function TeamDashboard() {
   const [draftFrom, setDraftFrom] = useState(todayISO);
   const [draftTo, setDraftTo] = useState(todayISO);
 
-  const range: DateRange = mode === 'range' ? { from: rangeFrom, to: rangeTo } : { from: singleISO, to: singleISO };
-  const isToday = mode !== 'range' && singleISO === todayISO;
+  const anchorDate = range.to;
+  const dateSelectorLabel = mode === 'today' ? `Today, ${fmtShortDate(todayISO)}` : mode === 'yesterday' ? `Yesterday, ${fmtShortDate(range.from)}` : rangeLabel(range, fmtShortDate);
+  const panelRangeLabel = mode === 'today' ? 'Today' : mode === 'yesterday' ? 'Yesterday' : 'Custom Range';
 
   function selectQuick(kind: 'today' | 'yesterday') {
     const next = new URLSearchParams(searchParams);
@@ -472,45 +629,78 @@ export default function TeamDashboard() {
   }
 
   function openPicker() {
-    setDraftFrom(mode === 'range' ? rangeFrom : singleISO);
-    setDraftTo(mode === 'range' ? rangeTo : singleISO);
+    setDraftFrom(range.from);
+    setDraftTo(range.to);
     setPickerOpen(true);
   }
 
-  const { data: summary, isPending: summaryPending, isFetching: summaryFetching, isError: summaryError, refetch: refetchSummary } = useTeamLeadSummary(range, isToday);
+  const {
+    data: summary, isPending: summaryPending, isFetching: summaryFetching, isError: summaryError,
+    refetch: refetchSummary, dataUpdatedAt,
+  } = useTeamLeadSummary(range, isToday);
   const { data: members, isPending: membersPending, isFetching: membersFetching, isError: membersError, refetch: refetchMembers } = useTeamMemberStatuses(range, isToday);
   const { data: blockers, isPending: blockersPending, isFetching: blockersFetching } = useTeamLeadBlockers(range, isToday);
-  const { data: trend } = useTeamLeadTrend(range.to, 7);
+  const { data: trend, isPending: trendPending } = useTeamLeadTrend(anchorDate, 7);
   const acknowledge = useAcknowledgeBlocker(range);
+
+  // Shared cache with the sidebar badge and Approvals page (see usePendingApprovalsCount's own
+  // doc comment) — scoped to the dashboard's own selected `range` so the "Review approvals"
+  // button and this KPI card reflect only that window. Shell.tsx resolves this same range from
+  // the URL independently (only while the current route is the Team Dashboard) so the sidebar
+  // badge asks the exact same question and can never disagree with what's shown here.
+  const pendingApprovalsCount = usePendingApprovalsCount(true, range);
 
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
   const [expandedBlockerId, setExpandedBlockerId] = useState<number | null>(null);
   const [ackingId, setAckingId] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [rosterExpanded, setRosterExpanded] = useState(false);
+
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Collapse the roster back to the default 6 rows whenever the selected date/range changes
+  // (a fresh load already starts collapsed via the initial state above).
+  useEffect(() => {
+    setRosterExpanded(false);
+  }, [range.from, range.to]);
 
   const sortedMembers = useMemo(() => {
     if (!members) return [];
     return [...members].sort((a, b) => STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status]);
   }, [members]);
 
+  const visibleMembers = rosterExpanded ? sortedMembers : sortedMembers.slice(0, ROSTER_COLLAPSED_COUNT);
+
+  const topOverloaded = useMemo(() => {
+    const overloaded = (members ?? []).filter(m => m.overloaded);
+    if (overloaded.length === 0) return null;
+    return overloaded.reduce((a, b) => (b.utilizationPct ?? 0) > (a.utilizationPct ?? 0) ? b : a);
+  }, [members]);
+
   const isPending = summaryPending || membersPending;
   const isError = summaryError || membersError;
-  // True only for a background refresh (e.g. after applying a new date/range) where prior data
-  // is still on screen — distinct from isPending, which is the true first-load/no-data case.
   const isRefreshing = !isPending && (summaryFetching || membersFetching || blockersFetching);
 
   if (isPending) {
     return (
       <div>
-        <div style={{ marginBottom: 28 }}>
-          <Skel h={26} w={200} />
-          <div style={{ marginTop: 8 }}><Skel h={14} w={220} /></div>
+        <div style={{ marginBottom: 24 }}>
+          <Skel h={24} w={220} />
+          <div style={{ marginTop: 8 }}><Skel h={14} w={280} /></div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-          {[0, 1, 2, 3].map(i => (
-            <Card key={i} style={{ padding: 18 }}><Skel h={28} w={60} /><div style={{ marginTop: 8 }}><Skel h={12} w={80} /></div></Card>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 16 }}>
+          {[0, 1, 2, 3, 4].map(i => (
+            <Card key={i} style={{ padding: '1rem' }}>
+              <Skel h={30} w={30} />
+              <div style={{ marginTop: 12 }}><Skel h={22} w={60} /></div>
+              <div style={{ marginTop: 8 }}><Skel h={12} w={90} /></div>
+            </Card>
           ))}
         </div>
-        <Card style={{ padding: 20 }}><Skel h={200} /></Card>
+        <Card style={{ padding: 20 }}><Skel h={260} /></Card>
       </div>
     );
   }
@@ -518,8 +708,8 @@ export default function TeamDashboard() {
   if (isError || !summary) {
     return (
       <div>
-        <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Team Dashboard</h1>
+        <div style={{ marginBottom: 24 }}>
+          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Team Lead Dashboard</h1>
         </div>
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load dashboard.</div>
@@ -534,30 +724,39 @@ export default function TeamDashboard() {
     );
   }
 
-  const submittedTodayLabel = `${summary.submittedCount + summary.pendingApprovalCount}/${summary.activeMembers}`;
-  const avgUtilLabel = summary.avgUtilization === null ? '—' : fmtPct(summary.avgUtilization);
-
-  const [utilToday, utilYesterday] = lastTwo(trend?.avgUtilization);
-  const utilDelta = utilToday !== null && utilYesterday !== null ? utilToday - utilYesterday : null;
-  const [pendingToday, pendingYesterday] = lastTwo(trend?.pendingApprovalCount);
-  const pendingDelta = pendingToday !== null && pendingYesterday !== null ? pendingToday - pendingYesterday : null;
-  const [blockersToday, blockersYesterday] = lastTwo(trend?.blockersCount);
-  const blockersDelta = blockersToday !== null && blockersYesterday !== null ? blockersToday - blockersYesterday : null;
+  const submittedTodayValue = `${summary.submittedCount + summary.pendingApprovalCount}/${summary.activeMembers}`;
+  const avgUtilLabel = fmtPct(summary.avgUtilization);
 
   const flaggedBlockerIds = new Set(
     (blockers ?? []).filter(b => !b.acknowledged && b.openHours > summary.thresholds.blockerAgeAlertHours).map(b => b.taskId),
   );
 
+  // Deltas: last point in the anchor-ending 7-day trend is the selected day itself;
+  // second-to-last is the day before it (TeamLeadService.getTrend returns oldest→newest,
+  // ending at the requested date) — so "today - yesterday" is just the last two points.
+  function delta(series: TrendPointDto[] | undefined): number | null {
+    if (!series || series.length < 2) return null;
+    const last = series[series.length - 1]?.value;
+    const prev = series[series.length - 2]?.value;
+    if (last == null || prev == null) return null;
+    return Math.round(last - prev);
+  }
+
+  const utilDelta = delta(trend?.avgUtilization);
+  const pendingDelta = delta(trend?.pendingApprovalCount);
+  const blockersDelta = delta(trend?.blockersCount);
+  const sparklineFor = (series: TrendPointDto[] | undefined) => (series ?? []).map(p => p.value);
+
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-            Team Dashboard
+            Team Lead Dashboard
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-            {user?.name} · {summary.activeMembers} direct report{summary.activeMembers !== 1 ? 's' : ''} · {rangeLabel(range, fmtLongDate)}
+            Overview of your team's productivity and status
           </p>
         </div>
 
@@ -567,14 +766,13 @@ export default function TeamDashboard() {
               onClick={() => (pickerOpen ? setPickerOpen(false) : openPicker())}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '8px 14px', fontSize: 12, fontWeight: 600,
-                color: isToday ? 'var(--info)' : 'var(--txt)',
-                background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8,
+                padding: '9px 14px', fontSize: 12.5, fontWeight: 600,
+                color: 'var(--txt)', background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8,
                 cursor: 'pointer', whiteSpace: 'nowrap',
               }}
             >
               <Calendar size={13} aria-hidden="true" />
-              {mode === 'today' ? 'Today' : mode === 'yesterday' ? 'Yesterday' : rangeLabel(range, fmtShortDate)}
+              {dateSelectorLabel}
               {isRefreshing
                 ? <Loader2 size={12} aria-hidden="true" style={{ animation: 'spin 1s linear infinite' }} />
                 : <ChevronDown size={12} aria-hidden="true" />}
@@ -582,10 +780,7 @@ export default function TeamDashboard() {
 
             {pickerOpen && (
               <>
-                <div
-                  onClick={() => setPickerOpen(false)}
-                  style={{ position: 'fixed', inset: 0, zIndex: 19 }}
-                />
+                <div onClick={() => setPickerOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
                 <div style={{
                   position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 260,
                   background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
@@ -621,25 +816,15 @@ export default function TeamDashboard() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                     <input
-                      type="date"
-                      value={draftFrom}
-                      max={todayISO}
+                      type="date" value={draftFrom} max={todayISO}
                       onChange={(e) => setDraftFrom(e.target.value)}
-                      style={{
-                        flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
-                        background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                      }}
+                      style={{ flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)' }}
                     />
                     <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>to</span>
                     <input
-                      type="date"
-                      value={draftTo}
-                      max={todayISO}
+                      type="date" value={draftTo} max={todayISO}
                       onChange={(e) => setDraftTo(e.target.value)}
-                      style={{
-                        flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
-                        background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                      }}
+                      style={{ flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)' }}
                     />
                   </div>
                   {draftFrom > draftTo && (
@@ -651,8 +836,7 @@ export default function TeamDashboard() {
                     style={{
                       width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
                       background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                      cursor: draftFrom > draftTo ? 'default' : 'pointer',
-                      opacity: draftFrom > draftTo ? 0.6 : 1,
+                      cursor: draftFrom > draftTo ? 'default' : 'pointer', opacity: draftFrom > draftTo ? 0.6 : 1,
                     }}
                   >
                     Apply
@@ -663,133 +847,203 @@ export default function TeamDashboard() {
           </div>
 
           <button
-            onClick={() => navigate('/team/approvals')}
+            onClick={() => navigate(`/team/approvals?from=${range.from}&to=${range.to}`)}
             style={{
               padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8,
               background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap',
             }}
           >
-            Review approvals ({summary.pendingApprovalCount})
+            Review approvals ({pendingApprovalsCount})
           </button>
         </div>
       </div>
 
-      {/* KPI row — 4 cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
-        <TrendKpiCard
-          label="Team Util"
-          value={avgUtilLabel}
-          delta={utilDelta}
-          deltaSuffix=" pts"
-          deltaGoodDirection="up"
-          accent="var(--info)"
-          sparkline={trend?.avgUtilization}
-          sparklineColor="var(--info)"
+      {/* KPI row — 5 cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 16 }}>
+        <KpiCard
+          icon={Gauge} accent="var(--warn)" label="Team Utilization" value={avgUtilLabel}
+          deltaIcon={utilDelta !== null && utilDelta < 0 ? ArrowDown : ArrowUp}
+          deltaText={utilDelta === null ? 'vs yesterday: —' : `${utilDelta >= 0 ? '+' : ''}${utilDelta} pts vs yesterday`}
+          deltaColor="var(--warn)"
+          sparkline={trendPending ? [] : sparklineFor(trend?.avgUtilization)}
         />
-        <TrendKpiCard
-          label="Submitted Today"
-          value={submittedTodayLabel}
-          delta={-summary.missingCount}
-          deltaLabel={(n) => `${Math.abs(n)} missing`}
-          deltaGoodDirection="up"
-          accent="var(--ok)"
-          sparkline={trend?.submittedCount}
-          sparklineColor="var(--ok)"
+        <KpiCard
+          icon={ClipboardCheck} accent="var(--warn)" label="Submitted Today" value={submittedTodayValue}
+          deltaIcon={ArrowDown}
+          deltaText={`${summary.missingCount} missing`}
+          deltaColor="var(--risk)"
+          sparkline={trendPending ? [] : sparklineFor(trend?.submittedCount)}
         />
-        <TrendKpiCard
-          label="Pending Approval"
-          value={summary.pendingApprovalCount}
-          delta={pendingDelta}
-          deltaGoodDirection="down"
-          accent="var(--warn)"
-          sparkline={trend?.pendingApprovalCount}
-          sparklineColor="var(--warn)"
+        <KpiCard
+          icon={Hourglass} accent="var(--risk)" label="Pending Approval" value={pendingApprovalsCount}
+          deltaIcon={pendingDelta !== null && pendingDelta < 0 ? ArrowDown : ArrowUp}
+          deltaText={pendingDelta === null ? '—' : `${pendingDelta >= 0 ? '+' : ''}${pendingDelta}`}
+          deltaColor="var(--risk)"
+          sparkline={trendPending ? [] : sparklineFor(trend?.pendingApprovalCount)}
         />
-        <TrendKpiCard
-          label="Open Blockers"
-          value={blockers ? blockers.length : summary.activeBlockersCount}
-          delta={blockersDelta}
-          deltaGoodDirection="down"
-          accent="var(--risk)"
-          sparkline={trend?.blockersCount}
-          sparklineColor="var(--risk)"
-          showDelta={false}
+        <KpiCard
+          icon={Scale} accent="var(--ok)" label="Over-allocated" value={summary.overloadedCount}
+          deltaIcon={ArrowUp}
+          deltaText={topOverloaded ? `${topOverloaded.fullName.split(' ')[0]} ${fmtPct(topOverloaded.utilizationPct)}` : 'None'}
+          deltaColor="var(--ok)"
+          // TODO(backend): no trend series exists for overloaded-member-count over time
+          // (DashboardTrendDto has no such field) — placeholder flat sparkline until it does.
+          sparkline={[summary.overloadedCount, summary.overloadedCount, summary.overloadedCount, summary.overloadedCount, summary.overloadedCount, summary.overloadedCount, summary.overloadedCount]}
+        />
+        <KpiCard
+          icon={Ban} accent="var(--info)" label="Open Blockers" value={blockers ? blockers.length : summary.activeBlockersCount}
+          deltaIcon={blockersDelta !== null && blockersDelta > 0 ? ArrowUp : ArrowDown}
+          deltaText={blockersDelta === null ? '—' : `${blockersDelta >= 0 ? '+' : ''}${blockersDelta}`}
+          deltaColor="var(--info)"
+          sparkline={trendPending ? [] : sparklineFor(trend?.blockersCount)}
         />
       </div>
 
-      {/* Two-column: today's team status + blockers today */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 16 }}>
+      {/* Mid section: Team Status table + right stack */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 16, marginBottom: 16, alignItems: 'start' }}>
         <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
-              {isToday ? "Today's team status" : `Team status — ${rangeLabel(range, fmtShortDate)}`}
-            </div>
+          <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Team Status</div>
             <button
               onClick={() => navigate('/team/utilization')}
-              style={{ fontSize: 11, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer' }}
+              style={{ fontSize: 12, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
             >
-              Utilization →
+              View Utilization <ChevronRight size={12} aria-hidden="true" />
             </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.2fr 1fr 110px', gap: 12, padding: '8px 16px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            <span>Member</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1.4fr 110px', gap: 12, padding: '8px 20px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <span>Employees</span>
             <span>Project</span>
-            <span>Util</span>
             <span style={{ textAlign: 'right' }}>Status</span>
           </div>
           {sortedMembers.length === 0 ? (
             <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No team members assigned yet.</div>
           ) : (
-            sortedMembers.map((m, i) => (
+            visibleMembers.map((m, i) => (
               <MemberRow
                 key={m.id}
                 member={m}
-                isLast={i === sortedMembers.length - 1}
+                isLast={i === visibleMembers.length - 1}
                 expanded={expandedMemberId === m.id}
                 onToggle={() => setExpandedMemberId(id => (id === m.id ? null : m.id))}
+                onOpenApproval={(eodEntryId) => navigate(`/team/approvals?from=${range.from}&to=${range.to}&highlight=${eodEntryId}`)}
               />
             ))
+          )}
+          {sortedMembers.length > ROSTER_COLLAPSED_COUNT && (
+            <div style={{ padding: '12px 20px', textAlign: 'center', borderTop: '1px solid var(--line)' }}>
+              <button
+                onClick={() => setRosterExpanded(e => !e)}
+                style={{ fontSize: 12, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                {rosterExpanded ? 'Show less' : 'View all members'}
+                {rosterExpanded ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
+              </button>
+            </div>
           )}
         </Card>
 
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
-                {isToday ? 'Blockers today' : `Blockers — ${rangeLabel(range, fmtShortDate)}`}
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 2 }}>
-                Unacknowledged blockers for {rangeLabel(range, fmtLongDate)}
-              </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Blockers Today</div>
+              <button
+                onClick={() => navigate('/team/blockers')}
+                style={{ fontSize: 12, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                View all <ChevronRight size={12} aria-hidden="true" />
+              </button>
             </div>
-            <button
-              onClick={() => navigate('/team/blockers')}
-              style={{ fontSize: 11, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer' }}
-            >
-              All →
-            </button>
+            {blockersPending ? (
+              <div style={{ padding: 16 }}><Skel h={60} /></div>
+            ) : !blockers || blockers.length === 0 ? (
+              <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>
+                No blockers reported.
+              </div>
+            ) : (
+              blockers.map((b, i) => (
+                <BlockerRow
+                  key={b.taskId}
+                  b={b}
+                  isLast={i === blockers.length - 1}
+                  flagged={flaggedBlockerIds.has(b.taskId)}
+                  expanded={expandedBlockerId === b.taskId}
+                  onToggle={() => setExpandedBlockerId(id => (id === b.taskId ? null : b.taskId))}
+                  acking={ackingId === b.taskId && acknowledge.isPending}
+                  onAcknowledge={() => { setAckingId(b.taskId); acknowledge.mutate(b.taskId, { onSettled: () => setAckingId(null) }); }}
+                />
+              ))
+            )}
+          </Card>
+
+          <Card style={{ padding: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Team Utilization (7 Days)</div>
+              <button
+                onClick={() => navigate('/team/utilization')}
+                style={{ fontSize: 12, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
+              >
+                View full report <ChevronRight size={12} aria-hidden="true" />
+              </button>
+            </div>
+            {trendPending ? <Skel h={220} /> : <WeeklyUtilChart points={trend?.avgUtilization ?? []} />}
+          </Card>
+        </div>
+      </div>
+
+      {/* Bottom row: 3 panels */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <Card style={{ padding: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>Status Distribution</div>
+            {/* No per-panel week filter exists yet — mirrors the header's selected range. */}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--txt-dim)' }}>
+              {panelRangeLabel} <ChevronDown size={11} aria-hidden="true" />
+            </span>
           </div>
-          {blockersPending ? (
-            <div style={{ padding: 16 }}><Skel h={60} /></div>
-          ) : !blockers || blockers.length === 0 ? (
-            <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>
-              {isToday ? 'No blockers reported today.' : `No blockers for ${rangeLabel(range, fmtShortDate)}.`}
-            </div>
-          ) : (
-            blockers.map((b, i) => (
-              <BlockerRow
-                key={b.taskId}
-                b={b}
-                isLast={i === blockers.length - 1}
-                flagged={flaggedBlockerIds.has(b.taskId)}
-                expanded={expandedBlockerId === b.taskId}
-                onToggle={() => setExpandedBlockerId(id => (id === b.taskId ? null : b.taskId))}
-                acking={ackingId === b.taskId && acknowledge.isPending}
-                onAcknowledge={() => { setAckingId(b.taskId); acknowledge.mutate(b.taskId, { onSettled: () => setAckingId(null) }); }}
-              />
-            ))
-          )}
+          <StatusDistributionDonut summary={summary} />
         </Card>
+
+        <Card style={{ padding: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>Utilization Overview</div>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--txt-dim)' }}>
+              {panelRangeLabel} <ChevronDown size={11} aria-hidden="true" />
+            </span>
+          </div>
+          <UtilizationOverviewRing summary={summary} />
+        </Card>
+
+        <Card style={{ padding: 20 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)', marginBottom: 14 }}>Quick Actions</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <QuickActionTile
+              icon={ClipboardList} accent="var(--brand)" title="Review Approvals"
+              subtitle={`${summary.pendingApprovalCount} pending`}
+              onClick={() => navigate('/team/approvals')}
+            />
+            <QuickActionTile
+              icon={Ban} accent="var(--risk)" title="View Blockers"
+              subtitle={`${blockers ? blockers.length : summary.activeBlockersCount} open`}
+              onClick={() => navigate('/team/blockers')}
+            />
+            <QuickActionTile
+              icon={Gauge} accent="var(--info)" title="Team Utilization"
+              subtitle="Detailed report"
+              onClick={() => navigate('/team/utilization')}
+            />
+            <QuickActionTile
+              icon={Download} accent="var(--ok)" title="Export Report"
+              subtitle="Download" disabled
+            />
+          </div>
+        </Card>
+      </div>
+
+      {/* Footer */}
+      <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        <RefreshCw size={11} aria-hidden="true" />
+        Last updated: {agoLabel(nowTick - dataUpdatedAt)}
       </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

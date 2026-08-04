@@ -4,6 +4,7 @@ import com.nforceone.sync.approval.ApprovalAction;
 import com.nforceone.sync.approval.ApprovalActionRepository;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.businessrules.HolidayRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
@@ -30,27 +31,39 @@ public class UtilizationService {
     private final ApprovalActionRepository actionRepository;
     private final AppUserRepository        userRepository;
     private final UtilSnapshotRepository   snapshotRepository;
+    private final HolidayRepository        holidayRepository;
 
     public UtilizationService(EodEntryRepository entryRepository,
                                ApprovalActionRepository actionRepository,
                                AppUserRepository userRepository,
-                               UtilSnapshotRepository snapshotRepository) {
+                               UtilSnapshotRepository snapshotRepository,
+                               HolidayRepository holidayRepository) {
         this.entryRepository   = entryRepository;
         this.actionRepository  = actionRepository;
         this.userRepository    = userRepository;
         this.snapshotRepository = snapshotRepository;
+        this.holidayRepository = holidayRepository;
     }
 
-    public UtilSnapshot computeSnapshot(Long employeeId, LocalDate date) {
-        BigDecimal available = UtilizationCalculator.computeAvailableHours(date);
+    // Computes utilization for employee/date without touching the persisted snapshot row.
+    // Used both as the basis for the persisted snapshot (computeSnapshot) and for
+    // on-demand team reads where no approval has happened yet (getForTeam).
+    private UtilSnapshot buildSnapshot(Long employeeId, LocalDate date) {
+        Optional<EodEntry> entryOpt = entryRepository.findByEmployeeIdAndEntryDate(employeeId, date);
+
+        boolean isHoliday = holidayRepository.existsByHolidayDate(date);
+        boolean isApprovedLeave = entryOpt
+                .filter(e -> e.getDayType() == EodEntry.DayType.LEAVE && e.getStatus() == EodEntry.Status.APPROVED)
+                .isPresent();
+
+        BigDecimal available = UtilizationCalculator.computeAvailableHours(date, isHoliday, isApprovedLeave);
 
         BigDecimal approvedProductive = BigDecimal.ZERO;
         BigDecimal billable           = BigDecimal.ZERO;
         BigDecimal nonBillable        = BigDecimal.ZERO;
         BigDecimal bench              = BigDecimal.ZERO;
 
-        Optional<EodEntry> approvedOpt = entryRepository
-                .findByEmployeeIdAndEntryDate(employeeId, date)
+        Optional<EodEntry> approvedOpt = entryOpt
                 .filter(e -> e.getStatus() == EodEntry.Status.APPROVED);
 
         if (approvedOpt.isPresent()) {
@@ -92,10 +105,7 @@ public class UtilizationService {
 
         BigDecimal pct = UtilizationCalculator.computeUtilizationPct(approvedProductive, available);
 
-        UtilSnapshot snap = snapshotRepository
-                .findByEmployeeIdAndSnapshotDate(employeeId, date)
-                .orElse(new UtilSnapshot());
-
+        UtilSnapshot snap = new UtilSnapshot();
         snap.setEmployeeId(employeeId);
         snap.setSnapshotDate(date);
         snap.setAvailableHours(available);
@@ -106,6 +116,26 @@ public class UtilizationService {
         snap.setIdleHours(idle);
         snap.setUtilizationPct(pct);
         snap.setComputedAt(OffsetDateTime.now());
+        return snap;
+    }
+
+    public UtilSnapshot computeSnapshot(Long employeeId, LocalDate date) {
+        UtilSnapshot computed = buildSnapshot(employeeId, date);
+
+        UtilSnapshot snap = snapshotRepository
+                .findByEmployeeIdAndSnapshotDate(employeeId, date)
+                .orElse(new UtilSnapshot());
+
+        snap.setEmployeeId(employeeId);
+        snap.setSnapshotDate(date);
+        snap.setAvailableHours(computed.getAvailableHours());
+        snap.setApprovedProductiveHours(computed.getApprovedProductiveHours());
+        snap.setBillableHours(computed.getBillableHours());
+        snap.setNonBillableHours(computed.getNonBillableHours());
+        snap.setBenchHours(computed.getBenchHours());
+        snap.setIdleHours(computed.getIdleHours());
+        snap.setUtilizationPct(computed.getUtilizationPct());
+        snap.setComputedAt(computed.getComputedAt());
 
         return snapshotRepository.save(snap);
     }
@@ -140,11 +170,12 @@ public class UtilizationService {
 
         return reports.stream().map(emp -> {
             UtilSnapshot snap = snapByEmployee.get(emp.getId());
+            UtilSnapshot resolved = snap != null ? snap : buildSnapshot(emp.getId(), date);
             return new TeamUtilDto(
                     emp.getId(),
                     emp.getFullName(),
                     emp.getEmployeeCode(),
-                    snap != null ? UtilSnapshotDto.from(snap) : null
+                    UtilSnapshotDto.from(resolved)
             );
         }).toList();
     }

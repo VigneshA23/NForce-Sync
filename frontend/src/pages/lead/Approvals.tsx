@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, CheckCheck, Check, X, RotateCcw, RefreshCw } from 'lucide-react';
 import { usePendingApprovals, useApprove, useReject, useRequestChanges, useBatchApprove } from '../../api/approvals';
+import type { PendingApprovalsRange } from '../../api/approvals';
 import { DropdownMenu } from '../../components/DropdownMenu';
 import { useToast } from '../../lib/toast';
 import { formatDate as fmtDate, formatDurationMinutes } from '../../lib/date';
@@ -286,9 +288,18 @@ function ActionPanel({ type, entryId, onClose }: ActionPanelProps) {
 
 // ── entry row ─────────────────────────────────────────────────────────────────
 
-function EntryRow({ entry }: { entry: EodEntryDto }) {
+function EntryRow({ entry, highlighted }: { entry: EodEntryDto; highlighted?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [action, setAction]     = useState<'approve' | 'reject' | 'request-changes' | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  // Arrived here via "Team Status" on the dashboard, which links a specific pending entry —
+  // scroll it into view and expand it so it's unmistakable which employee/entry was clicked.
+  useEffect(() => {
+    if (!highlighted) return;
+    rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setExpanded(true);
+  }, [highlighted]);
 
   function openAction(a: typeof action) {
     setAction(prev => prev === a ? null : a);
@@ -296,7 +307,15 @@ function EntryRow({ entry }: { entry: EodEntryDto }) {
   }
 
   return (
-    <div style={{ borderBottom: '1px solid var(--line)' }}>
+    <div
+      ref={rowRef}
+      style={{
+        borderBottom: '1px solid var(--line)',
+        background: highlighted ? 'color-mix(in srgb, var(--info) 12%, transparent)' : undefined,
+        boxShadow: highlighted ? 'inset 3px 0 0 var(--info)' : undefined,
+        transition: 'background 0.3s ease',
+      }}
+    >
       {/* Summary row */}
       <div
         style={{ display: 'grid', gridTemplateColumns: '32px 1fr 120px 100px 48px', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer' }}
@@ -382,10 +401,30 @@ function sortEntries(list: EodEntryDto[]): EodEntryDto[] {
 }
 
 export default function Approvals() {
-  const { data: rawEntries, isPending, isError, refetch } = usePendingApprovals();
+  // Arriving from the Team Dashboard's "Review approvals" button carries the dashboard's
+  // selected date/range as ?from=&to= so the count seen there matches what's shown here —
+  // both `from` and `to` must be present to apply the filter (a partial pair is ignored).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const fromParam = searchParams.get('from');
+  const toParam = searchParams.get('to');
+  const range: PendingApprovalsRange | undefined = fromParam && toParam ? { from: fromParam, to: toParam } : undefined;
+
+  // Set by the Team Status table's "Pending" click — identifies which entry to scroll to
+  // and highlight, so it's unmistakable that this is the one that was clicked.
+  const highlightParam = searchParams.get('highlight');
+  const highlightId = highlightParam ? Number(highlightParam) : null;
+
+  const { data: rawEntries, isPending, isError, refetch } = usePendingApprovals(true, range);
   const entries = useMemo(() => rawEntries && sortEntries(rawEntries), [rawEntries]);
   const batchApprove = useBatchApprove();
   const { show } = useToast();
+
+  function clearFilter() {
+    const next = new URLSearchParams(searchParams);
+    next.delete('from');
+    next.delete('to');
+    setSearchParams(next, { replace: true });
+  }
 
   async function approveAll() {
     if (!entries || entries.length === 0) return;
@@ -443,6 +482,20 @@ export default function Approvals() {
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
             {entries!.length} pending entr{entries!.length !== 1 ? 'ies' : 'y'}
+            {range && (
+              <>
+                {' '}for {fmtDate(range.from)}{range.from !== range.to ? ` – ${fmtDate(range.to)}` : ''}
+                <button
+                  onClick={clearFilter}
+                  style={{
+                    marginLeft: 8, fontSize: 12, color: 'var(--info)',
+                    background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  }}
+                >
+                  Clear filter
+                </button>
+              </>
+            )}
           </p>
         </div>
         {entries!.length > 1 && (
@@ -479,7 +532,7 @@ export default function Approvals() {
             <span>Submitted</span>
             <span style={{ textAlign: 'right' }}>Actions</span>
           </div>
-          {entries!.map(entry => <EntryRow key={entry.id} entry={entry} />)}
+          {entries!.map(entry => <EntryRow key={entry.id} entry={entry} highlighted={entry.id === highlightId} />)}
         </Card>
       )}
     </div>

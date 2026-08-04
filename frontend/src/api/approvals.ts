@@ -2,10 +2,25 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type { EodEntryDto } from './eod';
 
-export function usePendingApprovals(enabled = true) {
+/** Optional entryDate window — when supplied, both hooks below scope to it instead of the
+ * full all-time backlog. Deliberately a plain {from,to} rather than importing teamLead's
+ * DateRange, so this general approvals module doesn't depend on a lead-page-specific type. */
+export interface PendingApprovalsRange {
+  from: string;
+  to: string;
+}
+
+// Undefined range collapses to a stable 'all' key/no query params — this is what keeps every
+// unscoped caller (Shell's badge outside the dashboard, other pages) on the same cache entry
+// they always shared, rather than splintering into one query per call site.
+function pendingQueryKey(range?: PendingApprovalsRange) {
+  return ['approvals', 'pending', range ? range.from : 'all', range ? range.to : 'all'] as const;
+}
+
+export function usePendingApprovals(enabled = true, range?: PendingApprovalsRange) {
   return useQuery({
-    queryKey: ['approvals', 'pending'],
-    queryFn: () => api.get<EodEntryDto[]>('/approvals/pending').then(r => r.data),
+    queryKey: pendingQueryKey(range),
+    queryFn: () => api.get<EodEntryDto[]>('/approvals/pending', { params: range }).then(r => r.data),
     enabled,
   });
 }
@@ -13,12 +28,13 @@ export function usePendingApprovals(enabled = true) {
 /**
  * Live pending-approval count, sharing the same query cache as `usePendingApprovals`
  * (same queryKey — one network call feeds both) so the sidebar badge, Team Dashboard
- * KPI, and Approvals page can never disagree.
+ * KPI, and Approvals page can never disagree — for whatever `range` (or lack of one)
+ * all three are currently asking about.
  */
-export function usePendingApprovalsCount(enabled = true) {
+export function usePendingApprovalsCount(enabled = true, range?: PendingApprovalsRange) {
   const { data } = useQuery({
-    queryKey: ['approvals', 'pending'],
-    queryFn: () => api.get<EodEntryDto[]>('/approvals/pending').then(r => r.data),
+    queryKey: pendingQueryKey(range),
+    queryFn: () => api.get<EodEntryDto[]>('/approvals/pending', { params: range }).then(r => r.data),
     enabled,
     select: (d) => d.length,
   });

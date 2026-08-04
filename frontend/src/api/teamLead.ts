@@ -1,5 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api } from './client';
+import { RULES } from '../lib/rules';
+import { toLocalISODate } from '../lib/date';
 
 // ── types (mirror backend DTOs in com.nforceone.sync.teamlead) ────────────────────
 
@@ -156,6 +158,97 @@ export function useThresholds() {
     queryKey: ['team-lead', 'thresholds'],
     queryFn: () => api.get<ThresholdsDto>('/team-lead/thresholds').then(r => r.data),
     staleTime: 5 * 60_000,
+  });
+}
+
+// ── team monthly activity ──────────────────────────────────────────────────────
+// TODO(backend): GET /team-lead/monthly-activity?month=YYYY-MM does not exist yet.
+// This is team-wide (per-day member counts across the whole roster), distinct from the
+// existing daily dashboard-summary endpoint — do not fold it into that one. Once the
+// endpoint ships, delete `mockMonthlyActivity` below and point `useTeamMonthlyActivity`'s
+// queryFn at:
+//   api.get<TeamMonthlyActivityDto>('/team-lead/monthly-activity', { params: { month } }).then(r => r.data)
+
+export interface TeamMonthlyActivityDayDto {
+  date: string;
+  isWeekend: boolean;
+  isFuture: boolean;
+  isToday: boolean;
+  /** Only meaningful when `isToday` — whether today's submission cutoff has already passed. */
+  cutoffPassed: boolean;
+  approvedCount: number;
+  pendingCount: number;
+  needsActionCount: number;
+  missedCount: number;
+}
+
+export interface TeamMonthlyActivityDto {
+  month: string;
+  activeMemberCount: number;
+  days: TeamMonthlyActivityDayDto[];
+}
+
+// Deterministic per-day PRNG so the mock doesn't reshuffle on every refetch/re-render.
+function seededRandom(seed: string): () => number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return () => {
+    h = (h * 1664525 + 1013904223) | 0;
+    return ((h >>> 0) % 10000) / 10000;
+  };
+}
+
+function mockMonthlyActivity(month: string, activeMemberCount: number): TeamMonthlyActivityDto {
+  const [y, m] = month.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const todayStr = toLocalISODate(new Date());
+  const now = new Date();
+  const [cutoffH, cutoffM] = RULES.cutoff.split(':').map(Number);
+  const cutoffPassedToday = now.getHours() > cutoffH || (now.getHours() === cutoffH && now.getMinutes() >= cutoffM);
+
+  const days: TeamMonthlyActivityDayDto[] = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const dow = new Date(y, m - 1, d).getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const isToday = date === todayStr;
+    const isFuture = date > todayStr;
+
+    if (isWeekend || isFuture) {
+      days.push({ date, isWeekend, isFuture, isToday: false, cutoffPassed: false, approvedCount: 0, pendingCount: 0, needsActionCount: 0, missedCount: 0 });
+      continue;
+    }
+    if (isToday && !cutoffPassedToday) {
+      days.push({ date, isWeekend: false, isFuture: false, isToday: true, cutoffPassed: false, approvedCount: 0, pendingCount: 0, needsActionCount: 0, missedCount: 0 });
+      continue;
+    }
+
+    const rand = seededRandom(date);
+    let remaining = activeMemberCount;
+    const missedCount = rand() < 0.15 ? Math.min(remaining, 1 + Math.floor(rand() * 2)) : 0;
+    remaining -= missedCount;
+    const needsActionCount = remaining > 0 && rand() < 0.12 ? Math.min(remaining, 1) : 0;
+    remaining -= needsActionCount;
+    const pendingCount = remaining > 0 && rand() < 0.3 ? Math.min(remaining, 1 + Math.floor(rand() * 2)) : 0;
+    remaining -= pendingCount;
+    const approvedCount = remaining;
+
+    days.push({
+      date, isWeekend: false, isFuture: false, isToday, cutoffPassed: isToday,
+      approvedCount, pendingCount, needsActionCount, missedCount,
+    });
+  }
+
+  return { month, activeMemberCount, days };
+}
+
+export function useTeamMonthlyActivity(month: string, activeMemberCount: number) {
+  return useQuery({
+    queryKey: ['team-lead', 'monthly-activity', month, activeMemberCount],
+    queryFn: () => Promise.resolve(mockMonthlyActivity(month, activeMemberCount)),
+    staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
+    enabled: activeMemberCount > 0,
   });
 }
 

@@ -45,7 +45,7 @@ export function UtilLegend() {
     { color: 'var(--ok)',      label: `Healthy (${RULES.util.under}–${RULES.util.over}%)` },
     { color: 'var(--warn)',    label: `Under (< ${RULES.util.under}%)` },
     { color: 'var(--risk)',    label: `Over (> ${RULES.util.over}%)` },
-    { color: 'var(--txt-dim)', label: 'N/A (weekend / no data)' },
+    { color: 'var(--txt-dim)', label: 'N/A (weekend / holiday / full-day leave)' },
   ];
   return (
     <div style={{
