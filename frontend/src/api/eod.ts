@@ -34,6 +34,13 @@ export interface EodEntryDto {
   updatedAt: string;
   tasks: EodTaskDto[];
   reviewerComment: string | null;
+  /** PM-only enrichment — undefined/null for the Team Lead's own view of an entry. */
+  escalated?: boolean | null;
+  tlInactivityHours?: number | null;
+  tlName?: string | null;
+  tlId?: number | null;
+  undertimeHours?: number | null;
+  isResubmission?: boolean | null;
 }
 
 export interface SaveTaskRequest {

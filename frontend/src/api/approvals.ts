@@ -2,6 +2,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type { EodEntryDto } from './eod';
 
+export interface ApprovalActionDto {
+  id: number;
+  eodEntryId: number;
+  actorId: number;
+  actorName: string;
+  action: 'APPROVE' | 'REJECT' | 'REQUEST_CHANGES';
+  comment: string | null;
+  billableOverride: boolean | null;
+  actedAt: string;
+}
+
 export function usePendingApprovals(enabled = true) {
   return useQuery({
     queryKey: ['approvals', 'pending'],
@@ -60,6 +71,24 @@ export function useRequestChanges() {
     mutationFn: ({ entryId, comment }: { entryId: number; comment: string }) =>
       api.post<EodEntryDto>(`/approvals/${entryId}/request-changes`, { comment }).then(r => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }),
+  });
+}
+
+/** PM-only — entries this PM has personally decided on. Powers the Approved/Rejected/Changes Requested tabs. */
+export function useDecidedApprovals(status: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED', enabled = true) {
+  return useQuery({
+    queryKey: ['approvals', 'decided', status],
+    queryFn: () => api.get<EodEntryDto[]>('/approvals/history', { params: { status } }).then(r => r.data),
+    enabled,
+  });
+}
+
+/** Full approve/reject/request-changes audit trail for one entry — fetched lazily on row expand. */
+export function useApprovalHistory(entryId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['approvals', 'history', entryId],
+    queryFn: () => api.get<ApprovalActionDto[]>(`/approvals/${entryId}/history`).then(r => r.data),
+    enabled,
   });
 }
 

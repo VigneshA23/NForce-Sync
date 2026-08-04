@@ -26,7 +26,13 @@ public record EodEntryDto(
         OffsetDateTime   createdAt,
         OffsetDateTime   updatedAt,
         List<EodTaskDto> tasks,
-        String           reviewerComment
+        String           reviewerComment,
+        Boolean          escalated,
+        Integer          tlInactivityHours,
+        String           tlName,
+        Long             tlId,
+        BigDecimal       undertimeHours,
+        Boolean          isResubmission
 ) {
     // Default factory — no reviewer comment (used in approval flow, saveDraft, submit)
     public static EodEntryDto from(EodEntry e) {
@@ -35,6 +41,13 @@ public record EodEntryDto(
 
     // Enriched factory — includes latest reviewer comment for REJECTED / CHANGES_REQUESTED
     public static EodEntryDto from(EodEntry e, String reviewerComment) {
+        return from(e, reviewerComment, null);
+    }
+
+    // PM-only factory — adds escalation/undertime/TL/resubmission enrichment computed by
+    // ApprovalService. `enrichment` is null for every other caller, which is why the fields
+    // above default to null/false there rather than requiring every call site to supply them.
+    public static EodEntryDto from(EodEntry e, String reviewerComment, EodEntryEnrichment enrichment) {
         return new EodEntryDto(
                 e.getId(),
                 e.getEmployee().getId(),
@@ -54,7 +67,13 @@ public record EodEntryDto(
                 e.getCreatedAt(),
                 e.getUpdatedAt(),
                 e.getTasks().stream().map(EodTaskDto::from).toList(),
-                reviewerComment
+                reviewerComment,
+                enrichment != null ? enrichment.escalated() : null,
+                enrichment != null ? enrichment.tlInactivityHours() : null,
+                enrichment != null ? enrichment.tlName() : null,
+                enrichment != null ? enrichment.tlId() : null,
+                enrichment != null ? enrichment.undertimeHours() : null,
+                enrichment != null ? enrichment.isResubmission() : null
         );
     }
 }

@@ -32,6 +32,7 @@ const Approvals           = lazy(() => import('./pages/Approvals'));
 const TeamUtilization     = lazy(() => import('./pages/lead/TeamUtilization'));
 const Blockers            = lazy(() => import('./pages/lead/Blockers'));
 const ProjectsAllocation  = lazy(() => import('./pages/pm/ProjectsAllocation'));
+const ApprovalsPM         = lazy(() => import('./pages/pm/ApprovalsPM'));
 const Profile             = lazy(() => import('./pages/Profile'));
 const Notifications       = lazy(() => import('./pages/Notifications'));
 const ChangePassword      = lazy(() => import('./pages/ChangePassword'));
@@ -80,7 +81,7 @@ function ChunkPrefetcher() {
       prefetchTeamLeadLanding(queryClient, todayISO());
     } else if (user.role === 'pm') {
       import('./pages/pm/ProjectsAllocation');
-      import('./pages/Approvals');
+      import('./pages/pm/ApprovalsPM');
     }
   }, [user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
@@ -156,7 +157,7 @@ function AppRoutes() {
             <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
             <Route path="/projects/planned-actual" element={<Placeholder title="Planned vs Actual" />} />
             <Route path="/projects/blockers"       element={<Placeholder title="Blockers" />} />
-            <Route path="/projects/approvals"      element={<Approvals />} />
+            <Route path="/projects/approvals"      element={<ApprovalsPM />} />
             <Route path="/projects/reports"        element={<Placeholder title="Reports" />} />
 
             {/* ── Delivery Manager ───────────────────── */}

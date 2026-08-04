@@ -56,6 +56,25 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
     List<EodEntry> findPendingByProjectManagerId(@Param("pmId") Long pmId,
                                                  @Param("status") EodEntry.Status status);
 
+    // Entries a PM has personally decided (APPROVED/REJECTED), for the PM's own Approved/Rejected
+    // tabs. Deliberately narrower than findPendingByProjectManagerId's "any entry on my projects" —
+    // scoped to ApprovalAction.actor = this PM, so a PM doesn't see entries the TL decided on
+    // without the PM ever touching them.
+    @Query("""
+        SELECT DISTINCT e FROM EodEntry e
+        JOIN FETCH e.employee emp
+        LEFT JOIN FETCH e.tasks t
+        LEFT JOIN FETCH t.project
+        LEFT JOIN FETCH t.taskCategory
+        WHERE e.status = :status
+          AND EXISTS (
+            SELECT 1 FROM com.nforceone.sync.approval.ApprovalAction a
+            WHERE a.eodEntry = e AND a.actor.id = :pmId
+          )
+        """)
+    List<EodEntry> findDecidedByProjectManagerId(@Param("pmId") Long pmId,
+                                                  @Param("status") EodEntry.Status status);
+
     /**
      * Time-adjustment uses of one type inside a date window, for the monthly allowance check.
      *

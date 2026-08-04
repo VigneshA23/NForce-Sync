@@ -235,8 +235,14 @@ public class EmployeeService {
 
         List<UtilSnapshot> snaps = snapshotRepository
                 .findByEmployeeIdAndSnapshotDateBetweenOrderBySnapshotDateAsc(employeeId, gridStart, gridEnd);
-        Map<LocalDate, BigDecimal> utilMap = snaps.stream()
-                .collect(Collectors.toMap(UtilSnapshot::getSnapshotDate, UtilSnapshot::getUtilizationPct));
+        // Built with an explicit loop, not Collectors.toMap: utilization_pct is nullable (it is
+        // left null when available_hours is 0 — a weekend or holiday, where utilization is
+        // undefined rather than zero) and toMap throws NullPointerException on a null VALUE.
+        // A single such snapshot inside the displayed month would 500 the whole dashboard.
+        Map<LocalDate, BigDecimal> utilMap = new HashMap<>();
+        for (UtilSnapshot snap : snaps) {
+            utilMap.put(snap.getSnapshotDate(), snap.getUtilizationPct());
+        }
 
         List<DashboardSummaryDto.CalendarDay> days = new ArrayList<>();
         LocalDate cursor = gridStart;

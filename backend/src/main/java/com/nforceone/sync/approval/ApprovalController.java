@@ -1,9 +1,11 @@
 package com.nforceone.sync.approval;
 
+import com.nforceone.sync.approval.dto.ApprovalActionDto;
 import com.nforceone.sync.approval.dto.ApproveRequest;
 import com.nforceone.sync.approval.dto.BatchApproveRequest;
 import com.nforceone.sync.approval.dto.RejectRequest;
 import com.nforceone.sync.approval.dto.RequestChangesRequest;
+import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.dto.EodEntryDto;
 import jakarta.validation.Valid;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -24,6 +26,18 @@ public class ApprovalController {
     @GetMapping("/pending")
     public List<EodEntryDto> getPending() {
         return approvalService.getPendingForActor(actingEmail());
+    }
+
+    // PM-only — entries this PM has personally approved/rejected (Approved/Rejected tabs).
+    @GetMapping("/history")
+    public List<EodEntryDto> getDecidedHistory(@RequestParam EodEntry.Status status) {
+        return approvalService.getDecidedForActor(actingEmail(), status);
+    }
+
+    // Full approve/reject/request-changes audit trail for one entry, oldest first.
+    @GetMapping("/{entryId}/history")
+    public List<ApprovalActionDto> getEntryHistory(@PathVariable Long entryId) {
+        return approvalService.getHistory(entryId, actingEmail());
     }
 
     @PostMapping("/{entryId}/approve")

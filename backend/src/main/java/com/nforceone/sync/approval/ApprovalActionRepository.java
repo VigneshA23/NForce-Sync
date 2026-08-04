@@ -19,4 +19,15 @@ public interface ApprovalActionRepository extends JpaRepository<ApprovalAction, 
         ORDER BY a.eodEntry.id ASC, a.actedAt DESC
         """)
     List<ApprovalAction> findReviewerCommentsByEntryIds(@Param("entryIds") List<Long> entryIds);
+
+    // Unfiltered — every action (approve/reject/request-changes) for a batch of entries, used
+    // for escalation ("did the TL act at all?"), resubmission-flagging, and the per-entry
+    // audit-trail endpoint. findReviewerCommentsByEntryIds above can't serve those since it
+    // drops APPROVE actions.
+    @Query("""
+        SELECT a FROM ApprovalAction a
+        WHERE a.eodEntry.id IN :entryIds
+        ORDER BY a.eodEntry.id ASC, a.actedAt ASC
+        """)
+    List<ApprovalAction> findByEodEntryIdIn(@Param("entryIds") List<Long> entryIds);
 }
