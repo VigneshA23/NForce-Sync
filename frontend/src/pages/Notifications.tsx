@@ -15,94 +15,98 @@ import {
   type NotificationDto,
 } from '../api/notifications';
 import { formatDate, formatDateTime, formatTime12h, toLocalISODate, todayISO, yesterdayISO } from '../lib/date';
+import { resolveNotificationPriority, type NotificationPriority } from '../lib/notificationPriority';
 
 // ── Notification metadata ───────────────────────────────────────────────────
-// Category/priority/generated-by are derived client-side from `type` — the
-// backend only sends type/title/message/link/read/createdAt, so this is a
+// Category/generated-by are derived client-side from `type` — the backend
+// only sends type/title/message/link/read/createdAt, so this is a
 // display-layer classification, not fabricated per-notification data. Colors
 // reference CSS var *values* for the icon glyph; bg is a matching tint —
 // semantic role indicators, correct in both themes.
+//
+// Priority is NOT part of this map — it's computed per-notification by
+// `resolveNotificationPriority()` (see ../lib/notificationPriority.ts), which
+// applies the actual business-impact rules instead of a flat hardcoded value.
 
-type Priority = 'High' | 'Medium' | 'Low';
+type Priority = NotificationPriority;
 
 interface NotificationMeta {
   icon: React.ReactNode;
   color: string;
   bg: string;
   category: string;
-  priority: Priority;
   generatedBy: string;
 }
 
 const NOTIFICATION_META: Record<string, NotificationMeta> = {
   ACCOUNT_CREATED: {
     icon: <UserPlus size={15} />, color: 'var(--ok)', bg: 'rgba(47,182,124,.12)',
-    category: 'Account', priority: 'Medium', generatedBy: 'System',
+    category: 'Account', generatedBy: 'System',
   },
   PASSWORD_RESET: {
     icon: <KeyRound size={15} />, color: 'var(--warn)', bg: 'rgba(224,169,59,.12)',
-    category: 'Account', priority: 'Medium', generatedBy: 'System',
+    category: 'Account', generatedBy: 'System',
   },
   EOD_APPROVED: {
     icon: <ClipboardCheck size={15} />, color: 'var(--ok)', bg: 'rgba(47,182,124,.12)',
-    category: 'EOD', priority: 'Low', generatedBy: 'Approval Workflow',
+    category: 'EOD', generatedBy: 'Approval Workflow',
   },
   EOD_REJECTED: {
     icon: <XCircle size={15} />, color: 'var(--risk)', bg: 'rgba(228,55,61,.12)',
-    category: 'EOD', priority: 'High', generatedBy: 'Approval Workflow',
+    category: 'EOD', generatedBy: 'Approval Workflow',
   },
   EOD_CHANGES_REQUESTED: {
     icon: <RefreshCcw size={15} />, color: 'var(--warn)', bg: 'rgba(224,169,59,.12)',
-    category: 'EOD', priority: 'High', generatedBy: 'Approval Workflow',
+    category: 'EOD', generatedBy: 'Approval Workflow',
   },
   EOD_SUBMITTED: {
     icon: <ClipboardCheck size={15} />, color: 'var(--info)', bg: 'rgba(76,141,214,.12)',
-    category: 'EOD', priority: 'Low', generatedBy: 'EOD Workflow',
+    category: 'EOD', generatedBy: 'EOD Workflow',
   },
-  // Not emitted by the backend yet — kept ready so the icon/category/priority
-  // system needs no frontend changes the day these types start arriving.
+  // Not emitted by the backend yet — kept ready so the icon/category system
+  // needs no frontend changes the day these types start arriving.
   EOD_REMINDER: {
     icon: <Clock size={15} />, color: 'var(--warn)', bg: 'rgba(224,169,59,.12)',
-    category: 'Reminder', priority: 'Medium', generatedBy: 'EOD Reminder Service',
+    category: 'Reminder', generatedBy: 'EOD Reminder Service',
   },
   PENDING_CORRECTION: {
     icon: <AlertTriangle size={15} />, color: 'var(--risk)', bg: 'rgba(228,55,61,.12)',
-    category: 'EOD', priority: 'High', generatedBy: 'Approval Workflow',
+    category: 'EOD', generatedBy: 'Approval Workflow',
   },
   PROJECT_ASSIGNMENT: {
     icon: <FolderKanban size={15} />, color: 'var(--info)', bg: 'rgba(76,141,214,.12)',
-    category: 'Project', priority: 'Medium', generatedBy: 'Delivery Management',
+    category: 'Project', generatedBy: 'Delivery Management',
   },
   LEAVE_APPROVED: {
     icon: <CalendarDays size={15} />, color: 'var(--ok)', bg: 'rgba(47,182,124,.12)',
-    category: 'Leave', priority: 'Low', generatedBy: 'Leave Management',
+    category: 'Leave', generatedBy: 'Leave Management',
   },
   LEAVE_REJECTED: {
     icon: <CalendarDays size={15} />, color: 'var(--risk)', bg: 'rgba(228,55,61,.12)',
-    category: 'Leave', priority: 'High', generatedBy: 'Leave Management',
+    category: 'Leave', generatedBy: 'Leave Management',
   },
   HOLIDAY_ANNOUNCEMENT: {
     icon: <Megaphone size={15} />, color: 'var(--info)', bg: 'rgba(76,141,214,.12)',
-    category: 'System', priority: 'Low', generatedBy: 'HR',
+    category: 'System', generatedBy: 'HR',
   },
   MANAGER_COMMENT: {
     icon: <MessageSquare size={15} />, color: 'var(--info)', bg: 'rgba(76,141,214,.12)',
-    category: 'Manager', priority: 'Medium', generatedBy: 'Team Lead',
+    category: 'Manager', generatedBy: 'Team Lead',
   },
   RESOURCE_ALLOCATION: {
     icon: <Users size={15} />, color: 'var(--info)', bg: 'rgba(76,141,214,.12)',
-    category: 'Project', priority: 'Medium', generatedBy: 'Delivery Management',
+    category: 'Project', generatedBy: 'Delivery Management',
   },
   SYSTEM_ANNOUNCEMENT: {
     icon: <Megaphone size={15} />, color: 'var(--txt-dim)', bg: 'var(--raised2)',
-    category: 'System', priority: 'Low', generatedBy: 'System',
+    category: 'System', generatedBy: 'System',
   },
 };
 
 function defaultMeta(): NotificationMeta {
   return {
     icon: <Info size={15} />, color: 'var(--txt-dim)', bg: 'var(--raised2)',
-    category: 'General', priority: 'Low', generatedBy: 'System',
+    category: 'General', generatedBy: 'System',
   };
 }
 
@@ -197,7 +201,8 @@ function NotificationListItem({
   navigable: boolean;
 }) {
   const meta = NOTIFICATION_META[n.type] ?? defaultMeta();
-  const priority = PRIORITY_META[meta.priority];
+  const priorityValue = resolveNotificationPriority(n);
+  const priority = PRIORITY_META[priorityValue];
 
   function handleMarkRead(e: React.MouseEvent) {
     e.preventDefault();
@@ -261,7 +266,7 @@ function NotificationListItem({
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
           <Pill color={meta.color} bg={meta.bg}>{meta.category}</Pill>
-          <Pill color={priority.color} bg={priority.bg}>{meta.priority}</Pill>
+          <Pill color={priority.color} bg={priority.bg}>{priorityValue}</Pill>
           {!n.read && (
             <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--brand-bright)' }} />
           )}
@@ -318,7 +323,8 @@ function NotificationDetailPane({ n }: { n: NotificationDto | null }) {
   }
 
   const meta = NOTIFICATION_META[n.type] ?? defaultMeta();
-  const priority = PRIORITY_META[meta.priority];
+  const priorityValue = resolveNotificationPriority(n);
+  const priority = PRIORITY_META[priorityValue];
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: '26px 30px' }}>
@@ -330,7 +336,7 @@ function NotificationDetailPane({ n }: { n: NotificationDto | null }) {
           {meta.icon}
         </div>
         <Pill color={meta.color} bg={meta.bg}>{meta.category}</Pill>
-        <Pill color={priority.color} bg={priority.bg}>{meta.priority} priority</Pill>
+        <Pill color={priority.color} bg={priority.bg}>{priorityValue} priority</Pill>
         <Pill
           color={n.read ? 'var(--txt-dim)' : 'var(--brand-bright)'}
           bg={n.read ? 'var(--raised2)' : 'rgba(228,55,61,.14)'}

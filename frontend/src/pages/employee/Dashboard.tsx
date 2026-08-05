@@ -7,13 +7,13 @@ import {
 } from 'lucide-react';
 import {
   useDashboardSummary, useEmployeeDashboardStats, useEmployeeProjects,
-  useUpcomingHolidays, useUtilizationDetail,
+  useHolidaysForYear, useUtilizationDetail,
 } from '../../api/employee';
 import type {
   CalendarDay, BlockedTask, RecentEntry, PendingCorrectionDto, EmployeeProjectDto, HolidayDto,
 } from '../../api/employee';
 import { useAuth } from '../../lib/auth';
-import { UtilBar } from '../../components/UtilBar';
+import { UtilPctDonut, CategoryDonut, SegmentDonut } from '../../components/UtilizationDonut';
 import { utilColor, fmtPct } from '../../lib/rules';
 import { formatDate, formatDateTime, toLocalISODate, todayISO } from '../../lib/date';
 
@@ -343,34 +343,31 @@ function MonthStatsPanel({ days }: { days: CalendarDay[] }) {
   const empty        = days.filter(d => !d.isWeekend && !d.isFuture && d.status === 'EMPTY').length;
   const upcoming     = days.filter(d => !d.isWeekend && d.isFuture).length;
   const completePct  = pastDays > 0 ? Math.round((approved + submitted) / pastDays * 100) : 0;
-  const barPct = (n: number) => workingDays > 0 ? `${(n / workingDays * 100).toFixed(1)}%` : '0%';
 
   return (
     <div>
       <SectionLabel>Month Overview</SectionLabel>
 
-      {/* Completion % */}
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{
-          fontSize: 28, fontWeight: 700, color: 'var(--txt)',
-          fontFamily: '"Space Grotesk", sans-serif', letterSpacing: '-0.02em',
-        }}>
-          {completePct}%
-        </span>
-        <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
-          {approved + submitted} / {pastDays} days
-        </span>
-      </div>
-
-      {/* Segmented bar */}
-      <div style={{
-        height: 6, borderRadius: 3, background: 'var(--raised2)',
-        overflow: 'hidden', display: 'flex', marginBottom: 20,
-      }}>
-        <div style={{ width: barPct(approved),    background: 'var(--ok)',   transition: 'width 0.4s' }} />
-        <div style={{ width: barPct(submitted),   background: 'var(--info)', transition: 'width 0.4s' }} />
-        <div style={{ width: barPct(needsAction), background: 'var(--warn)', transition: 'width 0.4s' }} />
-        <div style={{ width: barPct(missed),      background: 'var(--risk)', transition: 'width 0.4s' }} />
+      {/* Completion donut + total */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+        <SegmentDonut
+          size={76}
+          centerValue={`${completePct}%`}
+          segments={[
+            { label: 'Approved',     value: approved,    color: 'var(--ok)' },
+            { label: 'Pending',      value: submitted,   color: 'var(--info)' },
+            { label: 'Needs action', value: needsAction, color: 'var(--warn)' },
+            { label: 'Missed',       value: missed,       color: 'var(--risk)' },
+          ]}
+        />
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 600 }}>
+            {approved + submitted} / {pastDays} days complete
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 2 }}>
+            {workingDays} working days this month
+          </div>
+        </div>
       </div>
 
       {/* Breakdown rows */}
@@ -598,29 +595,41 @@ function AssignedProjectsPanel({ projects }: { projects: EmployeeProjectDto[] })
 // holidays are backed by a real endpoint. Weekend visibility already lives on the
 // monthly calendar heatmap above, so this panel doesn't repeat it.
 
-function HolidaysPanel({ holidays }: { holidays: HolidayDto[] }) {
+function HolidaysPanel({ holidays, year }: { holidays: HolidayDto[]; year: number }) {
   return (
     <Card pad={0}>
       <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <CalendarDays size={13} color="var(--txt-mut)" style={{ flexShrink: 0 }} />
-        <SectionLabel style={{ marginBottom: 0 }}>Upcoming Holidays</SectionLabel>
+        <SectionLabel style={{ marginBottom: 0 }}>Holiday Calendar &mdash; {year}</SectionLabel>
+        {holidays.length > 0 && (
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+            {holidays.length}
+          </span>
+        )}
       </div>
       {holidays.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '16px 0 20px', fontSize: 12, color: 'var(--txt-dim)' }}>
-          No upcoming holidays
+          No holidays configured for {year}
         </div>
       ) : (
-        holidays.slice(0, 5).map(h => (
-          <div key={h.id} style={{
-            padding: '9px 16px', borderTop: '1px solid var(--line)',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <span style={{ flex: 1, fontSize: 12, color: 'var(--txt)' }}>{h.name}</span>
-            <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
-              {formatDate(h.holidayDate)}
-            </span>
-          </div>
-        ))
+        <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+          {holidays.map(h => {
+            const d = new Date(h.holidayDate + 'T12:00:00');
+            const dayOfWeek = d.toLocaleDateString('en-GB', { weekday: 'short' });
+            return (
+              <div key={h.id} style={{
+                padding: '9px 16px', borderTop: '1px solid var(--line)',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <span style={{ flex: 1, fontSize: 12, color: 'var(--txt)' }}>{h.name}</span>
+                <span style={{ fontSize: 10, color: 'var(--txt-dim)' }}>{dayOfWeek}</span>
+                <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+                  {formatDate(h.holidayDate)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       )}
       <div style={{ padding: '8px 16px', fontSize: 10, color: 'var(--txt-dim)', borderTop: '1px solid var(--line)' }}>
         Weekends are shown on the monthly calendar above.
@@ -644,9 +653,6 @@ function UtilPeriodCard({
   breakdown?: { label: string; pct: number | null }[];
   onViewFull: () => void;
 }) {
-  const totalCat = billableHours + nonBillableHours + benchHours;
-  const catPct = (n: number) => totalCat > 0 ? `${(n / totalCat * 100).toFixed(1)}%` : '0%';
-
   return (
     <Card>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -660,55 +666,44 @@ function UtilPeriodCard({
         </button>
       </div>
 
-      <div style={{ marginBottom: 10 }}>
-        <UtilBar pct={avgUtilPct} />
-      </div>
-
-      <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: 11 }}>
-        <div>
-          <span style={{ color: 'var(--txt-dim)' }}>Approved </span>
-          <span style={{ color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>{approvedHours.toFixed(1)}h</span>
-        </div>
-        <div>
-          <span style={{ color: 'var(--txt-dim)' }}>Available </span>
-          <span style={{ color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>{availableHours.toFixed(1)}h</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+        <UtilPctDonut pct={avgUtilPct} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11 }}>
+          <div>
+            <span style={{ color: 'var(--txt-dim)' }}>Approved </span>
+            <span style={{ color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>{approvedHours.toFixed(1)}h</span>
+          </div>
+          <div>
+            <span style={{ color: 'var(--txt-dim)' }}>Available </span>
+            <span style={{ color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>{availableHours.toFixed(1)}h</span>
+          </div>
         </div>
       </div>
 
       {breakdown && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
-          {breakdown.map(b => (
-            <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 62, fontSize: 10, color: 'var(--txt-dim)', flexShrink: 0 }}>{b.label}</span>
-              <div style={{ flex: 1, height: 5, borderRadius: 3, background: 'var(--raised2)', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', width: b.pct == null ? '0%' : `${Math.min(b.pct, 120)}%`,
-                  background: utilColor(b.pct), borderRadius: 3, transition: 'width 0.4s',
-                }} />
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+            Weekly Trend
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {breakdown.map(b => (
+              <div key={b.label} style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '4px 9px', borderRadius: 6,
+                background: `color-mix(in srgb, ${utilColor(b.pct)} 10%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${utilColor(b.pct)} 25%, transparent)`,
+              }}>
+                <span style={{ fontSize: 10, color: 'var(--txt-mut)' }}>{b.label}</span>
+                <span style={{ fontSize: 10, color: utilColor(b.pct), fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>
+                  {fmtPct(b.pct)}
+                </span>
               </div>
-              <span style={{ fontSize: 10, color: utilColor(b.pct), fontFamily: '"JetBrains Mono", monospace', width: 38, textAlign: 'right' }}>
-                {fmtPct(b.pct)}
-              </span>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
-      <div>
-        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-          Billable vs Non-Billable
-        </div>
-        <div style={{ height: 6, borderRadius: 3, background: 'var(--raised2)', overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
-          <div style={{ width: catPct(billableHours), background: 'var(--ok)' }} />
-          <div style={{ width: catPct(nonBillableHours), background: 'var(--info)' }} />
-          <div style={{ width: catPct(benchHours), background: 'var(--txt-dim)' }} />
-        </div>
-        <div style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--txt-mut)', flexWrap: 'wrap' }}>
-          <span><span style={{ color: 'var(--ok)' }}>●</span> Billable {billableHours.toFixed(1)}h</span>
-          <span><span style={{ color: 'var(--info)' }}>●</span> Non-billable {nonBillableHours.toFixed(1)}h</span>
-          <span><span style={{ color: 'var(--txt-dim)' }}>●</span> Bench {benchHours.toFixed(1)}h</span>
-        </div>
-      </div>
+      <CategoryDonut billableHours={billableHours} nonBillableHours={nonBillableHours} benchHours={benchHours} />
     </Card>
   );
 }
@@ -883,7 +878,14 @@ function RecentActivity({ entries }: { entries: RecentEntry[] }) {
               </div>
               <StatusBadge status={entry.status} />
               {entry.status === 'APPROVED'
-                ? <span style={{ fontSize: 11, color: utilAccent, fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+                ? <span style={{
+                    display: 'inline-flex', width: 'fit-content',
+                    padding: '2px 8px', borderRadius: 10,
+                    background: `color-mix(in srgb, ${utilAccent} 12%, transparent)`,
+                    border: `1px solid color-mix(in srgb, ${utilAccent} 30%, transparent)`,
+                    fontSize: 11, color: utilAccent, fontFamily: '"JetBrains Mono", monospace',
+                    fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+                  }}>
                     {fmtPct(entry.utilizationPct ?? null)}
                   </span>
                 : <span />
@@ -1049,12 +1051,13 @@ export default function Dashboard() {
   const weekStart   = useMemo(() => currentWeekStartISO(), []);
   const monthStart  = useMemo(() => currentMonthStartISO(), []);
   const todayStr    = useMemo(() => todayISO(), []);
+  const holidayYear = useMemo(() => new Date().getFullYear(), []);
 
   const { data: weekUtil }    = useUtilizationDetail(weekStart, todayStr);
   const { data: monthUtil }   = useUtilizationDetail(monthStart, todayStr);
   const { data: dashStats }   = useEmployeeDashboardStats(user?.id);
   const { data: projects }    = useEmployeeProjects(user?.id);
-  const { data: holidays }    = useUpcomingHolidays();
+  const { data: holidays }    = useHolidaysForYear(holidayYear);
 
   if (isPending) return <LoadingSkeleton />;
 
@@ -1166,34 +1169,6 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Weekly / Monthly utilization */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-        <UtilPeriodCard
-          title="Weekly Utilization"
-          avgUtilPct={weekUtil?.currentPeriod.avgUtilPct ?? null}
-          approvedHours={weekUtil?.currentPeriod.totalApproved ?? 0}
-          availableHours={weekUtil?.currentPeriod.totalAvailable ?? 0}
-          billableHours={weekUtil?.categoryBreakdown.billableHours ?? 0}
-          nonBillableHours={weekUtil?.categoryBreakdown.nonBillableHours ?? 0}
-          benchHours={weekUtil?.categoryBreakdown.benchHours ?? 0}
-          onViewFull={() => navigate('/utilization')}
-        />
-        <UtilPeriodCard
-          title="Monthly Utilization"
-          avgUtilPct={monthUtil?.currentPeriod.avgUtilPct ?? null}
-          approvedHours={monthUtil?.currentPeriod.totalApproved ?? 0}
-          availableHours={monthUtil?.currentPeriod.totalAvailable ?? 0}
-          billableHours={monthUtil?.categoryBreakdown.billableHours ?? 0}
-          nonBillableHours={monthUtil?.categoryBreakdown.nonBillableHours ?? 0}
-          benchHours={monthUtil?.categoryBreakdown.benchHours ?? 0}
-          breakdown={monthUtil?.weeklyTrend.map(w => ({
-            label: new Date(w.weekStart + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-            pct: w.avgUtilPct,
-          }))}
-          onViewFull={() => navigate('/utilization')}
-        />
-      </div>
-
       {/* Calendar card + Right panel */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, marginBottom: 16 }}>
         {/* Single card: calendar left + stats right */}
@@ -1249,7 +1224,35 @@ export default function Dashboard() {
       {/* Assigned projects + Holidays */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <AssignedProjectsPanel projects={projects ?? []} />
-        <HolidaysPanel holidays={holidays ?? []} />
+        <HolidaysPanel holidays={holidays ?? []} year={holidayYear} />
+      </div>
+
+      {/* Weekly / Monthly utilization */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <UtilPeriodCard
+          title="Weekly Utilization"
+          avgUtilPct={weekUtil?.currentPeriod.avgUtilPct ?? null}
+          approvedHours={weekUtil?.currentPeriod.totalApproved ?? 0}
+          availableHours={weekUtil?.currentPeriod.totalAvailable ?? 0}
+          billableHours={weekUtil?.categoryBreakdown.billableHours ?? 0}
+          nonBillableHours={weekUtil?.categoryBreakdown.nonBillableHours ?? 0}
+          benchHours={weekUtil?.categoryBreakdown.benchHours ?? 0}
+          onViewFull={() => navigate('/utilization')}
+        />
+        <UtilPeriodCard
+          title="Monthly Utilization"
+          avgUtilPct={monthUtil?.currentPeriod.avgUtilPct ?? null}
+          approvedHours={monthUtil?.currentPeriod.totalApproved ?? 0}
+          availableHours={monthUtil?.currentPeriod.totalAvailable ?? 0}
+          billableHours={monthUtil?.categoryBreakdown.billableHours ?? 0}
+          nonBillableHours={monthUtil?.categoryBreakdown.nonBillableHours ?? 0}
+          benchHours={monthUtil?.categoryBreakdown.benchHours ?? 0}
+          breakdown={monthUtil?.weeklyTrend.map(w => ({
+            label: new Date(w.weekStart + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+            pct: w.avgUtilPct,
+          }))}
+          onViewFull={() => navigate('/utilization')}
+        />
       </div>
 
       {/* Recent entries */}

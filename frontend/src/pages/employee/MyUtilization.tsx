@@ -4,11 +4,13 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine,
   PieChart, Pie, Cell,
 } from 'recharts';
-import { RefreshCw } from 'lucide-react';
+import {
+  RefreshCw, TrendingUp, Clock, CheckCircle2, Activity, CalendarRange,
+} from 'lucide-react';
 import { useUtilizationDetail } from '../../api/employee';
 import type { WeekTrend, HistoryDay } from '../../api/employee';
 import { UtilBar, UtilLegend } from '../../components/UtilBar';
-import { RULES, utilColor, fmtPct } from '../../lib/rules';
+import { RULES, utilColor, utilState, fmtPct } from '../../lib/rules';
 import { todayISO, toLocalISODate } from '../../lib/date';
 
 // ── Date range helpers ─────────────────────────────────────────────────────────
@@ -32,26 +34,67 @@ function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
 }
 
 function Card({
-  children, style, pad = 20,
-}: { children: React.ReactNode; style?: React.CSSProperties; pad?: number }) {
+  children, style, pad = 20, className,
+}: { children: React.ReactNode; style?: React.CSSProperties; pad?: number; className?: string }) {
   return (
-    <div style={{
+    <div className={className} style={{
       background: 'var(--panel)', border: '1px solid var(--line)',
-      borderRadius: 10, padding: pad, ...style,
+      borderRadius: 10, padding: pad, minWidth: 0, ...style,
     }}>
       {children}
     </div>
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({
+  children, icon,
+}: { children: React.ReactNode; icon?: React.ReactNode }) {
   return (
     <div style={{
+      display: 'flex', alignItems: 'center', gap: 6,
       fontSize: 11, fontWeight: 700, color: 'var(--txt-dim)',
       textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14,
     }}>
+      {icon}
       {children}
     </div>
+  );
+}
+
+// ── KPI summary tile ───────────────────────────────────────────────────────────
+
+function KpiTile({
+  icon, label, value, sub, accent = 'var(--txt)',
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: string;
+}) {
+  return (
+    <Card className="nf-util-card nf-util-kpi" pad={16}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+          background: `color-mix(in srgb, ${accent} 14%, var(--raised2))`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
+        }}>
+          {icon}
+        </div>
+      </div>
+      <div style={{
+        fontFamily: '"Space Grotesk", sans-serif',
+        fontSize: 24, fontWeight: 700, color: accent,
+        letterSpacing: '-0.02em', lineHeight: 1,
+        fontVariantNumeric: 'tabular-nums', marginBottom: 6,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--txt-mut)', fontWeight: 500 }}>{label}</div>
+      {sub && <div style={{ fontSize: 10, color: 'var(--txt-dim)', marginTop: 4 }}>{sub}</div>}
+    </Card>
   );
 }
 
@@ -168,14 +211,18 @@ function DonutChart({ billable, nonBillable, bench }: {
     );
   }
 
+  // Stacked layout (donut centered above, legend rows spanning the full card
+  // width below) rather than side-by-side — the card sits in a narrow fixed
+  // column, and a row layout left too little width for the legend text,
+  // pushing Billable / Non-Billable / Bench past the card boundary.
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-      <div style={{ width: 130, height: 130, flexShrink: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, minWidth: 0 }}>
+      <div style={{ position: 'relative', width: 140, height: 140, flexShrink: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={data} cx="50%" cy="50%"
-              innerRadius={36} outerRadius={56}
+              innerRadius={42} outerRadius={64}
               paddingAngle={3} dataKey="value"
               strokeWidth={0}
             >
@@ -186,8 +233,23 @@ function DonutChart({ billable, nonBillable, bench }: {
             </Pie>
           </PieChart>
         </ResponsiveContainer>
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex',
+          flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <span style={{
+            fontFamily: '"Space Grotesk", sans-serif', fontSize: 20, fontWeight: 700,
+            color: 'var(--txt)', letterSpacing: '-0.02em', lineHeight: 1,
+          }}>
+            {total.toFixed(0)}h
+          </span>
+          <span style={{ fontSize: 9, color: 'var(--txt-dim)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Total
+          </span>
+        </div>
       </div>
-      <div style={{ flex: 1 }}>
+
+      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
         {[
           { label: 'Billable',     value: billable,    color: DONUT_COLORS[0] },
           { label: 'Non-Billable', value: nonBillable, color: DONUT_COLORS[1] },
@@ -195,15 +257,21 @@ function DonutChart({ billable, nonBillable, bench }: {
         ].map(({ label, value, color }) => (
           <div key={label} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: 8,
+            gap: 8, minWidth: 0,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, overflow: 'hidden' }}>
               <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
-              <span style={{ fontSize: 11, color: 'var(--txt-mut)' }}>{label}</span>
+              <span style={{
+                fontSize: 11, color: 'var(--txt-mut)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {label}
+              </span>
             </div>
             <div style={{
               fontSize: 11, fontFamily: '"JetBrains Mono", monospace',
               color: 'var(--txt)', fontVariantNumeric: 'tabular-nums',
+              flexShrink: 0, whiteSpace: 'nowrap',
             }}>
               {value.toFixed(1)}h
               <span style={{ color: 'var(--txt-dim)', marginLeft: 4, fontSize: 10 }}>
@@ -237,7 +305,8 @@ function HistoryTable({ rows }: { rows: HistoryDay[] }) {
   }
 
   return (
-    <div>
+    <div style={{ overflowX: 'auto' }}>
+      <div style={{ minWidth: 560 }}>
       {/* Column headers */}
       <div style={{
         display: 'grid', gridTemplateColumns: '130px 80px 90px 90px 90px 1fr',
@@ -260,9 +329,11 @@ function HistoryTable({ rows }: { rows: HistoryDay[] }) {
         const label = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
         const color = utilColor(row.utilizationPct ?? null);
         return (
-          <div key={row.date} style={{
+          <div key={row.date} className="nf-util-hist-row" style={{
             display: 'grid', gridTemplateColumns: '130px 80px 90px 90px 90px 1fr',
-            gap: 8, padding: '9px 0',
+            gap: 8, padding: '9px 6px',
+            margin: '0 -6px',
+            borderRadius: 6,
             borderBottom: i < slice.length - 1 ? '1px solid var(--line)' : 'none',
             alignItems: 'center',
           }}>
@@ -297,6 +368,7 @@ function HistoryTable({ rows }: { rows: HistoryDay[] }) {
           </div>
         );
       })}
+      </div>
 
       {/* Pagination */}
       {pages > 1 && (
@@ -346,23 +418,38 @@ function CurrentPeriodCard({
   workingDays: number; approvedDays: number;
 }) {
   const color = utilColor(avgUtilPct);
+  const stateLabel: Record<string, string> = {
+    na: 'No data', under: 'Under target', healthy: 'Healthy', over: 'Over target',
+  };
+
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <div style={{
-          fontFamily: '"Space Grotesk", sans-serif',
-          fontSize: 32, fontWeight: 700,
-          color, letterSpacing: '-0.03em', lineHeight: 1,
-          fontVariantNumeric: 'tabular-nums', marginBottom: 4,
-        }}>
-          {fmtPct(avgUtilPct)}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{
+            fontFamily: '"Space Grotesk", sans-serif',
+            fontSize: 34, fontWeight: 700,
+            color, letterSpacing: '-0.03em', lineHeight: 1,
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            {fmtPct(avgUtilPct)}
+          </span>
+          <span style={{
+            fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
+            padding: '2px 8px', borderRadius: 10, color,
+            background: `color-mix(in srgb, ${color} 12%, transparent)`,
+            border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
+          }}>
+            {stateLabel[utilState(avgUtilPct)]}
+          </span>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>Average utilization</div>
+        <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 6 }}>Average utilization</div>
       </div>
       <UtilBar pct={avgUtilPct} />
       <div style={{
-        marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr',
-        gap: 12, fontSize: 11, color: 'var(--txt-mut)',
+        marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--line)',
+        display: 'grid', gridTemplateColumns: '1fr 1fr',
+        rowGap: 14, columnGap: 12, fontSize: 11, color: 'var(--txt-mut)',
       }}>
         {[
           { label: 'Approved hours', value: `${totalApproved.toFixed(1)}h` },
@@ -370,11 +457,11 @@ function CurrentPeriodCard({
           { label: 'Working days',   value: `${workingDays}d` },
           { label: 'Logged days',    value: `${approvedDays}d` },
         ].map(({ label, value }) => (
-          <div key={label}>
-            <div style={{ color: 'var(--txt-dim)', marginBottom: 2 }}>{label}</div>
+          <div key={label} style={{ minWidth: 0 }}>
+            <div style={{ color: 'var(--txt-dim)', marginBottom: 3 }}>{label}</div>
             <div style={{
               fontFamily: '"JetBrains Mono", monospace',
-              fontVariantNumeric: 'tabular-nums', color: 'var(--txt)', fontSize: 13,
+              fontVariantNumeric: 'tabular-nums', color: 'var(--txt)', fontSize: 14, fontWeight: 600,
             }}>
               {value}
             </div>
@@ -392,6 +479,15 @@ function LoadingSkeleton() {
     <div>
       <div style={{ marginBottom: 24 }}>
         <Skel h={28} w={200} /><div style={{ marginTop: 6 }} /><Skel h={14} w={220} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 16 }}>
+        {[0, 1, 2, 3].map(i => (
+          <div key={i} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 16 }}>
+            <Skel h={32} w={32} /><div style={{ marginTop: 12 }} />
+            <Skel h={24} w="60%" /><div style={{ marginTop: 8 }} />
+            <Skel h={11} w="45%" />
+          </div>
+        ))}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, marginBottom: 16 }}>
         <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
@@ -456,10 +552,13 @@ export default function MyUtilization() {
   const fromLabel = new Date(from + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   const toLabel   = new Date(today + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
+  const totalCatHours = categoryBreakdown.billableHours + categoryBreakdown.nonBillableHours + categoryBreakdown.benchHours;
+  const catPct = (n: number) => totalCatHours > 0 ? `${Math.round((n / totalCatHours) * 100)}% of hours` : undefined;
+
   return (
-    <div>
+    <div className="nf-util-page">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{
             fontFamily: '"Space Grotesk", sans-serif',
@@ -477,7 +576,7 @@ export default function MyUtilization() {
         <div style={{
           display: 'flex', gap: 0,
           background: 'var(--raised)', border: '1px solid var(--line)',
-          borderRadius: 7, overflow: 'hidden',
+          borderRadius: 7, overflow: 'hidden', flexShrink: 0,
         }}>
           {RANGES.map((r, i) => (
             <button
@@ -498,11 +597,46 @@ export default function MyUtilization() {
         </div>
       </div>
 
+      {/* KPI summary row */}
+      <div className="nf-util-kpis" style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+        gap: 14, marginBottom: 16,
+      }}>
+        <KpiTile
+          icon={<TrendingUp size={16} />}
+          label="Average utilization"
+          value={fmtPct(currentPeriod.avgUtilPct)}
+          sub={`${currentPeriod.approvedDays}/${currentPeriod.workingDays} days logged`}
+          accent={utilColor(currentPeriod.avgUtilPct)}
+        />
+        <KpiTile
+          icon={<CheckCircle2 size={16} />}
+          label="Billable hours"
+          value={`${categoryBreakdown.billableHours.toFixed(1)}h`}
+          sub={catPct(categoryBreakdown.billableHours)}
+          accent="var(--ok)"
+        />
+        <KpiTile
+          icon={<Clock size={16} />}
+          label="Non-billable hours"
+          value={`${categoryBreakdown.nonBillableHours.toFixed(1)}h`}
+          sub={catPct(categoryBreakdown.nonBillableHours)}
+          accent="var(--info)"
+        />
+        <KpiTile
+          icon={<Activity size={16} />}
+          label="Bench hours"
+          value={`${categoryBreakdown.benchHours.toFixed(1)}h`}
+          sub={catPct(categoryBreakdown.benchHours)}
+          accent="var(--txt-dim)"
+        />
+      </div>
+
       {/* Trend + current period */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, marginBottom: 16 }}>
-        <Card>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <SectionLabel>Weekly Trend</SectionLabel>
+      <div className="nf-util-trend-row" style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, marginBottom: 16 }}>
+        <Card className="nf-util-card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
+            <SectionLabel icon={<TrendingUp size={13} color="var(--txt-mut)" />}>Weekly Trend</SectionLabel>
             <div style={{ display: 'flex', gap: 16, fontSize: 10, color: 'var(--txt-dim)' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ display: 'inline-block', width: 24, height: 1, borderTop: '2px dashed var(--warn)', verticalAlign: 'middle' }} />
@@ -517,8 +651,8 @@ export default function MyUtilization() {
           <TrendChart weeks={weeklyTrend} />
         </Card>
 
-        <Card>
-          <SectionLabel>Period Summary</SectionLabel>
+        <Card className="nf-util-card">
+          <SectionLabel icon={<CalendarRange size={13} color="var(--txt-mut)" />}>Period Summary</SectionLabel>
           <CurrentPeriodCard
             avgUtilPct={currentPeriod.avgUtilPct}
             totalApproved={currentPeriod.totalApproved}
@@ -530,9 +664,9 @@ export default function MyUtilization() {
       </div>
 
       {/* Donut + history */}
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, marginBottom: 0 }}>
-        <Card>
-          <SectionLabel>Hours Breakdown</SectionLabel>
+      <div className="nf-util-breakdown-row" style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, marginBottom: 0 }}>
+        <Card className="nf-util-card">
+          <SectionLabel icon={<Activity size={13} color="var(--txt-mut)" />}>Hours Breakdown</SectionLabel>
           <DonutChart
             billable={categoryBreakdown.billableHours}
             nonBillable={categoryBreakdown.nonBillableHours}
@@ -540,9 +674,9 @@ export default function MyUtilization() {
           />
         </Card>
 
-        <Card pad={0}>
+        <Card className="nf-util-card" pad={0}>
           <div style={{ padding: '14px 20px 10px' }}>
-            <SectionLabel>Daily History</SectionLabel>
+            <SectionLabel icon={<Clock size={13} color="var(--txt-mut)" />}>Daily History</SectionLabel>
           </div>
           <div style={{ padding: '0 20px 16px' }}>
             <HistoryTable rows={history} />
@@ -550,6 +684,24 @@ export default function MyUtilization() {
           <UtilLegend />
         </Card>
       </div>
+
+      <style>{`
+        .nf-util-card { transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease; }
+        .nf-util-card:hover {
+          border-color: var(--line2);
+          box-shadow: 0 4px 16px color-mix(in srgb, #000 10%, transparent);
+        }
+        .nf-util-kpi:hover { transform: translateY(-1px); }
+        .nf-util-hist-row:hover { background: var(--raised2); }
+
+        @media (max-width: 1024px) {
+          .nf-util-trend-row { grid-template-columns: 1fr !important; }
+          .nf-util-breakdown-row { grid-template-columns: 1fr !important; }
+        }
+        @media (max-width: 560px) {
+          .nf-util-kpis { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+      `}</style>
     </div>
   );
 }

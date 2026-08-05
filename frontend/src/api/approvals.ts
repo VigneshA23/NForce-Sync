@@ -2,6 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type { EodEntryDto } from './eod';
 
+export interface PendingApprovalsRange {
+  from: string;
+  to: string;
+}
+
 export interface ApprovalActionDto {
   id: number;
   eodEntryId: number;
@@ -13,7 +18,7 @@ export interface ApprovalActionDto {
   actedAt: string;
 }
 
-export function usePendingApprovals(enabled = true) {
+export function usePendingApprovals(enabled = true, range?: PendingApprovalsRange) {
   return useQuery({
     queryKey: pendingQueryKey(range),
     queryFn: () => api.get<EodEntryDto[]>('/approvals/pending', { params: range }).then(r => r.data),
@@ -104,7 +109,7 @@ export function useBatchApprove() {
     },
   });
 }
-function pendingQueryKey(range: any): unknown {
-  throw new Error('Function not implemented.');
+function pendingQueryKey(range?: PendingApprovalsRange) {
+  return range ? ['approvals', 'pending', range.from, range.to] : ['approvals', 'pending'];
 }
 
