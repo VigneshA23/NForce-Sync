@@ -4,6 +4,7 @@ import com.nforceone.sync.teamlead.dto.DashboardTrendDto;
 import com.nforceone.sync.teamlead.dto.MemberEodStatusDto;
 import com.nforceone.sync.teamlead.dto.TeamBlockerDto;
 import com.nforceone.sync.teamlead.dto.TeamLeadSummaryDto;
+import com.nforceone.sync.teamlead.dto.TeamMemberDetailDto;
 import com.nforceone.sync.teamlead.dto.ThresholdsDto;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -59,6 +60,17 @@ public class TeamLeadController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(defaultValue = "7") int days) {
         return teamLeadService.getTrend(date, days, actingEmail());
+    }
+
+    @GetMapping("/team-members/{employeeId}/detail")
+    public TeamMemberDetailDto getMemberDetail(
+            @PathVariable Long employeeId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(defaultValue = "7") int days) {
+        if (days < 1 || days > 90) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "'days' must be between 1 and 90");
+        }
+        return teamLeadService.getMemberDetail(employeeId, date, days, actingEmail());
     }
 
     @PatchMapping("/blockers/{taskId}/acknowledge")

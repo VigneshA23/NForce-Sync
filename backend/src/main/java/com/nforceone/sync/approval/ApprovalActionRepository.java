@@ -10,6 +10,11 @@ public interface ApprovalActionRepository extends JpaRepository<ApprovalAction, 
 
     List<ApprovalAction> findByEodEntryIdOrderByActedAtDesc(Long eodEntryId);
 
+    // Most recent approval for one employee, across all their EOD entries — powers "Last
+    // Approved EOD" on the Team Utilization detail panel.
+    java.util.Optional<ApprovalAction> findTopByEodEntryEmployeeIdAndActionOrderByActedAtDesc(
+            Long employeeId, ApprovalAction.Action action);
+
     // One query for N entries instead of N queries — used by list endpoints
     @Query("""
         SELECT a FROM ApprovalAction a

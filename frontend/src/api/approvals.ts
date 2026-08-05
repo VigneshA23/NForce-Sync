@@ -58,6 +58,7 @@ export function useApprove() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['approvals'] });
       qc.invalidateQueries({ queryKey: ['team'] });
+      qc.invalidateQueries({ queryKey: ['team-lead'] });
     },
   });
 }
@@ -67,7 +68,10 @@ export function useReject() {
   return useMutation({
     mutationFn: ({ entryId, comment }: { entryId: number; comment: string }) =>
       api.post<EodEntryDto>(`/approvals/${entryId}/reject`, { comment }).then(r => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['approvals'] });
+      qc.invalidateQueries({ queryKey: ['team-lead'] });
+    },
   });
 }
 
@@ -76,11 +80,14 @@ export function useRequestChanges() {
   return useMutation({
     mutationFn: ({ entryId, comment }: { entryId: number; comment: string }) =>
       api.post<EodEntryDto>(`/approvals/${entryId}/request-changes`, { comment }).then(r => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['approvals'] });
+      qc.invalidateQueries({ queryKey: ['team-lead'] });
+    },
   });
 }
 
-/** PM-only — entries this PM has personally decided on. Powers the Approved/Rejected/Changes Requested tabs. */
+/** Entries this actor has personally decided on. Powers the Approved/Rejected/Changes Requested tabs. */
 export function useDecidedApprovals(status: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED', enabled = true) {
   return useQuery({
     queryKey: ['approvals', 'decided', status],
@@ -106,6 +113,7 @@ export function useBatchApprove() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['approvals'] });
       qc.invalidateQueries({ queryKey: ['team'] });
+      qc.invalidateQueries({ queryKey: ['team-lead'] });
     },
   });
 }

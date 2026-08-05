@@ -1,5 +1,7 @@
 package com.nforceone.sync.teamlead;
 
+import com.nforceone.sync.approval.ApprovalAction;
+import com.nforceone.sync.approval.ApprovalActionRepository;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.businessrules.BusinessRuleConfig;
@@ -9,13 +11,17 @@ import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
 import com.nforceone.sync.eod.EodTaskRepository;
+import com.nforceone.sync.org.Designation;
+import com.nforceone.sync.org.DesignationRepository;
 import com.nforceone.sync.teamlead.dto.DashboardTrendDto;
 import com.nforceone.sync.teamlead.dto.MemberEodStatusDto;
 import com.nforceone.sync.teamlead.dto.TeamBlockerDto;
 import com.nforceone.sync.teamlead.dto.TeamLeadSummaryDto;
+import com.nforceone.sync.teamlead.dto.TeamMemberDetailDto;
 import com.nforceone.sync.teamlead.dto.ThresholdsDto;
 import com.nforceone.sync.teamlead.dto.TrendPointDto;
 import com.nforceone.sync.utilization.UtilizationService;
+import com.nforceone.sync.utilization.dto.DayUtilDto;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,19 +57,25 @@ public class TeamLeadService {
     private final HolidayRepository            holidayRepository;
     private final BusinessRuleConfigRepository configRepository;
     private final UtilizationService           utilizationService;
+    private final ApprovalActionRepository     actionRepository;
+    private final DesignationRepository        designationRepository;
 
     public TeamLeadService(AppUserRepository userRepository,
                             EodEntryRepository entryRepository,
                             EodTaskRepository taskRepository,
                             HolidayRepository holidayRepository,
                             BusinessRuleConfigRepository configRepository,
-                            UtilizationService utilizationService) {
+                            UtilizationService utilizationService,
+                            ApprovalActionRepository actionRepository,
+                            DesignationRepository designationRepository) {
         this.userRepository    = userRepository;
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
         this.holidayRepository = holidayRepository;
         this.configRepository  = configRepository;
         this.utilizationService = utilizationService;
+        this.actionRepository  = actionRepository;
+        this.designationRepository = designationRepository;
     }
 
     public ThresholdsDto getThresholds() {
@@ -223,6 +235,68 @@ public class TeamLeadService {
         }
 
         return new DashboardTrendDto(avgUtil, submitted, pending, blockers);
+    }
+
+    /**
+     * Supplements the member list (status/utilization/hours, already served by
+     * getMemberStatuses + UtilizationService.getForTeam) with the extra fields only the
+     * Team Utilization detail panel needs: designation, working/logged days for the same
+     * {@code days}-day window as the trend chart, last-approved-EOD timestamp, and the
+     * trend itself.
+     *
+     * Working Days is deliberately independent of submission/approval activity — it counts
+     * scheduled business days via the same isWorkingDay rule the trend/weekend-exclusion fix
+     * already uses, computed from the SAME batch as the trend so the two can never disagree
+     * about which days in the window were working days. It must never be confused with
+     * "days with an approved entry" (that's loggedDays) — an employee with zero EODs still
+     * has a real, nonzero Working Days count for any window containing real business days.
+     *
+     * Uses UtilizationService.getTrendForEmployee — a batched read (3 queries total,
+     * regardless of window length) rather than a per-day loop, which at 14 days was issuing
+     * 50-100+ sequential queries and was the actual cause of the multi-second lag switching
+     * between employees on the Team Utilization page.
+     */
+    public TeamMemberDetailDto getMemberDetail(Long employeeId, LocalDate date, int days, String actingEmail) {
+        AppUser lead = requireLead(actingEmail);
+        AppUser member = requireDirectReport(employeeId, lead.getId());
+
+        String designation = member.getDesignationId() == null ? null
+                : designationRepository.findById(member.getDesignationId())
+                        .map(Designation::getTitle)
+                        .orElse(null);
+
+        LocalDate from = date.minusDays(days - 1L);
+        List<DayUtilDto> days7 = utilizationService.getTrendForEmployee(employeeId, from, date);
+
+        int workingDays = 0;
+        int loggedDays = 0;
+        List<TrendPointDto> weeklyTrend = new ArrayList<>();
+        for (DayUtilDto d : days7) {
+            if (d.workingDay()) workingDays++;
+            // Gated by workingDay so an entry approved for a weekend/holiday date (e.g. filed
+            // and approved before a holiday was added to the calendar) can never push
+            // loggedDays past workingDays — workingDays is the denominator this is measured
+            // against, so it can never count more days than that denominator contains.
+            if (d.hasApprovedEntry() && d.workingDay()) loggedDays++;
+            weeklyTrend.add(new TrendPointDto(d.date(), d.utilizationPct() != null ? d.utilizationPct().doubleValue() : null, d.workingDay()));
+        }
+
+        // Last approval ever, across all of this employee's entries — independent of `date`/
+        // the 7-day window above, and read straight from approval_action (the single source
+        // of truth for "was this approved"), never inferred from eod_entry.status alone.
+        OffsetDateTime lastApprovedEodAt = actionRepository
+                .findTopByEodEntryEmployeeIdAndActionOrderByActedAtDesc(employeeId, ApprovalAction.Action.APPROVE)
+                .map(ApprovalAction::getActedAt)
+                .orElse(null);
+
+        return new TeamMemberDetailDto(employeeId, designation, workingDays, loggedDays, lastApprovedEodAt, weeklyTrend);
+    }
+
+    private AppUser requireDirectReport(Long employeeId, Long leadId) {
+        return activeMembers(leadId).stream()
+                .filter(m -> m.getId().equals(employeeId))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your direct report"));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────────

@@ -1,75 +1,55 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, ChevronDown, ChevronRight, CheckCheck, Check, X, RotateCcw, RefreshCw } from 'lucide-react';
-import { usePendingApprovals, useApprove, useReject, useRequestChanges, useBatchApprove, type PendingApprovalsRange } from '../api/approvals';
-import { DropdownMenu } from '../components/DropdownMenu';
+import {
+  ChevronDown, ChevronRight, Check, X, RotateCcw, CheckCheck, RefreshCw,
+  Search, ListFilter,
+} from 'lucide-react';
+import {
+  usePendingApprovals, useDecidedApprovals, useApprovalHistory,
+  useApprove, useReject, useRequestChanges, useBatchApprove, type PendingApprovalsRange,
+} from '../api/approvals';
+import { Modal } from '../components/Modal';
 import { useToast } from '../lib/toast';
-import { formatDate as fmtDate, formatDurationMinutes, todayISO, yesterdayISO } from '../lib/date';
+import { formatDate as fmtDate, formatDateTime, formatDurationMinutes } from '../lib/date';
 import type { EodEntryDto, EodTaskDto } from '../api/eod';
 import { useSearchParams } from 'react-router-dom';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
-/** Category name for leave rows — renamed from 'Leave / Holiday' in V35. */
 const LEAVE_CATEGORY = 'Leave';
 
 function sumHours(tasks: EodTaskDto[]): number {
   return tasks.reduce((s, t) => s + (Number(t.hours) || 0), 0);
 }
 
-/** Drops a pointless trailing .0 — "4 hrs", not "4.0 hrs". */
 function hrs(v: number): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
-/**
- * One plain-language summary of the day: leave taken, hours worked, and how much of that was
- * overtime.
- *
- * Overtime is stated as a SPLIT of the hours worked, never as a separate addend. Showing
- * "5 hrs worked" and "Overtime +1.0 hrs" side by side reads as 5 + 1 = 6, when the 1 is already
- * inside the 5 — so it is spelled out as "worked 4 hrs + 1 hr OT = 5 hrs".
- *
- * regular = worked - overtime, which always lands on the day's expected hours: with 4 hrs leave
- * the expected work is 8 - 4 = 4, so logging 5 gives 4 regular + 1 OT.
- *
- * Returns null for an ordinary working day with no overtime — nothing to clarify there.
- */
-function daySummary(entry: EodEntryDto): string | null {
-  if (entry.dayType === 'HOLIDAY') return 'Holiday — no tasks';
-
-  const leaveHours = sumHours(entry.tasks.filter(t => t.categoryName === LEAVE_CATEGORY));
-  const worked     = sumHours(entry.tasks.filter(t => t.categoryName !== LEAVE_CATEGORY));
-  const overtime   = entry.isOvertime && entry.overtimeHours != null
-    ? Number(entry.overtimeHours)
-    : 0;
-
-  const parts: string[] = [];
-  if (entry.dayType === 'LEAVE' && leaveHours > 0) {
-    parts.push(worked > 0
-      ? `Half-day leave ${hrs(leaveHours)} hrs`
-      : `Full-day leave ${hrs(leaveHours)} hrs`);
-  }
-
-  if (overtime > 0) {
-    const regular = Math.max(0, worked - overtime);
-    parts.push(`worked ${hrs(regular)} hrs + ${hrs(overtime)} hr${overtime === 1 ? '' : 's'} OT = ${hrs(worked)} hrs total`);
-  } else if (parts.length > 0 && worked > 0) {
-    parts.push(`worked ${hrs(worked)} hrs`);
-  }
-
-  return parts.length > 0 ? parts.join(' · ') : null;
+function entryProjects(e: EodEntryDto): string[] {
+  return [...new Set(e.tasks.map(t => t.projectCode).filter((p): p is string => !!p))];
 }
 
-/**
- * A time adjustment in the manager's words — "2 hrs late log-in" rather than
- * "LATE_ARRIVAL / 120". Returns null when the entry has no adjustment.
- */
+function entryCategories(e: EodEntryDto): string[] {
+  return [...new Set(e.tasks.map(t => t.categoryName).filter((c): c is string => !!c))];
+}
+
+/** "Half-day leave 4h" / "Full-day leave 8h" / "Holiday". */
+function leaveLabel(entry: EodEntryDto): string | null {
+  if (entry.dayType === 'HOLIDAY') return 'Holiday';
+  if (entry.dayType !== 'LEAVE') return null;
+  const leaveHours = sumHours(entry.tasks.filter(t => t.categoryName === LEAVE_CATEGORY));
+  const worked = sumHours(entry.tasks.filter(t => t.categoryName !== LEAVE_CATEGORY));
+  if (leaveHours <= 0) return null;
+  return worked > 0 ? `Half-day leave ${hrs(leaveHours)}h` : `Full-day leave ${hrs(leaveHours)}h`;
+}
+
+/** One of late-arrival / early-leave / mid-shift-gap — the schema stores at most one per day. */
 function timeAdjustmentLabel(entry: EodEntryDto): string | null {
   const { timeAdjustmentType: type, timeAdjustmentMinutes: mins } = entry;
   if (!type || mins == null || mins <= 0) return null;
   const dur = formatDurationMinutes(mins);
   switch (type) {
-    case 'LATE_ARRIVAL': return `${dur} late log-in`;
+    case 'LATE_ARRIVAL': return `${dur} late start`;
     case 'EARLY_LEAVE':  return `${dur} early log-off`;
     case 'INTERVENING':  return `${dur} away mid-shift`;
     default:             return `${dur} time adjustment`;
@@ -82,7 +62,7 @@ function formatRelative(iso: string | null): string {
   const m = Math.floor(diff / 60_000);
   const h = Math.floor(diff / 3_600_000);
   const d = Math.floor(diff / 86_400_000);
-  if (m < 1)  return 'just now';
+  if (m < 1) return 'just now';
   if (m < 60) return `${m}m ago`;
   if (h < 24) return `${h}h ago`;
   return `${d}d ago`;
@@ -93,8 +73,8 @@ function extractError(err: unknown): string {
   return e?.response?.data?.error ?? e?.response?.data?.message ?? 'Something went wrong';
 }
 
-function fmtShortDate(iso: string): string {
-  return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+function initials(name: string): string {
+  return name.split(' ').map(p => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
 }
 
 // ── primitives ─────────────────────────────────────────────────────────────────
@@ -116,13 +96,13 @@ function Btn({
 }: {
   children: React.ReactNode;
   onClick?: () => void;
-  variant?: 'default' | 'danger' | 'warn' | 'primary';
+  variant?: 'default' | 'danger' | 'warn' | 'primary' | 'success';
   disabled?: boolean;
   style?: React.CSSProperties;
 }) {
-  const bg = { default: 'var(--raised2)', danger: 'var(--raised2)', warn: 'var(--raised2)', primary: 'var(--brand)' }[variant];
-  const border = { default: 'var(--line2)', danger: 'rgba(228,55,61,.4)', warn: 'rgba(224,169,59,.4)', primary: 'var(--brand)' }[variant];
-  const color = { default: 'var(--txt)', danger: 'var(--risk)', warn: 'var(--warn)', primary: '#fff' }[variant];
+  const bg = { default: 'var(--raised2)', danger: 'var(--raised2)', warn: 'var(--raised2)', primary: 'var(--brand)', success: 'var(--ok)' }[variant];
+  const border = { default: 'var(--line2)', danger: 'rgba(228,55,61,.4)', warn: 'rgba(224,169,59,.4)', primary: 'var(--brand)', success: 'var(--ok)' }[variant];
+  const color = { default: 'var(--txt)', danger: 'var(--risk)', warn: 'var(--warn)', primary: '#fff', success: '#fff' }[variant];
   return (
     <button
       onClick={onClick}
@@ -142,66 +122,90 @@ function Btn({
   );
 }
 
-// ── task status badge ──────────────────────────────────────────────────────────
-
-const TASK_STATUS_CFG: Record<string, { color: string; label: string }> = {
-  COMPLETED:   { color: 'var(--ok)',      label: 'Done' },
-  IN_PROGRESS: { color: 'var(--info)',    label: 'In Progress' },
-  BLOCKED:     { color: 'var(--risk)',    label: 'Blocked' },
-  NOT_STARTED: { color: 'var(--txt-dim)', label: 'Not Started' },
-};
-
-function TaskStatusBadge({ status }: { status: string }) {
-  const { color, label } = TASK_STATUS_CFG[status] ?? { color: 'var(--txt-dim)', label: status };
+function Chip({ children, tone = 'neutral', dashed = false }: {
+  children: React.ReactNode;
+  tone?: 'neutral' | 'warn' | 'info' | 'ok' | 'risk';
+  dashed?: boolean;
+}) {
+  const color = { neutral: 'var(--txt-dim)', warn: 'var(--warn)', info: 'var(--info)', ok: 'var(--ok)', risk: 'var(--risk)' }[tone];
   return (
     <span style={{
-      padding: '1px 7px', borderRadius: 3, fontSize: 10, fontWeight: 600, letterSpacing: '0.05em',
-      background: `color-mix(in srgb, ${color} 14%, transparent)`,
-      border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '2px 9px', borderRadius: 20, fontSize: 11, fontWeight: 600,
       color,
+      background: dashed ? 'transparent' : `color-mix(in srgb, ${color} 14%, transparent)`,
+      border: dashed ? `1px dashed var(--line2)` : `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
     }}>
-      {label}
+      {children}
     </span>
   );
 }
 
-// ── task breakdown row ─────────────────────────────────────────────────────────
+// ── filter dropdown (project / category / billable) ────────────────────────────
 
-function TaskRow({ task }: { task: EodTaskDto }) {
+function FilterDropdown({ label, options, selected, onToggle, onClear, getLabel }: {
+  label: string;
+  options: string[];
+  selected: Set<string>;
+  onToggle: (v: string) => void;
+  onClear: () => void;
+  /** Displayed checkbox text for an option value — defaults to the value itself. Lets
+   *  callers filter by a stable key (e.g. employee code) while showing a friendlier label
+   *  (e.g. employee name) without changing how Project/Category/Billable already work. */
+  getLabel?: (v: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '40px 1fr auto auto auto',
-      gap: 10, alignItems: 'center',
-      padding: '8px 16px',
-      borderBottom: '1px solid var(--line)',
-      fontSize: 12,
-    }}>
-      <span style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-mut)', fontSize: 11 }}>
-        {task.hours != null ? `${task.hours}h` : '—'}
-      </span>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ color: 'var(--txt)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {task.description ?? '—'}
-        </div>
-        <div style={{ color: 'var(--txt-dim)', fontSize: 11, marginTop: 1 }}>
-          {[task.projectCode, task.categoryName].filter(Boolean).join(' · ')}
-        </div>
-        {task.taskStatus === 'BLOCKED' && task.blockerReason && (
-          <div style={{ color: 'var(--risk)', fontSize: 11, marginTop: 2 }}>
-            ⚠ {task.blockerReason}
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 500,
+          background: selected.size ? 'color-mix(in srgb, var(--brand) 10%, var(--raised2))' : 'var(--raised2)',
+          border: `1px solid ${selected.size ? 'rgba(177,17,22,.5)' : 'var(--line2)'}`,
+          color: 'var(--txt)', cursor: 'pointer',
+        }}
+      >
+        <ListFilter size={13} aria-hidden="true" />
+        {label} {selected.size > 0 && `(${selected.size})`}
+        <ChevronDown size={12} aria-hidden="true" />
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, minWidth: 210,
+            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 10,
+            boxShadow: '0 12px 28px rgba(0,0,0,0.35)', maxHeight: 260, overflowY: 'auto',
+          }}>
+            {selected.size > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+                <button
+                  onClick={onClear}
+                  style={{ background: 'none', border: 'none', color: 'var(--brand-bright)', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: '4px' }}
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
+            {options.length === 0 && (
+              <div style={{ fontSize: 12, color: 'var(--txt-dim)', padding: '6px 4px' }}>No options</div>
+            )}
+            {options.map(opt => (
+              <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--txt)', padding: '5px 4px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={selected.has(opt)} onChange={() => onToggle(opt)} style={{ accentColor: 'var(--brand-bright)' }} />
+                {getLabel ? getLabel(opt) : opt}
+              </label>
+            ))}
           </div>
-        )}
-      </div>
-      <TaskStatusBadge status={task.taskStatus} />
-      <span style={{ fontSize: 10, color: task.isBillable ? 'var(--ok)' : 'var(--txt-dim)', fontWeight: 600 }}>
-        {task.isBillable ? 'Billable' : 'Non-billable'}
-      </span>
+        </>
+      )}
     </div>
   );
 }
 
-// ── comment modal (inline, not a separate component) ──────────────────────────
+// ── action panel (approve / reject / request changes) ──────────────────────────
 
 interface ActionPanelProps {
   type: 'approve' | 'reject' | 'request-changes' | null;
@@ -210,16 +214,15 @@ interface ActionPanelProps {
 }
 
 function ActionPanel({ type, entryId, onClose }: ActionPanelProps) {
-  const [comment, setComment]           = useState('');
+  const [comment, setComment] = useState('');
   const [billableOverride, setBillable] = useState<boolean | undefined>(undefined);
   const { show } = useToast();
 
-  const approve        = useApprove();
-  const reject         = useReject();
+  const approve = useApprove();
+  const reject = useReject();
   const requestChanges = useRequestChanges();
 
   if (!type) return null;
-
   const busy = approve.isPending || reject.isPending || requestChanges.isPending;
 
   async function submit() {
@@ -246,10 +249,7 @@ function ActionPanel({ type, entryId, onClose }: ActionPanelProps) {
   const commentEmpty = needsComment && !comment.trim();
 
   return (
-    <div style={{
-      background: 'var(--raised)', borderTop: '1px solid var(--line)',
-      padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10,
-    }}>
+    <div style={{ background: 'var(--raised)', borderTop: '1px solid var(--line)', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
       {type === 'approve' && (
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--txt-mut)', cursor: 'pointer' }}>
           <input
@@ -276,11 +276,7 @@ function ActionPanel({ type, entryId, onClose }: ActionPanelProps) {
         />
       )}
       <div style={{ display: 'flex', gap: 8 }}>
-        <Btn
-          variant={type === 'approve' ? 'primary' : type === 'reject' ? 'danger' : 'warn'}
-          onClick={submit}
-          disabled={busy || commentEmpty}
-        >
+        <Btn variant={type === 'approve' ? 'success' : type === 'reject' ? 'danger' : 'warn'} onClick={submit} disabled={busy || commentEmpty}>
           {busy ? 'Saving…' : type === 'approve' ? 'Confirm Approve' : type === 'reject' ? 'Confirm Reject' : 'Request Changes'}
         </Btn>
         <Btn onClick={onClose}>Cancel</Btn>
@@ -289,25 +285,91 @@ function ActionPanel({ type, entryId, onClose }: ActionPanelProps) {
   );
 }
 
+// ── audit trail (submitted → actions) ───────────────────────────────────────────
+
+function AuditTrail({ entry }: { entry: EodEntryDto }) {
+  const { data: actions, isPending } = useApprovalHistory(entry.id, true);
+
+  if (isPending) return <div style={{ padding: '12px 16px' }}><Skel h={12} w="60%" /></div>;
+
+  const actionLabel: Record<string, string> = {
+    APPROVE: 'Approved',
+    REJECT: 'Rejected',
+    REQUEST_CHANGES: 'Changes requested',
+  };
+
+  return (
+    <div style={{ padding: '12px 16px 16px', background: 'var(--raised)', borderTop: '1px solid var(--line)' }}>
+      <div style={{ fontSize: 10.5, letterSpacing: '0.06em', color: 'var(--txt-dim)', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>
+        Submission history
+      </div>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderLeft: '2px solid var(--line)', maxWidth: 520 }}>
+        {entry.submittedAt && (
+          <li style={{ position: 'relative', padding: '0 0 12px 16px', fontSize: 12.5, color: 'var(--txt-mut)' }}>
+            <span style={{ position: 'absolute', left: -5, top: 3, width: 8, height: 8, borderRadius: '50%', background: 'var(--brand-bright)', border: '2px solid var(--raised)' }} />
+            <b style={{ color: 'var(--txt)' }}>Submitted</b>
+            <span style={{ display: 'block', color: 'var(--txt-dim)', fontSize: 11 }}>{formatDateTime(entry.submittedAt)}</span>
+          </li>
+        )}
+        {(actions ?? []).map(a => (
+          <li key={a.id} style={{ position: 'relative', padding: '0 0 12px 16px', fontSize: 12.5, color: 'var(--txt-mut)' }}>
+            <span style={{ position: 'absolute', left: -5, top: 3, width: 8, height: 8, borderRadius: '50%', background: 'var(--brand-bright)', border: '2px solid var(--raised)' }} />
+            <b style={{ color: 'var(--txt)' }}>{actionLabel[a.action] ?? a.action} by {a.actorName}</b>
+            <span style={{ display: 'block', color: 'var(--txt-dim)', fontSize: 11 }}>{formatDateTime(a.actedAt)}</span>
+          </li>
+        ))}
+      </ul>
+      {entry.reviewerComment && (
+        <div style={{ background: 'color-mix(in srgb, var(--risk) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--risk) 30%, transparent)', borderRadius: 8, padding: '10px 12px', fontSize: 12.5, color: 'var(--txt)', marginTop: 10, maxWidth: 520 }}>
+          <strong>{entry.status === 'CHANGES_REQUESTED' ? 'Changes requested: ' : 'Previous reject reason: '}</strong>{entry.reviewerComment}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── entry row ─────────────────────────────────────────────────────────────────
 
-function EntryRow({ entry, highlighted }: { entry: EodEntryDto; highlighted?: boolean }) {
-  const [expanded, setExpanded] = useState(false);
-  const [action, setAction]     = useState<'approve' | 'reject' | 'request-changes' | null>(null);
+function EntryRow({
+  entry, actionable, checked, onToggleCheck,
+  expanded, onToggleExpand, onOpenReject, highlighted,
+}: {
+  entry: EodEntryDto;
+  actionable: boolean;
+  checked: boolean;
+  onToggleCheck: () => void;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onOpenReject: () => void;
+  highlighted?: boolean;
+}) {
+  const [action, setAction] = useState<'approve' | 'reject' | 'request-changes' | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
+  const total = sumHours(entry.tasks);
+  const overtime = entry.isOvertime && entry.overtimeHours != null ? Number(entry.overtimeHours) : 0;
+  const undertime = entry.undertimeHours != null ? Number(entry.undertimeHours) : 0;
+  const projects = entryProjects(entry);
+  const padding = '9px 16px';
 
   // Arrived here via "Team Status" on the dashboard, which links a specific pending entry —
   // scroll it into view and expand it so it's unmistakable which employee/entry was clicked.
   useEffect(() => {
     if (!highlighted) return;
     rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setExpanded(true);
   }, [highlighted]);
 
   function openAction(a: typeof action) {
+    if (a === 'reject') { onOpenReject(); return; }
     setAction(prev => prev === a ? null : a);
-    setExpanded(true);
   }
+
+  const statusChip = entry.status === 'APPROVED'
+    ? <Chip tone="ok">Approved</Chip>
+    : entry.status === 'REJECTED'
+      ? <Chip tone="risk">Rejected</Chip>
+      : entry.status === 'CHANGES_REQUESTED'
+        ? <Chip tone="warn">Changes requested</Chip>
+        : null;
 
   return (
     <div
@@ -319,341 +381,451 @@ function EntryRow({ entry, highlighted }: { entry: EodEntryDto; highlighted?: bo
         transition: 'background 0.3s ease',
       }}
     >
-      {/* Summary row */}
-      <div
-        style={{ display: 'grid', gridTemplateColumns: '32px 1fr 120px 100px 48px', gap: 12, alignItems: 'center', padding: '12px 16px', cursor: 'pointer' }}
-        onClick={() => { setExpanded(e => !e); if (action) setAction(null); }}
-      >
-        <div style={{ color: 'var(--txt-dim)', display: 'flex', alignItems: 'center' }}>
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </div>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>
-            {(entry as EodEntryDto & { employeeName?: string }).employeeName ?? `Employee #${entry.employeeId}`}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding }}>
+        {actionable && (
+          <div style={{ marginTop: 2 }}>
+            <input type="checkbox" checked={checked} onChange={onToggleCheck} style={{ width: 15, height: 15, accentColor: 'var(--brand-bright)', cursor: 'pointer' }} />
           </div>
-          <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
-            {entry.employeeCode ?? `#${entry.employeeId}`}
+        )}
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
+          background: 'var(--raised2)', color: 'var(--txt)', border: '1px solid var(--line2)',
+        }}>
+          {initials(entry.employeeName)}
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--txt)' }}>{entry.employeeName}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>{entry.employeeCode}</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span>{fmtDate(entry.entryDate)}</span>
+            <span>·</span>
+            <span>Submitted {formatRelative(entry.submittedAt)}</span>
+            <span>·</span>
+            <span>{entry.tasks.length} task{entry.tasks.length !== 1 ? 's' : ''} · {projects.length} project{projects.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {entry.tasks.length > 0 && (
+            <div style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)' }}>
+              {entry.tasks.map(t => (
+                <div key={t.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '4px 11px',
+                  fontSize: 11, color: 'var(--txt-dim)',
+                  borderBottom: '1px solid var(--line)',
+                }}>
+                  <span style={{ color: 'var(--txt)', fontWeight: 600, minWidth: 120, flexShrink: 0 }}>{t.projectCode ?? '—'}</span>
+                  <span style={{ flex: 1 }}>{t.categoryName ?? '—'}</span>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.isBillable ? 'var(--ok)' : 'transparent', border: t.isBillable ? 'none' : '1.5px solid var(--txt-dim)', flexShrink: 0 }} title={t.isBillable ? 'Billable' : 'Non-billable'} />
+                  <span style={{ color: 'var(--txt)', fontWeight: 700, minWidth: 36, textAlign: 'right', flexShrink: 0 }}>{t.hours != null ? `${hrs(Number(t.hours))}h` : '—'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 9 }}>
+            <Chip tone="neutral">{hrs(total)}h total</Chip>
+            {statusChip}
+            {overtime > 0 && <Chip tone="warn">OT +{hrs(overtime)}h</Chip>}
+            {undertime > 0 && <Chip tone="info">Under −{hrs(undertime)}h</Chip>}
+            {timeAdjustmentLabel(entry) && <Chip tone="neutral" dashed>{timeAdjustmentLabel(entry)}</Chip>}
+            {leaveLabel(entry) && <Chip tone="neutral" dashed>{leaveLabel(entry)}</Chip>}
+            {entry.isResubmission && <Chip tone="neutral" dashed>Resubmitted after rejection</Chip>}
           </div>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
-          {fmtDate(entry.entryDate)}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
-          {formatRelative(entry.submittedAt)} · {entry.tasks.length} task{entry.tasks.length !== 1 ? 's' : ''}
-          {/* Day type, time adjustment and overtime are all visible without expanding the row —
-              the manager decides from here, and a shortened day changes what "enough hours"
-              means. Without these, a 4-hour submission just looks incomplete. */}
-          {daySummary(entry) && (
-            <span style={{ color: 'var(--warn)', fontWeight: 600 }}>
-              {' '}· {daySummary(entry)}
-            </span>
-          )}
-          {timeAdjustmentLabel(entry) && (
-            <span style={{ color: 'var(--info)', fontWeight: 600 }}>
-              {' '}· {timeAdjustmentLabel(entry)}
-            </span>
-          )}
-        </div>
-        {/* Row actions menu — stop propagation so row expand doesn't fire */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
-          <DropdownMenu
-            ariaLabel={`Actions for ${(entry as EodEntryDto & { employeeName?: string }).employeeName ?? `Employee #${entry.employeeId}`}`}
-            items={[
-              { key: 'approve', label: 'Approve', icon: Check, color: 'var(--ok)', onSelect: () => openAction('approve') },
-              { key: 'reject', label: 'Reject', icon: X, color: 'var(--risk)', onSelect: () => openAction('reject') },
-              { key: 'request-changes', label: 'Request changes', icon: RotateCcw, color: 'var(--warn)', onSelect: () => openAction('request-changes') },
-            ]}
-          />
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+          {actionable ? (
+            <div style={{ display: 'flex', gap: 7 }}>
+              <Btn variant="warn" onClick={() => openAction('request-changes')}><RotateCcw size={12} aria-hidden="true" /> Changes</Btn>
+              <Btn variant="danger" onClick={() => openAction('reject')}><X size={12} aria-hidden="true" /> Reject</Btn>
+              <Btn variant="success" onClick={() => openAction('approve')}><Check size={12} aria-hidden="true" /> Approve</Btn>
+            </div>
+          ) : null}
+          <button
+            onClick={onToggleExpand}
+            title="View audit trail"
+            style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
+          >
+            {expanded ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
+          </button>
         </div>
       </div>
 
-      {/* Task breakdown */}
-      {expanded && entry.tasks.length > 0 && (
-        <div style={{ background: 'var(--raised)', borderTop: '1px solid var(--line)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr auto auto auto', gap: 10, padding: '6px 16px', fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--line)' }}>
-            <span>Hrs</span><span>Task</span><span>Status</span><span>Billing</span>
-          </div>
-          {entry.tasks.map(t => <TaskRow key={t.id} task={t} />)}
-          {entry.remarks && (
-            <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--txt-mut)', borderTop: '1px solid var(--line)' }}>
-              <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Remarks: </span>
-              {entry.remarks}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Action panel */}
-      {action && (
-        <ActionPanel
-          type={action}
-          entryId={entry.id}
-          onClose={() => { setAction(null); }}
-        />
-      )}
+      {action && <ActionPanel type={action} entryId={entry.id} onClose={() => setAction(null)} />}
+      {expanded && <AuditTrail entry={entry} />}
     </div>
   );
 }
 
 // ── main ───────────────────────────────────────────────────────────────────────
 
-/** Most recent EOD date first; same-date entries ordered by employee name so reloads don't shuffle. */
-function sortEntries(list: EodEntryDto[]): EodEntryDto[] {
-  return [...list].sort((a, b) =>
-    b.entryDate.localeCompare(a.entryDate) || a.employeeName.localeCompare(b.employeeName));
-}
-
-type DateMode = 'all' | 'today' | 'yesterday' | 'range';
+type Tab = 'pending' | 'approved' | 'rejected' | 'changes-requested';
+type SortMode = 'oldest' | 'latest' | 'hours' | 'name';
 
 export default function Approvals() {
   // Arriving from the Team Dashboard's "Review approvals" button carries the dashboard's
   // selected date/range as ?from=&to= so the count seen there matches what's shown here —
   // both `from` and `to` must be present to apply the filter (a partial pair is ignored).
-  const [searchParams, setSearchParams] = useSearchParams();
+  // With no params (direct nav via sidebar), the Pending tab shows every pending entry
+  // regardless of any dashboard date filter.
+  const [searchParams] = useSearchParams();
   const fromParam = searchParams.get('from');
   const toParam = searchParams.get('to');
   const range: PendingApprovalsRange | undefined = fromParam && toParam ? { from: fromParam, to: toParam } : undefined;
 
   // Set by the Team Status table's "Pending" click — identifies which entry to scroll to
-  // and highlight, so it's unmistakable that this is the one that was clicked.
+  // and highlight, so it's unmistakable which one was clicked.
   const highlightParam = searchParams.get('highlight');
   const highlightId = highlightParam ? Number(highlightParam) : null;
 
-  const { data: rawEntries, isPending, isError, refetch } = usePendingApprovals(true, range);
-  const entries = useMemo(() => rawEntries && sortEntries(rawEntries), [rawEntries]);
+  const { data: pending, isPending: pendingLoading, isError: pendingError, refetch } = usePendingApprovals(true, range);
+  const { data: approved, isPending: approvedLoading } = useDecidedApprovals('APPROVED');
+  const { data: rejected, isPending: rejectedLoading } = useDecidedApprovals('REJECTED');
+  const { data: changesRequested, isPending: changesRequestedLoading } = useDecidedApprovals('CHANGES_REQUESTED');
   const batchApprove = useBatchApprove();
+  const reject = useReject();
   const { show } = useToast();
 
-  const [mode, setMode] = useState<DateMode>('all');
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [draftFrom, setDraftFrom] = useState(todayISO());
-  const [draftTo, setDraftTo] = useState(todayISO());
-  const [rangeFrom, setRangeFrom] = useState(todayISO());
-  const [rangeTo, setRangeTo] = useState(todayISO());
+  const [tab, setTab] = useState<Tab>('pending');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<SortMode>('latest');
+  const [employeeFilter, setEmployeeFilter] = useState<Set<string>>(new Set());
+  const [projectFilter, setProjectFilter] = useState<Set<string>>(new Set());
+  const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set());
+  const [billableFilter, setBillableFilter] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [rejectTarget, setRejectTarget] = useState<'bulk' | number | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [confirmApproveAll, setConfirmApproveAll] = useState(false);
 
-  const filteredEntries = useMemo(() => {
-    if (!entries) return entries;
-    if (mode === 'today') return entries.filter(e => e.entryDate === todayISO());
-    if (mode === 'yesterday') return entries.filter(e => e.entryDate === yesterdayISO());
-    if (mode === 'range') return entries.filter(e => e.entryDate >= rangeFrom && e.entryDate <= rangeTo);
-    return entries;
-  }, [entries, mode, rangeFrom, rangeTo]);
+  const isLoading = pendingLoading
+    || (tab === 'approved' && approvedLoading)
+    || (tab === 'rejected' && rejectedLoading)
+    || (tab === 'changes-requested' && changesRequestedLoading);
 
-  function selectQuick(kind: 'all' | 'today' | 'yesterday') {
-    setMode(kind);
-    setPickerOpen(false);
+  const baseList: EodEntryDto[] = useMemo(() => {
+    if (tab === 'pending') return pending ?? [];
+    if (tab === 'approved') return approved ?? [];
+    if (tab === 'rejected') return rejected ?? [];
+    return changesRequested ?? [];
+  }, [tab, pending, approved, rejected, changesRequested]);
+
+  const allProjects = useMemo(() => [...new Set(baseList.flatMap(entryProjects))].sort(), [baseList]);
+  const allCategories = useMemo(() => [...new Set(baseList.flatMap(entryCategories))].sort(), [baseList]);
+  // Scoped to whichever employees have entries in the current tab's already-fetched,
+  // already-team-scoped list — same source Project/Category derive their options from,
+  // so this never needs its own request or a separate "direct reports" lookup.
+  const employeeNameByCode = useMemo(() => {
+    const byCode = new Map<string, string>();
+    for (const e of baseList) byCode.set(e.employeeCode, e.employeeName);
+    return byCode;
+  }, [baseList]);
+  const allEmployeeCodes = useMemo(
+    () => [...employeeNameByCode.keys()].sort((a, b) => employeeNameByCode.get(a)!.localeCompare(employeeNameByCode.get(b)!)),
+    [employeeNameByCode],
+  );
+
+  const visible = useMemo(() => {
+    let list = baseList;
+    if (employeeFilter.size) list = list.filter(e => employeeFilter.has(e.employeeCode));
+    if (projectFilter.size) list = list.filter(e => entryProjects(e).some(p => projectFilter.has(p)));
+    if (categoryFilter.size) list = list.filter(e => entryCategories(e).some(c => categoryFilter.has(c)));
+    if (billableFilter.size) {
+      list = list.filter(e => {
+        const labels = new Set<string>(e.tasks.map(t => t.isBillable ? 'Billable' : 'Non-billable'));
+        return [...billableFilter].some(f => labels.has(f));
+      });
+    }
+    const q = search.trim().toLowerCase();
+    if (q) list = list.filter(e => e.employeeName.toLowerCase().includes(q) || e.employeeCode.toLowerCase().includes(q));
+
+    const sorted = [...list];
+    if (sort === 'hours') sorted.sort((a, b) => sumHours(b.tasks) - sumHours(a.tasks));
+    else if (sort === 'name') sorted.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+    else if (sort === 'latest') sorted.sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''));
+    else sorted.sort((a, b) => (a.submittedAt ?? '').localeCompare(b.submittedAt ?? ''));
+    return sorted;
+  }, [baseList, employeeFilter, projectFilter, categoryFilter, billableFilter, search, sort]);
+
+  const actionable = tab === 'pending';
+
+  const pendingCount = pending?.length ?? 0;
+  const approvedCount = approved?.length ?? 0;
+  const rejectedCount = rejected?.length ?? 0;
+  const changesRequestedCount = changesRequested?.length ?? 0;
+
+  function toggleFilterVal(set: Set<string>, setFn: (s: Set<string>) => void, val: string) {
+    const next = new Set(set);
+    if (next.has(val)) next.delete(val); else next.add(val);
+    setFn(next);
   }
 
-  function openPicker() {
-    setDraftFrom(mode === 'range' ? rangeFrom : todayISO());
-    setDraftTo(mode === 'range' ? rangeTo : todayISO());
-    setPickerOpen(true);
+  const hasActiveFilters = employeeFilter.size > 0 || projectFilter.size > 0 || categoryFilter.size > 0 || billableFilter.size > 0;
+
+  function clearAllFilters() {
+    setEmployeeFilter(new Set());
+    setProjectFilter(new Set());
+    setCategoryFilter(new Set());
+    setBillableFilter(new Set());
   }
 
-  function applyRange() {
-    if (draftFrom > draftTo) return;
-    setRangeFrom(draftFrom);
-    setRangeTo(draftTo);
-    setMode('range');
-    setPickerOpen(false);
+  function toggleCheck(id: number) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelected(next);
   }
 
-  const filterLabel = mode === 'all'
-    ? 'All days'
-    : mode === 'today'
-      ? 'Today'
-      : mode === 'yesterday'
-        ? 'Yesterday'
-        : rangeFrom === rangeTo ? fmtShortDate(rangeFrom) : `${fmtShortDate(rangeFrom)} – ${fmtShortDate(rangeTo)}`;
+  function toggleExpand(id: number) {
+    const next = new Set(expanded);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setExpanded(next);
+  }
 
-  async function approveAll() {
-    if (!filteredEntries || filteredEntries.length === 0) return;
+  function switchTab(t: Tab) {
+    setTab(t);
+    setSelected(new Set());
+  }
+
+  async function approveIds(ids: number[]) {
+    if (ids.length === 0) return;
     try {
-      await batchApprove.mutateAsync(filteredEntries.map(e => e.id));
-      show(`${filteredEntries.length} entr${filteredEntries.length !== 1 ? 'ies' : 'y'} approved. Utilization recomputed.`, 'success');
+      await batchApprove.mutateAsync(ids);
+      show(`${ids.length} entr${ids.length !== 1 ? 'ies' : 'y'} approved. Utilization recomputed.`, 'success');
+      setSelected(new Set());
     } catch (err) {
       show(extractError(err), 'error');
     }
   }
 
-  if (isPending) {
-    return (
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 28 }}>
-          <div><Skel h={24} w={160} /><div style={{ marginTop: 8 }}><Skel h={14} w={120} /></div></div>
-        </div>
-        <Card>
-          {[0, 1, 2].map(i => (
-            <div key={i} style={{ padding: '16px', borderBottom: '1px solid var(--line)', display: 'flex', gap: 12 }}>
-              <Skel h={14} w="30%" /><Skel h={14} w="20%" /><Skel h={14} w="15%" />
-            </div>
-          ))}
-        </Card>
-      </div>
-    );
+  async function confirmRejectSubmit() {
+    const reason = rejectReason.trim();
+    if (!reason) return;
+    const ids = rejectTarget === 'bulk' ? [...selected] : rejectTarget != null ? [rejectTarget] : [];
+    if (ids.length === 0) return;
+    const results = await Promise.allSettled(ids.map(id => reject.mutateAsync({ entryId: id, comment: reason })));
+    const failed = results.filter(r => r.status === 'rejected').length;
+    const succeeded = ids.length - failed;
+    if (failed === 0) show(`${succeeded} entr${succeeded !== 1 ? 'ies' : 'y'} rejected.`, 'success');
+    else show(`${succeeded} of ${ids.length} rejected, ${failed} failed — please retry the rest.`, 'error');
+    setSelected(new Set());
+    setRejectTarget(null);
+    setRejectReason('');
   }
 
-  if (isError) {
+  const approveAllProjects = [...new Set(visible.flatMap(entryProjects))];
+
+  if (pendingError) {
     return (
-      <div>
-        <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Approvals</h1>
-        </div>
-        <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load pending entries.</div>
-          <button
-            onClick={() => refetch()}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 13, cursor: 'pointer' }}
-          >
-            <RefreshCw size={14} aria-hidden="true" /> Retry
-          </button>
-        </Card>
-      </div>
+      <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
+        <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load pending entries.</div>
+        <button onClick={() => refetch()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 13, cursor: 'pointer' }}>
+          <RefreshCw size={14} aria-hidden="true" /> Retry
+        </button>
+      </Card>
     );
   }
 
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 14, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
             Approvals
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-            {filteredEntries!.length} pending entr{filteredEntries!.length !== 1 ? 'ies' : 'y'}
-          </p>
+          <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>Review and act on your team's EOD submissions</p>
         </div>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ position: 'relative' }}>
+          {actionable && visible.length > 0 && (
             <button
-              onClick={() => (pickerOpen ? setPickerOpen(false) : openPicker())}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '8px 14px', fontSize: 12, fontWeight: 600,
-                color: mode !== 'all' ? 'var(--info)' : 'var(--txt)',
-                background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8,
-                cursor: 'pointer', whiteSpace: 'nowrap',
-              }}
-            >
-              <Calendar size={13} aria-hidden="true" />
-              {filterLabel}
-              <ChevronDown size={12} aria-hidden="true" />
-            </button>
-
-            {pickerOpen && (
-              <>
-                <div
-                  onClick={() => setPickerOpen(false)}
-                  style={{ position: 'fixed', inset: 0, zIndex: 19 }}
-                />
-                <div style={{
-                  position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 260,
-                  background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
-                  boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
-                }}>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                    {(['all', 'today', 'yesterday'] as const).map(kind => (
-                      <button
-                        key={kind}
-                        onClick={() => selectQuick(kind)}
-                        style={{
-                          flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                          background: mode === kind ? 'var(--info)' : 'var(--raised2)',
-                          color: mode === kind ? '#fff' : 'var(--txt)',
-                          border: '1px solid var(--line2)',
-                        }}
-                      >
-                        {kind === 'all' ? 'All days' : kind === 'today' ? 'Today' : 'Yesterday'}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                    Custom range
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <input
-                      type="date"
-                      value={draftFrom}
-                      max={todayISO()}
-                      onChange={(e) => setDraftFrom(e.target.value)}
-                      style={{
-                        flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
-                        background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                      }}
-                    />
-                    <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>to</span>
-                    <input
-                      type="date"
-                      value={draftTo}
-                      max={todayISO()}
-                      onChange={(e) => setDraftTo(e.target.value)}
-                      style={{
-                        flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
-                        background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                      }}
-                    />
-                  </div>
-                  {draftFrom > draftTo && (
-                    <div style={{ fontSize: 11, color: 'var(--risk)', marginBottom: 10 }}>"From" must not be after "to".</div>
-                  )}
-                  <button
-                    onClick={applyRange}
-                    disabled={draftFrom > draftTo}
-                    style={{
-                      width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
-                      background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                      cursor: draftFrom > draftTo ? 'default' : 'pointer',
-                      opacity: draftFrom > draftTo ? 0.6 : 1,
-                    }}
-                  >
-                    Apply
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-
-          {filteredEntries!.length > 0 && (
-            <button
-              onClick={approveAll}
+              onClick={() => setConfirmApproveAll(true)}
               disabled={batchApprove.isPending}
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '8px 16px', borderRadius: 7, fontSize: 13, fontWeight: 500,
-                background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                cursor: batchApprove.isPending ? 'not-allowed' : 'pointer',
-                opacity: batchApprove.isPending ? 0.6 : 1,
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 7,
+                fontSize: 13, fontWeight: 500, background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
+                cursor: batchApprove.isPending ? 'not-allowed' : 'pointer', opacity: batchApprove.isPending ? 0.6 : 1,
               }}
             >
-              <CheckCheck size={14} aria-hidden="true" />
-              {batchApprove.isPending ? 'Approving…' : `Approve All (${filteredEntries!.length})`}
+              <CheckCheck size={14} aria-hidden="true" /> Approve all ({visible.length})
             </button>
           )}
         </div>
       </div>
 
-      {filteredEntries!.length === 0 ? (
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {([
+          ['pending', 'Pending', pendingCount],
+          ['approved', 'Approved', approvedCount],
+          ['rejected', 'Rejected', rejectedCount],
+          ['changes-requested', 'Changes Requested', changesRequestedCount],
+        ] as [Tab, string, number][]).map(([key, label, count]) => (
+          <button key={key} onClick={() => switchTab(key)} style={{
+            padding: '8px 15px', borderRadius: 20, border: `1px solid ${tab === key ? 'var(--brand)' : 'var(--line2)'}`,
+            background: tab === key ? 'var(--brand)' : 'var(--raised2)', color: tab === key ? '#fff' : 'var(--txt-dim)',
+            fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7,
+          }}>
+            {label}
+            <span style={{ background: tab === key ? 'rgba(255,255,255,.25)' : 'rgba(255,255,255,.1)', padding: '1px 7px', borderRadius: 20, fontSize: 11.5 }}>{count}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
+        <div style={{ width: 220, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 8, padding: '7px 12px', marginRight: 14 }}>
+          <Search size={13} style={{ color: 'var(--txt-dim)' }} aria-hidden="true" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search employee…"
+            style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--txt)', fontSize: 12.5, width: '100%' }}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              aria-label="Clear search"
+              style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', flexShrink: 0 }}
+            >
+              <X size={13} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <FilterDropdown
+            label="Employee"
+            options={allEmployeeCodes}
+            selected={employeeFilter}
+            onToggle={v => toggleFilterVal(employeeFilter, setEmployeeFilter, v)}
+            onClear={() => setEmployeeFilter(new Set())}
+            getLabel={code => employeeNameByCode.get(code) ?? code}
+          />
+          <FilterDropdown label="Project" options={allProjects} selected={projectFilter} onToggle={v => toggleFilterVal(projectFilter, setProjectFilter, v)} onClear={() => setProjectFilter(new Set())} />
+          <FilterDropdown label="Category" options={allCategories} selected={categoryFilter} onToggle={v => toggleFilterVal(categoryFilter, setCategoryFilter, v)} onClear={() => setCategoryFilter(new Set())} />
+          <FilterDropdown label="Billable" options={['Billable', 'Non-billable']} selected={billableFilter} onToggle={v => toggleFilterVal(billableFilter, setBillableFilter, v)} onClear={() => setBillableFilter(new Set())} />
+          {hasActiveFilters && (
+            <button
+              onClick={clearAllFilters}
+              style={{ background: 'none', border: '1px solid var(--line2)', borderRadius: 8, color: 'var(--brand-bright)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '7px 12px' }}
+            >
+              Clear all filters
+            </button>
+          )}
+        </div>
+        <select value={sort} onChange={e => setSort(e.target.value as SortMode)} style={{ background: 'var(--raised2)', color: 'var(--txt)', border: '1px solid var(--line2)', borderRadius: 8, padding: '7px 10px', fontSize: 12.5 }}>
+          <option value="latest">Sort: Latest first</option>
+          <option value="oldest">Sort: Oldest first</option>
+          <option value="hours">Sort: Most hours</option>
+          <option value="name">Sort: Employee A–Z</option>
+        </select>
+      </div>
+
+      {/* Bulk bar */}
+      {actionable && selected.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          background: 'var(--raised)', border: '1px solid rgba(177,17,22,.4)', borderRadius: 12,
+          padding: '10px 16px', marginBottom: 14, position: 'sticky', top: 10, zIndex: 15,
+        }}>
+          <span style={{ fontSize: 13, color: 'var(--txt)' }}>{selected.size} selected</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn onClick={() => setSelected(new Set())}>Clear</Btn>
+            <Btn variant="danger" onClick={() => { setRejectTarget('bulk'); setRejectReason(''); }}><X size={12} aria-hidden="true" /> Reject selected</Btn>
+            <Btn variant="success" onClick={() => approveIds([...selected])} disabled={batchApprove.isPending}><Check size={12} aria-hidden="true" /> Approve selected</Btn>
+          </div>
+        </div>
+      )}
+
+      {/* List */}
+      {isLoading ? (
+        <Card>
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{ padding: 16, borderBottom: '1px solid var(--line)', display: 'flex', gap: 12 }}>
+              <Skel h={14} w="30%" /><Skel h={14} w="20%" /><Skel h={14} w="15%" />
+            </div>
+          ))}
+        </Card>
+      ) : visible.length === 0 ? (
         <Card style={{ textAlign: 'center', padding: '48px 20px' }}>
           <CheckCheck size={28} style={{ color: 'var(--ok)', marginBottom: 12 }} aria-hidden="true" />
-          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)', marginBottom: 6 }}>All caught up</div>
-          <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>No entries pending approval{mode !== 'all' ? ' for this filter' : ''}.</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)', marginBottom: 6 }}>
+            {tab === 'pending' && "You're all caught up"}
+            {tab === 'approved' && 'No approved entries yet'}
+            {tab === 'rejected' && 'No rejected entries'}
+            {tab === 'changes-requested' && 'No changes-requested entries'}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>
+            {tab === 'pending' && 'No pending entries match your current filters.'}
+            {tab === 'approved' && 'Entries you approve will appear here.'}
+            {tab === 'rejected' && 'Entries you reject will appear here with the reason given.'}
+            {tab === 'changes-requested' && 'Entries you send back for changes will appear here.'}
+          </div>
         </Card>
       ) : (
-        <Card style={{ padding: 0 }}>
-          {/* Column headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 120px 100px 48px', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            <span />
-            <span>Employee</span>
-            <span>Date</span>
-            <span>Submitted</span>
-            <span style={{ textAlign: 'right' }}>Actions</span>
-          </div>
-          {filteredEntries!.map(entry => <EntryRow key={entry.id} entry={entry} />)}
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          {visible.map(entry => (
+            <EntryRow
+              key={entry.id}
+              entry={entry}
+              actionable={actionable}
+              checked={selected.has(entry.id)}
+              onToggleCheck={() => toggleCheck(entry.id)}
+              expanded={expanded.has(entry.id)}
+              onToggleExpand={() => toggleExpand(entry.id)}
+              onOpenReject={() => { setRejectTarget(entry.id); setRejectReason(''); }}
+              highlighted={highlightId != null && entry.id === highlightId}
+            />
+          ))}
         </Card>
       )}
+
+      {/* Reject modal */}
+      <Modal
+        open={rejectTarget != null}
+        title="Reject entry"
+        onClose={() => setRejectTarget(null)}
+        footer={
+          <>
+            <Btn onClick={() => setRejectTarget(null)}>Cancel</Btn>
+            <Btn variant="danger" onClick={confirmRejectSubmit} disabled={!rejectReason.trim() || reject.isPending}>
+              {reject.isPending ? 'Rejecting…' : 'Confirm reject'}
+            </Btn>
+          </>
+        }
+      >
+        <p style={{ margin: '0 0 12px', color: 'var(--txt-mut)', fontSize: 12.5 }}>This reason is shared with the employee.</p>
+        <textarea
+          rows={4}
+          value={rejectReason}
+          onChange={e => setRejectReason(e.target.value)}
+          placeholder="e.g. Missing task description for the overtime hours logged"
+          style={{ width: '100%', resize: 'vertical', padding: 10, background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 8, color: 'var(--txt)', fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }}
+        />
+      </Modal>
+
+      {/* Approve-all confirm modal */}
+      <Modal
+        open={confirmApproveAll}
+        title="Approve all visible entries?"
+        onClose={() => setConfirmApproveAll(false)}
+        footer={
+          <>
+            <Btn onClick={() => setConfirmApproveAll(false)}>Cancel</Btn>
+            <Btn variant="primary" onClick={async () => { setConfirmApproveAll(false); await approveIds(visible.map(e => e.id)); }} disabled={batchApprove.isPending}>
+              {batchApprove.isPending ? 'Approving…' : `Approve ${visible.length}`}
+            </Btn>
+          </>
+        }
+      >
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--txt)' }}>
+          Approve {visible.length} entr{visible.length !== 1 ? 'ies' : 'y'} across {approveAllProjects.length} project{approveAllProjects.length !== 1 ? 's' : ''}?
+        </p>
+      </Modal>
     </div>
   );
 }

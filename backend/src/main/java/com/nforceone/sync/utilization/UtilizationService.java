@@ -4,10 +4,12 @@ import com.nforceone.sync.approval.ApprovalAction;
 import com.nforceone.sync.approval.ApprovalActionRepository;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.businessrules.Holiday;
 import com.nforceone.sync.businessrules.HolidayRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
+import com.nforceone.sync.utilization.dto.DayUtilDto;
 import com.nforceone.sync.utilization.dto.TeamUtilDto;
 import com.nforceone.sync.utilization.dto.UtilSnapshotDto;
 import org.springframework.http.HttpStatus;
@@ -19,9 +21,12 @@ import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -155,9 +160,16 @@ public class UtilizationService {
     // snapshot that predates this rule / was seeded directly and never passed through it).
     @Transactional(readOnly = true)
     public boolean isWorkingDay(LocalDate date) {
-        DayOfWeek dow = date.getDayOfWeek();
-        if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) return false;
+        if (isWeekend(date)) return false;
         return !holidayRepository.existsByHolidayDate(date);
+    }
+
+    // Factored out of isWorkingDay so getTrendForEmployee's batched loop (which checks
+    // membership in an already-fetched holiday Set instead of querying per day) applies the
+    // exact same weekend rule rather than a second, independently-typed copy of it.
+    private static boolean isWeekend(LocalDate date) {
+        DayOfWeek dow = date.getDayOfWeek();
+        return dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY;
     }
 
     // Persisted snapshots only exist once an EOD has been approved for that employee/date
@@ -176,6 +188,75 @@ public class UtilizationService {
         return snapshotRepository.findByEmployeeIdAndSnapshotDate(employeeId, date)
                 .map(UtilSnapshot::getUtilizationPct)
                 .orElseGet(() -> buildSnapshot(employeeId, date).getUtilizationPct());
+    }
+
+    /**
+     * Batched equivalent of calling resolveUtilizationPct() once per day in [from, to] — used
+     * by the Team Utilization detail panel's trend/working-days/logged-days, which previously
+     * called resolveUtilizationPct + findByEmployeeIdAndEntryDate + isWorkingDay per day (each
+     * doing its own DB round trip, several of them duplicated), turning a 14-day window into
+     * 50-100+ sequential queries — the actual cause of the multi-second lag switching between
+     * employees. This does exactly 3 queries total regardless of window length: snapshots,
+     * entries (with tasks eager-fetched), and holidays, then resolves each day in memory.
+     */
+    @Transactional(readOnly = true)
+    public List<DayUtilDto> getTrendForEmployee(Long employeeId, LocalDate from, LocalDate to) {
+        Map<LocalDate, UtilSnapshot> snapByDate = snapshotRepository
+                .findByEmployeeIdAndSnapshotDateBetweenOrderBySnapshotDateAsc(employeeId, from, to)
+                .stream()
+                .collect(Collectors.toMap(UtilSnapshot::getSnapshotDate, s -> s, (a, b) -> a));
+
+        Map<LocalDate, EodEntry> entryByDate = entryRepository
+                .findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(employeeId, from, to)
+                .stream()
+                .collect(Collectors.toMap(EodEntry::getEntryDate, e -> e, (a, b) -> a));
+
+        Set<LocalDate> holidays = holidayRepository.findAllByOrderByHolidayDateAsc()
+                .stream()
+                .map(Holiday::getHolidayDate)
+                .collect(Collectors.toSet());
+
+        List<DayUtilDto> out = new ArrayList<>();
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            boolean isHoliday = holidays.contains(d);
+            boolean workingDay = !isWeekend(d) && !isHoliday;
+            EodEntry entry = entryByDate.get(d);
+            boolean hasApprovedEntry = entry != null && entry.getStatus() == EodEntry.Status.APPROVED;
+
+            BigDecimal pct;
+            if (!workingDay) {
+                // Never trust a persisted value on a non-working day — same rule resolveUtilizationPct enforces.
+                pct = null;
+            } else {
+                UtilSnapshot snap = snapByDate.get(d);
+                pct = snap != null ? snap.getUtilizationPct() : computeUtilizationPctInMemory(entry, d, isHoliday);
+            }
+            out.add(new DayUtilDto(d, workingDay, pct, hasApprovedEntry));
+        }
+        return out;
+    }
+
+    // Mirrors buildSnapshot's productive-hours/utilization math, but reads from an already-
+    // fetched entry instead of querying — the in-memory counterpart used by getTrendForEmployee
+    // for days with no persisted snapshot. Deliberately skips the billable-override lookup:
+    // that only reclassifies billable vs non-billable hours, it never changes whether hours
+    // count toward approvedProductiveHours, so it can't affect the utilization percentage.
+    private BigDecimal computeUtilizationPctInMemory(EodEntry entry, LocalDate date, boolean isHoliday) {
+        boolean isApprovedLeave = entry != null
+                && entry.getDayType() == EodEntry.DayType.LEAVE
+                && entry.getStatus() == EodEntry.Status.APPROVED;
+        BigDecimal available = UtilizationCalculator.computeAvailableHours(date, isHoliday, isApprovedLeave);
+
+        BigDecimal approvedProductive = BigDecimal.ZERO;
+        if (entry != null && entry.getStatus() == EodEntry.Status.APPROVED) {
+            for (EodTask task : entry.getTasks()) {
+                if (task.getHours() == null) continue;
+                boolean productive = task.getTaskCategory() != null
+                        && Boolean.TRUE.equals(task.getTaskCategory().getIsProductive());
+                if (productive) approvedProductive = approvedProductive.add(task.getHours());
+            }
+        }
+        return UtilizationCalculator.computeUtilizationPct(approvedProductive, available);
     }
 
     @Transactional(readOnly = true)
