@@ -157,6 +157,44 @@ export function useTeamLeadTrend(date: string, days = 7) {
   });
 }
 
+export interface TeamMemberDetailDto {
+  employeeId: number;
+  designation: string | null;
+  /** Scheduled business days in the same window as `trend` (length matches the requested
+   *  `days`) — calendar-only, independent of whether anything was submitted/approved. */
+  workingDays: number;
+  /** Of those days, how many have an APPROVED entry. */
+  loggedDays: number;
+  lastApprovedEodAt: string | null;
+  trend: TrendPointDto[];
+}
+
+/** Supplements useTeamMemberStatuses/useTeamUtil (status, hours, utilization — already
+ *  fetched for the member list) with the extra fields the Team Utilization detail panel
+ *  needs: designation, working/logged days, last-approved-EOD timestamp, and a per-employee
+ *  trend over the requested window (`days`, default 7). */
+export function useTeamMemberDetail(employeeId: number | undefined, date: string, days = 7) {
+  return useQuery({
+    queryKey: ['team-lead', 'member-detail', employeeId, date, days],
+    queryFn: () =>
+      api.get<TeamMemberDetailDto>(`/team-lead/team-members/${employeeId}/detail`, { params: { date, days } }).then(r => r.data),
+    enabled: employeeId != null,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Warms the detail panel's cache on row hover, before the click — the backend request itself
+ *  is now fast (batched, ~3 queries), but prefetching on hover hides even that brief fetch,
+ *  so switching between employees reads as instant instead of a visible reload. */
+export function prefetchTeamMemberDetail(queryClient: QueryClient, employeeId: number, date: string, days = 7): void {
+  queryClient.prefetchQuery({
+    queryKey: ['team-lead', 'member-detail', employeeId, date, days],
+    queryFn: () =>
+      api.get<TeamMemberDetailDto>(`/team-lead/team-members/${employeeId}/detail`, { params: { date, days } }).then(r => r.data),
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useThresholds() {
   return useQuery({
     queryKey: ['team-lead', 'thresholds'],

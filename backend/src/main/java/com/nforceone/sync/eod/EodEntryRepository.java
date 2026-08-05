@@ -99,6 +99,23 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
     List<EodEntry> findDecidedByProjectManagerId(@Param("pmId") Long pmId,
                                                   @Param("status") EodEntry.Status status);
 
+    // Same idea as findDecidedByProjectManagerId, but for a Team Lead: entries belonging to
+    // this manager's direct reports, decided by this manager personally.
+    @Query("""
+        SELECT DISTINCT e FROM EodEntry e
+        JOIN FETCH e.employee emp
+        LEFT JOIN FETCH e.tasks t
+        LEFT JOIN FETCH t.project
+        LEFT JOIN FETCH t.taskCategory
+        WHERE emp.manager.id = :managerId AND e.status = :status
+          AND EXISTS (
+            SELECT 1 FROM com.nforceone.sync.approval.ApprovalAction a
+            WHERE a.eodEntry = e AND a.actor.id = :managerId
+          )
+        """)
+    List<EodEntry> findDecidedByManagerId(@Param("managerId") Long managerId,
+                                          @Param("status") EodEntry.Status status);
+
     /**
      * Time-adjustment uses of one type inside a date window, for the monthly allowance check.
      *

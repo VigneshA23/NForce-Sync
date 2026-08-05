@@ -13,7 +13,12 @@ export interface ApprovalActionDto {
   actedAt: string;
 }
 
-export function usePendingApprovals(enabled = true) {
+export interface PendingApprovalsRange {
+  from: string;
+  to: string;
+}
+
+export function usePendingApprovals(enabled = true, range?: PendingApprovalsRange) {
   return useQuery({
     queryKey: pendingQueryKey(range),
     queryFn: () => api.get<EodEntryDto[]>('/approvals/pending', { params: range }).then(r => r.data),
@@ -53,6 +58,7 @@ export function useApprove() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['approvals'] });
       qc.invalidateQueries({ queryKey: ['team'] });
+      qc.invalidateQueries({ queryKey: ['team-lead'] });
     },
   });
 }
@@ -62,7 +68,10 @@ export function useReject() {
   return useMutation({
     mutationFn: ({ entryId, comment }: { entryId: number; comment: string }) =>
       api.post<EodEntryDto>(`/approvals/${entryId}/reject`, { comment }).then(r => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['approvals'] });
+      qc.invalidateQueries({ queryKey: ['team-lead'] });
+    },
   });
 }
 
@@ -71,11 +80,14 @@ export function useRequestChanges() {
   return useMutation({
     mutationFn: ({ entryId, comment }: { entryId: number; comment: string }) =>
       api.post<EodEntryDto>(`/approvals/${entryId}/request-changes`, { comment }).then(r => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['approvals'] });
+      qc.invalidateQueries({ queryKey: ['team-lead'] });
+    },
   });
 }
 
-/** PM-only — entries this PM has personally decided on. Powers the Approved/Rejected/Changes Requested tabs. */
+/** Entries this actor has personally decided on. Powers the Approved/Rejected/Changes Requested tabs. */
 export function useDecidedApprovals(status: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED', enabled = true) {
   return useQuery({
     queryKey: ['approvals', 'decided', status],
@@ -101,10 +113,11 @@ export function useBatchApprove() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['approvals'] });
       qc.invalidateQueries({ queryKey: ['team'] });
+      qc.invalidateQueries({ queryKey: ['team-lead'] });
     },
   });
 }
-function pendingQueryKey(range: any): unknown {
-  throw new Error('Function not implemented.');
+function pendingQueryKey(range?: PendingApprovalsRange) {
+  return range ? ['approvals', 'pending', range.from, range.to] : ['approvals', 'pending'];
 }
 

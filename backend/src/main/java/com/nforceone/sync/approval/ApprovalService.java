@@ -29,6 +29,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 @Service
 @Transactional
@@ -68,6 +70,12 @@ public class ApprovalService {
     // from/to are both null or both present — enforced by the controller, which only forwards
     // the pair when the caller supplied both query params. PM entries aren't date-scoped —
     // no PM+date repository query exists yet — so a PM actor always gets the full backlog.
+    //
+    // Team Lead (non-PM) entries DO support date-scoping via findPendingByManagerIdAndEntryDateBetween
+    // — used when the caller supplies a range (e.g. the Team Dashboard's "Review approvals" count,
+    // which should track whatever date is selected on the dashboard). Callers that omit the range
+    // (the sidebar badge, and the Approvals page's own default view) get the full backlog via
+    // findPendingByManagerId, unchanged — those are deliberately NOT date-scoped.
     @Transactional(readOnly = true)
     public List<EodEntryDto> getPendingForActor(String actorEmail, LocalDate from, LocalDate to) {
         AppUser actor = requireUserByEmail(actorEmail);
@@ -75,19 +83,22 @@ public class ApprovalService {
             List<EodEntry> entries = entryRepository.findPendingByProjectManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
             return enrichAll(entries);
         }
-        List<EodEntry> entries = entryRepository.findPendingByManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
+        List<EodEntry> entries = (from != null && to != null)
+                ? entryRepository.findPendingByManagerIdAndEntryDateBetween(actor.getId(), EodEntry.Status.SUBMITTED, from, to)
+                : entryRepository.findPendingByManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
         return entries.stream().map(EodEntryDto::from).toList();
     }
 
-    /** PM-only: entries this PM has personally approved/rejected, for the Approved/Rejected tabs. */
+    /** Entries this actor has personally approved/rejected, for the Approved/Rejected tabs. */
     @Transactional(readOnly = true)
     public List<EodEntryDto> getDecidedForActor(String actorEmail, EodEntry.Status status) {
         AppUser actor = requireUserByEmail(actorEmail);
-        if (actor.getRole() != AppUser.Role.PM) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only a Project Manager can view decided-entry history");
+        if (actor.getRole() == AppUser.Role.PM) {
+            List<EodEntry> entries = entryRepository.findDecidedByProjectManagerId(actor.getId(), status);
+            return enrichAll(entries);
         }
-        List<EodEntry> entries = entryRepository.findDecidedByProjectManagerId(actor.getId(), status);
-        return enrichAll(entries);
+        List<EodEntry> entries = entryRepository.findDecidedByManagerId(actor.getId(), status);
+        return entries.stream().map(EodEntryDto::from).toList();
     }
 
     /** Full audit trail for one entry — every approve/reject/request-changes action, oldest first. */
