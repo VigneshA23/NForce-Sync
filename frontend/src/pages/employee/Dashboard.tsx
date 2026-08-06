@@ -680,8 +680,10 @@ function UtilPeriodCard({
         </div>
       </div>
 
+      <CategoryDonut billableHours={billableHours} nonBillableHours={nonBillableHours} benchHours={benchHours} />
+
       {breakdown && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginTop: 16 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
             Weekly Trend
           </div>
@@ -702,8 +704,6 @@ function UtilPeriodCard({
           </div>
         </div>
       )}
-
-      <CategoryDonut billableHours={billableHours} nonBillableHours={nonBillableHours} benchHours={benchHours} />
     </Card>
   );
 }

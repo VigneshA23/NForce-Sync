@@ -66,56 +66,58 @@ export function CategoryDonut({ billableHours, nonBillableHours, benchHours, siz
   ].filter(d => d.value > 0);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-      <div style={{ width: size, height: size, flexShrink: 0 }}>
-        {total > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data} cx="50%" cy="50%"
-                innerRadius={size * 0.32} outerRadius={size * 0.48}
-                paddingAngle={3} dataKey="value"
-                strokeWidth={0} isAnimationActive={false}
-              >
-                {data.map((entry) => {
-                  const colorIdx = ['Billable', 'Non-billable', 'Bench'].indexOf(entry.name);
-                  return <Cell key={entry.name} fill={CATEGORY_COLORS[colorIdx]} />;
-                })}
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
-        ) : (
-          <div style={{
-            width: '100%', height: '100%', borderRadius: '50%',
-            border: '1px solid var(--line)', display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
-          }}>
-            <span style={{ fontSize: 10, color: 'var(--txt-dim)' }}>No data</span>
-          </div>
-        )}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-        <span style={{
-          fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)',
-          textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2,
-        }}>
-          Billable vs Non-Billable
-        </span>
-        <span><span style={{ color: 'var(--ok)' }}>●</span>{' '}
-          <span style={{ fontSize: 10, color: 'var(--txt-mut)' }}>
-            Billable {billableHours.toFixed(1)}h ({total > 0 ? Math.round(billableHours / total * 100) : 0}%)
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
+      <span style={{
+        fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)',
+        textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left',
+      }}>
+        Billable vs Non-Billable
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ width: size, height: size, flexShrink: 0 }}>
+          {total > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data} cx="50%" cy="50%"
+                  innerRadius={size * 0.32} outerRadius={size * 0.48}
+                  paddingAngle={3} dataKey="value"
+                  strokeWidth={0} isAnimationActive={false}
+                >
+                  {data.map((entry) => {
+                    const colorIdx = ['Billable', 'Non-billable', 'Bench'].indexOf(entry.name);
+                    return <Cell key={entry.name} fill={CATEGORY_COLORS[colorIdx]} />;
+                  })}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{
+              width: '100%', height: '100%', borderRadius: '50%',
+              border: '1px solid var(--line)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{ fontSize: 10, color: 'var(--txt-dim)' }}>No data</span>
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span><span style={{ color: 'var(--ok)' }}>●</span>{' '}
+            <span style={{ fontSize: 10, color: 'var(--txt-mut)' }}>
+              Billable {billableHours.toFixed(1)}h ({total > 0 ? Math.round(billableHours / total * 100) : 0}%)
+            </span>
           </span>
-        </span>
-        <span><span style={{ color: 'var(--info)' }}>●</span>{' '}
-          <span style={{ fontSize: 10, color: 'var(--txt-mut)' }}>
-            Non-billable {nonBillableHours.toFixed(1)}h ({total > 0 ? Math.round(nonBillableHours / total * 100) : 0}%)
+          <span><span style={{ color: 'var(--info)' }}>●</span>{' '}
+            <span style={{ fontSize: 10, color: 'var(--txt-mut)' }}>
+              Non-billable {nonBillableHours.toFixed(1)}h ({total > 0 ? Math.round(nonBillableHours / total * 100) : 0}%)
+            </span>
           </span>
-        </span>
-        <span><span style={{ color: 'var(--txt-dim)' }}>●</span>{' '}
-          <span style={{ fontSize: 10, color: 'var(--txt-mut)' }}>
-            Bench {benchHours.toFixed(1)}h ({total > 0 ? Math.round(benchHours / total * 100) : 0}%)
+          <span><span style={{ color: 'var(--txt-dim)' }}>●</span>{' '}
+            <span style={{ fontSize: 10, color: 'var(--txt-mut)' }}>
+              Bench {benchHours.toFixed(1)}h ({total > 0 ? Math.round(benchHours / total * 100) : 0}%)
+            </span>
           </span>
-        </span>
+        </div>
       </div>
     </div>
   );
