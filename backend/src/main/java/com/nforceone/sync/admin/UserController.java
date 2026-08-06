@@ -1,11 +1,11 @@
 package com.nforceone.sync.admin;
 
 import com.nforceone.sync.admin.dto.CreateUserRequest;
-import com.nforceone.sync.admin.dto.ResetPasswordRequest;
+
 import com.nforceone.sync.admin.dto.SetStatusRequest;
 import com.nforceone.sync.admin.dto.UpdateUserRequest;
 import com.nforceone.sync.admin.dto.UserCreateResult;
-import com.nforceone.sync.auth.AppUser;
+
 import com.nforceone.sync.auth.dto.UserDto;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;

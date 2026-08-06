@@ -51,6 +51,7 @@ public class UserService {
     private final AuditLogRepository auditLogRepository;
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper;
+
     private final DepartmentRepository departmentRepository;
     private final DesignationRepository designationRepository;
     private final OrgLocationRepository locationRepository;
@@ -85,11 +86,13 @@ public class UserService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "An account with this email already exists");
         }
-        if (userRepository.existsByEmployeeCode(request.employeeCode())) {
+        if (userRepository.existsByEmployeeCodeAndDeletedAtIsNull(request.employeeCode())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This Employee ID is already in use");
         }
         AppUser actor = requireActorByEmail(actingEmail);
+
+        requireOrgReferencesExist(request.departmentId(), request.designationId(), request.locationId());
 
         String tempPassword = generateTempPassword();
 
@@ -144,6 +147,14 @@ public class UserService {
         AppUser user  = requireUserById(id);
         AppUser actor = requireActorByEmail(actingEmail);
 
+        if (user.getRole() == AppUser.Role.SUPERADMIN
+                && user.getStatus() == AppUser.Status.ACTIVE
+                && request.role() != AppUser.Role.SUPERADMIN) {
+            assertSurvivingSuperAdmin();
+        }
+
+        requireOrgReferencesExist(request.departmentId(), request.designationId(), request.locationId());
+
         String before = toJson(UserDto.from(user));
 
         user.setFullName(request.fullName());
@@ -171,6 +182,7 @@ public class UserService {
             AppUser manager = userRepository.findById(request.managerId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "Team Lead not found"));
+            requireNoManagerCycle(id, manager);
             user.setManager(manager);
         } else {
             user.setManager(null);
@@ -181,17 +193,38 @@ public class UserService {
         return UserDto.from(user);
     }
 
+    // Walks the proposed manager's own reporting chain — if it leads back to `userId`,
+    // assigning `proposedManager` would create a cycle (A -> B, B -> A or longer).
+    private void requireNoManagerCycle(Long userId, AppUser proposedManager) {
+        AppUser current = proposedManager;
+        while (current != null) {
+            if (current.getId().equals(userId)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "This assignment would create a circular reporting chain");
+            }
+            current = current.getManager();
+        }
+    }
+
+    private void requireOrgReferencesExist(Long departmentId, Long designationId, Long locationId) {
+        if (departmentId != null && !departmentRepository.existsById(departmentId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Department not found");
+        }
+        if (designationId != null && !designationRepository.existsById(designationId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Designation not found");
+        }
+        if (locationId != null && !locationRepository.existsById(locationId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Location not found");
+        }
+    }
+
     public UserDto setStatus(Long id, AppUser.Status newStatus, String actingEmail) {
         AppUser user = requireUserById(id);
 
         if (newStatus == AppUser.Status.INACTIVE
+                && user.getStatus() == AppUser.Status.ACTIVE
                 && user.getRole() == AppUser.Role.SUPERADMIN) {
-            long activeSuperadmins = userRepository.countByRoleAndStatus(
-                    AppUser.Role.SUPERADMIN, AppUser.Status.ACTIVE);
-            if (activeSuperadmins <= 1) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Cannot deactivate the last active Super Admin");
-            }
+            assertSurvivingSuperAdmin();
         }
 
         AppUser actor = requireActorByEmail(actingEmail);
@@ -246,6 +279,11 @@ public class UserService {
 
     public void softDeleteUser(Long id, String actingEmail) {
         AppUser user  = requireUserById(id);
+
+        if (user.getStatus() == AppUser.Status.ACTIVE && user.getRole() == AppUser.Role.SUPERADMIN) {
+            assertSurvivingSuperAdmin();
+        }
+
         AppUser actor = requireActorByEmail(actingEmail);
 
         String before = toJson(UserDto.from(user));
@@ -313,6 +351,17 @@ public class UserService {
     }
 
     // ── private helpers ─────────────────────────────────────────────
+
+    // Shared by setStatus, updateUser (role change off SUPERADMIN), and softDeleteUser —
+    // all three can turn an active Super Admin into a non-active-Super-Admin state.
+    private void assertSurvivingSuperAdmin() {
+        long activeSuperadmins = userRepository.countByRoleAndStatus(
+                AppUser.Role.SUPERADMIN, AppUser.Status.ACTIVE);
+        if (activeSuperadmins <= 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot remove the last active Super Admin");
+        }
+    }
 
     private AppUser requireUserById(Long id) {
         return userRepository.findById(id)

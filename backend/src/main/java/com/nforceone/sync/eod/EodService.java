@@ -17,6 +17,7 @@ import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
 import com.nforceone.sync.project.TaskCategory;
 import com.nforceone.sync.project.TaskCategoryRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +44,10 @@ public class EodService {
 
     /** Only used if the config row is somehow absent — the seeded value is 8. */
     private static final BigDecimal FALLBACK_HOURS_PER_DAY = BigDecimal.valueOf(8);
+
+    /** Only used if the config row is somehow absent — fails closed rather than allowing
+     *  unlimited adjustments, matching what getTimeAdjustmentContext already displays. */
+    private static final int FALLBACK_ADJUSTMENT_ALLOWANCE = 0;
 
     /** Per-use duration limits for a time adjustment. Distinct from the monthly allowance. */
     private static final int MIN_ADJUSTMENT_MINUTES = 30;
@@ -82,6 +87,11 @@ public class EodService {
 
     public EodEntryDto saveDraft(SaveEodRequest request, String actingEmail) {
         AppUser employee = requireUserByEmail(actingEmail);
+
+        if (request.entryDate().isAfter(LocalDate.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Cannot log an EOD entry for a future date");
+        }
 
         EodEntry entry = entryRepository
                 .findByEmployeeIdAndEntryDate(employee.getId(), request.entryDate())
@@ -133,7 +143,15 @@ public class EodService {
             }
         }
 
-        return EodEntryDto.from(entryRepository.save(entry));
+        try {
+            return EodEntryDto.from(entryRepository.save(entry));
+        } catch (DataIntegrityViolationException ex) {
+            // Two concurrent saves for a brand-new day can both see entry == null above and
+            // both try to insert; the DB's (employee_id, entry_date) unique constraint catches
+            // the loser here rather than letting it surface as a raw 500.
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "An entry for this date was just created — reload and try again");
+        }
     }
 
     public EodEntryDto submit(Long entryId, String actingEmail) {
@@ -361,13 +379,11 @@ public class EodService {
         }
 
         BusinessRuleConfig config = configRepository.findById(BUSINESS_RULE_CONFIG_ID).orElse(null);
-        if (config != null) {
-            int allowance = allowanceFor(config, type);
-            long used = usedThisMonth(employee.getId(), type, entry.getEntryDate(), entry.getId());
-            if (used >= allowance) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        label(type) + ": monthly limit reached (" + used + " of " + allowance + " used).");
-            }
+        int allowance = config != null ? allowanceFor(config, type) : FALLBACK_ADJUSTMENT_ALLOWANCE;
+        long used = usedThisMonth(employee.getId(), type, entry.getEntryDate(), entry.getId());
+        if (used >= allowance) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    label(type) + ": monthly limit reached (" + used + " of " + allowance + " used).");
         }
     }
 
@@ -420,9 +436,9 @@ public class EodService {
                 shift.getStartTime(),
                 shift.getEndTime(),
                 shiftDurationMinutes(shift),
-                config != null ? config.getLateArrivalAllowance() : 0,
-                config != null ? config.getEarlyLeaveAllowance()  : 0,
-                config != null ? config.getInterveningAllowance() : 0,
+                config != null ? config.getLateArrivalAllowance() : FALLBACK_ADJUSTMENT_ALLOWANCE,
+                config != null ? config.getEarlyLeaveAllowance()  : FALLBACK_ADJUSTMENT_ALLOWANCE,
+                config != null ? config.getInterveningAllowance() : FALLBACK_ADJUSTMENT_ALLOWANCE,
                 usedThisMonth(employee.getId(), EodEntry.TimeAdjustmentType.LATE_ARRIVAL, month, null),
                 usedThisMonth(employee.getId(), EodEntry.TimeAdjustmentType.EARLY_LEAVE,  month, null),
                 usedThisMonth(employee.getId(), EodEntry.TimeAdjustmentType.INTERVENING,  month, null)

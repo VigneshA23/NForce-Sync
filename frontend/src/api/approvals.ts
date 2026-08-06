@@ -13,7 +13,12 @@ export interface ApprovalActionDto {
   actedAt: string;
 }
 
-export function usePendingApprovals(enabled = true) {
+export interface PendingApprovalsRange {
+  from: string;
+  to: string;
+}
+
+export function usePendingApprovals(enabled = true, range?: PendingApprovalsRange) {
   return useQuery({
     queryKey: pendingQueryKey(range),
     queryFn: () => api.get<EodEntryDto[]>('/approvals/pending', { params: range }).then(r => r.data),
@@ -104,7 +109,7 @@ export function useBatchApprove() {
     },
   });
 }
-function pendingQueryKey(range: any): unknown {
-  throw new Error('Function not implemented.');
+function pendingQueryKey(range?: PendingApprovalsRange): readonly unknown[] {
+  return range ? ['approvals', 'pending', range.from, range.to] : ['approvals', 'pending'];
 }
 

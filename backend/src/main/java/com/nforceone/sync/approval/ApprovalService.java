@@ -23,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -75,7 +76,9 @@ public class ApprovalService {
             List<EodEntry> entries = entryRepository.findPendingByProjectManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
             return enrichAll(entries);
         }
-        List<EodEntry> entries = entryRepository.findPendingByManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
+        List<EodEntry> entries = (from != null && to != null)
+                ? entryRepository.findPendingByManagerIdAndEntryDateBetween(actor.getId(), EodEntry.Status.SUBMITTED, from, to)
+                : entryRepository.findPendingByManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
         return entries.stream().map(EodEntryDto::from).toList();
     }
 

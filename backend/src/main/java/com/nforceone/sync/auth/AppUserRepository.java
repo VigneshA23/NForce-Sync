@@ -23,6 +23,10 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long>, JpaSpec
 
     boolean existsByEmployeeCode(String employeeCode);
 
+    // Active-only variant — mirrors existsByEmailAndDeletedAtIsNull so a soft-deleted user's
+    // employee code can be reused, the same way their email can be.
+    boolean existsByEmployeeCodeAndDeletedAtIsNull(String employeeCode);
+
     // Fix 3: JOIN FETCH manager + createdBy to avoid N+1 lazy-load round trips to Neon
     // Also excludes soft-deleted users (deleted_at IS NULL)
     @Query("SELECT u FROM AppUser u LEFT JOIN FETCH u.manager LEFT JOIN FETCH u.createdBy WHERE u.deletedAt IS NULL ORDER BY u.employeeCode ASC")
