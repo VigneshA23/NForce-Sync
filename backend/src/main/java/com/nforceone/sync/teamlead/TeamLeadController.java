@@ -1,5 +1,9 @@
 package com.nforceone.sync.teamlead;
 
+import com.nforceone.sync.eod.BlockerConversationService;
+import com.nforceone.sync.eod.dto.BlockerReplyDto;
+import com.nforceone.sync.eod.dto.ReplyRequest;
+import com.nforceone.sync.teamlead.dto.BlockerStatusRequest;
 import com.nforceone.sync.teamlead.dto.DashboardTrendDto;
 import com.nforceone.sync.teamlead.dto.MemberEodStatusDto;
 import com.nforceone.sync.teamlead.dto.TeamBlockerDto;
@@ -20,9 +24,11 @@ import java.util.List;
 public class TeamLeadController {
 
     private final TeamLeadService teamLeadService;
+    private final BlockerConversationService conversationService;
 
-    public TeamLeadController(TeamLeadService teamLeadService) {
+    public TeamLeadController(TeamLeadService teamLeadService, BlockerConversationService conversationService) {
         this.teamLeadService = teamLeadService;
+        this.conversationService = conversationService;
     }
 
     @GetMapping("/dashboard/summary")
@@ -44,9 +50,15 @@ public class TeamLeadController {
     @GetMapping("/blockers")
     public List<TeamBlockerDto> getBlockers(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "false") boolean includeAcknowledged) {
         validateRange(from, to);
-        return teamLeadService.getBlockers(from, to, actingEmail());
+        return teamLeadService.getBlockers(from, to, actingEmail(), includeAcknowledged);
+    }
+
+    @GetMapping("/blockers/{taskId}")
+    public TeamBlockerDto getBlocker(@PathVariable Long taskId) {
+        return teamLeadService.getBlockerById(taskId, actingEmail());
     }
 
     private void validateRange(LocalDate from, LocalDate to) {
@@ -76,6 +88,21 @@ public class TeamLeadController {
     @PatchMapping("/blockers/{taskId}/acknowledge")
     public TeamBlockerDto acknowledgeBlocker(@PathVariable Long taskId) {
         return teamLeadService.acknowledgeBlocker(taskId, actingEmail());
+    }
+
+    @PatchMapping("/blockers/{taskId}/status")
+    public TeamBlockerDto setBlockerStatus(@PathVariable Long taskId, @RequestBody BlockerStatusRequest body) {
+        return teamLeadService.setBlockerStatus(taskId, actingEmail(), body);
+    }
+
+    @GetMapping("/blockers/{taskId}/replies")
+    public List<BlockerReplyDto> getBlockerReplies(@PathVariable Long taskId) {
+        return conversationService.getThreadForLead(taskId, actingEmail());
+    }
+
+    @PostMapping("/blockers/{taskId}/replies")
+    public BlockerReplyDto postBlockerReply(@PathVariable Long taskId, @RequestBody ReplyRequest body) {
+        return conversationService.postReplyAsLead(taskId, actingEmail(), body.message());
     }
 
     // Reuses the existing Admin Config (business_rule_config) row — this just exposes the

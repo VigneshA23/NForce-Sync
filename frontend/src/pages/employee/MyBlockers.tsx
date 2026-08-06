@@ -1,55 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  AlertTriangle, UserX, Users, CheckCircle2, Search, ChevronDown, RefreshCw, List as ListIcon, LayoutGrid,
-  MessageCircle, X, Folder, Clock, ListChecks, CalendarDays,
-  ChevronLeft, ChevronRight, Calendar, Download,
+  AlertTriangle, UserX, CheckCircle2, Search, ChevronDown, RefreshCw,
+  X, Folder, Clock, CalendarDays, Calendar,
 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
-import { Avatar, avatarColor, TL_AVATAR_BG, BlockerThreadView } from '../../components/BlockerThread';
-import {
-  useTeamLeadBlockers, useTeamLeadBlocker, useSetBlockerStatus, type TeamBlockerDto, type DateRange,
-} from '../../api/teamLead';
+import { BlockerThreadView } from '../../components/BlockerThread';
+import { useEmployeeBlockers, useEmployeeBlocker, type BlockedTask } from '../../api/employee';
+import type { DateRange } from '../../api/teamLead';
 import { todayISO as localTodayISO, toLocalISODate } from '../../lib/date';
-import { readStoredDateFilter, resolveBlockersDateFilter, writeStoredDateFilter } from '../../lib/blockersDateFilter';
 
-// ── date helpers (page-local — reference shows "31 Jul 2026, 10:24 AM" / "4d ago" /
-// "Yesterday" formats distinct from the app's DD-MM-YYYY convention used elsewhere) ──
+// Mirrors pages/lead/Blockers.tsx's list + side-panel layout, trimmed to the fields
+// BlockedTask carries (this is always "my own" blockers — no employeeName/avatar/replyCount).
+
+// ── date helpers (page-local, same convention as lead/Blockers.tsx) ────────────────
 
 function fmtShortDate(iso: string): string {
   return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
-
-function fmtDateTimeParts(iso: string): { date: string; time: string } {
-  const d = new Date(iso);
-  return {
-    date: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-    time: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
-  };
-}
-
-function fmtRelativeDays(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const d = Math.floor(diff / 86_400_000);
-  if (d < 1) return 'today';
-  if (d === 1) return '1d ago';
-  return `${d}d ago`;
-}
-
-/** Table "Last Reply" cell: recent -> relative hours, yesterday -> "Yesterday", else absolute date. */
-function fmtLastReply(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const h = Math.floor(diff / 3_600_000);
-  const d = Math.floor(diff / 86_400_000);
-  if (h < 1) return 'Just now';
-  if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`;
-  if (d === 1) return 'Yesterday';
-  return fmtShortDate(toLocalISODate(new Date(iso)));
-}
-
-// ── date filter (page-local — mirrors Team Dashboard's Today/Yesterday/range picker,
-// kept independent rather than sharing its sessionStorage key so picking a date here
-// doesn't silently change what the dashboard shows) ─────────────────────────────────
 
 type DateMode = 'today' | 'yesterday' | 'range';
 
@@ -151,7 +119,7 @@ function DateFilterButton({ mode, range, onChange }: {
   );
 }
 
-// ── single-select filter dropdown (Project / Assignee) ──────────────────────────
+// ── single-select project filter dropdown ───────────────────────────────────────
 
 function SingleSelectDropdown({ label, value, options, onChange }: {
   label: string;
@@ -211,7 +179,7 @@ function SingleSelectDropdown({ label, value, options, onChange }: {
   );
 }
 
-// ── KPI stat card (colored icon box, per reference — distinct from the neutral-box KpiCard) ──
+// ── KPI stat card ────────────────────────────────────────────────────────────────
 
 function StatCard({ icon, label, value, caption, accent }: {
   icon: React.ReactNode; label: string; value: number; caption: string; accent: string;
@@ -240,14 +208,8 @@ function StatCard({ icon, label, value, caption, accent }: {
 
 // ── status badge ─────────────────────────────────────────────────────────────────
 
-const STATUS_META: Record<TeamBlockerDto['status'], { label: string; color: string }> = {
-  NEEDS_RESPONSE: { label: 'Needs Response', color: 'var(--risk)' },
-  ACKNOWLEDGED:   { label: 'Acknowledged',   color: 'var(--ok)' },
-  RESOLVED:       { label: 'Resolved',       color: 'var(--info)' },
-};
-
-function StatusBadge({ status }: { status: TeamBlockerDto['status'] }) {
-  const { label, color } = STATUS_META[status];
+function StatusBadge({ acknowledged }: { acknowledged: boolean }) {
+  const color = acknowledged ? 'var(--ok)' : 'var(--risk)';
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 20,
@@ -256,101 +218,45 @@ function StatusBadge({ status }: { status: TeamBlockerDto['status'] }) {
       border: `1px solid color-mix(in srgb, ${color} 32%, transparent)`,
       whiteSpace: 'nowrap',
     }}>
-      {label}
+      {acknowledged ? 'Team Lead Replied' : 'Needs Response'}
     </span>
-  );
-}
-
-// Interactive counterpart used only in the DetailPanel — same color coding as StatusBadge,
-// but a real <select> so the Team Lead can change status directly (Change 3).
-function StatusDropdown({ status, onChange, disabled }: {
-  status: TeamBlockerDto['status'];
-  onChange: (status: TeamBlockerDto['status']) => void;
-  disabled?: boolean;
-}) {
-  const { color } = STATUS_META[status];
-  return (
-    <select
-      value={status}
-      disabled={disabled}
-      onChange={(e) => onChange(e.target.value as TeamBlockerDto['status'])}
-      aria-label="Blocker status"
-      style={{
-        appearance: 'none', WebkitAppearance: 'none',
-        padding: '3px 26px 3px 10px', borderRadius: 20,
-        fontSize: 11, fontWeight: 700, color,
-        background: `color-mix(in srgb, ${color} 16%, transparent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center`,
-        border: `1px solid color-mix(in srgb, ${color} 32%, transparent)`,
-        whiteSpace: 'nowrap', cursor: disabled ? 'default' : 'pointer',
-      }}
-    >
-      <option value="NEEDS_RESPONSE">Needs Response</option>
-      <option value="ACKNOWLEDGED">Acknowledged</option>
-      <option value="RESOLVED">Resolved</option>
-    </select>
   );
 }
 
 // ── main table row ────────────────────────────────────────────────────────────────
 
 function BlockerRow({ b, selected, onClick }: {
-  b: TeamBlockerDto;
+  b: BlockedTask;
   selected: boolean;
   onClick: () => void;
 }) {
-  const { date: reportedDate, time: reportedTime } = fmtDateTimeParts(b.submittedAt ?? `${b.entryDate}T09:00:00`);
   return (
     <div
       onClick={onClick}
       style={{
-        display: 'grid', gridTemplateColumns: '2.2fr 1fr 1fr 0.7fr 1.3fr 1fr', gap: 12,
+        display: 'grid', gridTemplateColumns: '2.2fr 1fr 1.2fr 1fr', gap: 12,
         padding: '14px 20px', cursor: 'pointer', alignItems: 'center',
         borderBottom: '1px solid var(--line)',
         background: selected ? 'color-mix(in srgb, var(--risk) 8%, transparent)' : 'transparent',
         borderLeft: selected ? '3px solid var(--risk)' : '3px solid transparent',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0 }}>
-        <Avatar name={b.employeeName} bg={avatarColor(b.employeeName)} size={30} />
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 2 }}>
-            {b.description ?? 'Blocked task'}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {b.blockerReason ?? '—'}
-          </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 2 }}>
+          {b.description}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {b.blockerReason ?? '—'}
         </div>
       </div>
-      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{b.projectName ?? b.projectCode ?? '—'}</div>
-      <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
-        {reportedDate}<br />{reportedTime}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: 'var(--txt-mut)' }}>
-        <MessageCircle size={13} aria-hidden="true" /> {b.replyCount}
-      </div>
-      <div>
-        {b.lastReplyAt && b.lastReplySenderName ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Avatar
-              name={b.lastReplySenderName}
-              bg={b.lastReplySenderRole === 'EMPLOYEE' ? avatarColor(b.lastReplySenderName) : TL_AVATAR_BG}
-              size={24}
-            />
-            <div>
-              <div style={{ fontSize: 12.5, color: 'var(--txt)', fontWeight: 500 }}>{b.lastReplySenderName}</div>
-              <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>{fmtLastReply(b.lastReplyAt)}</div>
-            </div>
-          </div>
-        ) : (
-          <span style={{ color: 'var(--txt-dim)', fontSize: 13 }}>—</span>
-        )}
-      </div>
-      <div><StatusBadge status={b.status} /></div>
+      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{b.projectName}</div>
+      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{fmtShortDate(b.entryDate)}</div>
+      <div><StatusBadge acknowledged={b.acknowledged} /></div>
     </div>
   );
 }
 
-// ── detail panel ──────────────────────────────────────────────────────────────────
+// ── detail / conversation side panel ──────────────────────────────────────────────
 
 function InfoField({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
   return (
@@ -364,32 +270,14 @@ function InfoField({ icon, label, children }: { icon: React.ReactNode; label: st
   );
 }
 
-function DetailPanel({ b, range, onClose }: { b: TeamBlockerDto; range: DateRange; onClose: () => void }) {
-  const { date: reportedDate, time: reportedTime } = fmtDateTimeParts(b.submittedAt ?? `${b.entryDate}T09:00:00`);
-  const setStatus = useSetBlockerStatus(range);
-
+function DetailPanel({ b, onClose }: { b: BlockedTask; onClose: () => void }) {
   return (
     <Card style={{ padding: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--line)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Avatar name={b.employeeName} bg={avatarColor(b.employeeName)} size={38} />
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>{b.employeeName}</div>
-                <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
-                  {b.employeeCode}
-                </span>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>{b.projectName ?? b.projectCode ?? '—'}</div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <StatusDropdown
-              status={b.status}
-              disabled={setStatus.isPending}
-              onChange={(status) => setStatus.mutate({ taskId: b.taskId, status })}
-            />
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>{b.description}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <StatusBadge acknowledged={b.acknowledged} />
             <button
               onClick={onClose}
               aria-label="Close"
@@ -400,27 +288,22 @@ function DetailPanel({ b, range, onClose }: { b: TeamBlockerDto; range: DateRang
           </div>
         </div>
 
-        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
-          {b.description ?? 'Blocked task'}
-        </div>
         <div style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.5, marginBottom: 16 }}>
           {b.blockerReason ?? 'No detail provided.'}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <InfoField icon={<Folder size={14} aria-hidden="true" />} label="Project">
-            {b.projectName ?? b.projectCode ?? '—'}
-          </InfoField>
-          <InfoField icon={<Clock size={14} aria-hidden="true" />} label="Reported On">
-            {reportedDate}, {reportedTime}
-            {b.submittedAt && <span style={{ color: 'var(--txt-dim)', fontWeight: 400 }}> ({fmtRelativeDays(b.submittedAt)})</span>}
-          </InfoField>
-          <InfoField icon={<ListChecks size={14} aria-hidden="true" />} label="Task / Module">
-            {b.categoryName ?? '—'}
+            {b.projectName}
           </InfoField>
           <InfoField icon={<CalendarDays size={14} aria-hidden="true" />} label="Reported in EOD">
             {fmtShortDate(b.entryDate)}
           </InfoField>
+          {b.acknowledged && (
+            <InfoField icon={<Clock size={14} aria-hidden="true" />} label="Replied By">
+              {b.acknowledgedByName ?? 'Your Team Lead'}
+            </InfoField>
+          )}
         </div>
       </div>
 
@@ -431,10 +314,9 @@ function DetailPanel({ b, range, onClose }: { b: TeamBlockerDto; range: DateRang
         <div style={{ flex: 1, minHeight: 0 }}>
           <BlockerThreadView
             taskId={b.taskId}
-            scope="lead"
-            range={range}
-            replyToLabel={`Reply to ${b.employeeName}`}
-            visibilityNote={`Replies are visible to ${b.employeeName} and other team leads`}
+            scope="employee"
+            replyToLabel="Reply to your Team Lead"
+            visibilityNote="Replies are visible to your Team Lead"
           />
         </div>
       </div>
@@ -452,37 +334,21 @@ const PAGE_SIZE = 10;
 
 // ── main ───────────────────────────────────────────────────────────────────────────
 
-export default function Blockers() {
-  const [searchParams, setSearchParams] = useSearchParams();
+export default function MyBlockers() {
+  const [searchParams] = useSearchParams();
   const highlightParam = searchParams.get('highlight');
   const highlightId = highlightParam ? Number(highlightParam) : null;
 
-  // Selected date/range lives in the URL (?mode=today|yesterday|range&from=&to=), with a
-  // sessionStorage fallback for navigation that drops the query string entirely — same
-  // approach as the Team Dashboard's date filter (lib/teamDashboardDateFilter.ts), so
-  // picking a date here and navigating away and back no longer resets it to "Today".
-  const { mode: dateMode, range, isToday } = resolveBlockersDateFilter(searchParams);
+  const todayISO = localTodayISO();
+  const [dateMode, setDateMode] = useState<DateMode>('today');
+  const [range, setRange] = useState<DateRange>({ from: todayISO, to: todayISO });
+  const isToday = dateMode === 'today';
 
-  useEffect(() => {
-    if (searchParams.get('mode')) return;
-    const saved = readStoredDateFilter();
-    if (!saved) return;
-    const next = new URLSearchParams(searchParams);
-    next.set('mode', saved.mode);
-    if (saved.mode === 'range' && saved.from && saved.to) {
-      next.set('from', saved.from);
-      next.set('to', saved.to);
-    }
-    setSearchParams(next, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const { data: blockers, isPending, isError, refetch } = useTeamLeadBlockers(range, isToday, true);
+  const { data: blockers, isPending, isError, refetch } = useEmployeeBlockers(range, isToday);
 
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
-  const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
-  const [view, setView] = useState<'list' | 'group'>('list');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
 
@@ -491,35 +357,29 @@ export default function Blockers() {
   }, [highlightId]);
 
   const projectOptions = useMemo(
-    () => [...new Set((blockers ?? []).map(b => b.projectName ?? b.projectCode).filter((v): v is string => !!v))].sort(),
-    [blockers],
-  );
-  const assigneeOptions = useMemo(
-    () => [...new Set((blockers ?? []).map(b => b.employeeName))].sort(),
+    () => [...new Set((blockers ?? []).map(b => b.projectName).filter(Boolean))].sort(),
     [blockers],
   );
 
   const filtered = useMemo(() => {
     let list = blockers ?? [];
-    if (projectFilter) list = list.filter(b => (b.projectName ?? b.projectCode) === projectFilter);
-    if (assigneeFilter) list = list.filter(b => b.employeeName === assigneeFilter);
+    if (projectFilter) list = list.filter(b => b.projectName === projectFilter);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(b =>
-        (b.description ?? '').toLowerCase().includes(q)
+        b.description.toLowerCase().includes(q)
         || (b.blockerReason ?? '').toLowerCase().includes(q)
-        || b.employeeName.toLowerCase().includes(q)
-        || (b.projectName ?? '').toLowerCase().includes(q),
+        || b.projectName.toLowerCase().includes(q),
       );
     }
     return [...list].sort((a, b) => {
-      const aT = a.acknowledged ? new Date(a.acknowledgedAt ?? 0).getTime() : 0;
-      const bT = b.acknowledged ? new Date(b.acknowledgedAt ?? 0).getTime() : 0;
-      return bT - aT;
+      const aT = new Date(a.entryDate).getTime();
+      const bT = new Date(b.entryDate).getTime();
+      return sortDir === 'desc' ? bT - aT : aT - bT;
     });
-  }, [blockers, projectFilter, assigneeFilter, search]);
+  }, [blockers, projectFilter, search, sortDir]);
 
-  useEffect(() => { setPage(1); }, [search, projectFilter, assigneeFilter, view]);
+  useEffect(() => { setPage(1); }, [search, projectFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -528,23 +388,27 @@ export default function Blockers() {
     () => (blockers ?? []).find(b => b.taskId === selectedTaskId) ?? null,
     [blockers, selectedTaskId],
   );
-  // The selected blocker can fall outside the currently selected date range (e.g. arriving via
-  // a notification's ?highlight= link) — fetch it directly rather than showing an empty panel.
+  // The selected blocker can fall outside the currently selected date range (e.g. arriving
+  // via a notification's ?highlight= link) — fetch it directly rather than showing an empty panel.
   const needsFallback = selectedTaskId != null && blockers != null && matchedBlocker == null;
-  const { data: fallbackBlocker } = useTeamLeadBlocker(needsFallback ? selectedTaskId : undefined);
+  const { data: fallbackBlocker } = useEmployeeBlocker(needsFallback ? selectedTaskId : undefined);
   const selectedBlocker = matchedBlocker ?? fallbackBlocker ?? null;
 
+  function resetFilters() {
+    setSearch('');
+    setProjectFilter(null);
+  }
+
   const total = blockers?.length ?? 0;
-  const needsResponse = (blockers ?? []).filter(b => b.status === 'NEEDS_RESPONSE').length;
-  const acknowledgedCount = (blockers ?? []).filter(b => b.status === 'ACKNOWLEDGED').length;
-  const resolvedCount = (blockers ?? []).filter(b => b.status === 'RESOLVED').length;
+  const needsResponse = (blockers ?? []).filter(b => !b.acknowledged).length;
+  const acknowledgedCount = (blockers ?? []).filter(b => b.acknowledged).length;
 
   if (isPending) {
     return (
       <div>
         <div style={{ marginBottom: 24 }}><Skel h={24} w={160} /><div style={{ marginTop: 8 }}><Skel h={14} w={280} /></div></div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
-          {[0, 1, 2, 3].map(i => <Card key={i}><Skel h={60} /></Card>)}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+          {[0, 1, 2].map(i => <Card key={i}><Skel h={60} /></Card>)}
         </div>
         <Card style={{ padding: 20 }}><Skel h={320} /></Card>
       </div>
@@ -555,7 +419,7 @@ export default function Blockers() {
     return (
       <div>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Blockers</h1>
+          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>My Blockers</h1>
         </div>
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load blockers.</div>
@@ -570,15 +434,6 @@ export default function Blockers() {
     );
   }
 
-  const groups = view === 'group'
-    ? Array.from(pageItems.reduce((map, b) => {
-        const key = b.projectName ?? b.projectCode ?? 'Unassigned Project';
-        if (!map.has(key)) map.set(key, []);
-        map.get(key)!.push(b);
-        return map;
-      }, new Map<string, TeamBlockerDto[]>()))
-    : null;
-
   return (
     <div style={{ display: 'grid', gridTemplateColumns: selectedBlocker ? '1.7fr 1fr' : '1fr', gap: 16, alignItems: 'start' }}>
       <div>
@@ -586,50 +441,20 @@ export default function Blockers() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-              Blockers
+              My Blockers
             </h1>
             <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-              View and respond to blockers raised by your team.
+              Blockers you've reported and your Team Lead's replies.
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <DateFilterButton
-              mode={dateMode}
-              range={range}
-              onChange={(m, r) => {
-                const next = new URLSearchParams(searchParams);
-                next.set('mode', m);
-                if (m === 'range') {
-                  next.set('from', r.from);
-                  next.set('to', r.to);
-                } else {
-                  next.delete('from');
-                  next.delete('to');
-                }
-                setSearchParams(next, { replace: true });
-                writeStoredDateFilter(m === 'range' ? { mode: m, from: r.from, to: r.to } : { mode: m });
-              }}
-            />
-            {/* TODO(backend): no export endpoint exists yet — disabled until one does. */}
-            <button
-              disabled
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', fontSize: 12.5, fontWeight: 600,
-                borderRadius: 8, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt-dim)',
-                cursor: 'not-allowed', whiteSpace: 'nowrap',
-              }}
-            >
-              <Download size={14} aria-hidden="true" /> Export Report
-            </button>
-          </div>
+          <DateFilterButton mode={dateMode} range={range} onChange={(m, r) => { setDateMode(m); setRange(r); }} />
         </div>
 
         {/* KPI row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
-          <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={total} caption="Across all projects" accent="var(--warn)" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+          <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={total} caption="In the selected range" accent="var(--warn)" />
           <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={needsResponse} caption="No reply from Team Lead" accent="var(--risk)" />
-          <StatCard icon={<Users size={18} aria-hidden="true" />} label="Acknowledged" value={acknowledgedCount} caption="Replied by Team Lead" accent="var(--info)" />
-          <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Resolved" value={resolvedCount} caption="Marked resolved by Team Lead" accent="var(--ok)" />
+          <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Team Lead Replied" value={acknowledgedCount} caption="Awaiting your follow-up" accent="var(--info)" />
         </div>
 
         {/* Filter bar */}
@@ -647,46 +472,32 @@ export default function Blockers() {
             />
           </div>
           <SingleSelectDropdown label="Project" value={projectFilter} options={projectOptions} onChange={setProjectFilter} />
-          <SingleSelectDropdown label="Assignee" value={assigneeFilter} options={assigneeOptions} onChange={setAssigneeFilter} />
-
-          <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, background: 'var(--raised2)', borderRadius: 8, padding: 3 }}>
-            <button
-              onClick={() => setView('list')}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6,
-                fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
-                background: view === 'list' ? 'var(--risk)' : 'transparent',
-                color: view === 'list' ? '#fff' : 'var(--txt-mut)',
-              }}
-            >
-              <ListIcon size={13} aria-hidden="true" /> List
-            </button>
-            <button
-              onClick={() => setView('group')}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6,
-                fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
-                background: view === 'group' ? 'var(--risk)' : 'transparent',
-                color: view === 'group' ? '#fff' : 'var(--txt-mut)',
-              }}
-            >
-              <LayoutGrid size={13} aria-hidden="true" /> Group by Project
-            </button>
-          </div>
+          <button
+            onClick={resetFilters}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
+              color: 'var(--brand-bright)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: '6px 4px',
+            }}
+          >
+            <RefreshCw size={13} aria-hidden="true" /> Reset
+          </button>
         </Card>
 
         {/* Table */}
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{
-            display: 'grid', gridTemplateColumns: '2.2fr 1fr 1fr 0.7fr 1.3fr 1fr', gap: 12,
+            display: 'grid', gridTemplateColumns: '2.2fr 1fr 1.2fr 1fr', gap: 12,
             padding: '10px 20px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)',
             fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
           }}>
             <span>Blocker</span>
             <span>Project</span>
-            <span>Reported On</span>
-            <span>Replies</span>
-            <span>Last Reply</span>
+            <button
+              onClick={() => setSortDir(d => (d === 'desc' ? 'asc' : 'desc'))}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--risk)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', padding: 0 }}
+            >
+              Reported On
+            </button>
             <span>Status</span>
           </div>
 
@@ -694,26 +505,12 @@ export default function Blockers() {
             <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>
               No blockers match these filters.
             </div>
-          ) : view === 'list' ? (
+          ) : (
             pageItems.map(b => (
               <BlockerRow
                 key={b.taskId} b={b} selected={b.taskId === selectedTaskId}
                 onClick={() => setSelectedTaskId(id => (id === b.taskId ? null : b.taskId))}
               />
-            ))
-          ) : (
-            groups!.map(([name, items]) => (
-              <div key={name}>
-                <div style={{ padding: '8px 20px', background: 'var(--raised2)', fontSize: 11.5, fontWeight: 700, color: 'var(--txt)' }}>
-                  {name}
-                </div>
-                {items.map(b => (
-                  <BlockerRow
-                    key={b.taskId} b={b} selected={b.taskId === selectedTaskId}
-                    onClick={() => setSelectedTaskId(id => (id === b.taskId ? null : b.taskId))}
-                  />
-                ))}
-              </div>
             ))
           )}
 
@@ -724,13 +521,6 @@ export default function Blockers() {
                 : `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} results`}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                style={{ display: 'flex', padding: 5, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}
-              >
-                <ChevronLeft size={14} aria-hidden="true" />
-              </button>
               <span style={{
                 minWidth: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 borderRadius: 6, background: 'var(--risk)', color: '#fff', fontSize: 12, fontWeight: 700,
@@ -738,11 +528,18 @@ export default function Blockers() {
                 {page}
               </span>
               <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                style={{ display: 'flex', padding: 5, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}
+              >
+                Prev
+              </button>
+              <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 style={{ display: 'flex', padding: 5, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.5 : 1 }}
               >
-                <ChevronRight size={14} aria-hidden="true" />
+                Next
               </button>
             </div>
           </div>
@@ -751,7 +548,7 @@ export default function Blockers() {
 
       {selectedBlocker && (
         <div style={{ position: 'sticky', top: 0 }}>
-          <DetailPanel b={selectedBlocker} range={range} onClose={() => setSelectedTaskId(null)} />
+          <DetailPanel b={selectedBlocker} onClose={() => setSelectedTaskId(null)} />
         </div>
       )}
     </div>

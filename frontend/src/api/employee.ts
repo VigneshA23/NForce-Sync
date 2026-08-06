@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { api } from './client';
 import type { HolidayDto } from './businessRules';
+import type { DateRange } from './teamLead';
 
 export type { HolidayDto };
 
@@ -21,11 +22,15 @@ export interface QuickStats {
 }
 
 export interface BlockedTask {
+  taskId: number;
   entryId: number;
   entryDate: string;
   projectName: string;
   description: string;
   blockerReason: string | null;
+  acknowledged: boolean;
+  acknowledgedAt: string | null;
+  acknowledgedByName: string | null;
 }
 
 export interface RecentEntry {
@@ -51,6 +56,34 @@ export interface DashboardSummary {
   blockedTasks: BlockedTask[];
   recentEntries: RecentEntry[];
   calendarData: CalendarDay[];
+}
+
+// The dashboard's "My Blockers" list only covers the last 14 days (see
+// EmployeeService.buildBlockedTasks) — a BLOCKER_REPLY notification can point at an older
+// blocker that's fallen off that list. This fetches that one blocker directly by id so the
+// notification's deep link always resolves to something, regardless of age.
+export function useEmployeeBlocker(taskId: number | undefined) {
+  return useQuery({
+    queryKey: ['employee', 'blocker', taskId],
+    queryFn: () => api.get<BlockedTask>(`/employee/blockers/${taskId}`).then(r => r.data),
+    enabled: taskId != null,
+  });
+}
+
+// Full blocker history for the dedicated "My Blockers" page — same 30s/5min live-vs-historical
+// staleTime convention as useTeamLeadBlockers (api/teamLead.ts), since this mirrors that page.
+function rangeStaleTime(live: boolean): number {
+  return live ? 30_000 : 5 * 60_000;
+}
+
+export function useEmployeeBlockers(range: DateRange, live = false) {
+  return useQuery({
+    queryKey: ['employee', 'blockers', range.from, range.to],
+    queryFn: () => api.get<BlockedTask[]>('/employee/blockers', { params: range }).then(r => r.data),
+    staleTime: rangeStaleTime(live),
+    refetchInterval: live ? 60_000 : false,
+    placeholderData: keepPreviousData,
+  });
 }
 
 export function useDashboardSummary(calendarFrom?: string, calendarTo?: string) {

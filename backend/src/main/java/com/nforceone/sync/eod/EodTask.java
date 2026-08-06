@@ -59,6 +59,15 @@ public class EodTask {
     @JoinColumn(name = "acknowledged_by_id")
     private AppUser acknowledgedBy;
 
+    // Manual "Resolved" marker set by the Team Lead from the Blockers page — layered on top of
+    // acknowledgedAt (a resolved blocker is always also acknowledged), not a replacement for it.
+    @Column(name = "resolved_at")
+    private OffsetDateTime resolvedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "resolved_by_id")
+    private AppUser resolvedBy;
+
     public enum TaskStatus {
         COMPLETED, IN_PROGRESS, BLOCKED, NOT_STARTED
     }

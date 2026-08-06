@@ -28,11 +28,15 @@ public record DashboardSummaryDto(
     ) {}
 
     public record BlockedTask(
+            Long taskId,
             Long entryId,
             LocalDate entryDate,
             String projectName,
             String description,
-            String blockerReason
+            String blockerReason,
+            boolean acknowledged,
+            java.time.OffsetDateTime acknowledgedAt,
+            String acknowledgedByName
     ) {}
 
     public record RecentEntry(
