@@ -1,4 +1,5 @@
-import { RULES, utilColor, fmtPct } from '../lib/rules';
+import { RULES, utilColor, utilState, fmtPct } from '../lib/rules';
+import type { OrgUtilRowDto } from '../api/utilization';
 
 // ── UtilBar ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,62 @@ export function UtilBar({ pct, capAt = 120 }: UtilBarProps) {
       }}>
         {fmtPct(pct)}
       </span>
+    </div>
+  );
+}
+
+// ── Distribution ───────────────────────────────────────────────────────────────
+
+export function Distribution({ members }: { members: OrgUtilRowDto[] }) {
+  const counts = { under: 0, healthy: 0, over: 0, na: 0 };
+  for (const m of members) {
+    counts[utilState(m.snapshot?.utilizationPct ?? null)]++;
+  }
+  const total = members.length;
+  const segments = [
+    { key: 'under',   color: 'var(--warn)',    label: `Under <${RULES.util.under}%`,   count: counts.under },
+    { key: 'healthy', color: 'var(--ok)',      label: `Healthy ${RULES.util.under}–${RULES.util.over}%`, count: counts.healthy },
+    { key: 'over',    color: 'var(--risk)',    label: `Over >${RULES.util.over}%`,     count: counts.over },
+    { key: 'na',      color: 'var(--txt-dim)', label: 'N/A',                           count: counts.na },
+  ] as const;
+
+  return (
+    <div style={{ padding: '16px 16px 12px' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-mut)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        Utilization Distribution — {total} employees
+      </div>
+      {/* Stacked proportional bar */}
+      <div style={{ display: 'flex', height: 20, borderRadius: 4, overflow: 'hidden', gap: 1, marginBottom: 12 }}>
+        {segments.map(s => s.count > 0 && (
+          <div
+            key={s.key}
+            style={{
+              flex: s.count / total,
+              background: s.color,
+              transition: 'flex 0.4s ease',
+              position: 'relative',
+            }}
+            title={`${s.label}: ${s.count}`}
+          />
+        ))}
+      </div>
+      {/* Count chips */}
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+        {segments.map(s => (
+          <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: s.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
+              {s.label}
+            </span>
+            <span style={{ fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
+              {s.count}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
+              ({total > 0 ? Math.round((s.count / total) * 100) : 0}%)
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -42,10 +42,6 @@ function fmtPct(pct: number | null): string {
   return pct === null ? '—' : `${Math.round(pct)}%`;
 }
 
-function fmtLongDate(iso: string): string {
-  return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-}
-
 function fmtShortDate(iso: string): string {
   return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
