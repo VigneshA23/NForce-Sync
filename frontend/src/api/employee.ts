@@ -175,12 +175,12 @@ export function useEmployeeProjects(employeeId: number | undefined) {
   });
 }
 
-// ── Upcoming company holidays ───────────────────────────────────────────────────
+// ── Company holidays for a calendar year ────────────────────────────────────────
 
-export function useUpcomingHolidays() {
+export function useHolidaysForYear(year: number) {
   return useQuery({
-    queryKey: ['employee', 'holidays-upcoming'],
-    queryFn: () => api.get<HolidayDto[]>('/employee/holidays/upcoming').then(r => r.data),
+    queryKey: ['employee', 'holidays', year],
+    queryFn: () => api.get<HolidayDto[]>('/employee/holidays', { params: { year } }).then(r => r.data),
     staleTime: 5 * 60_000,
   });
 }

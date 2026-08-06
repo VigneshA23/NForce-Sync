@@ -91,10 +91,9 @@ public class EmployeeDashboardService {
                 .toList();
     }
 
-    public List<HolidayDto> getUpcomingHolidays() {
-        LocalDate today = LocalDate.now();
+    public List<HolidayDto> getHolidaysForYear(int year) {
         return holidayRepository.findAllByOrderByHolidayDateAsc().stream()
-                .filter(h -> !h.getHolidayDate().isBefore(today))
+                .filter(h -> h.getHolidayDate().getYear() == year)
                 .map(HolidayDto::from)
                 .toList();
     }

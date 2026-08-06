@@ -28,9 +28,10 @@ public class EmployeeDashboardController {
         return employeeDashboardService.getProjects(id, actingEmail());
     }
 
-    @GetMapping("/holidays/upcoming")
-    public List<HolidayDto> getUpcomingHolidays() {
-        return employeeDashboardService.getUpcomingHolidays();
+    @GetMapping("/holidays")
+    public List<HolidayDto> getHolidaysForYear(@RequestParam(required = false) Integer year) {
+        int resolvedYear = year != null ? year : java.time.LocalDate.now().getYear();
+        return employeeDashboardService.getHolidaysForYear(resolvedYear);
     }
 
     private String actingEmail() {
