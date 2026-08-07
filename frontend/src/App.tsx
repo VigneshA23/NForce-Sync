@@ -29,6 +29,7 @@ const MyUtilization       = lazy(() => import('./pages/employee/MyUtilization'))
 const SubmitEOD           = lazy(() => import('./pages/employee/SubmitEOD'));
 const EodHistory          = lazy(() => import('./pages/employee/EodHistory'));
 const TeamDashboard       = lazy(() => import('./pages/lead/TeamDashboard'));
+const MyProjects          = lazy(() => import('./pages/lead/MyProjects'));
 const Approvals           = lazy(() => import('./pages/Approvals'));
 const TeamUtilization     = lazy(() => import('./pages/lead/TeamUtilization'));
 const Blockers            = lazy(() => import('./pages/lead/Blockers'));
@@ -76,6 +77,7 @@ function ChunkPrefetcher() {
       import('./pages/admin/BusinessRules');
     } else if (user.role === 'lead') {
       import('./pages/lead/TeamDashboard');
+      import('./pages/lead/MyProjects');
       import('./pages/Approvals');
       import('./pages/lead/TeamUtilization');
       import('./pages/lead/Blockers');
@@ -152,6 +154,7 @@ function AppRoutes() {
 
             {/* ── Team Lead ──────────────────────────── */}
             <Route path="/team/dashboard"   element={<TeamDashboard />} />
+            <Route path="/team/projects"    element={<MyProjects />} />
             <Route path="/team/approvals"   element={<Approvals />} />
             <Route path="/team/utilization" element={<TeamUtilization />} />
             <Route path="/team/blockers"    element={<Blockers />} />
