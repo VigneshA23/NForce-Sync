@@ -74,7 +74,8 @@ export const NAV: Record<Role, RoleNav> = {
     {
       section: 'Overview',
       items: [
-        { key: 'lead-dash',  label: 'Team Dashboard',   path: '/team/dashboard',   icon: LayoutDashboard },
+        { key: 'lead-dash',      label: 'Team Dashboard', path: '/team/dashboard',   icon: LayoutDashboard },
+        { key: 'lead-projects',  label: 'My Projects',    path: '/team/projects',    icon: FolderKanban },
         { key: 'approvals',  label: 'Approvals',         path: '/team/approvals',   icon: ClipboardCheck },
         { key: 'team-util',  label: 'Team Utilization',  path: '/team/utilization', icon: Activity },
         { key: 'blockers',   label: 'Blockers',          path: '/team/blockers',    icon: AlertOctagon },
