@@ -120,11 +120,12 @@ function rangeStaleTime(live: boolean): number {
   return live ? 30_000 : 5 * 60_000;
 }
 
-export function useTeamLeadSummary(range: DateRange, live = false) {
+export function useTeamLeadSummary(range: DateRange, live = false, enabled = true) {
   return useQuery({
     queryKey: ['team-lead', 'summary', range.from, range.to],
     queryFn: () =>
       api.get<TeamLeadSummaryDto>('/team-lead/dashboard/summary', { params: range }).then(r => r.data),
+    enabled,
     staleTime: rangeStaleTime(live),
     refetchInterval: live ? 60_000 : false,
     // Keep showing the previous range's data while a newly-picked range loads, instead of

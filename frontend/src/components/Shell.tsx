@@ -12,6 +12,8 @@ import { searchUsers, listLocations } from '../api/admin';
 import { toRole } from '../api/auth';
 import { useUnreadNotificationsCount } from '../api/notifications';
 import { usePendingApprovalsCount } from '../api/approvals';
+import { useTeamLeadSummary } from '../api/teamLead';
+import { todayISO } from '../lib/date';
 
 // ─── Workspace search (top nav) ────────────────────────────────────────────────
 // Only wired up for superadmin — the destination (User Management) and the
@@ -190,6 +192,16 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   // and the Notifications page header, so all three stay in sync. See api/notifications.ts.
   const unreadNotificationsCount = useUnreadNotificationsCount();
 
+  // Sidebar Blockers badge — same "today" summary query (and cache key) as the Team
+  // Dashboard's "Open Blockers" KPI fallback, warmed by prefetchTeamLeadLanding right
+  // after login, so the two can never disagree. Team Lead only, per that KPI's own scope.
+  const { data: teamLeadSummary } = useTeamLeadSummary(
+    { from: todayISO(), to: todayISO() },
+    true,
+    role === 'lead',
+  );
+  const openBlockersCount = role === 'lead' ? (teamLeadSummary?.activeBlockersCount ?? 0) : 0;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
@@ -249,7 +261,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                 ? pendingApprovalsCount
                 : item.key === 'notifications'
                   ? unreadNotificationsCount
-                  : item.badge;
+                  : role === 'lead' && item.key === 'blockers'
+                    ? openBlockersCount
+                    : item.badge;
               return (
                 <Link
                   key={item.key}

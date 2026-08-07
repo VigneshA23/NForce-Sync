@@ -35,14 +35,6 @@ public record TeamBlockerDto(
         String         lastReplySenderName,
         String         lastReplySenderRole  // "EMPLOYEE" | "TEAM_LEAD"
 ) {
-    /** Single source of truth for the tri-state label — resolvedAt implies acknowledged,
-     *  so every existing acknowledgedAt-only check elsewhere keeps working unchanged. */
-    private static String deriveStatus(EodTask t) {
-        if (t.getResolvedAt() != null) return "RESOLVED";
-        if (t.getAcknowledgedAt() != null) return "ACKNOWLEDGED";
-        return "NEEDS_RESPONSE";
-    }
-
     /** @param threadReplies this task's replies, any order — pass an empty list if none. */
     public static TeamBlockerDto from(EodTask t, List<BlockerReply> threadReplies) {
         var entry = t.getEodEntry();
@@ -78,7 +70,7 @@ public record TeamBlockerDto(
                 t.getAcknowledgedAt() != null,
                 t.getAcknowledgedAt(),
                 t.getAcknowledgedBy() != null ? t.getAcknowledgedBy().getFullName() : null,
-                deriveStatus(t),
+                t.getBlockerStatus(),
                 t.getResolvedAt(),
                 t.getResolvedBy() != null ? t.getResolvedBy().getFullName() : null,
                 threadReplies.size(),

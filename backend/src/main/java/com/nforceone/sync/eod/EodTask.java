@@ -71,4 +71,12 @@ public class EodTask {
     public enum TaskStatus {
         COMPLETED, IN_PROGRESS, BLOCKED, NOT_STARTED
     }
+
+    /** Single source of truth for the blocker tri-state label, shared by both the Team
+     *  Lead's and the employee's DTOs so the two sides never derive it differently. */
+    public String getBlockerStatus() {
+        if (resolvedAt != null) return "RESOLVED";
+        if (acknowledgedAt != null) return "ACKNOWLEDGED";
+        return "NEEDS_RESPONSE";
+    }
 }

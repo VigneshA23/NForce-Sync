@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle, UserX, Users, CheckCircle2, Search, ChevronDown, RefreshCw, List as ListIcon, LayoutGrid,
   MessageCircle, X, Folder, Clock, ListChecks, CalendarDays,
-  ChevronLeft, ChevronRight, Calendar, Download,
+  ChevronLeft, ChevronRight, Calendar, Download, Check,
 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
 import { Avatar, avatarColor, TL_AVATAR_BG, BlockerThreadView } from '../../components/BlockerThread';
+import { FilterDropdown, toggleFilterVal } from '../../components/FilterDropdown';
 import {
   useTeamLeadBlockers, useTeamLeadBlocker, useSetBlockerStatus, type TeamBlockerDto, type DateRange,
 } from '../../api/teamLead';
@@ -151,66 +152,6 @@ function DateFilterButton({ mode, range, onChange }: {
   );
 }
 
-// ── single-select filter dropdown (Project / Assignee) ──────────────────────────
-
-function SingleSelectDropdown({ label, value, options, onChange }: {
-  label: string;
-  value: string | null;
-  options: string[];
-  onChange: (v: string | null) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div style={{ position: 'relative' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px',
-          borderRadius: 8, fontSize: 12.5, fontWeight: 500, color: 'var(--txt)',
-          background: 'var(--raised2)', border: '1px solid var(--line2)', cursor: 'pointer', whiteSpace: 'nowrap',
-        }}
-      >
-        {label}: {value ?? 'All'}
-        <ChevronDown size={12} aria-hidden="true" />
-      </button>
-      {open && (
-        <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div style={{
-            position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, minWidth: 180,
-            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 6,
-            boxShadow: '0 12px 28px rgba(0,0,0,0.35)', maxHeight: 260, overflowY: 'auto',
-          }}>
-            <button
-              onClick={() => { onChange(null); setOpen(false); }}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6,
-                background: value == null ? 'var(--raised2)' : 'transparent', border: 'none',
-                color: 'var(--txt)', fontSize: 12.5, cursor: 'pointer',
-              }}
-            >
-              All
-            </button>
-            {options.map(opt => (
-              <button
-                key={opt}
-                onClick={() => { onChange(opt); setOpen(false); }}
-                style={{
-                  display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6,
-                  background: value === opt ? 'var(--raised2)' : 'transparent', border: 'none',
-                  color: 'var(--txt)', fontSize: 12.5, cursor: 'pointer',
-                }}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 // ── KPI stat card (colored icon box, per reference — distinct from the neutral-box KpiCard) ──
 
 function StatCard({ icon, label, value, caption, accent }: {
@@ -262,39 +203,78 @@ function StatusBadge({ status }: { status: TeamBlockerDto['status'] }) {
 }
 
 // Interactive counterpart used only in the DetailPanel — same color coding as StatusBadge,
-// but a real <select> so the Team Lead can change status directly (Change 3).
+// but a custom open/close panel (matching FilterDropdown's pattern) so the selected option
+// can be reliably highlighted, which a native <select>'s option list can't do cross-browser.
 function StatusDropdown({ status, onChange, disabled }: {
   status: TeamBlockerDto['status'];
   onChange: (status: TeamBlockerDto['status']) => void;
   disabled?: boolean;
 }) {
-  const { color } = STATUS_META[status];
+  const [open, setOpen] = useState(false);
+  const { label, color } = STATUS_META[status];
+  const options: TeamBlockerDto['status'][] = ['NEEDS_RESPONSE', 'ACKNOWLEDGED', 'RESOLVED'];
   return (
-    <select
-      value={status}
-      disabled={disabled}
-      onChange={(e) => onChange(e.target.value as TeamBlockerDto['status'])}
-      aria-label="Blocker status"
-      style={{
-        appearance: 'none', WebkitAppearance: 'none',
-        padding: '3px 26px 3px 10px', borderRadius: 20,
-        fontSize: 11, fontWeight: 700, color,
-        background: `color-mix(in srgb, ${color} 16%, transparent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center`,
-        border: `1px solid color-mix(in srgb, ${color} 32%, transparent)`,
-        whiteSpace: 'nowrap', cursor: disabled ? 'default' : 'pointer',
-      }}
-    >
-      <option value="NEEDS_RESPONSE">Needs Response</option>
-      <option value="ACKNOWLEDGED">Acknowledged</option>
-      <option value="RESOLVED">Resolved</option>
-    </select>
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen(o => !o)}
+        disabled={disabled}
+        aria-label="Blocker status"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '5px 12px 5px 10px', borderRadius: 20,
+          fontSize: 12, fontWeight: 700, letterSpacing: '0.01em', color,
+          background: `color-mix(in srgb, ${color} 16%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${color} 34%, transparent)`,
+          whiteSpace: 'nowrap', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.7 : 1,
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+        {label}
+        <ChevronDown size={12} aria-hidden="true" />
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 170,
+            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 6,
+            boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
+          }}>
+            {options.map(opt => {
+              const meta = STATUS_META[opt];
+              const isSelected = opt === status;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => { onChange(opt); setOpen(false); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                    padding: '7px 8px', borderRadius: 6, border: 'none',
+                    background: isSelected ? `color-mix(in srgb, ${meta.color} 14%, transparent)` : 'transparent',
+                    color: isSelected ? meta.color : 'var(--txt)',
+                    fontSize: 12.5, fontWeight: isSelected ? 700 : 500, cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.color, flexShrink: 0 }} />
+                  <span style={{ flex: 1 }}>{meta.label}</span>
+                  {isSelected && <Check size={13} aria-hidden="true" />}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
 // ── main table row ────────────────────────────────────────────────────────────────
 
-function BlockerRow({ b, selected, onClick }: {
+function BlockerRow({ b, index, selected, onClick }: {
   b: TeamBlockerDto;
+  index: number;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -303,20 +283,23 @@ function BlockerRow({ b, selected, onClick }: {
     <div
       onClick={onClick}
       style={{
-        display: 'grid', gridTemplateColumns: '2.2fr 1fr 1fr 0.7fr 1.3fr 1fr', gap: 12,
+        display: 'grid', gridTemplateColumns: '32px 2.2fr 1fr 1fr 0.7fr 1.3fr 1fr', gap: 12,
         padding: '14px 20px', cursor: 'pointer', alignItems: 'center',
         borderBottom: '1px solid var(--line)',
         background: selected ? 'color-mix(in srgb, var(--risk) 8%, transparent)' : 'transparent',
         borderLeft: selected ? '3px solid var(--risk)' : '3px solid transparent',
       }}
     >
+      <div style={{ fontSize: 12, color: 'var(--txt-dim)', fontWeight: 600 }}>{index}</div>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0 }}>
         <Avatar name={b.employeeName} bg={avatarColor(b.employeeName)} size={30} />
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 2 }}>
+            <span style={{ color: 'var(--txt-dim)', fontWeight: 500 }}>Category: </span>
             {b.description ?? 'Blocked task'}
           </div>
           <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ color: 'var(--txt-dim)' }}>Reason: </span>
             {b.blockerReason ?? '—'}
           </div>
         </div>
@@ -401,9 +384,11 @@ function DetailPanel({ b, range, onClose }: { b: TeamBlockerDto; range: DateRang
         </div>
 
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
+          <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Category: </span>
           {b.description ?? 'Blocked task'}
         </div>
         <div style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.5, marginBottom: 16 }}>
+          <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Reason: </span>
           {b.blockerReason ?? 'No detail provided.'}
         </div>
 
@@ -435,6 +420,7 @@ function DetailPanel({ b, range, onClose }: { b: TeamBlockerDto; range: DateRang
             range={range}
             replyToLabel={`Reply to ${b.employeeName}`}
             visibilityNote={`Replies are visible to ${b.employeeName} and other team leads`}
+            isLocked={b.status === 'RESOLVED'}
           />
         </div>
       </div>
@@ -448,7 +434,7 @@ function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
   return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 8;
 
 // ── main ───────────────────────────────────────────────────────────────────────────
 
@@ -480,11 +466,12 @@ export default function Blockers() {
   const { data: blockers, isPending, isError, refetch } = useTeamLeadBlockers(range, isToday, true);
 
   const [search, setSearch] = useState('');
-  const [projectFilter, setProjectFilter] = useState<string | null>(null);
-  const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState<Set<string>>(new Set());
+  const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [view, setView] = useState<'list' | 'group'>('list');
   const [page, setPage] = useState(1);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const appliedHighlightRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (highlightId != null) setSelectedTaskId(highlightId);
@@ -501,8 +488,8 @@ export default function Blockers() {
 
   const filtered = useMemo(() => {
     let list = blockers ?? [];
-    if (projectFilter) list = list.filter(b => (b.projectName ?? b.projectCode) === projectFilter);
-    if (assigneeFilter) list = list.filter(b => b.employeeName === assigneeFilter);
+    if (projectFilter.size) list = list.filter(b => projectFilter.has(b.projectName ?? b.projectCode ?? ''));
+    if (assigneeFilter.size) list = list.filter(b => assigneeFilter.has(b.employeeName));
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(b =>
@@ -523,6 +510,9 @@ export default function Blockers() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // Grouped view splits pageItems by project, so each row needs its position within the
+  // whole page (not its position within its own group) to keep numbering continuous.
+  const rowIndexByTaskId = new Map(pageItems.map((b, i) => [b.taskId, (page - 1) * PAGE_SIZE + i + 1]));
 
   const matchedBlocker = useMemo(
     () => (blockers ?? []).find(b => b.taskId === selectedTaskId) ?? null,
@@ -533,6 +523,26 @@ export default function Blockers() {
   const needsFallback = selectedTaskId != null && blockers != null && matchedBlocker == null;
   const { data: fallbackBlocker } = useTeamLeadBlocker(needsFallback ? selectedTaskId : undefined);
   const selectedBlocker = matchedBlocker ?? fallbackBlocker ?? null;
+
+  // Once the highlighted blocker's data resolves, jump the date filter to the day it was
+  // reported on — the notification link only carries the blocker id, not its date, so
+  // without this the page silently stays on "today" even when the blocker is from another day.
+  useEffect(() => {
+    if (
+      highlightId != null
+      && appliedHighlightRef.current !== highlightId
+      && selectedBlocker != null
+      && selectedBlocker.taskId === highlightId
+    ) {
+      appliedHighlightRef.current = highlightId;
+      const next = new URLSearchParams(searchParams);
+      next.set('mode', 'range');
+      next.set('from', selectedBlocker.entryDate);
+      next.set('to', selectedBlocker.entryDate);
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightId, selectedBlocker]);
 
   const total = blockers?.length ?? 0;
   const needsResponse = (blockers ?? []).filter(b => b.status === 'NEEDS_RESPONSE').length;
@@ -639,22 +649,31 @@ export default function Blockers() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search blockers..."
+              placeholder="Search by employee/blocker..."
               style={{
                 width: '100%', padding: '7px 10px 7px 32px', fontSize: 12.5, borderRadius: 8,
                 background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
               }}
             />
           </div>
-          <SingleSelectDropdown label="Project" value={projectFilter} options={projectOptions} onChange={setProjectFilter} />
-          <SingleSelectDropdown label="Assignee" value={assigneeFilter} options={assigneeOptions} onChange={setAssigneeFilter} />
+          <FilterDropdown
+            label="Project" options={projectOptions} selected={projectFilter}
+            onToggle={v => toggleFilterVal(projectFilter, setProjectFilter, v)}
+            onClear={() => setProjectFilter(new Set())}
+          />
+          <FilterDropdown
+            label="Assignee" options={assigneeOptions} selected={assigneeFilter}
+            onToggle={v => toggleFilterVal(assigneeFilter, setAssigneeFilter, v)}
+            onClear={() => setAssigneeFilter(new Set())}
+          />
 
           <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, background: 'var(--raised2)', borderRadius: 8, padding: 3 }}>
             <button
-              onClick={() => setView('list')}
+              onClick={() => { if (view !== 'list') setView('list'); }}
+              aria-pressed={view === 'list'}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6,
-                fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: 600, border: 'none', cursor: view === 'list' ? 'default' : 'pointer',
                 background: view === 'list' ? 'var(--risk)' : 'transparent',
                 color: view === 'list' ? '#fff' : 'var(--txt-mut)',
               }}
@@ -662,10 +681,11 @@ export default function Blockers() {
               <ListIcon size={13} aria-hidden="true" /> List
             </button>
             <button
-              onClick={() => setView('group')}
+              onClick={() => { if (view !== 'group') setView('group'); }}
+              aria-pressed={view === 'group'}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 6,
-                fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: 600, border: 'none', cursor: view === 'group' ? 'default' : 'pointer',
                 background: view === 'group' ? 'var(--risk)' : 'transparent',
                 color: view === 'group' ? '#fff' : 'var(--txt-mut)',
               }}
@@ -678,10 +698,11 @@ export default function Blockers() {
         {/* Table */}
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{
-            display: 'grid', gridTemplateColumns: '2.2fr 1fr 1fr 0.7fr 1.3fr 1fr', gap: 12,
+            display: 'grid', gridTemplateColumns: '32px 2.2fr 1fr 1fr 0.7fr 1.3fr 1fr', gap: 12,
             padding: '10px 20px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)',
             fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
           }}>
+            <span>#</span>
             <span>Blocker</span>
             <span>Project</span>
             <span>Reported On</span>
@@ -695,9 +716,9 @@ export default function Blockers() {
               No blockers match these filters.
             </div>
           ) : view === 'list' ? (
-            pageItems.map(b => (
+            pageItems.map((b, i) => (
               <BlockerRow
-                key={b.taskId} b={b} selected={b.taskId === selectedTaskId}
+                key={b.taskId} b={b} index={(page - 1) * PAGE_SIZE + i + 1} selected={b.taskId === selectedTaskId}
                 onClick={() => setSelectedTaskId(id => (id === b.taskId ? null : b.taskId))}
               />
             ))
@@ -709,7 +730,7 @@ export default function Blockers() {
                 </div>
                 {items.map(b => (
                   <BlockerRow
-                    key={b.taskId} b={b} selected={b.taskId === selectedTaskId}
+                    key={b.taskId} b={b} index={rowIndexByTaskId.get(b.taskId) ?? 0} selected={b.taskId === selectedTaskId}
                     onClick={() => setSelectedTaskId(id => (id === b.taskId ? null : b.taskId))}
                   />
                 ))}

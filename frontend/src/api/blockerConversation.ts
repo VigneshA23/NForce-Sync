@@ -9,6 +9,13 @@ import type { DateRange } from './teamLead';
 
 export type ConversationScope = 'lead' | 'employee';
 
+export interface BlockerAttachmentDto {
+  id: number;
+  fileName: string;
+  contentType: string;
+  fileSize: number;
+}
+
 export interface BlockerReplyDto {
   id: number;
   senderId: number;
@@ -16,10 +23,25 @@ export interface BlockerReplyDto {
   senderRole: 'EMPLOYEE' | 'TEAM_LEAD';
   createdAt: string;
   message: string;
+  attachments: BlockerAttachmentDto[];
 }
 
 function basePath(scope: ConversationScope): string {
   return scope === 'lead' ? '/team-lead/blockers' : '/employee/blockers';
+}
+
+// Attachment bytes are fetched on demand (not inlined into the thread response) — cached
+// as an object URL per attachment. Not explicitly revoked on cache eviction since another
+// mounted <img>/link may still reference the same cached URL; the per-session attachment
+// count on a single blocker thread is small enough that this isn't worth the complexity.
+export function useBlockerAttachmentUrl(scope: ConversationScope, attachmentId: number) {
+  return useQuery({
+    queryKey: ['blocker-attachment-blob', scope, attachmentId],
+    queryFn: () =>
+      api.get(`${basePath(scope)}/attachments/${attachmentId}`, { responseType: 'blob' })
+        .then(r => URL.createObjectURL(r.data as Blob)),
+    staleTime: Infinity,
+  });
 }
 
 function threadKey(scope: ConversationScope, taskId: number | undefined) {
@@ -43,8 +65,14 @@ export function useBlockerThread(taskId: number | undefined, scope: Conversation
 export function useSendBlockerReply(taskId: number, scope: ConversationScope, range?: DateRange) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (message: string) =>
-      api.post<BlockerReplyDto>(`${basePath(scope)}/${taskId}/replies`, { message }).then(r => r.data),
+    mutationFn: ({ message, files }: { message: string; files: File[] }) => {
+      const form = new FormData();
+      form.append('message', message);
+      files.forEach(f => form.append('files', f));
+      return api.post<BlockerReplyDto>(`${basePath(scope)}/${taskId}/replies`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }).then(r => r.data);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: threadKey(scope, taskId) });
       if (scope === 'lead' && range) {

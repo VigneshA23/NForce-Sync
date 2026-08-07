@@ -3,14 +3,18 @@ package com.nforceone.sync.employee;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.eod.BlockerConversationService;
+import com.nforceone.sync.eod.BlockerReplyAttachment;
 import com.nforceone.sync.eod.dto.BlockerReplyDto;
-import com.nforceone.sync.eod.dto.ReplyRequest;
 import com.nforceone.sync.employee.dto.DashboardSummaryDto;
 import com.nforceone.sync.employee.dto.UtilizationDetailDto;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -81,9 +85,21 @@ public class EmployeeController {
         return conversationService.getThreadForEmployee(taskId, actingEmail());
     }
 
-    @PostMapping("/blockers/{taskId}/replies")
-    public BlockerReplyDto postBlockerReply(@PathVariable Long taskId, @RequestBody ReplyRequest body) {
-        return conversationService.postReplyAsEmployee(taskId, actingEmail(), body.message());
+    @PostMapping(value = "/blockers/{taskId}/replies", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public BlockerReplyDto postBlockerReply(
+            @PathVariable Long taskId,
+            @RequestParam String message,
+            @RequestParam(required = false) List<MultipartFile> files) {
+        return conversationService.postReplyAsEmployee(taskId, actingEmail(), message, files);
+    }
+
+    @GetMapping("/blockers/attachments/{attachmentId}")
+    public ResponseEntity<byte[]> downloadBlockerAttachment(@PathVariable Long attachmentId) {
+        BlockerReplyAttachment attachment = conversationService.getAttachmentForEmployee(attachmentId, actingEmail());
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(attachment.getContentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + attachment.getFileName() + "\"")
+                .body(attachment.getData());
     }
 
     private String actingEmail() {

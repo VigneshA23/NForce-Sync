@@ -194,7 +194,10 @@ public class EmployeeService {
                 task.getBlockerReason(),
                 task.getAcknowledgedAt() != null,
                 task.getAcknowledgedAt(),
-                task.getAcknowledgedBy() != null ? task.getAcknowledgedBy().getFullName() : null
+                task.getAcknowledgedBy() != null ? task.getAcknowledgedBy().getFullName() : null,
+                task.getBlockerStatus(),
+                task.getResolvedAt(),
+                task.getResolvedBy() != null ? task.getResolvedBy().getFullName() : null
         );
     }
 
@@ -224,7 +227,10 @@ public class EmployeeService {
                             task.getBlockerReason(),
                             task.getAcknowledgedAt() != null,
                             task.getAcknowledgedAt(),
-                            task.getAcknowledgedBy() != null ? task.getAcknowledgedBy().getFullName() : null
+                            task.getAcknowledgedBy() != null ? task.getAcknowledgedBy().getFullName() : null,
+                            task.getBlockerStatus(),
+                            task.getResolvedAt(),
+                            task.getResolvedBy() != null ? task.getResolvedBy().getFullName() : null
                     ));
                 }
             }

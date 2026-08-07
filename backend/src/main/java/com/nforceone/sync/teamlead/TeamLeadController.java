@@ -1,8 +1,8 @@
 package com.nforceone.sync.teamlead;
 
 import com.nforceone.sync.eod.BlockerConversationService;
+import com.nforceone.sync.eod.BlockerReplyAttachment;
 import com.nforceone.sync.eod.dto.BlockerReplyDto;
-import com.nforceone.sync.eod.dto.ReplyRequest;
 import com.nforceone.sync.teamlead.dto.BlockerStatusRequest;
 import com.nforceone.sync.teamlead.dto.DashboardTrendDto;
 import com.nforceone.sync.teamlead.dto.MemberEodStatusDto;
@@ -11,9 +11,13 @@ import com.nforceone.sync.teamlead.dto.TeamLeadSummaryDto;
 import com.nforceone.sync.teamlead.dto.TeamMemberDetailDto;
 import com.nforceone.sync.teamlead.dto.ThresholdsDto;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -100,9 +104,21 @@ public class TeamLeadController {
         return conversationService.getThreadForLead(taskId, actingEmail());
     }
 
-    @PostMapping("/blockers/{taskId}/replies")
-    public BlockerReplyDto postBlockerReply(@PathVariable Long taskId, @RequestBody ReplyRequest body) {
-        return conversationService.postReplyAsLead(taskId, actingEmail(), body.message());
+    @PostMapping(value = "/blockers/{taskId}/replies", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public BlockerReplyDto postBlockerReply(
+            @PathVariable Long taskId,
+            @RequestParam String message,
+            @RequestParam(required = false) List<MultipartFile> files) {
+        return conversationService.postReplyAsLead(taskId, actingEmail(), message, files);
+    }
+
+    @GetMapping("/blockers/attachments/{attachmentId}")
+    public ResponseEntity<byte[]> downloadBlockerAttachment(@PathVariable Long attachmentId) {
+        BlockerReplyAttachment attachment = conversationService.getAttachmentForLead(attachmentId, actingEmail());
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(attachment.getContentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + attachment.getFileName() + "\"")
+                .body(attachment.getData());
     }
 
     // Reuses the existing Admin Config (business_rule_config) row — this just exposes the

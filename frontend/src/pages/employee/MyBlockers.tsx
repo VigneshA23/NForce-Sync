@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  AlertTriangle, UserX, CheckCircle2, Search, ChevronDown, RefreshCw,
+  AlertTriangle, UserX, CheckCircle2, Search, ChevronDown, ChevronLeft, ChevronRight, RefreshCw,
   X, Folder, Clock, CalendarDays, Calendar,
 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
@@ -207,9 +207,18 @@ function StatCard({ icon, label, value, caption, accent }: {
 }
 
 // ── status badge ─────────────────────────────────────────────────────────────────
+// Same tri-state field and color coding as the Team Lead's Blockers page (STATUS_META
+// in pages/lead/Blockers.tsx) — this reads BlockedTask.status directly, the literal
+// value the Team Lead's status dropdown writes, not a derived "has replied" label.
 
-function StatusBadge({ acknowledged }: { acknowledged: boolean }) {
-  const color = acknowledged ? 'var(--ok)' : 'var(--risk)';
+const STATUS_META: Record<BlockedTask['status'], { label: string; color: string }> = {
+  NEEDS_RESPONSE: { label: 'Needs Response', color: 'var(--risk)' },
+  ACKNOWLEDGED:   { label: 'Acknowledged',   color: 'var(--ok)' },
+  RESOLVED:       { label: 'Resolved',       color: 'var(--info)' },
+};
+
+function StatusBadge({ status }: { status: BlockedTask['status'] }) {
+  const { label, color } = STATUS_META[status];
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 20,
@@ -218,7 +227,7 @@ function StatusBadge({ acknowledged }: { acknowledged: boolean }) {
       border: `1px solid color-mix(in srgb, ${color} 32%, transparent)`,
       whiteSpace: 'nowrap',
     }}>
-      {acknowledged ? 'Team Lead Replied' : 'Needs Response'}
+      {label}
     </span>
   );
 }
@@ -243,15 +252,17 @@ function BlockerRow({ b, selected, onClick }: {
     >
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 2 }}>
-          {b.description}
+          <span style={{ color: 'var(--txt-dim)', fontWeight: 500 }}>Category: </span>
+          {b.description ?? 'Blocked task'}
         </div>
         <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--txt-dim)' }}>Reason: </span>
           {b.blockerReason ?? '—'}
         </div>
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{b.projectName}</div>
       <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{fmtShortDate(b.entryDate)}</div>
-      <div><StatusBadge acknowledged={b.acknowledged} /></div>
+      <div><StatusBadge status={b.status} /></div>
     </div>
   );
 }
@@ -274,21 +285,23 @@ function DetailPanel({ b, onClose }: { b: BlockedTask; onClose: () => void }) {
   return (
     <Card style={{ padding: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--line)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>{b.description}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            <StatusBadge acknowledged={b.acknowledged} />
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', display: 'flex', padding: 2 }}
-            >
-              <X size={18} aria-hidden="true" />
-            </button>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
+          <StatusBadge status={b.status} />
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', display: 'flex', padding: 2 }}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
         </div>
 
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
+          <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Category: </span>
+          {b.description ?? 'Blocked task'}
+        </div>
         <div style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.5, marginBottom: 16 }}>
+          <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Reason: </span>
           {b.blockerReason ?? 'No detail provided.'}
         </div>
 
@@ -317,6 +330,7 @@ function DetailPanel({ b, onClose }: { b: BlockedTask; onClose: () => void }) {
             scope="employee"
             replyToLabel="Reply to your Team Lead"
             visibilityNote="Replies are visible to your Team Lead"
+            isLocked={b.status === 'RESOLVED'}
           />
         </div>
       </div>
@@ -342,15 +356,15 @@ export default function MyBlockers() {
   const todayISO = localTodayISO();
   const [dateMode, setDateMode] = useState<DateMode>('today');
   const [range, setRange] = useState<DateRange>({ from: todayISO, to: todayISO });
-  const isToday = dateMode === 'today';
 
-  const { data: blockers, isPending, isError, refetch } = useEmployeeBlockers(range, isToday);
+  const { data: blockers, isPending, isError, refetch } = useEmployeeBlockers(range);
 
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const appliedHighlightRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (highlightId != null) setSelectedTaskId(highlightId);
@@ -394,10 +408,21 @@ export default function MyBlockers() {
   const { data: fallbackBlocker } = useEmployeeBlocker(needsFallback ? selectedTaskId : undefined);
   const selectedBlocker = matchedBlocker ?? fallbackBlocker ?? null;
 
-  function resetFilters() {
-    setSearch('');
-    setProjectFilter(null);
-  }
+  // Once the highlighted blocker's data resolves, jump the date filter to the day it was
+  // reported on — the notification link only carries the blocker id, not its date, so
+  // without this the page silently stays on "today" even when the blocker is from another day.
+  useEffect(() => {
+    if (
+      highlightId != null
+      && appliedHighlightRef.current !== highlightId
+      && selectedBlocker != null
+      && selectedBlocker.taskId === highlightId
+    ) {
+      appliedHighlightRef.current = highlightId;
+      setDateMode('range');
+      setRange({ from: selectedBlocker.entryDate, to: selectedBlocker.entryDate });
+    }
+  }, [highlightId, selectedBlocker]);
 
   const total = blockers?.length ?? 0;
   const needsResponse = (blockers ?? []).filter(b => !b.acknowledged).length;
@@ -472,15 +497,6 @@ export default function MyBlockers() {
             />
           </div>
           <SingleSelectDropdown label="Project" value={projectFilter} options={projectOptions} onChange={setProjectFilter} />
-          <button
-            onClick={resetFilters}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
-              color: 'var(--brand-bright)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: '6px 4px',
-            }}
-          >
-            <RefreshCw size={13} aria-hidden="true" /> Reset
-          </button>
         </Card>
 
         {/* Table */}
@@ -521,6 +537,13 @@ export default function MyBlockers() {
                 : `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} results`}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                style={{ display: 'flex', padding: 5, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}
+              >
+                <ChevronLeft size={14} aria-hidden="true" />
+              </button>
               <span style={{
                 minWidth: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 borderRadius: 6, background: 'var(--risk)', color: '#fff', fontSize: 12, fontWeight: 700,
@@ -528,18 +551,11 @@ export default function MyBlockers() {
                 {page}
               </span>
               <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                style={{ display: 'flex', padding: 5, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}
-              >
-                Prev
-              </button>
-              <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 style={{ display: 'flex', padding: 5, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.5 : 1 }}
               >
-                Next
+                <ChevronRight size={14} aria-hidden="true" />
               </button>
             </div>
           </div>

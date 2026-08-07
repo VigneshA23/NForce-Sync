@@ -31,6 +31,9 @@ export interface BlockedTask {
   acknowledged: boolean;
   acknowledgedAt: string | null;
   acknowledgedByName: string | null;
+  status: 'NEEDS_RESPONSE' | 'ACKNOWLEDGED' | 'RESOLVED';
+  resolvedAt: string | null;
+  resolvedByName: string | null;
 }
 
 export interface RecentEntry {
@@ -62,26 +65,29 @@ export interface DashboardSummary {
 // EmployeeService.buildBlockedTasks) — a BLOCKER_REPLY notification can point at an older
 // blocker that's fallen off that list. This fetches that one blocker directly by id so the
 // notification's deep link always resolves to something, regardless of age.
+//
+// Polled on the same 30s/15s cadence as useUnreadNotificationsCount (api/notifications.ts) —
+// a Team Lead's status change (e.g. marking a blocker Resolved) is made from their own
+// separate session, so it can only reach this page via polling, not local cache invalidation.
 export function useEmployeeBlocker(taskId: number | undefined) {
   return useQuery({
     queryKey: ['employee', 'blocker', taskId],
     queryFn: () => api.get<BlockedTask>(`/employee/blockers/${taskId}`).then(r => r.data),
     enabled: taskId != null,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 }
 
-// Full blocker history for the dedicated "My Blockers" page — same 30s/5min live-vs-historical
-// staleTime convention as useTeamLeadBlockers (api/teamLead.ts), since this mirrors that page.
-function rangeStaleTime(live: boolean): number {
-  return live ? 30_000 : 5 * 60_000;
-}
-
-export function useEmployeeBlockers(range: DateRange, live = false) {
+// Full blocker history for the dedicated "My Blockers" page — polled unconditionally (not
+// gated on the selected date range) so a Team Lead's status change always reaches this page
+// without a manual refresh, same cadence as useEmployeeBlocker above.
+export function useEmployeeBlockers(range: DateRange) {
   return useQuery({
     queryKey: ['employee', 'blockers', range.from, range.to],
     queryFn: () => api.get<BlockedTask[]>('/employee/blockers', { params: range }).then(r => r.data),
-    staleTime: rangeStaleTime(live),
-    refetchInterval: live ? 60_000 : false,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
     placeholderData: keepPreviousData,
   });
 }
