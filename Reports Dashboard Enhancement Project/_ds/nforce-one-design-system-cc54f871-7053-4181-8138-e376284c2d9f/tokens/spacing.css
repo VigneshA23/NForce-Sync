@@ -1,0 +1,20 @@
+:root{
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+  --sp-9: 88px;
+
+  /* Post padding — the safe margin from the artboard edge */
+  --post-pad: 56px;
+  --post-pad-sm: 36px;
+
+  /* Formats (artboard sizes) */
+  --fmt-landscape-w: 800px;  --fmt-landscape-h: 450px;  /* 16:9 LinkedIn link card */
+  --fmt-square-w: 800px;     --fmt-square-h: 800px;     /* 1:1 */
+  --fmt-portrait-w: 800px;   --fmt-portrait-h: 1000px;  /* 4:5 */
+}

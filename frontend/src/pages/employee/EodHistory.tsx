@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  CheckCircle, Clock, XCircle, MessageSquare, ChevronRight, AlertTriangle,
+  CheckCircle, Clock, XCircle, ChevronRight, AlertTriangle,
   Search, ArrowUpDown, ChevronLeft,
 } from 'lucide-react';
 import { listEntries } from '../../api/eod';
@@ -16,7 +16,6 @@ const STATUS_META: Record<string, { color: string; label: string; Icon: React.FC
   SUBMITTED:         { color: '#4C8DD6', label: 'Submitted',         Icon: Clock },
   APPROVED:          { color: '#2FB67C', label: 'Approved',          Icon: CheckCircle },
   REJECTED:          { color: '#E4373D', label: 'Rejected',          Icon: XCircle },
-  CHANGES_REQUESTED: { color: '#E0A93B', label: 'Changes Requested', Icon: MessageSquare },
   MISSED:            { color: '#6B7280', label: 'Missed',            Icon: AlertTriangle },
 };
 
@@ -42,7 +41,6 @@ const STATUS_FILTERS = [
   { value: 'SUBMITTED',        label: 'Submitted' },
   { value: 'APPROVED',         label: 'Approved' },
   { value: 'REJECTED',         label: 'Rejected' },
-  { value: 'CHANGES_REQUESTED',label: 'Changes Requested' },
   { value: 'DRAFT',            label: 'Draft' },
 ];
 

@@ -17,7 +17,11 @@ public record DashboardSummaryDto(
             LocalDate today,
             String entryStatus,
             boolean cutoffPassed,
-            LocalTime cutoffTime
+            LocalTime cutoffTime,
+            /** True when the cutoff lands on the day AFTER `today`, as it does for a shift that
+             *  crosses midnight (15:30-00:30 with a 00:30 cutoff). Without this the UI shows a
+             *  bare "00:30" that reads as though the deadline already passed this morning. */
+            boolean cutoffNextDay
     ) {}
 
     public record QuickStats(

@@ -4,7 +4,6 @@ import com.nforceone.sync.approval.dto.ApprovalActionDto;
 import com.nforceone.sync.approval.dto.ApproveRequest;
 import com.nforceone.sync.approval.dto.BatchApproveRequest;
 import com.nforceone.sync.approval.dto.RejectRequest;
-import com.nforceone.sync.approval.dto.RequestChangesRequest;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.dto.EodEntryDto;
 import jakarta.validation.Valid;
@@ -65,11 +64,8 @@ public class ApprovalController {
         return approvalService.reject(entryId, actingEmail(), request.comment());
     }
 
-    @PostMapping("/{entryId}/request-changes")
-    public EodEntryDto requestChanges(@PathVariable Long entryId,
-                                      @Valid @RequestBody RequestChangesRequest request) {
-        return approvalService.requestChanges(entryId, actingEmail(), request.comment());
-    }
+    // POST /{entryId}/request-changes removed in V44 — reject() covers the same flow, since a
+    // rejected entry is editable and resubmittable.
 
     @PostMapping("/batch-approve")
     public List<EodEntryDto> batchApprove(@Valid @RequestBody BatchApproveRequest request) {

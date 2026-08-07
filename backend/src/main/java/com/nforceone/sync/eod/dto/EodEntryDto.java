@@ -39,7 +39,7 @@ public record EodEntryDto(
         return from(e, null);
     }
 
-    // Enriched factory — includes latest reviewer comment for REJECTED / CHANGES_REQUESTED
+    // Enriched factory — includes latest reviewer comment for REJECTED
     public static EodEntryDto from(EodEntry e, String reviewerComment) {
         return from(e, reviewerComment, null);
     }

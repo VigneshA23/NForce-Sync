@@ -52,7 +52,6 @@ export interface ResourceUtilizationRowDto {
   employeeId: number;
   employeeName: string;
   projectName: string;
-  allocationPct: number;
   productiveHours: number;
   availableHours: number;
   utilizationPct: number;

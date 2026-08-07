@@ -34,6 +34,15 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
                                                           @Param("from") LocalDate from,
                                                           @Param("to") LocalDate to);
 
+    // Same as findByEmployeeIdInAndEntryDateBetween but with tasks/project/category eagerly
+    // fetched — for reporting views that render every task line, not just the missing-day count.
+    @EntityGraph(attributePaths = {"employee", "tasks", "tasks.project", "tasks.taskCategory"})
+    @Query("SELECT e FROM EodEntry e WHERE e.employee.id IN :employeeIds " +
+           "AND e.entryDate BETWEEN :from AND :to")
+    List<EodEntry> findWithTasksByEmployeeIdInAndEntryDateBetween(@Param("employeeIds") List<Long> employeeIds,
+                                                                   @Param("from") LocalDate from,
+                                                                   @Param("to") LocalDate to);
+
     // Pending approvals for a manager — custom JPQL with EntityGraph-equivalent JOIN FETCH
     @Query("""
         SELECT DISTINCT e FROM EodEntry e

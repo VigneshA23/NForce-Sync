@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/nforce-one-design-system-cc54f871-7053-4181-8138-e376284c2d9f/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/nforce-one-design-system-cc54f871-7053-4181-8138-e376284c2d9f/tokens/colors.css">
+<link rel="stylesheet" href="_ds/nforce-one-design-system-cc54f871-7053-4181-8138-e376284c2d9f/tokens/typography.css">
+<link rel="stylesheet" href="_ds/nforce-one-design-system-cc54f871-7053-4181-8138-e376284c2d9f/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/nforce-one-design-system-cc54f871-7053-4181-8138-e376284c2d9f/tokens/effects.css">
+<link rel="stylesheet" href="_ds/nforce-one-design-system-cc54f871-7053-4181-8138-e376284c2d9f/styles.css">
+<script src="_ds/nforce-one-design-system-cc54f871-7053-4181-8138-e376284c2d9f/_ds_bundle.js"></script>
+<style>
+  :root{ --bg:#0B0B0C; --panel:#121214; --panel2:#17171A; --bd:#2A2A2E; --tx:#FFFFFF; --tx2:#C9C9CE; --mut:#7A7A82; --inp:#1C1C1F; --hov:#1E1E22; --head:#141417; --ok:#3FBF83; --warn:#E0A62E; }
+  [data-theme="light"]{ --bg:#F4F5F6; --panel:#FFFFFF; --panel2:#FAFAFB; --bd:#E2E2E6; --tx:#0A0A0B; --tx2:#3A3A40; --mut:#75757D; --inp:#FFFFFF; --hov:#F2F2F3; --head:#F7F7F8; --ok:#1F8B57; --warn:#A5710F; }
+  html,body{margin:0;padding:0;background:#0B0B0C}
+  *{box-sizing:border-box}
+  a{color:var(--nf-red);text-decoration:none}
+  a:hover{color:var(--nf-red-600)}
+  input,select,button,textarea{font-family:'Montserrat',system-ui,sans-serif}
+  select option{background:#17171A;color:#fff}
+  [data-theme="light"] select option{background:#fff;color:#0A0A0B}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--bd);border-radius:6px}
+  @keyframes riseIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+</style>
+</helmet>
+<div data-theme="{{ theme }}" style="display:flex;height:100vh;overflow:hidden;background:var(--bg);font-family:'Montserrat',system-ui,sans-serif;color:var(--tx)">
+
+  <aside style="width:238px;flex:0 0 238px;background:#0E0E10;border-right:1px solid #232327;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid #232327;height:56px">
+      <img src="assets/nf1-logo.png" alt="Nforce One" style="width:34px;height:34px;object-fit:contain;background:#000;border-radius:6px;padding:3px">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <div style="font-size:13px;font-weight:800;color:#fff;letter-spacing:.01em">Nforce Sync</div>
+        <div style="font-size:8px;font-weight:600;color:#7A7A82;letter-spacing:.16em">EOD &amp; UTILIZATION</div>
+      </div>
+    </div>
+    <nav style="flex:1;overflow-y:auto;padding:16px 10px;display:flex;flex-direction:column;gap:2px">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.16em;color:#6A6A72;padding:6px 8px 8px">PROJECTS</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;color:#C9C9CE;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#18181B;color:#fff">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>
+        Project Dashboard
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;color:#C9C9CE;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#18181B;color:#fff">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path></svg>
+        Projects
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;color:#C9C9CE;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#18181B;color:#fff">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3"></circle><path d="M3 20a6 6 0 0 1 12 0"></path><path d="M16 6a3 3 0 0 1 0 6"></path></svg>
+        Allocation
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;color:#C9C9CE;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#18181B;color:#fff">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 17 10 11l3 3 7-7"></path><path d="M15 7h5v5"></path></svg>
+        Planned vs Actual
+      </div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.16em;color:#6A6A72;padding:18px 8px 8px">WORK</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;color:#C9C9CE;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#18181B;color:#fff">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+        <span style="flex:1">Approvals</span>
+        <span style="background:var(--nf-red);color:#fff;font-size:10px;font-weight:700;border-radius:9px;padding:2px 7px">4</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;background:#1C1013;border-left:2px solid var(--nf-red);color:#fff;font-size:13px;font-weight:700;cursor:pointer">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"></path><path d="M14 3v5h5"></path></svg>
+        Reports
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;color:#C9C9CE;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#18181B;color:#fff">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"></path><path d="M10 21h4"></path></svg>
+        Notifications
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;color:#C9C9CE;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#18181B;color:#fff">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg>
+        Profile
+      </div>
+    </nav>
+    <sc-if value="{{ showRole }}" hint-placeholder-val="{{ true }}">
+      <div style="padding:12px;border-top:1px solid #232327;display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.16em;color:#6A6A72">PREVIEW AS ROLE</div>
+        <select value="{{ role }}" onChange="{{ onRole }}" style="width:100%;background:#17171A;border:1px solid #2A2A2E;color:#fff;border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600">
+          <option>Project Manager</option>
+          <option>Team Lead</option>
+          <option>Delivery Head</option>
+          <option>Employee</option>
+        </select>
+      </div>
+    </sc-if>
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-top:1px solid #232327">
+      <div style="width:30px;height:30px;border-radius:50%;background:var(--nf-red);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">RD</div>
+      <div style="display:flex;flex-direction:column">
+        <div style="font-size:12px;font-weight:700;color:#fff">Ravi Dandu</div>
+        <div style="font-size:10px;color:#7A7A82;font-weight:500">{{ role }}</div>
+      </div>
+    </div>
+  </aside>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <header style="height:56px;flex:0 0 56px;display:flex;align-items:center;gap:16px;padding:0 20px;background:linear-gradient(100deg,#1E0407 0%,#8E1015 26%,#C21319 44%,#6E0A10 64%,#180306 100%);border-bottom:1px solid #2A2A2E">
+      <div style="font-size:13px;font-weight:500;color:#E9C9CB">Sync&nbsp; /&nbsp; <span style="font-weight:800;color:#fff">Reports</span></div>
+      <div style="flex:1"></div>
+      <div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:7px 12px;width:280px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E9C9CB" stroke-width="1.8"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+        <input placeholder="Search this workspace..." style="flex:1;background:transparent;border:0;outline:none;color:#fff;font-size:12px;font-weight:500">
+      </div>
+      <button onClick="{{ toggleTheme }}" style="display:flex;align-items:center;gap:7px;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:7px 12px;color:#fff;font-size:12px;font-weight:700;cursor:pointer" style-hover="background:rgba(0,0,0,.5)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"></path></svg>
+        {{ themeLabel }}
+      </button>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" style="cursor:pointer"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"></path><path d="M10 21h4"></path></svg>
+      <div style="width:30px;height:30px;border-radius:50%;background:#fff;color:var(--nf-red);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">RD</div>
+    </header>
+
+    <main style="flex:1;overflow-y:auto;padding:24px 28px 60px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:20px">
+        <div>
+          <h1 style="margin:0;font-size:30px;font-weight:800;letter-spacing:-.01em;color:var(--tx)">Reports</h1>
+          <p style="margin:5px 0 0;font-size:13px;font-weight:500;color:var(--mut)">Employee-wise EOD exports, compliance and utilization — all role-scoped.</p>
+        </div>
+<sc-if value="{{ isEod }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="font-size:9px;font-weight:700;letter-spacing:.16em;color:var(--mut)">HOW DO YOU WANT TO LOOK AT EODs?</div>
+          <div style="display:flex;gap:0;border:1px solid var(--bd);border-radius:8px;overflow:hidden;background:var(--panel)">
+            <sc-for list="{{ flows }}" as="f" hint-placeholder-count="2">
+              <button onClick="{{ f.onClick }}" style="border:0;cursor:pointer;padding:9px 14px;font-size:12px;font-weight:700;background:{{ f.bg }};color:{{ f.fg }};display:flex;align-items:center;gap:8px">
+{{ f.label }}
+              </button>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+
+      <div style="display:flex;gap:4px;border-bottom:1px solid var(--bd);margin-bottom:20px">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+          <button onClick="{{ t.onClick }}" style="border:0;background:transparent;cursor:pointer;padding:10px 14px;font-size:13px;font-weight:{{ t.fw }};color:{{ t.fg }};border-bottom:2px solid {{ t.bar }};display:flex;align-items:center;gap:8px">
+            {{ t.label }}<span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--mut)">{{ t.count }}</span>
+          </button>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ isEod }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+
+          <section style="background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:14px 16px">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">FROM</span>
+                <input type="date" value="{{ from }}" onChange="{{ onFrom }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">TO</span>
+                <input type="date" value="{{ to }}" onChange="{{ onTo }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">PROJECT</span>
+                <select value="{{ project }}" onChange="{{ onProject }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+                  <sc-for list="{{ projectOpts }}" as="o" hint-placeholder-count="4"><option>{{ o }}</option></sc-for>
+                </select>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">CLIENT</span>
+                <select value="{{ client }}" onChange="{{ onClient }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+                  <sc-for list="{{ clientOpts }}" as="o" hint-placeholder-count="4"><option>{{ o }}</option></sc-for>
+                </select>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">TEAM LEAD</span>
+                <select value="{{ manager }}" onChange="{{ onManager }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+                  <sc-for list="{{ managerOpts }}" as="o" hint-placeholder-count="4"><option>{{ o }}</option></sc-for>
+                </select>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">EOD STATUS</span>
+                <select value="{{ status }}" onChange="{{ onStatus }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+                  <sc-for list="{{ statusOpts }}" as="o" hint-placeholder-count="4"><option>{{ o }}</option></sc-for>
+                </select>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">BILLABLE OR INTERNAL</span>
+                <select value="{{ billable }}" onChange="{{ onBillable }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+                  <sc-for list="{{ billableOpts }}" as="o" hint-placeholder-count="3"><option>{{ o }}</option></sc-for>
+                </select>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">EMPLOYEE</span>
+                <input placeholder="Name or ID" value="{{ q }}" onChange="{{ onQ }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+              </label>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--bd)">
+              <div style="font-size:12px;font-weight:600;color:var(--tx2)"><span style="font-family:'JetBrains Mono',monospace;color:var(--nf-red);font-weight:700">{{ matchCount }}</span> employees · <span style="font-family:'JetBrains Mono',monospace;color:var(--nf-red);font-weight:700">{{ entryCount }}</span> EOD entries · <span style="font-family:'JetBrains Mono',monospace;color:var(--nf-red);font-weight:700">{{ hoursTotal }}</span> hrs in range</div>
+              <div style="flex:1"></div>
+              <button onClick="{{ resetFilters }}" style="flex-shrink:0;background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="color:var(--tx);border-color:var(--nf-red)">Reset filters</button>
+              <div style="flex-shrink:0;display:flex;gap:0;border:1px solid var(--bd);border-radius:6px;overflow:hidden">
+                <sc-for list="{{ fmts }}" as="f" hint-placeholder-count="3">
+                  <button onClick="{{ f.onClick }}" style="border:0;cursor:pointer;padding:7px 13px;font-size:11px;font-weight:700;background:{{ f.bg }};color:{{ f.fg }};white-space:nowrap">{{ f.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+          </section>
+
+          <sc-if value="{{ isRoster }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:minmax(340px,0.85fr) minmax(420px,1.3fr);gap:16px;align-items:start">
+              <section style="background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--bd)">
+                  <div style="font-size:14px;font-weight:800;color:var(--tx)">Team roster</div>
+                  <div style="font-size:11px;font-weight:600;color:var(--mut)">{{ pageLabel }}</div>
+                </div>
+                <div style="display:grid;grid-template-columns:26px 1fr 62px 58px 32px;gap:8px;padding:8px 16px;background:var(--head);border-bottom:1px solid var(--bd);font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--mut)">
+                  <div></div><div>EMPLOYEE</div><div style="text-align:right">ENTRIES</div><div style="text-align:right">HRS</div><div></div>
+                </div>
+                <sc-for list="{{ pageRows }}" as="r" hint-placeholder-count="9">
+                  <div onClick="{{ r.onSelect }}" style="display:grid;grid-template-columns:26px 1fr 62px 58px 32px;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--bd);cursor:pointer;background:{{ r.rowBg }}" style-hover="background:var(--hov)">
+                    <input type="checkbox" checked="{{ r.checked }}" onChange="{{ r.onCheck }}" onClick="{{ r.stop }}" style="width:14px;height:14px;accent-color:#E01F26;cursor:pointer">
+                    <div style="display:flex;align-items:center;gap:9px;min-width:0">
+                      <div style="width:28px;height:28px;flex:0 0 28px;border-radius:50%;background:{{ r.avBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">{{ r.initials }}</div>
+                      <div style="min-width:0">
+                        <div style="font-size:12.5px;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</div>
+                        <div style="font-size:10px;font-weight:500;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.sub }}</div>
+                      </div>
+                    </div>
+                    <div style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:{{ r.cntColor }}">{{ r.count }}</div>
+                    <div style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--tx2)">{{ r.hours }}</div>
+                    <button onClick="{{ r.onDownload }}" title="Download this employee's EOD" style="width:26px;height:26px;border:1px solid var(--bd);background:transparent;border-radius:6px;color:var(--tx2);display:flex;align-items:center;justify-content:center;cursor:pointer" style-hover="border-color:var(--nf-red);color:var(--nf-red)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
+                    </button>
+                  </div>
+                </sc-for>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;gap:10px">
+                  <button onClick="{{ prevPage }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="border-color:var(--nf-red);color:var(--tx)">Prev</button>
+                  <div style="font-size:11px;font-weight:600;color:var(--mut);font-family:'JetBrains Mono',monospace">{{ pageOfLabel }}</div>
+                  <button onClick="{{ nextPage }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="border-color:var(--nf-red);color:var(--tx)">Next</button>
+                </div>
+                <sc-if value="{{ hasChecked }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:#1C1013;border-top:1px solid var(--nf-red-maroon);flex-wrap:wrap">
+                    <div style="font-size:12px;font-weight:700;color:#fff">{{ checkedLabel }}</div>
+                    <div style="flex:1"></div>
+                    <button onClick="{{ bulkZip }}" style="background:var(--nf-red);border:0;color:#fff;border-radius:6px;padding:8px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="background:var(--nf-red-600)">One file per person</button>
+                    <button onClick="{{ bulkMerge }}" style="background:transparent;border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:6px;padding:8px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="border-color:#fff">All in one file</button>
+                    <button onClick="{{ clearChecked }}" style="background:transparent;border:0;color:#C9C9CE;font-size:11px;font-weight:700;cursor:pointer">Clear</button>
+                  </div>
+                </sc-if>
+              </section>
+
+              <section style="background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:hidden;animation:riseIn .22s ease-out">
+                <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--bd);flex-wrap:wrap">
+                  <div style="width:36px;height:36px;border-radius:50%;background:{{ selAvBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800">{{ selInitials }}</div>
+                  <div>
+                    <div style="font-size:15px;font-weight:800;color:var(--tx)">{{ selName }}</div>
+                    <div style="font-size:11px;font-weight:500;color:var(--mut)">{{ selMeta }}</div>
+                  </div>
+                  <div style="flex:1"></div>
+                  <span style="font-size:10px;font-weight:700;letter-spacing:.08em;padding:5px 10px;border-radius:20px;background:{{ selChipBg }};color:{{ selChipFg }}">{{ selStatus }}</span>
+                  <button onClick="{{ downloadSel }}" style="display:flex;align-items:center;gap:8px;background:var(--nf-red);border:0;color:#fff;border-radius:6px;padding:9px 14px;font-size:12px;font-weight:700;cursor:pointer" style-hover="background:var(--nf-red-600)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
+                    Download {{ fmt }}
+                  </button>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--bd)">
+                  <sc-for list="{{ selStats }}" as="s" hint-placeholder-count="4">
+                    <div style="padding:12px 16px;border-right:1px solid var(--bd)">
+                      <div style="font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--mut)">{{ s.label }}</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:700;color:var(--tx);margin-top:4px">{{ s.value }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:grid;grid-template-columns:100px 1.1fr 1.4fr 62px 74px;gap:10px;padding:9px 16px;background:var(--head);border-bottom:1px solid var(--bd);font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--mut)">
+                  <div>ENTRY DATE</div><div>PROJECT</div><div>CATEGORY</div><div style="text-align:right">HOURS</div><div style="text-align:center">BILLABLE</div>
+                </div>
+                <div style="max-height:396px;overflow-y:auto">
+                  <sc-for list="{{ selRows }}" as="e" hint-placeholder-count="8">
+                    <div style="display:grid;grid-template-columns:100px 1.1fr 1.4fr 62px 74px;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--bd)" style-hover="background:var(--hov)">
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:600;color:var(--tx2)">{{ e.date }}</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--tx)">{{ e.project }}</div>
+                      <div style="font-size:12px;font-weight:500;color:var(--tx2)">{{ e.category }}</div>
+                      <div style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--tx)">{{ e.hours }}</div>
+                      <div style="text-align:center;font-size:10px;font-weight:700;letter-spacing:.06em;color:{{ e.bFg }}">{{ e.bLabel }}</div>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ selEmpty }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:40px 16px;text-align:center;font-size:12.5px;font-weight:600;color:var(--mut)">No EOD entries match the current filters for this employee.</div>
+                  </sc-if>
+                </div>
+              </section>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isQuery }}" hint-placeholder-val="{{ false }}">
+            <section style="background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--bd);flex-wrap:wrap">
+                <div style="font-size:14px;font-weight:800;color:var(--tx)">Everyone's EOD entries</div>
+                <div style="flex:1"></div>
+                <button onClick="{{ toggleGrouped }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="border-color:var(--nf-red);color:var(--tx)">{{ groupBtn }}</button>
+                <button onClick="{{ downloadAll }}" style="display:flex;align-items:center;gap:8px;background:var(--nf-red);border:0;color:#fff;border-radius:6px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer" style-hover="background:var(--nf-red-600)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
+                  Download all ({{ fmt }})
+                </button>
+              </div>
+              <div style="display:grid;grid-template-columns:1.4fr 100px 1.1fr 1.3fr 60px 72px 40px;gap:10px;padding:9px 16px;background:var(--head);border-bottom:1px solid var(--bd);font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--mut)">
+                <div>EMPLOYEE</div><div>ENTRY DATE</div><div>PROJECT</div><div>CATEGORY</div><div style="text-align:right">HOURS</div><div style="text-align:center">BILLABLE</div><div></div>
+              </div>
+              <div style="max-height:560px;overflow-y:auto">
+                <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+                  <div>
+                    <div onClick="{{ g.onToggle }}" style="display:grid;grid-template-columns:1.4fr 100px 1.1fr 1.3fr 60px 72px 40px;gap:10px;align-items:center;padding:10px 16px;background:var(--panel2);border-bottom:1px solid var(--bd);cursor:pointer" style-hover="background:var(--hov)">
+                      <div style="display:flex;align-items:center;gap:9px;min-width:0">
+                        <span style="color:var(--mut);font-size:10px;width:8px">{{ g.caret }}</span>
+                        <div style="width:24px;height:24px;flex:0 0 24px;border-radius:50%;background:{{ g.avBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800">{{ g.initials }}</div>
+                        <div style="font-size:12.5px;font-weight:800;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ g.name }}</div>
+                      </div>
+                      <div style="font-size:10.5px;font-weight:600;color:var(--mut)">{{ g.span }}</div>
+                      <div style="font-size:10.5px;font-weight:600;color:var(--mut)">{{ g.projects }}</div>
+                      <div style="font-size:10.5px;font-weight:600;color:var(--mut)">{{ g.countLabel }}</div>
+                      <div style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--tx)">{{ g.hours }}</div>
+                      <div style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--ok)">{{ g.billLabel }}</div>
+                      <button onClick="{{ g.onDownload }}" title="Download this employee's EOD" style="width:26px;height:26px;border:1px solid var(--bd);background:transparent;border-radius:6px;color:var(--tx2);display:flex;align-items:center;justify-content:center;cursor:pointer;justify-self:end" style-hover="border-color:var(--nf-red);color:var(--nf-red)">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
+                      </button>
+                    </div>
+                    <sc-if value="{{ g.open }}" hint-placeholder-val="{{ true }}">
+                      <div>
+                        <sc-for list="{{ g.rows }}" as="e" hint-placeholder-count="4">
+                          <div style="display:grid;grid-template-columns:1.4fr 100px 1.1fr 1.3fr 60px 72px 40px;gap:10px;align-items:center;padding:9px 16px 9px 49px;border-bottom:1px solid var(--bd)" style-hover="background:var(--hov)">
+                            <div style="font-size:11px;font-weight:500;color:var(--mut)">{{ e.who }}</div>
+                            <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:600;color:var(--tx2)">{{ e.date }}</div>
+                            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--tx)">{{ e.project }}</div>
+                            <div style="font-size:12px;font-weight:500;color:var(--tx2)">{{ e.category }}</div>
+                            <div style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--tx)">{{ e.hours }}</div>
+                            <div style="text-align:center;font-size:10px;font-weight:700;letter-spacing:.06em;color:{{ e.bFg }}">{{ e.bLabel }}</div>
+                            <div></div>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ groupsEmpty }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:48px 16px;text-align:center;font-size:12.5px;font-weight:600;color:var(--mut)">No EOD entries match these filters. Widen the date range or clear a filter.</div>
+                </sc-if>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--bd);font-size:12px;font-weight:700;color:var(--tx2);flex-wrap:wrap">
+                <div>Showing people <span style="font-family:'JetBrains Mono',monospace;color:var(--nf-red)">{{ qRangeLabel }}</span> · your download will include all <span style="font-family:'JetBrains Mono',monospace;color:var(--nf-red)">{{ entryCount }}</span> entries / <span style="font-family:'JetBrains Mono',monospace;color:var(--nf-red)">{{ hoursTotal }}</span> hrs</div>
+                <div style="flex:1"></div>
+                <button onClick="{{ qPrev }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="border-color:var(--nf-red);color:var(--tx)">Prev</button>
+                <div style="font-size:11px;font-weight:600;color:var(--mut);font-family:'JetBrains Mono',monospace">{{ qOfLabel }}</div>
+                <button onClick="{{ qNext }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="border-color:var(--nf-red);color:var(--tx)">Next</button>
+              </div>
+            </section>
+          </sc-if>
+
+          <div style="display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--bd);border-left:2px solid var(--nf-red);border-radius:8px;padding:12px 14px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E01F26" stroke-width="1.8"><rect x="4" y="10" width="16" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
+            <div style="font-size:12.5px;font-weight:500;color:var(--tx2)">Exports are <strong style="color:var(--nf-red);font-weight:800">role-scoped</strong> — every file contains only the employees and projects your role is permitted to see.</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isMissing }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+        <section style="background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:14px 16px">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+            <label style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">PROJECT</span>
+              <select value="{{ mProject }}" onChange="{{ onMProject }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+                <sc-for list="{{ projectOpts }}" as="o" hint-placeholder-count="4"><option>{{ o }}</option></sc-for>
+              </select>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">TEAM LEAD</span>
+              <select value="{{ mManager }}" onChange="{{ onMManager }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+                <sc-for list="{{ managerOpts }}" as="o" hint-placeholder-count="4"><option>{{ o }}</option></sc-for>
+              </select>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">SEARCH</span>
+              <input placeholder="Name or ID" value="{{ mQ }}" onChange="{{ onMQ }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+            </label>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--bd)">
+            <button onClick="{{ resetMissingFilters }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="color:var(--tx);border-color:var(--nf-red)">Clear filters</button>
+          </div>
+        </section>
+        <section style="background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--bd)">
+            <div style="font-size:14px;font-weight:800;color:var(--tx)">Missing &amp; late submissions</div>
+            <div style="flex:1"></div>
+            <button onClick="{{ nudgeAll }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="border-color:var(--nf-red);color:var(--tx)">Send reminder to everyone</button>
+            <button onClick="{{ downloadMissing }}" style="background:var(--nf-red);border:0;color:#fff;border-radius:6px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer" style-hover="background:var(--nf-red-600)">Download {{ fmt }}</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1.6fr 1.1fr 1.1fr 90px 96px;gap:12px;padding:9px 16px;background:var(--head);border-bottom:1px solid var(--bd);font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--mut)">
+            <div>EMPLOYEE</div><div>PROJECT</div><div>TEAM LEAD</div><div style="text-align:right">GAPS</div><div></div>
+          </div>
+          <div style="max-height:600px;overflow-y:auto">
+            <sc-for list="{{ missingRows }}" as="m" hint-placeholder-count="8">
+              <div style="display:grid;grid-template-columns:1.6fr 1.1fr 1.1fr 90px 96px;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--bd)" style-hover="background:var(--hov)">
+                <div style="display:flex;align-items:center;gap:9px;min-width:0">
+                  <div style="width:26px;height:26px;flex:0 0 26px;border-radius:50%;background:{{ m.avBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800">{{ m.initials }}</div>
+                  <div style="min-width:0">
+                    <div style="font-size:12.5px;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.name }}</div>
+                    <div style="font-size:10px;color:var(--mut);font-weight:500">{{ m.role }}</div>
+                  </div>
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--tx2)">{{ m.project }}</div>
+                <div style="font-size:12px;font-weight:500;color:var(--tx2)">{{ m.manager }}</div>
+                <button onClick="{{ m.onOpenCal }}" title="See which days are missing" style="justify-self:end;display:flex;align-items:center;gap:7px;background:transparent;border:1px solid var(--bd);border-radius:6px;padding:5px 10px;cursor:pointer" style-hover="border-color:var(--nf-red);background:var(--hov)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--mut)" stroke-width="1.9"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M8 3v4M16 3v4M3 10h18"></path></svg>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:{{ m.gapColor }}">{{ m.gaps }}</span>
+                </button>
+                <button onClick="{{ m.onNudge }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;justify-self:end" style-hover="border-color:var(--nf-red);color:var(--nf-red)">Remind</button>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--bd);font-size:12px;font-weight:700;color:var(--tx2)">
+            <div>Showing <span style="font-family:'JetBrains Mono',monospace;color:var(--nf-red)">{{ mRangeLabel }}</span></div>
+            <div style="flex:1"></div>
+            <button onClick="{{ mPrev }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="border-color:var(--nf-red);color:var(--tx)">Prev</button>
+            <div style="font-size:11px;font-weight:600;color:var(--mut);font-family:'JetBrains Mono',monospace">{{ mOfLabel }}</div>
+            <button onClick="{{ mNext }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="border-color:var(--nf-red);color:var(--tx)">Next</button>
+          </div>
+        </section>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isUtil }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:16px">
+        <section style="background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:14px 16px">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+            <label style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">EMPLOYEE</span>
+              <select value="{{ uEmp }}" onChange="{{ onUEmp }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+                <sc-for list="{{ uEmpOpts }}" as="o" hint-placeholder-count="6"><option>{{ o }}</option></sc-for>
+              </select>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut)">PROJECT</span>
+              <select value="{{ uProject }}" onChange="{{ onUProject }}" style="background:var(--inp);border:1px solid var(--bd);color:var(--tx);border-radius:6px;padding:8px 9px;font-size:12px;font-weight:600;width:100%">
+                <sc-for list="{{ projectOpts }}" as="o" hint-placeholder-count="6"><option>{{ o }}</option></sc-for>
+              </select>
+            </label>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--bd)">
+            <button onClick="{{ resetUtilFilters }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="color:var(--tx);border-color:var(--nf-red)">Clear filters</button>
+          </div>
+        </section>
+        <section style="background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--bd)">
+            <div style="font-size:14px;font-weight:800;color:var(--tx)">Utilization in range</div>
+            <div style="flex:1"></div>
+            <button onClick="{{ downloadUtil }}" style="background:var(--nf-red);border:0;color:#fff;border-radius:6px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer" style-hover="background:var(--nf-red-600)">Download {{ fmt }}</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1.3fr 1fr 78px 78px 78px 1.1fr;gap:12px;padding:9px 16px;background:var(--head);border-bottom:1px solid var(--bd);font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--mut)">
+            <div>EMPLOYEE</div><div>CLIENT</div><div style="text-align:right">BILLABLE</div><div style="text-align:right">INTERNAL</div><div style="text-align:right">CAPACITY</div><div>UTILIZATION</div>
+          </div>
+          <div style="max-height:600px;overflow-y:auto">
+            <sc-for list="{{ utilRows }}" as="u" hint-placeholder-count="8">
+              <div style="display:grid;grid-template-columns:1.3fr 1fr 78px 78px 78px 1.1fr;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--bd)" style-hover="background:var(--hov)">
+                <div style="display:flex;align-items:center;gap:9px;min-width:0">
+                  <div style="width:26px;height:26px;flex:0 0 26px;border-radius:50%;background:{{ u.avBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800">{{ u.initials }}</div>
+                  <div style="font-size:12.5px;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ u.name }}</div>
+                </div>
+                <div style="font-size:12px;font-weight:500;color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ u.client }}</div>
+                <div style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--tx)">{{ u.billable }}</div>
+                <div style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--tx2)">{{ u.internal }}</div>
+                <div style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--mut)">{{ u.capacity }}</div>
+                <div style="display:flex;align-items:center;gap:9px">
+                  <div style="flex:1;height:6px;border-radius:4px;background:var(--bd);overflow:hidden">
+                    <div style="height:100%;width:{{ u.barPct }};background:{{ u.barColor }}"></div>
+                  </div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:700;color:{{ u.barColor }};width:42px;text-align:right">{{ u.pctLabel }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--bd);font-size:12px;font-weight:700;color:var(--tx2)">
+            <div>Showing <span style="font-family:'JetBrains Mono',monospace;color:var(--nf-red)">{{ uRangeLabel }}</span></div>
+            <div style="flex:1"></div>
+            <button onClick="{{ uPrev }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="border-color:var(--nf-red);color:var(--tx)">Prev</button>
+            <div style="font-size:11px;font-weight:600;color:var(--mut);font-family:'JetBrains Mono',monospace">{{ uOfLabel }}</div>
+            <button onClick="{{ uNext }}" style="background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer" style-hover="border-color:var(--nf-red);color:var(--tx)">Next</button>
+          </div>
+        </section>
+        </div>
+      </sc-if>
+
+      
+    </main>
+  </div>
+
+  <sc-if value="{{ hasCal }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeCal }}" style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:60">
+      <div onClick="{{ stopCal }}" style="width:352px;background:var(--panel);border:1px solid var(--bd);border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.5);overflow:hidden;animation:riseIn .18s ease-out">
+        <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--bd)">
+          <div style="width:30px;height:30px;border-radius:50%;background:{{ cal.avBg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">{{ cal.initials }}</div>
+          <div style="min-width:0">
+            <div style="font-size:13px;font-weight:800;color:var(--tx)">{{ cal.name }}</div>
+            <div style="font-size:10px;font-weight:500;color:var(--mut)">{{ cal.meta }}</div>
+          </div>
+          <div style="flex:1"></div>
+          <button onClick="{{ closeCal }}" style="background:transparent;border:0;color:var(--mut);cursor:pointer;font-size:16px;line-height:1;padding:4px" style-hover="color:var(--tx)">✕</button>
+        </div>
+        <sc-if value="{{ cal.confirming }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:24px 20px">
+            <div style="display:flex;justify-content:center;margin-bottom:14px">
+              <div style="width:44px;height:44px;border-radius:50%;background:rgba(224,31,38,.14);display:flex;align-items:center;justify-content:center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E01F26" stroke-width="1.9"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5M12 16h.01"></path></svg>
+              </div>
+            </div>
+            <div style="font-size:13.5px;font-weight:700;color:var(--tx);text-align:center;line-height:1.5">{{ cal.confirmText }}</div>
+            <div style="display:flex;gap:10px;margin-top:20px">
+              <button onClick="{{ cal.onCancel }}" style="flex:1;background:transparent;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:10px;font-size:12px;font-weight:700;cursor:pointer" style-hover="border-color:var(--tx2);color:var(--tx)">Cancel</button>
+              <button onClick="{{ cal.onConfirm }}" style="flex:1;background:var(--nf-red);border:0;color:#fff;border-radius:6px;padding:10px;font-size:12px;font-weight:800;cursor:pointer" style-hover="background:var(--nf-red-600)">Confirm &amp; send</button>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ cal.notConfirming }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:14px 16px">
+          <div style="font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mut);margin-bottom:10px">JULY 2026</div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px">
+            <sc-for list="{{ dows }}" as="d" hint-placeholder-count="7">
+              <div style="text-align:center;font-size:9px;font-weight:700;color:var(--mut)">{{ d }}</div>
+            </sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
+            <sc-for list="{{ cal.cells }}" as="c" hint-placeholder-count="35">
+              <div onClick="{{ c.onClick }}" title="{{ c.note }}" style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;border:1px solid {{ c.bd }};border-radius:6px;background:{{ c.bg }};color:{{ c.fg }};font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:700;cursor:{{ c.cursor }};box-shadow:{{ c.ring }}">{{ c.label }}</div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--bd)">
+            <div style="display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:var(--tx2)"><span style="width:9px;height:9px;border-radius:3px;background:rgba(63,191,131,.35);border:1px solid #3FBF83"></span>Submitted</div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:var(--tx2)"><span style="width:9px;height:9px;border-radius:3px;background:rgba(224,31,38,.3);border:1px solid #E01F26"></span>Missed</div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:var(--tx2)"><span style="width:9px;height:9px;border-radius:3px;background:rgba(224,166,46,.3);border:1px solid #E0A62E"></span>Holiday</div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:var(--mut)"><span style="width:9px;height:9px;border-radius:3px;background:var(--hov);border:1px solid var(--bd)"></span>Weekend</div>
+          </div>
+          <div style="font-size:11px;font-weight:600;color:var(--mut);margin-top:10px">{{ cal.summary }}</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+            <div style="flex:1;font-size:11px;font-weight:600;color:var(--tx2)">{{ cal.hint }}</div>
+            <sc-if value="{{ cal.hasPicks }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ cal.clearPicks }}" style="background:transparent;border:0;color:var(--mut);font-size:11px;font-weight:700;cursor:pointer;padding:0" style-hover="color:var(--nf-red)">Clear</button>
+            </sc-if>
+          </div>
+          <button onClick="{{ cal.onNudge }}" style="width:100%;margin-top:12px;background:var(--nf-red);border:0;color:#fff;border-radius:6px;padding:10px;font-size:12px;font-weight:800;cursor:pointer" style-hover="background:var(--nf-red-600)">{{ cal.nudgeLabel }}</button>
+        </div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;right:22px;bottom:22px;display:flex;align-items:center;gap:11px;background:#121214;border:1px solid var(--nf-red-maroon);border-left:3px solid var(--nf-red);border-radius:8px;padding:13px 16px;box-shadow:0 18px 40px rgba(0,0,0,.5);animation:riseIn .2s ease-out;z-index:50;max-width:420px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E01F26" stroke-width="2"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path></svg>
+      <div style="font-size:12.5px;font-weight:700;color:#fff">{{ toast }}</div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;'dark'|'light'&quot;},&quot;defaultFlow&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;roster&quot;,&quot;query&quot;],&quot;default&quot;:&quot;roster&quot;,&quot;tsType&quot;:&quot;'roster'|'query'&quot;},&quot;rowsPerPage&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:9,&quot;min&quot;:5,&quot;max&quot;:20,&quot;tsType&quot;:&quot;number&quot;},&quot;showRoleSwitcher&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+const FIRST=['Sai','Ravi','Priya','Anil','Divya','Marcus','Neha','Arjun','Kavya','Rahul','Sneha','Vikram','Meera','Karthik','Ananya','Rohit','Lakshmi','Aditya','Pooja','Suresh','Elena','Jonas','Tara','Nikhil','Ishita','Varun','Deepa','Manoj','Ritu','Gaurav','Sana','Dinesh','Aarti','Kiran','Naveen'];
+const LAST=['Rodda','Dandu','Nair','Kumar','Reddy','Hale','Sharma','Menon','Iyer','Verma','Patil','Rao','Joshi','Bose','Kapoor','Shetty','Pillai','Ghosh','Desai','Malhotra'];
+const PROJECTS=[{code:'APEX-BANKING',client:'Meridian Financial'},{code:'ORBIT-CRM',client:'Orbit Retail'},{code:'NOVA-PAYMENTS',client:'Nova Health'},{code:'INTERNAL-TOOLS',client:'Internal'},{code:'SENTINEL-AI',client:'Sentinel Labs'},{code:'MERIDIAN-QA',client:'Meridian Financial'}];
+const CATS=['Test Case Preparation','Test Execution','Automation Scripting','Defect Triage','Sprint Ceremony','Requirement Analysis','Regression Suite'];
+const MGRS=['Ravi Dandu','Priya Nair','Marcus Hale','Karthik Iyer'];
+const ROLES=['QA Engineer','Sr. QA Engineer','Automation Engineer','Test Lead','Performance Tester'];
+const AV=['#C21319','#6E0A10','#2A2A2E','#9F1216','#3A3A40'];
+const TYPES=['Daily EOD Report','Weekly EOD Summary','Missing EOD Report','Monthly Utilization Report','Client-wise Utilization','Billable vs Non-Billable','Project Allocation Report'];
+
+function rng(seed){let s=seed;return function(){s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff;};}
+function pad(n){return n<10?'0'+n:''+n;}
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const HOLIDAYS={'2026-07-03':'Public holiday','2026-07-10':'Company holiday'};
+function pretty(iso){const p=iso.split('-');return MON[parseInt(p[1],10)-1]+' '+parseInt(p[2],10);}
+
+function buildEmployees(){
+  const r=rng(9137),out=[];
+  for(let i=0;i<175;i++){
+    const f=FIRST[i%FIRST.length],l=LAST[(i*7+3)%LAST.length],name=f+' '+l;
+    const p=PROJECTS[Math.floor(r()*PROJECTS.length)];
+    const roll=r();
+    const status=roll<0.7?'Submitted':(roll<0.88?'Late':'Missing');
+    const n=status==='Missing'?2+Math.floor(r()*4):7+Math.floor(r()*5);
+    const days=[];
+    while(days.length<n){const d=1+Math.floor(r()*15);if(days.indexOf(d)<0)days.push(d);}
+    days.sort(function(a,b){return a-b;});
+    const entries=days.map(function(d,j){
+      const pr=r()<0.75?p:PROJECTS[Math.floor(r()*PROJECTS.length)];
+      const h=[2,3,4,5,6,8][Math.floor(r()*6)];
+      return {id:i+'-'+j,date:'2026-07-'+pad(d),day:d,project:pr.code,client:pr.client,category:CATS[Math.floor(r()*CATS.length)],hours:h,billable:pr.code!=='INTERNAL-TOOLS'&&r()<0.85};
+    });
+    out.push({id:'NF1-'+(1400+i),name:name,initials:f[0]+l[0],role:ROLES[Math.floor(r()*ROLES.length)],project:p.code,client:p.client,manager:MGRS[Math.floor(r()*MGRS.length)],status:status,av:AV[i%AV.length],entries:entries});
+  }
+  return out;
+}
+
+const CHIP={Submitted:['rgba(63,191,131,.14)','#3FBF83'],Late:['rgba(224,166,46,.16)','#E0A62E'],Missing:['rgba(224,31,38,.16)','#E01F26']};
+
+class Component extends DCLogic {
+  constructor(p){
+    super(p);
+    this.emps=buildEmployees();
+    this.state={
+      theme:p.defaultTheme||'dark',
+      role:'Project Manager',
+      flow:p.defaultFlow||'roster',
+      tab:'eod',
+      from:'2026-07-01',to:'2026-07-15',
+      project:'All projects',client:'All clients',manager:'All team leads',status:'All statuses',billable:'All work',q:'',
+      fmt:'Excel',page:0,qPage:0,mPage:0,uPage:0,selectedId:this.emps[0].id,checked:{},grouped:true,closed:{},
+      mProject:'All projects',mManager:'All team leads',mQ:'',
+      uEmp:'All employees',uProject:'All projects',
+      toast:'',calFor:null,calPick:{},calConfirm:false,
+      ns:{name:'',type:'Daily EOD Report',freq:'Weekly',time:'18:30',recips:'ravi.dandu@nforceone.com',fmt:'Excel'},
+      scheds:[
+        {id:1,name:'PM Daily EOD digest',type:'Daily EOD Report',scope:'My 3 projects',cadence:'Daily · 19:00',next:'Aug 06, 19:00',recipients:'ravi.dandu@nforceone.com',fmt:'Excel',active:true},
+        {id:2,name:'Missing EOD chase list',type:'Missing EOD Report',scope:'All reportees',cadence:'Weekdays · 10:30',next:'Aug 06, 10:30',recipients:'ravi.dandu@…, leads@…',fmt:'CSV',active:true},
+        {id:3,name:'Client utilization — Meridian',type:'Client-wise Utilization',scope:'Meridian Financial',cadence:'Monthly · 1st, 08:00',next:'Sep 01, 08:00',recipients:'delivery@nforceone.com',fmt:'PDF',active:false}
+      ]
+    };
+  }
+  set(k){const self=this;return function(e){self.setState({[k]:e.target.value,page:0,qPage:0,mPage:0,uPage:0});};}
+  pager(key,total,size,current){
+    const self=this,pages=Math.max(1,Math.ceil(total/size)),page=Math.min(current,pages-1);
+    return {page:page,pages:pages,start:page*size,end:Math.min(total,page*size+size),
+      label:total===0?'No rows':(page*size+1)+'–'+Math.min(total,page*size+size)+' of '+total,
+      ofLabel:'Page '+(page+1)+' / '+pages,
+      prev:function(){self.setState({[key]:Math.max(0,page-1)});},
+      next:function(){self.setState({[key]:Math.min(pages-1,page+1)});}};
+  }
+  nsSet(k){const self=this;return function(e){const ns=Object.assign({},self.state.ns);ns[k]=e.target.value;self.setState({ns:ns});};}
+  say(msg){
+    const self=this;
+    clearTimeout(this._t);
+    this.setState({toast:msg});
+    this._t=setTimeout(function(){self.setState({toast:''});},3200);
+  }
+  inRange(e){return e.date>=this.state.from&&e.date<=this.state.to;}
+  rowsFor(emp){
+    const s=this.state,self=this;
+    return emp.entries.filter(function(e){
+      if(!self.inRange(e))return false;
+      if(s.project!=='All projects'&&e.project!==s.project)return false;
+      if(s.billable==='Billable only'&&!e.billable)return false;
+      if(s.billable==='Internal only'&&e.billable)return false;
+      return true;
+    });
+  }
+  matches(){
+    const s=this.state,q=s.q.trim().toLowerCase(),self=this;
+    return this.emps.filter(function(m){
+      if(s.client!=='All clients'&&m.client!==s.client)return false;
+      if(s.manager!=='All team leads'&&m.manager!==s.manager)return false;
+      if(s.status!=='All statuses'&&m.status!==s.status)return false;
+      if(q&&m.name.toLowerCase().indexOf(q)<0&&m.id.toLowerCase().indexOf(q)<0)return false;
+      if(s.project!=='All projects'&&self.rowsFor(m).length===0)return false;
+      return true;
+    });
+  }
+  fmtChoices(current,onPick){
+    return ['Excel','PDF','CSV'].map(function(l){
+      const on=current===l;
+      return {label:l,bg:on?'#E01F26':'transparent',fg:on?'#fff':'var(--tx2)',onClick:function(){onPick(l);}};
+    });
+  }
+  renderVals(){
+    const self=this,s=this.state,perPage=this.props.rowsPerPage||9;
+    const list=this.matches();
+    let entryCount=0,hoursTotal=0;
+    const enriched=list.map(function(m){
+      const rows=self.rowsFor(m);
+      let h=0,b=0;
+      rows.forEach(function(e){h+=e.hours;if(e.billable)b+=e.hours;});
+      entryCount+=rows.length;hoursTotal+=h;
+      return {emp:m,rows:rows,hours:h,bill:b};
+    });
+    const pages=Math.max(1,Math.ceil(enriched.length/perPage));
+    const page=Math.min(s.page,pages-1);
+    const slice=enriched.slice(page*perPage,page*perPage+perPage);
+
+    const pageRows=slice.map(function(x){
+      const m=x.emp,sel=m.id===s.selectedId;
+      return {
+        initials:m.initials,name:m.name,sub:m.role+' · '+m.id,avBg:m.av,
+        count:x.rows.length,hours:x.hours.toFixed(1),
+        cntColor:x.rows.length===0?'#E01F26':'var(--tx)',
+        checked:!!s.checked[m.id],rowBg:sel?'var(--hov)':'transparent',
+        onSelect:function(){self.setState({selectedId:m.id});},
+        stop:function(e){e.stopPropagation();},
+        onCheck:function(e){e.stopPropagation();const c=Object.assign({},s.checked);if(c[m.id])delete c[m.id];else c[m.id]=true;self.setState({checked:c});},
+        onDownload:function(e){e.stopPropagation();self.say('Preparing '+m.name+' — EOD '+pretty(s.from)+' to '+pretty(s.to)+' ('+s.fmt+')');}
+      };
+    });
+
+    const selRec=enriched.filter(function(x){return x.emp.id===s.selectedId;})[0]||enriched[0]||{emp:this.emps[0],rows:[],hours:0,bill:0};
+    const se=selRec.emp,chip=CHIP[se.status];
+    const dayCount={};selRec.rows.forEach(function(e){dayCount[e.date]=1;});
+
+    const withRows=enriched.filter(function(x){return x.rows.length>0;});
+    const qp=this.pager('qPage',withRows.length,12,s.qPage);
+    const groups=withRows.slice(qp.start,qp.end).map(function(x){
+      const m=x.emp,open=!s.closed[m.id];
+      const projs={};x.rows.forEach(function(e){projs[e.project]=1;});
+      const pk=Object.keys(projs);
+      return {
+        name:m.name,initials:m.initials,avBg:m.av,open:open,caret:open?'▾':'▸',
+        span:x.rows[0].date.slice(5)+' → '+x.rows[x.rows.length-1].date.slice(5),
+        projects:pk.length>1?pk.length+' projects':pk[0],
+        countLabel:x.rows.length+' entries',
+        hours:x.hours.toFixed(1),billLabel:x.bill.toFixed(1)+' b',
+        onToggle:function(){const c=Object.assign({},s.closed);if(c[m.id])delete c[m.id];else c[m.id]=true;self.setState({closed:c});},
+        onDownload:function(e){e.stopPropagation();self.say('Preparing '+m.name+' — EOD '+pretty(s.from)+' to '+pretty(s.to)+' ('+s.fmt+')');},
+        rows:(s.grouped?x.rows:x.rows).map(function(e){return {who:m.role,date:e.date,project:e.project,category:e.category,hours:e.hours.toFixed(1),bLabel:e.billable?'BILLABLE':'INTERNAL',bFg:e.billable?'var(--ok)':'var(--mut)'};})
+      };
+    });
+
+    const mq=s.mQ.trim().toLowerCase();
+    const missingAll=this.emps.filter(function(m){
+      if(m.status==='Submitted')return false;
+      if(s.mProject!=='All projects'&&m.project!==s.mProject)return false;
+      if(s.mManager!=='All team leads'&&m.manager!==s.mManager)return false;
+      if(mq&&m.name.toLowerCase().indexOf(mq)<0&&m.id.toLowerCase().indexOf(mq)<0)return false;
+      return true;
+    });
+    const mp=this.pager('mPage',missingAll.length,14,s.mPage);
+    const missing=missingAll.slice(mp.start,mp.end).map(function(m){
+      const have={};m.entries.forEach(function(e){if(self.inRange(e))have[e.day]=1;});
+      const gaps=[];for(let d=1;d<=31;d++){const dt='2026-07-'+pad(d),dow=new Date(2026,6,d).getDay();
+        if(dt>=s.from&&dt<=s.to&&dow!==0&&dow!==6&&!HOLIDAYS[dt]&&!have[d])gaps.push('Jul '+pad(d));}
+      return {name:m.name,initials:m.initials,avBg:m.av,role:m.role,project:m.project,manager:m.manager,
+        gaps:gaps.length,gapColor:gaps.length>3?'#E01F26':'#E0A62E',
+        onOpenCal:function(){self.setState({calFor:m.id,calPick:{},calConfirm:false});},
+        onNudge:function(){self.say('Reminder sent to '+m.name+' for '+gaps.length+' missing EOD(s)');}};
+    });
+
+    let cal=null;
+    if(s.calFor){
+      const cm=this.emps.filter(function(m){return m.id===s.calFor;})[0];
+      if(cm){
+        const have={};cm.entries.forEach(function(e){have[e.day]=(have[e.day]||0)+e.hours;});
+        const first=new Date(2026,6,1).getDay(),dim=31,cells=[];
+        for(let i=0;i<first;i++)cells.push({key:'b'+i,label:'',bg:'transparent',fg:'transparent',bd:'transparent',note:''});
+        for(let d=1;d<=dim;d++){
+          const dt='2026-07-'+pad(d),dow=new Date(2026,6,d).getDay(),weekend=dow===0||dow===6;
+          const inR=dt>=s.from&&dt<=s.to;
+          let bg='transparent',fg='var(--mut)',bd='var(--bd)',note='Outside selected range';
+          if(HOLIDAYS[dt]){bg='rgba(224,166,46,.16)';fg='#E0A62E';bd='rgba(224,166,46,.5)';note=HOLIDAYS[dt]+' — no EOD expected'+(have[d]?' (worked '+have[d].toFixed(1)+' hrs)':'');}
+          else if(weekend){bg='var(--hov)';fg='var(--mut)';bd='transparent';note='Weekend — no EOD expected'+(have[d]?' (worked '+have[d].toFixed(1)+' hrs)':'');}
+          else if(have[d]){bg='rgba(63,191,131,.16)';fg='#3FBF83';bd='rgba(63,191,131,.45)';note='Submitted · '+have[d].toFixed(1)+' hrs';}
+          else if(inR){bg='rgba(224,31,38,.16)';fg='#E01F26';bd='rgba(224,31,38,.5)';note='No EOD submitted';}
+          const missed=!have[d]&&inR&&!weekend&&!HOLIDAYS[dt];
+          const picked=!!s.calPick[dt];
+          if(picked){bg='rgba(224,31,38,.42)';fg='#fff';bd='#E01F26';}
+          cells.push({key:'d'+d,label:d,bg:bg,fg:fg,bd:bd,note:missed?(picked?'Selected — click to unselect':'Click to select just this day'):note,
+            cursor:missed?'pointer':'default',ring:picked?'0 0 0 2px rgba(224,31,38,.35)':'none',
+            onClick:missed?function(){const c=Object.assign({},s.calPick);if(c[dt])delete c[dt];else c[dt]=true;self.setState({calPick:c});}:function(){}});
+        }
+        let sub=0,miss=0;/* working days only */
+        for(let d=1;d<=dim;d++){const dt='2026-07-'+pad(d),dow=new Date(2026,6,d).getDay();
+          if(dt<s.from||dt>s.to||dow===0||dow===6||HOLIDAYS[dt])continue;
+          if(have[d])sub++;else miss++;}
+        const picks=Object.keys(s.calPick).sort();
+        const targetLabel=picks.length?(picks.length+' selected day'+(picks.length>1?'s':'')+' ('+picks.map(pretty).join(', ')+')'):('all '+miss+' missing days');
+        cal={name:cm.name,initials:cm.initials,avBg:cm.av,meta:cm.role+' · '+cm.id,
+          cells:cells,summary:sub+' submitted · '+miss+' missed between '+pretty(s.from)+' and '+pretty(s.to),
+          hint:picks.length?'Emailing about '+picks.map(pretty).join(', '):'Tip: click a red day to remind about just that date',
+          hasPicks:picks.length>0,
+          clearPicks:function(){self.setState({calPick:{}});},
+          confirming:s.calConfirm,notConfirming:!s.calConfirm,
+          nudgeLabel:picks.length?('Send reminder for '+picks.length+' selected day'+(picks.length>1?'s':'')):('Send reminder for all '+miss+' missed days'),
+          confirmText:'Send a reminder email to '+cm.name+' for '+targetLabel+'?',
+          onNudge:function(){self.setState({calConfirm:true});},
+          onCancel:function(){self.setState({calConfirm:false});},
+          onConfirm:function(){
+            self.say(picks.length
+              ?('Reminder sent to '+cm.name+' for '+picks.map(pretty).join(', '))
+              :('Reminder sent to '+cm.name+' for all '+miss+' missing EOD(s)'));
+            self.setState({calFor:null,calPick:{},calConfirm:false});
+          }};
+      }
+    }
+
+    const utilList=enriched.filter(function(x){
+      if(s.uEmp!=='All employees'&&x.emp.name!==s.uEmp)return false;
+      if(s.uProject!=='All projects'&&x.emp.project!==s.uProject)return false;
+      return true;
+    });
+    const up=this.pager('uPage',utilList.length,14,s.uPage);
+    const utilRows=utilList.slice(up.start,up.end).map(function(x){
+      const cap=Math.max(8,x.rows.length*8||8);
+      const pct=Math.min(140,Math.round(x.bill/cap*100));
+      return {name:x.emp.name,initials:x.emp.initials,avBg:x.emp.av,client:x.emp.client,
+        billable:x.bill.toFixed(1),internal:(x.hours-x.bill).toFixed(1),capacity:cap.toFixed(1),
+        pctLabel:pct+'%',barPct:Math.min(100,pct)+'%',
+        barColor:pct>=75?'#3FBF83':(pct>=50?'#E0A62E':'#E01F26')};
+    });
+
+    const scheds=s.scheds.map(function(x){
+      return Object.assign({},x,{
+        dot:x.active?'#3FBF83':'#7A7A82',
+        toggleLabel:x.active?'Pause':'Resume',
+        onToggle:function(){self.setState({scheds:s.scheds.map(function(y){return y.id===x.id?Object.assign({},y,{active:!y.active}):y;})});self.say((x.active?'Paused':'Resumed')+' "'+x.name+'"');},
+        onDelete:function(){self.setState({scheds:s.scheds.filter(function(y){return y.id!==x.id;})});self.say('Deleted "'+x.name+'"');},
+        onRun:function(){self.say('Running "'+x.name+'" now — '+x.fmt+' will be emailed to '+x.recipients);}
+      });
+    });
+
+    const scopeParts=[pretty(s.from)+' to '+pretty(s.to)];
+    ['project','client','manager','status','billable'].forEach(function(k){if(s[k].indexOf('All ')!==0)scopeParts.push(s[k]);});
+
+    const checkedIds=Object.keys(s.checked);
+
+    return {
+      theme:s.theme,themeLabel:s.theme==='dark'?'Light':'Dark',
+      toggleTheme:function(){self.setState({theme:s.theme==='dark'?'light':'dark'});},
+      role:s.role,onRole:this.set('role'),showRole:this.props.showRoleSwitcher!==false,
+
+      flows:[{id:'1a',label:'Pick a person',key:'roster'},{id:'1b',label:'See the whole team',key:'query'}].map(function(f){
+        const on=s.flow===f.key;
+        return {id:f.id,label:f.label,bg:on?'#E01F26':'transparent',fg:on?'#fff':'var(--tx2)',onClick:function(){self.setState({flow:f.key});}};
+      }),
+      isRoster:s.flow==='roster',isQuery:s.flow==='query',
+
+      tabs:[{k:'eod',label:'EOD by employee',c:list.length},{k:'missing',label:'Missing EOD',c:missingAll.length},{k:'util',label:'Utilization',c:utilList.length}].map(function(t){
+        const on=s.tab===t.k;
+        return {label:t.label,count:t.c,fw:on?800:600,fg:on?'var(--tx)':'var(--mut)',bar:on?'#E01F26':'transparent',onClick:function(){self.setState({tab:t.k});}};
+      }),
+      isEod:s.tab==='eod',isMissing:s.tab==='missing',isUtil:s.tab==='util',isSched:s.tab==='sched',
+
+      from:s.from,to:s.to,onFrom:this.set('from'),onTo:this.set('to'),
+      project:s.project,client:s.client,manager:s.manager,status:s.status,billable:s.billable,q:s.q,
+      onProject:this.set('project'),onClient:this.set('client'),onManager:this.set('manager'),
+      onStatus:this.set('status'),onBillable:this.set('billable'),onQ:this.set('q'),
+      projectOpts:['All projects'].concat(PROJECTS.map(function(p){return p.code;})),
+      clientOpts:['All clients','Meridian Financial','Orbit Retail','Nova Health','Sentinel Labs','Internal'],
+      managerOpts:['All team leads'].concat(MGRS),
+      statusOpts:['All statuses','Submitted','Late','Missing'],
+      billableOpts:['All work','Billable only','Internal only'],
+      resetFilters:function(){self.setState({project:'All projects',client:'All clients',manager:'All team leads',status:'All statuses',billable:'All work',q:'',from:'2026-07-01',to:'2026-07-15',page:0});},
+
+      matchCount:list.length,entryCount:entryCount,hoursTotal:hoursTotal.toFixed(1),
+      fmt:s.fmt,fmts:this.fmtChoices(s.fmt,function(l){self.setState({fmt:l});}),
+
+      pageRows:pageRows,
+      pageLabel:list.length+' of 175 in scope',
+      pageOfLabel:'Page '+(page+1)+' / '+pages,
+      prevPage:function(){self.setState({page:Math.max(0,page-1)});},
+      nextPage:function(){self.setState({page:Math.min(pages-1,page+1)});},
+      hasChecked:checkedIds.length>0,
+      checkedLabel:checkedIds.length+' employees selected',
+      bulkZip:function(){self.say('Downloading '+checkedIds.length+' separate '+s.fmt+' files — one per person');},
+      bulkMerge:function(){self.say('Downloading one '+s.fmt+' file with all '+checkedIds.length+' people — a separate sheet for each');},
+      clearChecked:function(){self.setState({checked:{}});},
+
+      selName:se.name,selInitials:se.initials,selAvBg:se.av,
+      selMeta:se.role+' · '+se.id+' · '+se.client+' · reports to '+se.manager,
+      selStatus:se.status,selChipBg:chip[0],selChipFg:chip[1],
+      selStats:[
+        {label:'ENTRIES',value:selRec.rows.length},
+        {label:'DAYS LOGGED',value:Object.keys(dayCount).length},
+        {label:'TOTAL HRS',value:selRec.hours.toFixed(1)},
+        {label:'BILLABLE HRS',value:selRec.bill.toFixed(1)}
+      ],
+      selRows:selRec.rows.map(function(e){return {date:e.date,project:e.project,category:e.category,hours:e.hours.toFixed(1),bLabel:e.billable?'BILLABLE':'INTERNAL',bFg:e.billable?'var(--ok)':'var(--mut)'};}),
+      selEmpty:selRec.rows.length===0,
+      downloadSel:function(){self.say('Downloading '+se.name+' — EOD '+pretty(s.from)+' to '+pretty(s.to)+' ('+s.fmt+', '+selRec.rows.length+' rows)');},
+
+      groups:groups,groupsEmpty:groups.length===0,groupCount:withRows.length,
+      qRangeLabel:qp.label,qOfLabel:qp.ofLabel,qPrev:qp.prev,qNext:qp.next,
+      mRangeLabel:mp.label,mOfLabel:mp.ofLabel,mPrev:mp.prev,mNext:mp.next,
+      uRangeLabel:up.label,uOfLabel:up.ofLabel,uPrev:up.prev,uNext:up.next,
+      grouped:s.grouped,groupBtn:s.grouped?'Hide entries':'Show entries',
+      toggleGrouped:function(){
+        if(s.grouped){const c={};self.emps.forEach(function(m){c[m.id]=true;});self.setState({closed:c,grouped:false});}
+        else self.setState({closed:{},grouped:true});
+      },
+      downloadAll:function(){self.say('Downloading '+entryCount+' EOD entries for all '+withRows.length+' employees ('+s.fmt+') — everything you filtered, not just this page');},
+
+      missingRows:missing,
+      mProject:s.mProject,mManager:s.mManager,mQ:s.mQ,
+      onMProject:function(e){self.setState({mProject:e.target.value,mPage:0});},
+      onMManager:function(e){self.setState({mManager:e.target.value,mPage:0});},
+      onMQ:function(e){self.setState({mQ:e.target.value,mPage:0});},
+      resetMissingFilters:function(){self.setState({mProject:'All projects',mManager:'All team leads',mQ:'',mPage:0});},
+      nudgeAll:function(){self.say('Reminder sent to '+missingAll.length+' employees with missing EOD');},
+      downloadMissing:function(){self.say('Downloading Missing EOD Report ('+s.fmt+')');},
+      utilRows:utilRows,
+      uEmp:s.uEmp,uProject:s.uProject,
+      uEmpOpts:['All employees'].concat(this.emps.map(function(m){return m.name;}).sort()),
+      onUEmp:function(e){self.setState({uEmp:e.target.value,uPage:0});},
+      onUProject:function(e){self.setState({uProject:e.target.value,uPage:0});},
+      resetUtilFilters:function(){self.setState({uEmp:'All employees',uProject:'All projects',uPage:0});},
+      downloadUtil:function(){self.say('Downloading Utilization Report ('+s.fmt+')');},
+
+      scheds:scheds,
+      schedSummary:s.scheds.filter(function(x){return x.active;}).length+' active · '+s.scheds.length+' total',
+      typeOpts:TYPES,
+      nsName:s.ns.name,nsType:s.ns.type,nsFreq:s.ns.freq,nsTime:s.ns.time,nsRecips:s.ns.recips,
+      onNsName:this.nsSet('name'),onNsType:this.nsSet('type'),onNsFreq:this.nsSet('freq'),onNsTime:this.nsSet('time'),onNsRecips:this.nsSet('recips'),
+      nsFmts:this.fmtChoices(s.ns.fmt,function(l){self.setState({ns:Object.assign({},s.ns,{fmt:l})});}),
+      scopeText:scopeParts.join(' · '),
+      addSched:function(){
+        const n={id:Date.now(),name:s.ns.name||s.ns.freq+' '+s.ns.type,type:s.ns.type,scope:scopeParts.join(' · '),
+          cadence:s.ns.freq+' · '+s.ns.time,next:'Aug 06, '+s.ns.time,recipients:s.ns.recips,fmt:s.ns.fmt,active:true};
+        self.setState({scheds:s.scheds.concat([n]),ns:Object.assign({},s.ns,{name:''})});
+        self.say('Schedule "'+n.name+'" created');
+      },
+
+      hasCal:!!cal,cal:cal||{cells:[],name:'',initials:'',avBg:'#2A2A2E',meta:'',summary:'',hint:'',hasPicks:false,nudgeLabel:'',confirming:false,notConfirming:true,confirmText:'',clearPicks:function(){},onNudge:function(){},onCancel:function(){},onConfirm:function(){}},
+      closeCal:function(){self.setState({calFor:null,calPick:{},calConfirm:false});},
+      stopCal:function(e){e.stopPropagation();},
+      dows:['S','M','T','W','T','F','S'],
+      hasToast:!!s.toast,toast:s.toast
+    };
+  }
+}
+</script>
+</body>
+</html>

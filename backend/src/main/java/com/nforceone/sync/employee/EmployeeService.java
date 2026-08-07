@@ -1,7 +1,11 @@
 package com.nforceone.sync.employee;
 
+import com.nforceone.sync.auth.AppUser;
+import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.businessrules.BusinessRuleConfig;
 import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
+import com.nforceone.sync.businessrules.ShiftDefinition;
+import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
@@ -21,6 +25,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 // import java.time.OffsetDateTime;
 // import java.time.ZoneOffset;
@@ -35,17 +40,23 @@ public class EmployeeService {
     private final UtilSnapshotRepository    snapshotRepository;
     private final BusinessRuleConfigRepository rulesRepository;
     private final UtilizationService        utilizationService;
+    private final AppUserRepository         userRepository;
+    private final ShiftDefinitionRepository shiftRepository;
 
     public EmployeeService(EodEntryRepository entryRepository,
                            EodTaskRepository taskRepository,
                            UtilSnapshotRepository snapshotRepository,
                            BusinessRuleConfigRepository rulesRepository,
-                           UtilizationService utilizationService) {
+                           UtilizationService utilizationService,
+                           AppUserRepository userRepository,
+                           ShiftDefinitionRepository shiftRepository) {
         this.entryRepository  = entryRepository;
         this.taskRepository   = taskRepository;
         this.snapshotRepository = snapshotRepository;
         this.rulesRepository  = rulesRepository;
         this.utilizationService = utilizationService;
+        this.userRepository   = userRepository;
+        this.shiftRepository  = shiftRepository;
     }
 
     @Transactional(readOnly = true)
@@ -74,7 +85,7 @@ public class EmployeeService {
         // Streak: consecutive approved weekdays going back from today
         int streak = computeStreak(employeeId, today);
 
-        // Days since last issue (MISSED, REJECTED, CHANGES_REQUESTED)
+        // Days since last issue (MISSED, REJECTED)
         int daysSinceLastIssue = computeDaysSinceLastIssue(employeeId, today);
 
         DashboardSummaryDto.QuickStats quickStats = new DashboardSummaryDto.QuickStats(
@@ -132,11 +143,33 @@ public class EmployeeService {
         Optional<EodEntry> todayEntry = entryRepository.findByEmployeeIdAndEntryDate(employeeId, today);
         String status = todayEntry.map(e -> e.getStatus().name()).orElse(null);
 
-        // Cutoff is server local time vs cutoff time from config
-        LocalTime now = LocalTime.now();
-        boolean cutoffPassed = now.isAfter(cutoffTime);
+        // The cutoff must be anchored to a DATE, not compared as a bare time-of-day. A shift that
+        // crosses midnight (Evening, 15:30-00:30) has its cutoff at 00:30 the FOLLOWING day; a
+        // plain time comparison made 00:30 read as 15 hours before the shift even started, so
+        // everyone on that shift was told the cutoff had passed the moment they clocked in.
+        //
+        // The rollover is derived from the employee's own shift rather than a global flag, so it
+        // stays correct for a mixed day/night workforce. No shift assigned means no start time to
+        // compare against, so it falls back to same-day.
+        LocalTime shiftStart = shiftStartFor(employeeId);
+        boolean cutoffNextDay = shiftStart != null && cutoffTime.isBefore(shiftStart);
 
-        return new DashboardSummaryDto.CutoffStatus(today, status, cutoffPassed, cutoffTime);
+        LocalDateTime cutoffAt = LocalDateTime.of(today, cutoffTime);
+        if (cutoffNextDay) cutoffAt = cutoffAt.plusDays(1);
+        boolean cutoffPassed = LocalDateTime.now().isAfter(cutoffAt);
+
+        return new DashboardSummaryDto.CutoffStatus(today, status, cutoffPassed, cutoffTime, cutoffNextDay);
+    }
+
+    /** Start time of this employee's assigned shift, or null when they have none. */
+    private LocalTime shiftStartFor(Long employeeId) {
+        Long shiftId = userRepository.findById(employeeId)
+                .map(AppUser::getShiftId)
+                .orElse(null);
+        if (shiftId == null) return null;
+        return shiftRepository.findById(shiftId)
+                .map(ShiftDefinition::getStartTime)
+                .orElse(null);
     }
 
     private int computeStreak(Long employeeId, LocalDate today) {
@@ -165,8 +198,7 @@ public class EmployeeService {
 
         return entries.stream()
                 .filter(e -> e.getStatus() == EodEntry.Status.MISSED
-                          || e.getStatus() == EodEntry.Status.REJECTED
-                          || e.getStatus() == EodEntry.Status.CHANGES_REQUESTED)
+                          || e.getStatus() == EodEntry.Status.REJECTED)
                 .map(EodEntry::getEntryDate)
                 .max(Comparator.naturalOrder())
                 .map(issueDate -> (int) today.toEpochDay() - (int) issueDate.toEpochDay())

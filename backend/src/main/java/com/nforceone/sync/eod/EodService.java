@@ -45,6 +45,14 @@ public class EodService {
     /** Only used if the config row is somehow absent — the seeded value is 8. */
     private static final BigDecimal FALLBACK_HOURS_PER_DAY = BigDecimal.valueOf(8);
 
+    /**
+     * Hard bounds on hours logged for one day, both inclusive. Neither is the expected-hours
+     * reference — going over THAT is overtime and permitted. These catch data-entry mistakes: a
+     * day contains only 24 hours, and an entry totalling 0 records nothing worth submitting.
+     */
+    private static final BigDecimal MIN_HOURS_PER_DAY = BigDecimal.valueOf(2);
+    private static final BigDecimal MAX_HOURS_PER_DAY = BigDecimal.valueOf(24);
+
     /** Only used if the config row is somehow absent — fails closed rather than allowing
      *  unlimited adjustments, matching what getTimeAdjustmentContext already displays. */
     private static final int FALLBACK_ADJUSTMENT_ALLOWANCE = 0;
@@ -56,7 +64,7 @@ public class EodService {
     private static final int MINUTES_PER_DAY = 24 * 60;
 
     private static final java.util.Set<EodEntry.Status> NEEDS_COMMENT = java.util.Set.of(
-            EodEntry.Status.REJECTED, EodEntry.Status.CHANGES_REQUESTED);
+            EodEntry.Status.REJECTED);
 
     private final EodEntryRepository      entryRepository;
     private final EodTaskRepository       taskRepository;
@@ -110,7 +118,7 @@ public class EodService {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "Entry in status " + entry.getStatus() + " cannot be edited");
             }
-            // Re-open as DRAFT when coming from REJECTED or CHANGES_REQUESTED
+            // Re-open as DRAFT when coming from REJECTED
             entry.setStatus(EodEntry.Status.DRAFT);
         }
 
@@ -248,6 +256,15 @@ public class EodService {
                     "At least one task row is required for a working/leave day.");
         }
 
+        // Work location is required whenever the day actually involves work. A full-day leave has
+        // none by definition (saveDraft leaves it null and the UI disables the field), so it is
+        // only demanded when at least one row is real work. HOLIDAY never reaches here.
+        boolean hasWorkRow = entry.getTasks().stream().anyMatch(t -> !isLeaveRow(t));
+        if (hasWorkRow && (entry.getWorkLocation() == null || entry.getWorkLocation().isBlank())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Work location is required.");
+        }
+
         BigDecimal total = BigDecimal.ZERO;
         int rowNumber = 0;
 
@@ -284,8 +301,24 @@ public class EodService {
             }
             total = total.add(task.getHours());
         }
-        // NOTE: total hours are deliberately NOT capped here. Exceeding the day's reference is
-        // overtime, flagged for the manager in applyOvertime — never a rejection.
+
+        // Exceeding the day's EXPECTED hours is overtime, flagged in applyOvertime, never a
+        // rejection. These two are different: they bound what is physically plausible for a day,
+        // catching a 0-hour submission at one end and a typo at the other. Both are inclusive.
+        // The minimum applies to a WORKING_DAY only. On a leave day the hours are optional — the
+        // absence is the record, so a leave row left at 0 is legitimate. The maximum still applies
+        // to every day type, since no amount of leave makes a day longer than 24 hours.
+        if (entry.getDayType() != EodEntry.DayType.LEAVE
+                && total.compareTo(MIN_HOURS_PER_DAY) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Total hours (" + total.stripTrailingZeros().toPlainString()
+                            + ") must be at least 2 for a single day.");
+        }
+        if (total.compareTo(MAX_HOURS_PER_DAY) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Total hours (" + total.stripTrailingZeros().toPlainString()
+                            + ") cannot exceed 24 for a single day.");
+        }
     }
 
     private BigDecimal totalHours(EodEntry entry) {

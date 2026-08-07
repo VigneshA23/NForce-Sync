@@ -13,8 +13,7 @@ public record AllocationDto(
         String projectCode,
         String projectName,
         LocalDate effectiveFrom,
-        LocalDate effectiveTo,
-        Integer allocationPct
+        LocalDate effectiveTo
 ) {
     public static AllocationDto from(Allocation a) {
         return new AllocationDto(
@@ -26,7 +25,6 @@ public record AllocationDto(
                 a.getProject().getCode(),
                 a.getProject().getName(),
                 a.getEffectiveFrom(),
-                a.getEffectiveTo(),
-                a.getAllocationPct());
+                a.getEffectiveTo());
     }
 }

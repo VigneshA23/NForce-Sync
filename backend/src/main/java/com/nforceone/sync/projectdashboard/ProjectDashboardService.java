@@ -185,6 +185,9 @@ public class ProjectDashboardService {
         // Planned hours per allocation, clipped to the overlap of the allocation's own effective
         // window and the requested range — an allocation that started mid-range should not be
         // credited planned hours for days before it began.
+        //
+        // Every allocation counts as full-time: allocations no longer carry a percentage (V48
+        // dropped allocation_pct), so this used to scale by `allocation_pct / 100` and no longer can.
         BigDecimal totalPlannedHours = BigDecimal.ZERO;
         Map<Long, BigDecimal> plannedByProject = new HashMap<>();
         for (Allocation a : allocations) {
@@ -192,10 +195,7 @@ public class ProjectDashboardService {
             LocalDate winTo = a.getEffectiveTo() != null ? minDate(to, a.getEffectiveTo()) : to;
             if (winTo.isBefore(winFrom)) continue;
             int workingDays = countWorkingDays(winFrom, winTo, holidayDates);
-            BigDecimal planned = standardHours
-                    .multiply(BigDecimal.valueOf(workingDays))
-                    .multiply(BigDecimal.valueOf(a.getAllocationPct()))
-                    .divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
+            BigDecimal planned = standardHours.multiply(BigDecimal.valueOf(workingDays));
             totalPlannedHours = totalPlannedHours.add(planned);
             plannedByProject.merge(a.getProject().getId(), planned, BigDecimal::add);
         }
@@ -238,7 +238,7 @@ public class ProjectDashboardService {
                     BigDecimal actual = actualByEmpProj.getOrDefault(key, BigDecimal.ZERO);
                     return new ResourceUtilizationRowDto(
                             a.getEmployee().getId(), a.getEmployee().getFullName(), a.getProject().getName(),
-                            a.getAllocationPct(), actual, availableHoursPerEmployee,
+                            actual, availableHoursPerEmployee,
                             pctOf(actual, availableHoursPerEmployee));
                 })
                 .sorted(Comparator.comparing(ResourceUtilizationRowDto::employeeName))
@@ -340,7 +340,7 @@ public class ProjectDashboardService {
         if (isLeaveOnlyEntry(entry)) return false;
         return switch (entry.getStatus()) {
             case APPROVED, SUBMITTED -> false;
-            case DRAFT, REJECTED, CHANGES_REQUESTED, MISSED -> true;
+            case DRAFT, REJECTED, MISSED -> true;
         };
     }
 

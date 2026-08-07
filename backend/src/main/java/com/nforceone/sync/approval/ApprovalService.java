@@ -87,7 +87,10 @@ public class ApprovalService {
         List<EodEntry> entries = (from != null && to != null)
                 ? entryRepository.findPendingByManagerIdAndEntryDateBetween(actor.getId(), EodEntry.Status.SUBMITTED, from, to)
                 : entryRepository.findPendingByManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
-        return entries.stream().map(EodEntryDto::from).toList();
+        // Enriched for the Team Lead too, not just the PM: without it isResubmission is always
+        // false, so a rejected entry the employee then fixed and resubmitted came back into the
+        // TL's pending list looking like a first-time submission with no trace of the rejection.
+        return enrichAll(entries);
     }
 
     /** Entries this actor has personally approved/rejected, for the Approved/Rejected tabs. */
@@ -99,7 +102,7 @@ public class ApprovalService {
             return enrichAll(entries);
         }
         List<EodEntry> entries = entryRepository.findDecidedByManagerId(actor.getId(), status);
-        return entries.stream().map(EodEntryDto::from).toList();
+        return enrichAll(entries);
     }
 
     /** Full audit trail for one entry — every approve/reject/request-changes action, oldest first. */
@@ -142,27 +145,8 @@ public class ApprovalService {
         return EodEntryDto.from(entry);
     }
 
-    public EodEntryDto requestChanges(Long entryId, String actorEmail, String comment) {
-        AppUser actor = requireUserByEmail(actorEmail);
-        EodEntry entry = requireEntryById(entryId);
-        checkManagerAuthorization(actor, entry);
-        requireStatus(entry, EodEntry.Status.SUBMITTED);
-
-        OffsetDateTime now = OffsetDateTime.now();
-        recordAction(entry, actor, ApprovalAction.Action.REQUEST_CHANGES, comment, null, now);
-
-        entry.setStatus(EodEntry.Status.CHANGES_REQUESTED);
-        entry.setUpdatedAt(now);
-        entryRepository.save(entry);
-
-        writeAudit(entry, "EOD_CHANGES_REQUESTED", actor, now);
-        notificationService.send(entry.getEmployee().getId(), "EOD_CHANGES_REQUESTED",
-                "Changes requested on EOD entry",
-                "Your EOD entry for " + entry.getEntryDate() + " requires changes."
-                        + (comment != null && !comment.isBlank() ? " Comment: " + comment : ""),
-                "/eod/submit?date=" + entry.getEntryDate());
-        return EodEntryDto.from(entry);
-    }
+    // requestChanges() removed in V44 — reject() covers it. A rejected entry is editable and
+    // resubmittable, which is all "changes requested" ever did.
 
     public List<EodEntryDto> batchApprove(List<Long> entryIds, String actorEmail) {
         AppUser actor = requireUserByEmail(actorEmail);
@@ -171,12 +155,15 @@ public class ApprovalService {
                 .toList();
     }
 
-    // ── PM enrichment (escalation, undertime, TL, resubmission) ────────
+    // ── Enrichment (escalation, undertime, TL, resubmission) ────────
 
     /**
      * Enriches a batch of entries in one extra query (all their ApprovalActions) instead of
-     * one query per row. Only ever called for a PM's own views — the Team Lead's pending list
-     * keeps calling {@code EodEntryDto::from(e)} unchanged.
+     * one query per row.
+     *
+     * Used for BOTH the PM's and the Team Lead's views. It was PM-only, which meant
+     * isResubmission never reached the Team Lead and a resubmitted-after-rejection entry was
+     * indistinguishable from a first submission on their Approvals screen.
      */
     private List<EodEntryDto> enrichAll(List<EodEntry> entries) {
         if (entries.isEmpty()) return List.of();
@@ -199,8 +186,14 @@ public class ApprovalService {
     private EodEntryEnrichment enrich(EodEntry entry, List<ApprovalAction> actions,
                                        int slaHours, BigDecimal standardHours, OffsetDateTime now) {
         AppUser tl = entry.getEmployee().getManager();
-        boolean isResubmission = actions.stream().anyMatch(a ->
-                a.getAction() == ApprovalAction.Action.REJECT || a.getAction() == ApprovalAction.Action.REQUEST_CHANGES);
+        // "Awaiting review again after having been sent back" — so it requires BOTH a prior
+        // rejection AND the entry being back in SUBMITTED. A prior-rejection check alone is true
+        // for an entry that is merely sitting rejected, which would label it as resubmitted on
+        // the Rejected tab. REQUEST_CHANGES is still honoured for entries sent back before V44.
+        boolean isResubmission = entry.getStatus() == EodEntry.Status.SUBMITTED
+                && actions.stream().anyMatch(a ->
+                        a.getAction() == ApprovalAction.Action.REJECT
+                     || a.getAction() == ApprovalAction.Action.REQUEST_CHANGES);
 
         boolean escalated;
         Integer tlInactivityHours = null;

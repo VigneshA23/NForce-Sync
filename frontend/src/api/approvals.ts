@@ -12,7 +12,7 @@ export interface ApprovalActionDto {
   eodEntryId: number;
   actorId: number;
   actorName: string;
-  action: 'APPROVE' | 'REJECT' | 'REQUEST_CHANGES';
+  action: 'APPROVE' | 'REJECT' | 'REQUEST_CHANGES'; // REQUEST_CHANGES: legacy, historical rows only
   comment: string | null;
   billableOverride: boolean | null;
   actedAt: string;
@@ -75,20 +75,11 @@ export function useReject() {
   });
 }
 
-export function useRequestChanges() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ entryId, comment }: { entryId: number; comment: string }) =>
-      api.post<EodEntryDto>(`/approvals/${entryId}/request-changes`, { comment }).then(r => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['approvals'] });
-      qc.invalidateQueries({ queryKey: ['team-lead'] });
-    },
-  });
-}
+// useRequestChanges removed in V44 — POST /approvals/{id}/request-changes no longer exists.
+// useReject covers the same flow: a rejected entry is editable and resubmittable.
 
-/** Entries this actor has personally decided on. Powers the Approved/Rejected/Changes Requested tabs. */
-export function useDecidedApprovals(status: 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED', enabled = true) {
+/** Entries this actor has personally decided on. Powers the Approved/Rejected tabs. */
+export function useDecidedApprovals(status: 'APPROVED' | 'REJECTED', enabled = true) {
   return useQuery({
     queryKey: ['approvals', 'decided', status],
     queryFn: () => api.get<EodEntryDto[]>('/approvals/history', { params: { status } }).then(r => r.data),
@@ -96,7 +87,7 @@ export function useDecidedApprovals(status: 'APPROVED' | 'REJECTED' | 'CHANGES_R
   });
 }
 
-/** Full approve/reject/request-changes audit trail for one entry — fetched lazily on row expand. */
+/** Full approve/reject audit trail for one entry — fetched lazily on row expand. */
 export function useApprovalHistory(entryId: number, enabled: boolean) {
   return useQuery({
     queryKey: ['approvals', 'history', entryId],

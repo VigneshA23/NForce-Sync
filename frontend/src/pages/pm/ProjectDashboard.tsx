@@ -288,7 +288,7 @@ function ProjectUtilizationTable({ rows }: { rows: ProjectUtilizationRowDto[] })
 
 // ── resource utilization table ──────────────────────────────────────────────────
 
-type ResourceSortKey = 'employeeName' | 'projectName' | 'allocationPct' | 'productiveHours' | 'utilizationPct';
+type ResourceSortKey = 'employeeName' | 'projectName' | 'productiveHours' | 'utilizationPct';
 
 function ResourceUtilizationTable({ rows }: { rows: ResourceUtilizationRowDto[] }) {
   const [search, setSearch] = useState('');
@@ -336,7 +336,6 @@ function ResourceUtilizationTable({ rows }: { rows: ResourceUtilizationRowDto[] 
               <tr>
                 <SortableTh label="Employee" active={sort.key === 'employeeName'} dir={sort.dir} onToggle={() => toggle('employeeName')} />
                 <SortableTh label="Project" active={sort.key === 'projectName'} dir={sort.dir} onToggle={() => toggle('projectName')} />
-                <SortableTh label="Allocation" active={sort.key === 'allocationPct'} dir={sort.dir} onToggle={() => toggle('allocationPct')} />
                 <SortableTh label="Productive Hrs" active={sort.key === 'productiveHours'} dir={sort.dir} onToggle={() => toggle('productiveHours')} />
                 <th style={thStyle}>Available Hrs</th>
                 <SortableTh label="Utilization" active={sort.key === 'utilizationPct'} dir={sort.dir} onToggle={() => toggle('utilizationPct')} />
@@ -347,7 +346,6 @@ function ResourceUtilizationTable({ rows }: { rows: ResourceUtilizationRowDto[] 
                 <tr key={`${r.employeeId}-${r.projectName}-${i}`}>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{r.employeeName}</td>
                   <td style={tdStyle}>{r.projectName}</td>
-                  <td style={tdStyle}>{r.allocationPct}%</td>
                   <td style={tdStyle}>{fmtHours(r.productiveHours)}</td>
                   <td style={tdStyle}>{fmtHours(r.availableHours)}</td>
                   <td style={{ ...tdStyle, color: utilColor(r.utilizationPct), fontWeight: 600 }}>{fmtPct(r.utilizationPct)}</td>

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ChevronDown, ChevronRight, Check, X, RotateCcw, CheckCheck, RefreshCw,
+  ChevronDown, ChevronRight, Check, X, CheckCheck, RefreshCw,
   Search,
 } from 'lucide-react';
 import {
   usePendingApprovals, useDecidedApprovals, useApprovalHistory,
-  useApprove, useReject, useRequestChanges, useBatchApprove, type PendingApprovalsRange,
+  useApprove, useReject, useBatchApprove, type PendingApprovalsRange,
 } from '../api/approvals';
 import { Modal } from '../components/Modal';
 import { FilterDropdown } from '../components/FilterDropdown';
@@ -34,14 +34,42 @@ function entryCategories(e: EodEntryDto): string[] {
   return [...new Set(e.tasks.map(t => t.categoryName).filter((c): c is string => !!c))];
 }
 
-/** "Half-day leave 4h" / "Full-day leave 8h" / "Holiday". */
-function leaveLabel(entry: EodEntryDto): string | null {
-  if (entry.dayType === 'HOLIDAY') return 'Holiday';
-  if (entry.dayType !== 'LEAVE') return null;
+/**
+ * One plain-language summary of the day: leave taken, hours worked, and how much of that was
+ * overtime.
+ *
+ * Overtime is stated as a SPLIT of the hours worked, never as a separate addend. A "Half-day
+ * leave 4h" chip beside an "OT +1h" chip and a "9h total" chip forces the reader to work out
+ * that 5 were actually worked, and invites reading leave + worked + OT as additive. Spelling it
+ * out as "worked 4h + 1h OT = 5h" removes the arithmetic.
+ *
+ * regular = worked - overtime, which always lands on the day's expected hours: with 4h leave the
+ * expected work is 8 - 4 = 4, so logging 5 gives 4 regular + 1 OT.
+ *
+ * Returns null for an ordinary working day with no overtime — nothing to clarify there.
+ */
+function daySummary(entry: EodEntryDto): string | null {
+  if (entry.dayType === 'HOLIDAY') return 'Holiday — no tasks';
+
   const leaveHours = sumHours(entry.tasks.filter(t => t.categoryName === LEAVE_CATEGORY));
   const worked = sumHours(entry.tasks.filter(t => t.categoryName !== LEAVE_CATEGORY));
-  if (leaveHours <= 0) return null;
-  return worked > 0 ? `Half-day leave ${hrs(leaveHours)}h` : `Full-day leave ${hrs(leaveHours)}h`;
+  const overtime = entry.isOvertime && entry.overtimeHours != null ? Number(entry.overtimeHours) : 0;
+
+  const parts: string[] = [];
+  if (entry.dayType === 'LEAVE' && leaveHours > 0) {
+    parts.push(worked > 0
+      ? `Half-day leave ${hrs(leaveHours)}h`
+      : `Full-day leave ${hrs(leaveHours)}h`);
+  }
+
+  if (overtime > 0) {
+    const regular = Math.max(0, worked - overtime);
+    parts.push(`worked ${hrs(regular)}h + ${hrs(overtime)}h OT = ${hrs(worked)}h`);
+  } else if (parts.length > 0 && worked > 0) {
+    parts.push(`worked ${hrs(worked)}h`);
+  }
+
+  return parts.length > 0 ? parts.join(' · ') : null;
 }
 
 /** One of late-arrival / early-leave / mid-shift-gap — the schema stores at most one per day. */
@@ -145,7 +173,7 @@ function Chip({ children, tone = 'neutral', dashed = false }: {
 // ── action panel (approve / reject / request changes) ──────────────────────────
 
 interface ActionPanelProps {
-  type: 'approve' | 'reject' | 'request-changes' | null;
+  type: 'approve' | 'reject' | null;
   entryId: number;
   onClose: () => void;
 }
@@ -157,24 +185,19 @@ function ActionPanel({ type, entryId, onClose }: ActionPanelProps) {
 
   const approve = useApprove();
   const reject = useReject();
-  const requestChanges = useRequestChanges();
 
   if (!type) return null;
-  const busy = approve.isPending || reject.isPending || requestChanges.isPending;
+  const busy = approve.isPending || reject.isPending;
 
   async function submit() {
     try {
       if (type === 'approve') {
         await approve.mutateAsync({ entryId, billableOverride, comment: comment || undefined });
         show('Entry approved. Utilization recomputed.', 'success');
-      } else if (type === 'reject') {
+      } else {
         if (!comment.trim()) return;
         await reject.mutateAsync({ entryId, comment });
         show('Entry rejected.', 'success');
-      } else {
-        if (!comment.trim()) return;
-        await requestChanges.mutateAsync({ entryId, comment });
-        show('Changes requested.', 'success');
       }
       onClose();
     } catch (err) {
@@ -258,7 +281,7 @@ function AuditTrail({ entry }: { entry: EodEntryDto }) {
       </ul>
       {entry.reviewerComment && (
         <div style={{ background: 'color-mix(in srgb, var(--risk) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--risk) 30%, transparent)', borderRadius: 8, padding: '10px 12px', fontSize: 12.5, color: 'var(--txt)', marginTop: 10, maxWidth: 520 }}>
-          <strong>{entry.status === 'CHANGES_REQUESTED' ? 'Changes requested: ' : 'Previous reject reason: '}</strong>{entry.reviewerComment}
+          <strong>Reject reason: </strong>{entry.reviewerComment}
         </div>
       )}
     </div>
@@ -280,7 +303,7 @@ function EntryRow({
   onOpenReject: () => void;
   highlighted?: boolean;
 }) {
-  const [action, setAction] = useState<'approve' | 'reject' | 'request-changes' | null>(null);
+  const [action, setAction] = useState<'approve' | 'reject' | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const total = sumHours(entry.tasks);
   const overtime = entry.isOvertime && entry.overtimeHours != null ? Number(entry.overtimeHours) : 0;
@@ -304,9 +327,7 @@ function EntryRow({
     ? <Chip tone="ok">Approved</Chip>
     : entry.status === 'REJECTED'
       ? <Chip tone="risk">Rejected</Chip>
-      : entry.status === 'CHANGES_REQUESTED'
-        ? <Chip tone="warn">Changes requested</Chip>
-        : null;
+      : null;
 
   return (
     <div
@@ -364,12 +385,18 @@ function EntryRow({
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 9 }}>
-            <Chip tone="neutral">{hrs(total)}h total</Chip>
+            {/* "logged" not "total": this counts leave hours too, so it is not the amount worked.
+                daySummary below carries the worked/OT split and replaces the old separate
+                leave and OT chips, which together read as if they summed. */}
+            <Chip tone="neutral">{hrs(total)}h logged</Chip>
             {statusChip}
-            {overtime > 0 && <Chip tone="warn">OT +{hrs(overtime)}h</Chip>}
+            {daySummary(entry) && (
+              <Chip tone={overtime > 0 ? 'warn' : 'neutral'} dashed={overtime === 0}>
+                {daySummary(entry)}
+              </Chip>
+            )}
             {undertime > 0 && <Chip tone="info">Under −{hrs(undertime)}h</Chip>}
             {timeAdjustmentLabel(entry) && <Chip tone="neutral" dashed>{timeAdjustmentLabel(entry)}</Chip>}
-            {leaveLabel(entry) && <Chip tone="neutral" dashed>{leaveLabel(entry)}</Chip>}
             {entry.isResubmission && <Chip tone="neutral" dashed>Resubmitted after rejection</Chip>}
           </div>
         </div>
@@ -377,7 +404,6 @@ function EntryRow({
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
           {actionable ? (
             <div style={{ display: 'flex', gap: 7 }}>
-              <Btn variant="warn" onClick={() => openAction('request-changes')}><RotateCcw size={12} aria-hidden="true" /> Changes</Btn>
               <Btn variant="danger" onClick={() => openAction('reject')}><X size={12} aria-hidden="true" /> Reject</Btn>
               <Btn variant="success" onClick={() => openAction('approve')}><Check size={12} aria-hidden="true" /> Approve</Btn>
             </div>
@@ -400,7 +426,7 @@ function EntryRow({
 
 // ── main ───────────────────────────────────────────────────────────────────────
 
-type Tab = 'pending' | 'approved' | 'rejected' | 'changes-requested';
+type Tab = 'pending' | 'approved' | 'rejected';
 type SortMode = 'oldest' | 'latest' | 'hours' | 'name';
 
 export default function Approvals() {
@@ -422,7 +448,6 @@ export default function Approvals() {
   const { data: pending, isPending: pendingLoading, isError: pendingError, refetch } = usePendingApprovals(true, range);
   const { data: approved, isPending: approvedLoading } = useDecidedApprovals('APPROVED');
   const { data: rejected, isPending: rejectedLoading } = useDecidedApprovals('REJECTED');
-  const { data: changesRequested, isPending: changesRequestedLoading } = useDecidedApprovals('CHANGES_REQUESTED');
   const batchApprove = useBatchApprove();
   const reject = useReject();
   const { show } = useToast();
@@ -442,15 +467,13 @@ export default function Approvals() {
 
   const isLoading = pendingLoading
     || (tab === 'approved' && approvedLoading)
-    || (tab === 'rejected' && rejectedLoading)
-    || (tab === 'changes-requested' && changesRequestedLoading);
+    || (tab === 'rejected' && rejectedLoading);
 
   const baseList: EodEntryDto[] = useMemo(() => {
     if (tab === 'pending') return pending ?? [];
     if (tab === 'approved') return approved ?? [];
-    if (tab === 'rejected') return rejected ?? [];
-    return changesRequested ?? [];
-  }, [tab, pending, approved, rejected, changesRequested]);
+    return rejected ?? [];
+  }, [tab, pending, approved, rejected]);
 
   const allProjects = useMemo(() => [...new Set(baseList.flatMap(entryProjects))].sort(), [baseList]);
   const allCategories = useMemo(() => [...new Set(baseList.flatMap(entryCategories))].sort(), [baseList]);
@@ -494,7 +517,6 @@ export default function Approvals() {
   const pendingCount = pending?.length ?? 0;
   const approvedCount = approved?.length ?? 0;
   const rejectedCount = rejected?.length ?? 0;
-  const changesRequestedCount = changesRequested?.length ?? 0;
 
   function toggleFilterVal(set: Set<string>, setFn: (s: Set<string>) => void, val: string) {
     const next = new Set(set);
@@ -600,7 +622,6 @@ export default function Approvals() {
           ['pending', 'Pending', pendingCount],
           ['approved', 'Approved', approvedCount],
           ['rejected', 'Rejected', rejectedCount],
-          ['changes-requested', 'Changes Requested', changesRequestedCount],
         ] as [Tab, string, number][]).map(([key, label, count]) => (
           <button key={key} onClick={() => switchTab(key)} style={{
             padding: '8px 15px', borderRadius: 20, border: `1px solid ${tab === key ? 'var(--brand)' : 'var(--line2)'}`,
@@ -694,13 +715,11 @@ export default function Approvals() {
             {tab === 'pending' && "You're all caught up"}
             {tab === 'approved' && 'No approved entries yet'}
             {tab === 'rejected' && 'No rejected entries'}
-            {tab === 'changes-requested' && 'No changes-requested entries'}
           </div>
           <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>
             {tab === 'pending' && 'No pending entries match your current filters.'}
             {tab === 'approved' && 'Entries you approve will appear here.'}
             {tab === 'rejected' && 'Entries you reject will appear here with the reason given.'}
-            {tab === 'changes-requested' && 'Entries you send back for changes will appear here.'}
           </div>
         </Card>
       ) : (

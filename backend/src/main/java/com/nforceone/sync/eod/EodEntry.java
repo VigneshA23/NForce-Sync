@@ -75,7 +75,10 @@ public class EodEntry {
     private List<EodTask> tasks = new ArrayList<>();
 
     public enum Status {
-        DRAFT, SUBMITTED, APPROVED, REJECTED, CHANGES_REQUESTED, MISSED
+        // CHANGES_REQUESTED removed in V44 — REJECTED already returns the entry to the employee
+        // for edit and resubmit, so the two were functionally identical. Existing rows were
+        // migrated to REJECTED.
+        DRAFT, SUBMITTED, APPROVED, REJECTED, MISSED
     }
 
     /** Day-level classification. HOLIDAY carries no task rows at all. */
@@ -90,7 +93,6 @@ public class EodEntry {
 
     public boolean isEditable() {
         return status == Status.DRAFT
-            || status == Status.REJECTED
-            || status == Status.CHANGES_REQUESTED;
+            || status == Status.REJECTED;
     }
 }

@@ -1,0 +1,19 @@
+-- V48: remove the allocation percentage entirely.
+--
+-- History: V3 introduced allocation_pct, V29 dropped it when allocation was simplified to a plain
+-- employee+project+dates assignment, and V40 reintroduced it for the PM Project Dashboard's
+-- planned-utilization math. It is now removed for good — allocations carry no percentage.
+--
+-- ProjectDashboardService previously computed
+--     planned = standardHours x workingDays x allocation_pct / 100
+-- and now treats every allocation as full-time, so planned hours rise for anyone who had been
+-- recorded below 100%. Two rows were at 50% when this ran (both Akhila: id 29 on INTERNAL-TOOLS,
+-- id 30 on SYNC); their percentages are not recoverable from the schema afterwards.
+--
+-- Postgres drops V40's CHECK (allocation_pct BETWEEN 1 AND 100) along with the column.
+--
+-- Numbered 48 against a DB at V47: local files stop at V44, while V45-V47 were applied from another
+-- working copy and have no .sql here. Always confirm with
+--   SELECT version FROM flyway_schema_history ORDER BY installed_rank DESC LIMIT 1;
+-- before adding a migration -- Flyway silently skips files at/below the recorded version.
+ALTER TABLE allocation DROP COLUMN IF EXISTS allocation_pct;

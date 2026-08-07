@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 public class EmployeeDashboardService {
 
     private static final Set<EodEntry.Status> CORRECTION_STATUSES =
-            Set.of(EodEntry.Status.REJECTED, EodEntry.Status.CHANGES_REQUESTED);
+            Set.of(EodEntry.Status.REJECTED);
 
     private final AppUserRepository        userRepository;
     private final EodEntryRepository       entryRepository;

@@ -1,0 +1,371 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "components/core/**",
+              "ui_kits/social-posts/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/\\b\\d+px\\b/]",
+        "message": "Raw px value — use a design-system spacing token via var()."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Montserrat|Anton|Great Vibes|JetBrains Mono))/i]",
+        "message": "Font not provided by the design system. Available: Montserrat, Anton, Great Vibes, JetBrains Mono."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='CTA'] > JSXAttribute > JSXIdentifier[name!=/^(?:variant|size|href|key|ref|className|style|children)$/]",
+        "message": "<CTA> doesn't accept that prop. Declared props: variant, size, href."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='CTA'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:solid|ghost|url)$/]",
+        "message": "<CTA> variant must be one of 'solid' | 'ghost' | 'url'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='CTA'] > JSXAttribute[name.name='size'] > Literal[value!=/^(?:sm|md|lg)$/]",
+        "message": "<CTA> size must be one of 'sm' | 'md' | 'lg'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Eyebrow'] > JSXAttribute > JSXIdentifier[name!=/^(?:color|banner|key|ref|className|style|children)$/]",
+        "message": "<Eyebrow> doesn't accept that prop. Declared props: color, banner."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Footer'] > JSXAttribute > JSXIdentifier[name!=/^(?:url|boxed|showLogo|logoSrc|tone|align|key|ref|className|style|children)$/]",
+        "message": "<Footer> doesn't accept that prop. Declared props: url, boxed, showLogo, logoSrc, tone, align."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Footer'] > JSXAttribute[name.name='tone'] > Literal[value!=/^(?:light|dark)$/]",
+        "message": "<Footer> tone must be one of 'light' | 'dark'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Footer'] > JSXAttribute[name.name='align'] > Literal[value!=/^(?:center|between)$/]",
+        "message": "<Footer> align must be one of 'center' | 'between'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Highlight'] > JSXAttribute > JSXIdentifier[name!=/^(?:tone|strike|key|ref|className|style|children)$/]",
+        "message": "<Highlight> doesn't accept that prop. Declared props: tone, strike."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Highlight'] > JSXAttribute[name.name='tone'] > Literal[value!=/^(?:red|salmon|yellow|white)$/]",
+        "message": "<Highlight> tone must be one of 'red' | 'salmon' | 'yellow' | 'white'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='IconFeature'] > JSXAttribute > JSXIdentifier[name!=/^(?:icon|label|sublabel|tone|size|layout|key|ref|className|style|children)$/]",
+        "message": "<IconFeature> doesn't accept that prop. Declared props: icon, label, sublabel, tone, size, layout."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='IconFeature'] > JSXAttribute[name.name='tone'] > Literal[value!=/^(?:white|red)$/]",
+        "message": "<IconFeature> tone must be one of 'white' | 'red'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='IconFeature'] > JSXAttribute[name.name='layout'] > Literal[value!=/^(?:vertical|horizontal)$/]",
+        "message": "<IconFeature> layout must be one of 'vertical' | 'horizontal'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Logo'] > JSXAttribute > JSXIdentifier[name!=/^(?:src|height|variant|key|ref|className|style|children)$/]",
+        "message": "<Logo> doesn't accept that prop. Declared props: src, height, variant."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Logo'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:mark|wordmark)$/]",
+        "message": "<Logo> variant must be one of 'mark' | 'wordmark'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='PostFrame'] > JSXAttribute > JSXIdentifier[name!=/^(?:format|theme|logo|logoSrc|logoCorner|footer|footerUrl|footerBoxed|pad|key|ref|className|style|children)$/]",
+        "message": "<PostFrame> doesn't accept that prop. Declared props: format, theme, logo, logoSrc, logoCorner, footer, footerUrl, footerBoxed, pad."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='PostFrame'] > JSXAttribute[name.name='format'] > Literal[value!=/^(?:landscape|square|portrait)$/]",
+        "message": "<PostFrame> format must be one of 'landscape' | 'square' | 'portrait'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='PostFrame'] > JSXAttribute[name.name='theme'] > Literal[value!=/^(?:dark|ink|red|light)$/]",
+        "message": "<PostFrame> theme must be one of 'dark' | 'ink' | 'red' | 'light'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='PostFrame'] > JSXAttribute[name.name='logoCorner'] > Literal[value!=/^(?:top-left|top-right)$/]",
+        "message": "<PostFrame> logoCorner must be one of 'top-left' | 'top-right'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Tag'] > JSXAttribute > JSXIdentifier[name!=/^(?:variant|key|ref|className|style|children)$/]",
+        "message": "<Tag> doesn't accept that prop. Declared props: variant."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Tag'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:solid|outline|dark)$/]",
+        "message": "<Tag> variant must be one of 'solid' | 'outline' | 'dark'."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {
+      "CTA": {
+        "replaces": []
+      },
+      "Eyebrow": {
+        "replaces": []
+      },
+      "Footer": {
+        "replaces": []
+      },
+      "Highlight": {
+        "replaces": []
+      },
+      "IconFeature": {
+        "replaces": []
+      },
+      "Logo": {
+        "replaces": []
+      },
+      "PostFrame": {
+        "replaces": []
+      },
+      "Tag": {
+        "replaces": []
+      }
+    },
+    "tokens": [
+      "--border-dark",
+      "--border-light",
+      "--border-red",
+      "--color-brand",
+      "--color-brand-active",
+      "--color-brand-hover",
+      "--dur-base",
+      "--dur-fast",
+      "--dur-slow",
+      "--ease-in-out",
+      "--ease-out",
+      "--fmt-landscape-h",
+      "--fmt-landscape-w",
+      "--fmt-portrait-h",
+      "--fmt-portrait-w",
+      "--fmt-square-h",
+      "--fmt-square-w",
+      "--font-body",
+      "--font-display",
+      "--font-impact",
+      "--font-mono",
+      "--font-script",
+      "--fs-body",
+      "--fs-body-lg",
+      "--fs-caption",
+      "--fs-display",
+      "--fs-eyebrow",
+      "--fs-h1",
+      "--fs-h2",
+      "--fs-h3",
+      "--fw-black",
+      "--fw-bold",
+      "--fw-extrabold",
+      "--fw-medium",
+      "--fw-regular",
+      "--fw-semibold",
+      "--glow-red",
+      "--glow-white",
+      "--grad-dark-glow",
+      "--grad-ink-fade",
+      "--grad-red",
+      "--grad-red-field",
+      "--lh-body",
+      "--lh-heading",
+      "--lh-snug",
+      "--lh-tight",
+      "--ls-eyebrow",
+      "--ls-heading",
+      "--ls-tagline",
+      "--nf-black",
+      "--nf-cream",
+      "--nf-gray-100",
+      "--nf-gray-200",
+      "--nf-gray-300",
+      "--nf-gray-400",
+      "--nf-gray-500",
+      "--nf-ink-700",
+      "--nf-ink-800",
+      "--nf-ink-900",
+      "--nf-ink-950",
+      "--nf-meme-yellow",
+      "--nf-red",
+      "--nf-red-600",
+      "--nf-red-700",
+      "--nf-red-bright",
+      "--nf-red-deep",
+      "--nf-red-maroon",
+      "--nf-salmon",
+      "--nf-white",
+      "--post-pad",
+      "--post-pad-sm",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-none",
+      "--radius-pill",
+      "--radius-sm",
+      "--scrim-bottom",
+      "--shadow-md",
+      "--shadow-red",
+      "--shadow-sm",
+      "--sp-1",
+      "--sp-2",
+      "--sp-3",
+      "--sp-4",
+      "--sp-5",
+      "--sp-6",
+      "--sp-7",
+      "--sp-8",
+      "--sp-9",
+      "--surface-canvas",
+      "--surface-card",
+      "--surface-light",
+      "--surface-raised",
+      "--surface-red",
+      "--text-accent",
+      "--text-body",
+      "--text-muted",
+      "--text-on-light",
+      "--text-on-red",
+      "--text-strong"
+    ],
+    "tokenKinds": {
+      "--nf-red": "color",
+      "--nf-red-bright": "color",
+      "--nf-red-600": "color",
+      "--nf-red-700": "color",
+      "--nf-red-maroon": "color",
+      "--nf-red-deep": "color",
+      "--nf-salmon": "color",
+      "--nf-black": "color",
+      "--nf-ink-950": "color",
+      "--nf-ink-900": "color",
+      "--nf-ink-800": "color",
+      "--nf-ink-700": "color",
+      "--nf-gray-500": "color",
+      "--nf-gray-400": "color",
+      "--nf-gray-300": "color",
+      "--nf-gray-200": "color",
+      "--nf-gray-100": "color",
+      "--nf-white": "color",
+      "--nf-cream": "color",
+      "--nf-meme-yellow": "color",
+      "--color-brand": "color",
+      "--color-brand-hover": "color",
+      "--color-brand-active": "color",
+      "--surface-canvas": "color",
+      "--surface-card": "color",
+      "--surface-raised": "color",
+      "--surface-red": "color",
+      "--surface-light": "color",
+      "--text-strong": "font",
+      "--text-body": "font",
+      "--text-muted": "font",
+      "--text-on-red": "font",
+      "--text-on-light": "font",
+      "--text-accent": "font",
+      "--border-dark": "color",
+      "--border-light": "color",
+      "--border-red": "color",
+      "--font-display": "font",
+      "--font-body": "font",
+      "--font-impact": "font",
+      "--font-script": "font",
+      "--font-mono": "font",
+      "--fw-regular": "font",
+      "--fw-medium": "font",
+      "--fw-semibold": "font",
+      "--fw-bold": "font",
+      "--fw-extrabold": "font",
+      "--fw-black": "font",
+      "--fs-eyebrow": "spacing",
+      "--fs-caption": "spacing",
+      "--fs-body": "spacing",
+      "--fs-body-lg": "spacing",
+      "--fs-h3": "spacing",
+      "--fs-h2": "spacing",
+      "--fs-h1": "spacing",
+      "--fs-display": "spacing",
+      "--lh-tight": "other",
+      "--lh-heading": "other",
+      "--lh-snug": "other",
+      "--lh-body": "other",
+      "--ls-eyebrow": "other",
+      "--ls-heading": "other",
+      "--ls-tagline": "other",
+      "--sp-1": "spacing",
+      "--sp-2": "spacing",
+      "--sp-3": "spacing",
+      "--sp-4": "spacing",
+      "--sp-5": "spacing",
+      "--sp-6": "spacing",
+      "--sp-7": "spacing",
+      "--sp-8": "spacing",
+      "--sp-9": "spacing",
+      "--post-pad": "spacing",
+      "--post-pad-sm": "spacing",
+      "--fmt-landscape-w": "spacing",
+      "--fmt-landscape-h": "spacing",
+      "--fmt-square-w": "spacing",
+      "--fmt-square-h": "spacing",
+      "--fmt-portrait-w": "spacing",
+      "--fmt-portrait-h": "spacing",
+      "--radius-none": "radius",
+      "--radius-sm": "radius",
+      "--radius-md": "radius",
+      "--radius-lg": "radius",
+      "--radius-pill": "radius",
+      "--grad-red": "color",
+      "--grad-red-field": "color",
+      "--grad-dark-glow": "color",
+      "--grad-ink-fade": "color",
+      "--scrim-bottom": "color",
+      "--shadow-sm": "shadow",
+      "--shadow-md": "shadow",
+      "--shadow-red": "shadow",
+      "--glow-red": "shadow",
+      "--glow-white": "shadow",
+      "--ease-out": "other",
+      "--ease-in-out": "other",
+      "--dur-fast": "other",
+      "--dur-base": "other",
+      "--dur-slow": "other"
+    },
+    "fontFamilies": [
+      "Anton",
+      "Great Vibes",
+      "JetBrains Mono",
+      "Montserrat"
+    ]
+  }
+}

@@ -15,7 +15,7 @@ import type {
 import { useAuth } from '../../lib/auth';
 import { UtilPctDonut, CategoryDonut, SegmentDonut } from '../../components/UtilizationDonut';
 import { utilColor, fmtPct } from '../../lib/rules';
-import { formatDate, formatDateTime, toLocalISODate, todayISO } from '../../lib/date';
+import { formatDate, formatDateTime, formatTime12h, toLocalISODate, todayISO } from '../../lib/date';
 
 // ── Primitives ─────────────────────────────────────────────────────────────────
 
@@ -61,7 +61,6 @@ function cellTint(day: CalendarDay): string {
     }
     case 'SUBMITTED':         return 'color-mix(in srgb, var(--info) 28%, var(--raised2))';
     case 'DRAFT':             return 'color-mix(in srgb, var(--txt-dim) 18%, var(--raised2))';
-    case 'CHANGES_REQUESTED': return 'color-mix(in srgb, var(--warn) 32%, var(--raised2))';
     case 'REJECTED':          return 'color-mix(in srgb, var(--risk) 32%, var(--raised2))';
     case 'MISSED':            return 'color-mix(in srgb, var(--risk) 50%, var(--raised2))';
     default:                  return 'var(--raised2)';
@@ -88,7 +87,6 @@ function cellDotColor(day: CalendarDay): string {
     case 'DRAFT':             return 'var(--txt-dim)';
     case 'MISSED':            return 'rgba(255,255,255,0.55)';
     case 'REJECTED':          return 'var(--risk)';
-    case 'CHANGES_REQUESTED': return 'var(--warn)';
     default:                  return 'transparent';
   }
 }
@@ -107,7 +105,6 @@ function calendarTooltip(day: CalendarDay): string {
     DRAFT: 'Draft — not submitted',
     MISSED: 'Missed',
     REJECTED: 'Rejected — needs resubmission',
-    CHANGES_REQUESTED: 'Changes requested by manager',
   };
   return `${label} — ${labels[day.status] ?? day.status}`;
 }
@@ -120,7 +117,6 @@ function StatusBadge({ status }: { status: string }) {
     SUBMITTED:         { color: 'var(--info)',      label: 'Pending' },
     DRAFT:             { color: 'var(--txt-dim)',   label: 'Draft' },
     REJECTED:          { color: 'var(--risk)',      label: 'Rejected' },
-    CHANGES_REQUESTED: { color: 'var(--warn)',      label: 'Changes Requested' },
     MISSED:            { color: 'var(--risk)',      label: 'Missed' },
   };
   const { color, label } = map[status] ?? { color: 'var(--txt-dim)', label: status };
@@ -339,7 +335,7 @@ function MonthStatsPanel({ days }: { days: CalendarDay[] }) {
   const approved     = days.filter(d => d.status === 'APPROVED').length;
   const submitted    = days.filter(d => d.status === 'SUBMITTED').length;
   const missed       = days.filter(d => d.status === 'MISSED').length;
-  const needsAction  = days.filter(d => d.status === 'REJECTED' || d.status === 'CHANGES_REQUESTED').length;
+  const needsAction  = days.filter(d => d.status === 'REJECTED').length;
   const empty        = days.filter(d => !d.isWeekend && !d.isFuture && d.status === 'EMPTY').length;
   const upcoming     = days.filter(d => !d.isWeekend && d.isFuture).length;
   const completePct  = pastDays > 0 ? Math.round((approved + submitted) / pastDays * 100) : 0;
@@ -428,7 +424,6 @@ function PendingCorrectionsPanel({ corrections }: { corrections: PendingCorrecti
         </div>
       ) : (
         corrections.slice(0, 4).map(c => {
-          const isCR = c.status === 'CHANGES_REQUESTED';
           return (
             <div key={c.entryId} style={{
               padding: '9px 16px', borderTop: '1px solid var(--line)',
@@ -439,8 +434,8 @@ function PendingCorrectionsPanel({ corrections }: { corrections: PendingCorrecti
                   <span style={{ fontSize: 11, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
                     {formatDate(c.entryDate)}
                   </span>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: isCR ? 'var(--warn)' : 'var(--risk)' }}>
-                    {isCR ? 'Changes Requested' : 'Rejected'}
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--risk)' }}>
+                    Rejected
                   </span>
                 </div>
                 {c.reviewerComment && (
@@ -711,13 +706,14 @@ function UtilPeriodCard({
 // ── Cutoff banner ──────────────────────────────────────────────────────────────
 
 function CutoffBanner({
-  status, cutoffPassed, cutoffTime,
-}: { status: string | null; cutoffPassed: boolean; cutoffTime: string }) {
-  const needsAction = !status || status === 'DRAFT' || status === 'CHANGES_REQUESTED' || status === 'REJECTED';
+  status, cutoffPassed, cutoffTime, cutoffNextDay,
+}: { status: string | null; cutoffPassed: boolean; cutoffTime: string; cutoffNextDay?: boolean }) {
+  const needsAction = !status || status === 'DRAFT' || status === 'REJECTED';
   if (!needsAction) return null;
 
-  const [h, m] = cutoffTime.split(':');
-  const fmt = `${parseInt(h)}:${m}`;
+  // 12-hour clock plus an explicit "next day": a bare "0:30" for a shift that ends after
+  // midnight reads as though the deadline already passed this morning.
+  const fmt = `${formatTime12h(cutoffTime)}${cutoffNextDay ? ' (next day)' : ''}`;
 
   if (cutoffPassed) {
     return (
@@ -731,7 +727,7 @@ function CutoffBanner({
         <AlertCircle size={16} color="var(--risk)" style={{ flexShrink: 0 }} />
         <div style={{ flex: 1 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--risk)' }}>
-            {status === 'CHANGES_REQUESTED' ? "Changes requested — cutoff passed." : "Cutoff passed — EOD not submitted."}
+            {"Cutoff passed — EOD not submitted."}
           </span>
           <span style={{ fontSize: 12, color: 'var(--txt-mut)', marginLeft: 8 }}>
             This day may be marked as missed.
@@ -752,9 +748,7 @@ function CutoffBanner({
       <Clock size={16} color="var(--warn)" style={{ flexShrink: 0 }} />
       <div style={{ flex: 1 }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--warn)' }}>
-          {status === 'CHANGES_REQUESTED'
-            ? "Your manager requested changes."
-            : status === 'DRAFT'
+          {status === 'DRAFT'
             ? "Draft saved — remember to submit."
             : "Today's EOD not yet submitted."}
         </span>
@@ -926,7 +920,6 @@ const TODAY_STATUS_META: Record<string, { color: string; label: string }> = {
   SUBMITTED:         { color: 'var(--info)',   label: 'Pending Review' },
   DRAFT:             { color: 'var(--txt-dim)', label: 'Draft Saved' },
   REJECTED:          { color: 'var(--risk)',   label: 'Rejected' },
-  CHANGES_REQUESTED: { color: 'var(--warn)',   label: 'Changes Requested' },
   MISSING:           { color: 'var(--txt-dim)', label: 'Not Submitted' },
 };
 
@@ -939,7 +932,7 @@ function TodayStatusCard({
   isWeekend: boolean;
 }) {
   const meta = TODAY_STATUS_META[status] ?? { color: 'var(--txt-dim)', label: status };
-  const actionable = !isWeekend && (status === 'MISSING' || status === 'DRAFT' || status === 'REJECTED' || status === 'CHANGES_REQUESTED');
+  const actionable = !isWeekend && (status === 'MISSING' || status === 'DRAFT' || status === 'REJECTED');
   const [h, m] = cutoffTime.split(':');
 
   return (
@@ -1149,6 +1142,7 @@ export default function Dashboard() {
           status={cutoffStatus.entryStatus}
           cutoffPassed={cutoffStatus.cutoffPassed}
           cutoffTime={cutoffStatus.cutoffTime}
+          cutoffNextDay={cutoffStatus.cutoffNextDay}
         />
       )}
 

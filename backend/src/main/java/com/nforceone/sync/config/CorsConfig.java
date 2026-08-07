@@ -17,6 +17,10 @@ public class CorsConfig implements WebMvcConfigurer {
                 .allowedOrigins(allowedOrigins.split(","))
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
+                // Without this, the browser hides Content-Disposition from JS on cross-origin
+                // responses (it's not one of the CORS "simple response headers") — file exports
+                // would download fine but the frontend couldn't read the real filename.
+                .exposedHeaders("Content-Disposition")
                 .allowCredentials(true);
     }
 }

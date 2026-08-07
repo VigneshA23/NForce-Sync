@@ -6,7 +6,6 @@ public record ResourceUtilizationRowDto(
         Long employeeId,
         String employeeName,
         String projectName,
-        Integer allocationPct,
         BigDecimal productiveHours,
         BigDecimal availableHours,
         BigDecimal utilizationPct

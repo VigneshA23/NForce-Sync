@@ -1,0 +1,48 @@
+:root{
+  /* ===== Base palette ===== */
+  /* Brand red — the "1" and accent words */
+  --nf-red: #E01F26;
+  --nf-red-bright: #F0242B;
+  --nf-red-600: #C21319;
+  --nf-red-700: #9F1216;
+  --nf-red-maroon: #6E0A10;
+  --nf-red-deep: #4A0507;
+  --nf-salmon: #E8837F;      /* soft red — script accents on red fields */
+
+  /* Ink / neutrals */
+  --nf-black: #000000;
+  --nf-ink-950: #0A0A0B;     /* primary dark canvas */
+  --nf-ink-900: #121214;     /* dark surface */
+  --nf-ink-800: #1C1C1F;     /* raised dark surface */
+  --nf-ink-700: #2A2A2E;     /* dark border / divider */
+  --nf-gray-500: #7A7A82;
+  --nf-gray-400: #9A9AA2;
+  --nf-gray-300: #C9C9CE;
+  --nf-gray-200: #E4E4E7;
+  --nf-gray-100: #F2F2F3;
+  --nf-white: #FFFFFF;
+  --nf-cream: #F5EFEA;       /* warm off-white used over red fields */
+  --nf-meme-yellow: #FBE14D; /* meme caption highlight */
+
+  /* ===== Semantic aliases ===== */
+  --color-brand: var(--nf-red);
+  --color-brand-hover: var(--nf-red-600);
+  --color-brand-active: var(--nf-red-700);
+
+  --surface-canvas: var(--nf-ink-950);   /* default post background (dark) */
+  --surface-card: var(--nf-ink-900);
+  --surface-raised: var(--nf-ink-800);
+  --surface-red: var(--nf-red);
+  --surface-light: var(--nf-white);
+
+  --text-strong: var(--nf-white);        /* headlines on dark */
+  --text-body: var(--nf-gray-300);        /* body on dark */
+  --text-muted: var(--nf-gray-500);
+  --text-on-red: var(--nf-cream);
+  --text-on-light: var(--nf-ink-950);
+  --text-accent: var(--nf-red);
+
+  --border-dark: var(--nf-ink-700);
+  --border-light: var(--nf-gray-200);
+  --border-red: var(--nf-red);
+}

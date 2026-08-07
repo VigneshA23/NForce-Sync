@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, XCircle, MessageSquare } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, XCircle } from 'lucide-react';
 import { useToast } from '../../lib/toast';
 import { useAuth } from '../../lib/auth';
 import { todayISO, formatDate, formatTime12h } from '../../lib/date';
@@ -39,6 +39,15 @@ const DAY_TYPES = [
  * server rejects with the real number.
  */
 const DAILY_HOURS_CAP = 8;
+
+/**
+ * Hard bounds for one day's logged hours, both inclusive. Distinct from DAILY_HOURS_CAP above,
+ * which is only a reference — going over THAT is overtime and allowed. These bound what is
+ * plausible for a day: an entry totalling 0 records nothing, and more than 24 is a typo.
+ * Mirrored server-side in EodService.
+ */
+const MIN_HOURS_PER_DAY = 2;
+const MAX_HOURS_PER_DAY = 24;
 
 /** Per-use duration limits for a time adjustment. Mirrored server-side in EodService. */
 const MIN_ADJ_MINUTES = 30;
@@ -79,6 +88,15 @@ function minutesToHm(mins: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+
+/**
+ * Identifies a specific version of the server's entry for a date. Used to decide whether the
+ * form still reflects what the server last said. `updatedAt` moves on every server-side change,
+ * so a manager's reject produces a different signature and forces the form to re-populate.
+ */
+function entrySignature(date: string, entry?: EodEntryDto | null): string {
+  return entry ? `${date}|${entry.id}|${entry.status}|${entry.updatedAt}` : `${date}|none`;
+}
 
 // ── Local task row type ────────────────────────────────────────────────────────
 
@@ -143,7 +161,6 @@ function StatusBadge({ status }: { status: string }) {
     SUBMITTED:         { color: '#4C8DD6', label: 'Submitted',         Icon: Clock },
     APPROVED:          { color: '#2FB67C', label: 'Approved',          Icon: CheckCircle },
     REJECTED:          { color: '#E4373D', label: 'Rejected',          Icon: XCircle },
-    CHANGES_REQUESTED: { color: '#E0A93B', label: 'Changes Requested', Icon: MessageSquare },
     MISSED:            { color: '#6B7280', label: 'Missed',            Icon: XCircle },
   };
   const { color, label, Icon } = cfg[status] ?? cfg.DRAFT;
@@ -168,6 +185,11 @@ function Label({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
+}
+
+/** Required-field marker, matching the asterisk already used on the blocker-reason label. */
+function Req() {
+  return <span style={{ color: '#E4373D' }}>*</span>;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -232,9 +254,19 @@ export default function SubmitEOD() {
 
   // Validation errors (client-side)
   const [errors, setErrors] = useState<string[]>([]);
+  const errorRef = useRef<HTMLDivElement>(null);
 
   // Track if form has been populated from the query for the current date
-  const appliedDateRef = useRef<string | null>(null);
+  // Signature of the server state already copied into the form — NOT just the date.
+  //
+  // Keying on the date alone meant a stale cached entry got applied first (React Query serves
+  // cache immediately, so isLoading is false), and when the background refetch returned the real
+  // status the effect bailed out as "already applied". Arriving from a rejection notification
+  // therefore showed the form read-only until a hard refresh emptied the cache.
+  //
+  // updatedAt changes on every server-side mutation, so a genuinely newer entry re-populates
+  // while a redundant refetch of identical state leaves in-progress edits alone.
+  const appliedRef = useRef<string | null>(null);
 
   // ── Backend queries ───────────────────────────────────────────────────────
 
@@ -263,14 +295,24 @@ export default function SubmitEOD() {
     queryFn:  () => getTimeAdjustmentContext(selectedDate),
   });
 
+  // The error list renders above the form, so pressing Submit from the bottom of a long task list
+  // showed nothing at all until you scrolled up. Bring it into view instead. Same scrollIntoView
+  // pattern the Approvals row-highlight uses.
+  useEffect(() => {
+    if (errors.length === 0) return;
+    errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [errors]);
+
   // ── Populate form when entry loads for the selected date ──────────────────
 
   useEffect(() => {
     if (loadingEntry) return;
-    if (appliedDateRef.current === selectedDate) return; // already applied
-    appliedDateRef.current = selectedDate;
 
     const entry: EodEntryDto | undefined = entries[0];
+    const signature = entrySignature(selectedDate, entry);
+    if (appliedRef.current === signature) return; // same server state already in the form
+    appliedRef.current = signature;
+
     if (entry) {
       setEntryId(entry.id);
       setEntryStatus(entry.status);
@@ -304,9 +346,9 @@ export default function SubmitEOD() {
     setErrors([]);
   }, [entries, loadingEntry, selectedDate, categories]);
 
-  // Reset appliedDateRef when date changes so the next query result repopulates
+  // Clear the applied signature when the date changes so the next query result repopulates
   function handleDateChange(d: string) {
-    appliedDateRef.current = null;
+    appliedRef.current = null;
     setSelectedDate(d);
     setErrors([]);
   }
@@ -334,7 +376,7 @@ export default function SubmitEOD() {
   // flagged entry untouched and write a different day instead, so the date is pinned while
   // the rest of the form stays editable. Kept separate from isReadOnly, whose dates must stay
   // navigable.
-  const isDateLocked = entryStatus === 'CHANGES_REQUESTED' || entryStatus === 'REJECTED';
+  const isDateLocked = entryStatus === 'REJECTED';
   const totalHours   = tasks.reduce((sum, t) => sum + (parseFloat(t.hours) || 0), 0);
   const catMap       = new Map(categories.map(c => [c.id, c]));
 
@@ -414,13 +456,16 @@ export default function SubmitEOD() {
 
   const draftMutation = useMutation({
     mutationFn: saveDraft,
+    // No toast here. Submit reuses this mutation to persist the form before submitting, and a
+    // mutate()-level onSuccess does NOT replace this one — both run — so a toast here surfaced
+    // "Draft saved" alongside "EOD submitted successfully" on every submit. The toast belongs to
+    // the button the user actually pressed, so it lives in handleSaveDraft instead.
     onSuccess: (entry) => {
       setEntryId(entry.id);
       setEntryStatus(entry.status);
       setReviewerComment(null);
-      appliedDateRef.current = selectedDate; // don't re-populate from refetch
+      appliedRef.current = entrySignature(selectedDate, entry); // our own refetch is a no-op
       qc.invalidateQueries({ queryKey: ['eod'] });
-      toast('Draft saved');
     },
     onError: (err: unknown) => {
       const msg = extractError(err);
@@ -432,7 +477,7 @@ export default function SubmitEOD() {
     mutationFn: (id: number) => submitEntry(id),
     onSuccess: (entry) => {
       setEntryStatus(entry.status);
-      appliedDateRef.current = selectedDate;
+      appliedRef.current = entrySignature(selectedDate, entry);
       qc.invalidateQueries({ queryKey: ['eod'] });
       toast('EOD submitted successfully');
     },
@@ -449,6 +494,13 @@ export default function SubmitEOD() {
     if (isHoliday) return [];
 
     const errs: string[] = [];
+
+    // Required only when the field is actually enabled. A holiday and a full-day leave both
+    // disable and clear it, so demanding it there would make those days unsubmittable.
+    if (!workLocDisabled && !workLocation) {
+      errs.push('Work location is required.');
+    }
+
     if (tasks.length === 0) {
       errs.push('At least one task row is required for a working/leave day.');
       return errs;
@@ -468,8 +520,16 @@ export default function SubmitEOD() {
         errs.push(`Task ${n}: blocker reason is required when status is Blocked.`);
       }
     });
-    // Hours are deliberately NOT capped. Exceeding the reference is overtime, surfaced to the
-    // manager on submit — never a reason to block the employee.
+    // Exceeding the day's EXPECTED hours is overtime, surfaced to the manager on submit, never a
+    // reason to block. These are different: they bound what is plausible for a day.
+    // Minimum applies to a working day only — on a leave day the hours are optional, since the
+    // absence itself is the record. The maximum still applies to every day type.
+    if (!isLeaveDay && totalHours < MIN_HOURS_PER_DAY - 0.001) {
+      errs.push(`Total hours (${totalHours.toFixed(1)}) must be at least ${MIN_HOURS_PER_DAY} for a single day.`);
+    }
+    if (totalHours > MAX_HOURS_PER_DAY + 0.001) {
+      errs.push(`Total hours (${totalHours.toFixed(1)}) cannot exceed ${MAX_HOURS_PER_DAY} for a single day.`);
+    }
     errs.push(...validateAdjustment());
     return errs;
   }
@@ -529,7 +589,11 @@ export default function SubmitEOD() {
 
   function handleSaveDraft() {
     setErrors([]);
-    draftMutation.mutate(buildRequest());
+    // Toast lives here rather than on the mutation so it only fires for an explicit Save draft,
+    // not for the save that Submit performs on the way through.
+    draftMutation.mutate(buildRequest(), {
+      onSuccess: () => toast('Draft saved'),
+    });
   }
 
   function handleSubmit() {
@@ -603,7 +667,7 @@ export default function SubmitEOD() {
       />
 
       {/* Reviewer feedback banner */}
-      {reviewerComment && (entryStatus === 'REJECTED' || entryStatus === 'CHANGES_REQUESTED') && (
+      {reviewerComment && entryStatus === 'REJECTED' && (
         <div style={{
           display: 'flex', gap: 12, alignItems: 'flex-start',
           padding: '12px 16px', borderRadius: 8, marginTop: 20,
@@ -642,7 +706,7 @@ export default function SubmitEOD() {
 
       {/* Validation errors */}
       {errors.length > 0 && (
-        <div style={{
+        <div ref={errorRef} style={{
           padding: '12px 16px', borderRadius: 8, marginTop: 20,
           background: 'rgba(228,55,61,.08)', border: '1px solid rgba(228,55,61,.25)',
         }}>
@@ -685,7 +749,7 @@ export default function SubmitEOD() {
               )}
             </div>
             <div>
-              <Label>Day type</Label>
+              <Label>Day type <Req /></Label>
               {isReadOnly ? (
                 <div style={{ ...inputStyle, opacity: 0.7 }}>
                   {DAY_TYPES.find(d => d.value === dayType)?.label ?? dayType}
@@ -697,7 +761,9 @@ export default function SubmitEOD() {
               )}
             </div>
             <div>
-              <Label>Work location</Label>
+              {/* Marked required only while it is enabled — a holiday or full-day leave has no
+                  work location, so the asterisk would be a lie there. */}
+              <Label>Work location {!workLocDisabled && <Req />}</Label>
               {isReadOnly ? (
                 <div style={{ ...inputStyle, opacity: 0.7 }}>{workLocation || '—'}</div>
               ) : (
@@ -706,7 +772,7 @@ export default function SubmitEOD() {
                   onChange={e => setWorkLocation(e.target.value)}
                   disabled={workLocDisabled}
                 >
-                  <option value="">— Select —</option>
+                  <option value="">Work location</option>
                   {WORK_LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
                 </Sel>
               )}

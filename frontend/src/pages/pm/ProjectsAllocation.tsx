@@ -610,11 +610,9 @@ function AllocationModal({ open, onClose, projects }: {
   const [projectId, setProjectId] = useState('');
   const [effectiveFrom, setEffectiveFrom] = useState(todayISO);
   const [effectiveTo, setEffectiveTo] = useState('');
-  const [allocationPct, setAllocationPct] = useState('100');
   const [error, setError] = useState<string | null>(null);
 
   const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
-  const badAllocationPct = allocationPct !== '' && (Number(allocationPct) < 1 || Number(allocationPct) > 100);
 
   // Only ACTIVE projects are allocatable — you cannot staff someone onto work that is
   // completed, on hold, or inactive. It would also be invisible to them: the EOD Project
@@ -627,13 +625,13 @@ function AllocationModal({ open, onClose, projects }: {
   function handleClose() {
     setEmployeeId('');
     setProjectId('');
-    setEffectiveTo(''); setAllocationPct('100'); setError(null);
+    setEffectiveTo(''); setError(null);
     onClose();
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!employeeId || !projectId || !effectiveFrom || badDateOrder || badAllocationPct) return;
+    if (!employeeId || !projectId || !effectiveFrom || badDateOrder) return;
     setError(null);
     try {
       await createMutation.mutateAsync({
@@ -641,7 +639,6 @@ function AllocationModal({ open, onClose, projects }: {
         projectId: Number(projectId),
         effectiveFrom,
         effectiveTo: effectiveTo || null,
-        allocationPct: allocationPct === '' ? undefined : Number(allocationPct),
       });
       showToast('success', 'Allocation created');
       handleClose();
@@ -697,21 +694,11 @@ function AllocationModal({ open, onClose, projects }: {
             )}
           </div>
         </div>
-        <div style={{ marginBottom: 20 }}>
-          <label style={labelStyle}>Allocation %</label>
-          <input type="number" min={1} max={100} style={{ ...inputStyle, width: 120 }} value={allocationPct}
-            onChange={e => setAllocationPct(e.target.value)} />
-          {badAllocationPct && (
-            <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>
-              Allocation % must be between 1 and 100.
-            </p>
-          )}
-        </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             type="submit"
             disabled={createMutation.isPending || !employeeId || !projectId
-              || !effectiveFrom || badDateOrder || badAllocationPct}
+              || !effectiveFrom || badDateOrder}
             style={{
               padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
               color: '#fff', fontSize: 13, fontWeight: 600,
@@ -737,7 +724,6 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
   const updateMutation = useUpdateAllocation();
   const [effectiveFrom, setEffectiveFrom] = useState('');
   const [effectiveTo, setEffectiveTo] = useState('');
-  const [allocationPct, setAllocationPct] = useState('100');
   const [error, setError] = useState<string | null>(null);
 
   // Re-seed whenever a different row is opened.
@@ -745,16 +731,14 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
     if (!allocation) return;
     setEffectiveFrom(allocation.effectiveFrom);
     setEffectiveTo(allocation.effectiveTo ?? '');
-    setAllocationPct(String(allocation.allocationPct ?? 100));
     setError(null);
   }, [allocation]);
 
   const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
-  const badAllocationPct = allocationPct !== '' && (Number(allocationPct) < 1 || Number(allocationPct) > 100);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!allocation || !effectiveFrom || badDateOrder || badAllocationPct) return;
+    if (!allocation || !effectiveFrom || badDateOrder) return;
     setError(null);
     try {
       await updateMutation.mutateAsync({
@@ -762,7 +746,6 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
         data: {
           effectiveFrom,
           effectiveTo: effectiveTo || null,
-          allocationPct: allocationPct === '' ? undefined : Number(allocationPct),
         },
       });
       showToast('success', 'Allocation updated');
@@ -819,21 +802,10 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
             </div>
           </div>
 
-          <div style={{ marginBottom: 20 }}>
-            <label style={labelStyle}>Allocation %</label>
-            <input type="number" min={1} max={100} style={{ ...inputStyle, width: 120 }} value={allocationPct}
-              onChange={e => setAllocationPct(e.target.value)} />
-            {badAllocationPct && (
-              <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>
-                Allocation % must be between 1 and 100.
-              </p>
-            )}
-          </div>
-
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="submit"
-              disabled={updateMutation.isPending || !effectiveFrom || badDateOrder || badAllocationPct}
+              disabled={updateMutation.isPending || !effectiveFrom || badDateOrder}
               style={{
                 padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
                 color: '#fff', fontSize: 13, fontWeight: 600,
@@ -1047,14 +1019,13 @@ function AllocationTab() {
                 onToggle={() => toggleSort('project')} />
               <th style={thStyle}>Effective From</th>
               <th style={thStyle}>Effective To</th>
-              <th style={thStyle}>Allocation %</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                <td colSpan={5} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
                   {filtersActive
                     ? 'No allocations match that employee.'
                     : 'No allocations yet. Create one above.'}
@@ -1067,7 +1038,6 @@ function AllocationTab() {
                   <td style={tdStyle}>{a.projectCode} — {a.projectName}</td>
                   <td style={tdStyle}>{fmtDateDMY(a.effectiveFrom)}</td>
                   <td style={tdStyle}>{fmtDateDMY(a.effectiveTo)}</td>
-                  <td style={tdStyle}>{a.allocationPct ?? 100}%</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                       <IconButton icon={<Pencil size={13} aria-hidden="true" />} label="Edit" onClick={() => setToEdit(a)} />

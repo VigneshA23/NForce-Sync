@@ -399,7 +399,7 @@ public class TeamLeadService {
         return switch (entry.getStatus()) {
             case APPROVED -> "SUBMITTED";
             case SUBMITTED -> "PENDING_APPROVAL";
-            case DRAFT, REJECTED, CHANGES_REQUESTED, MISSED -> "MISSING";
+            case DRAFT, REJECTED, MISSED -> "MISSING";
         };
     }
 

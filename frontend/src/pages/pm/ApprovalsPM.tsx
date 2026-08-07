@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import {
-  ChevronDown, ChevronRight, Check, X, RotateCcw, CheckCheck, RefreshCw,
+  ChevronDown, ChevronRight, Check, X, CheckCheck, RefreshCw,
   Search, AlertTriangle, Users, ListFilter,
 } from 'lucide-react';
 import {
   usePendingApprovals, useDecidedApprovals, useApprovalHistory,
-  useApprove, useReject, useRequestChanges, useBatchApprove,
+  useApprove, useReject, useBatchApprove,
 } from '../../api/approvals';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../lib/toast';
@@ -209,7 +209,7 @@ function FilterDropdown({ label, options, selected, onToggle, onClear }: {
 // ── action panel (approve / reject / request changes) ──────────────────────────
 
 interface ActionPanelProps {
-  type: 'approve' | 'reject' | 'request-changes' | null;
+  type: 'approve' | 'reject' | null;
   entryId: number;
   onClose: () => void;
 }
@@ -221,24 +221,19 @@ function ActionPanel({ type, entryId, onClose }: ActionPanelProps) {
 
   const approve = useApprove();
   const reject = useReject();
-  const requestChanges = useRequestChanges();
 
   if (!type) return null;
-  const busy = approve.isPending || reject.isPending || requestChanges.isPending;
+  const busy = approve.isPending || reject.isPending;
 
   async function submit() {
     try {
       if (type === 'approve') {
         await approve.mutateAsync({ entryId, billableOverride, comment: comment || undefined });
         show('Entry approved. Utilization recomputed.', 'success');
-      } else if (type === 'reject') {
+      } else {
         if (!comment.trim()) return;
         await reject.mutateAsync({ entryId, comment });
         show('Entry rejected — reason sent to employee & TL.', 'success');
-      } else {
-        if (!comment.trim()) return;
-        await requestChanges.mutateAsync({ entryId, comment });
-        show('Changes requested.', 'success');
       }
       onClose();
     } catch (err) {
@@ -331,7 +326,7 @@ function AuditTrail({ entry }: { entry: EodEntryDto }) {
       </ul>
       {entry.reviewerComment && (
         <div style={{ background: 'color-mix(in srgb, var(--risk) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--risk) 30%, transparent)', borderRadius: 8, padding: '10px 12px', fontSize: 12.5, color: 'var(--txt)', marginTop: 10, maxWidth: 520 }}>
-          <strong>{entry.status === 'CHANGES_REQUESTED' ? 'Changes requested: ' : 'Previous reject reason: '}</strong>{entry.reviewerComment}
+          <strong>Reject reason: </strong>{entry.reviewerComment}
         </div>
       )}
     </div>
@@ -352,7 +347,7 @@ function EntryRow({
   onToggleExpand: () => void;
   onOpenReject: () => void;
 }) {
-  const [action, setAction] = useState<'approve' | 'reject' | 'request-changes' | null>(null);
+  const [action, setAction] = useState<'approve' | 'reject' | null>(null);
   const total = sumHours(entry.tasks);
   const overtime = entry.isOvertime && entry.overtimeHours != null ? Number(entry.overtimeHours) : 0;
   const undertime = entry.undertimeHours != null ? Number(entry.undertimeHours) : 0;
@@ -368,9 +363,7 @@ function EntryRow({
     ? <Chip tone="ok">Approved</Chip>
     : entry.status === 'REJECTED'
       ? <Chip tone="risk">Rejected</Chip>
-      : entry.status === 'CHANGES_REQUESTED'
-        ? <Chip tone="warn">Changes requested</Chip>
-        : null;
+      : null;
 
   return (
     <div style={{ borderBottom: '1px solid var(--line)', background: entry.escalated ? 'linear-gradient(90deg, color-mix(in srgb, var(--warn) 7%, transparent), transparent 45%)' : undefined }}>
@@ -438,7 +431,6 @@ function EntryRow({
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
           {actionable ? (
             <div style={{ display: 'flex', gap: 7 }}>
-              <Btn onClick={() => openAction('request-changes')}><RotateCcw size={12} aria-hidden="true" /> Changes</Btn>
               <Btn variant="danger" onClick={() => openAction('reject')}><X size={12} aria-hidden="true" /> Reject</Btn>
               <Btn variant="primary" onClick={() => openAction('approve')}><Check size={12} aria-hidden="true" /> Approve</Btn>
             </div>
@@ -461,7 +453,7 @@ function EntryRow({
 
 // ── main ───────────────────────────────────────────────────────────────────────
 
-type Tab = 'pending' | 'escalated' | 'approved' | 'rejected' | 'changes-requested';
+type Tab = 'pending' | 'escalated' | 'approved' | 'rejected';
 type SortMode = 'oldest' | 'latest' | 'hours' | 'name';
 
 function groupByTL(entries: EodEntryDto[]): Map<string, EodEntryDto[]> {
@@ -478,7 +470,6 @@ export default function ApprovalsPM() {
   const { data: pending, isPending: pendingLoading, isError: pendingError, refetch } = usePendingApprovals();
   const { data: approved, isPending: approvedLoading } = useDecidedApprovals('APPROVED');
   const { data: rejected, isPending: rejectedLoading } = useDecidedApprovals('REJECTED');
-  const { data: changesRequested, isPending: changesRequestedLoading } = useDecidedApprovals('CHANGES_REQUESTED');
   const batchApprove = useBatchApprove();
   const reject = useReject();
   const { show } = useToast();
@@ -497,16 +488,14 @@ export default function ApprovalsPM() {
 
   const isLoading = pendingLoading
     || (tab === 'approved' && approvedLoading)
-    || (tab === 'rejected' && rejectedLoading)
-    || (tab === 'changes-requested' && changesRequestedLoading);
+    || (tab === 'rejected' && rejectedLoading);
 
   const baseList: EodEntryDto[] = useMemo(() => {
     if (tab === 'pending') return pending ?? [];
     if (tab === 'escalated') return (pending ?? []).filter(e => e.escalated);
     if (tab === 'approved') return approved ?? [];
-    if (tab === 'rejected') return rejected ?? [];
-    return changesRequested ?? [];
-  }, [tab, pending, approved, rejected, changesRequested]);
+    return rejected ?? [];
+  }, [tab, pending, approved, rejected]);
 
   const allProjects = useMemo(() => [...new Set(baseList.flatMap(entryProjects))].sort(), [baseList]);
   const allCategories = useMemo(() => [...new Set(baseList.flatMap(entryCategories))].sort(), [baseList]);
@@ -539,7 +528,6 @@ export default function ApprovalsPM() {
   const escalatedCount = (pending ?? []).filter(e => e.escalated).length;
   const approvedCount = approved?.length ?? 0;
   const rejectedCount = rejected?.length ?? 0;
-  const changesRequestedCount = changesRequested?.length ?? 0;
 
   function toggleFilterVal(set: Set<string>, setFn: (s: Set<string>) => void, val: string) {
     const next = new Set(set);
@@ -663,7 +651,6 @@ export default function ApprovalsPM() {
           ['escalated', '⚠ Escalated', escalatedCount],
           ['approved', 'Approved', approvedCount],
           ['rejected', 'Rejected', rejectedCount],
-          ['changes-requested', 'Changes Requested', changesRequestedCount],
         ] as [Tab, string, number][]).map(([key, label, count]) => (
           <button key={key} onClick={() => switchTab(key)} style={{
             padding: '8px 15px', borderRadius: 20, border: `1px solid ${tab === key ? 'var(--brand)' : 'var(--line2)'}`,
@@ -750,14 +737,12 @@ export default function ApprovalsPM() {
             {tab === 'escalated' && 'No escalated entries'}
             {tab === 'approved' && 'No approved entries yet'}
             {tab === 'rejected' && 'No rejected entries'}
-            {tab === 'changes-requested' && 'No changes-requested entries'}
           </div>
           <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>
             {tab === 'pending' && 'No pending entries match your current filters.'}
             {tab === 'escalated' && 'All Team Leads are current — nothing has breached SLA.'}
             {tab === 'approved' && 'Entries you approve will appear here.'}
             {tab === 'rejected' && 'Entries you reject will appear here with the reason given.'}
-            {tab === 'changes-requested' && 'Entries you send back for changes will appear here.'}
           </div>
         </Card>
       ) : (

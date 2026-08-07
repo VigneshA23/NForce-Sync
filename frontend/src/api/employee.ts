@@ -12,6 +12,8 @@ export interface CutoffStatus {
   entryStatus: string | null;
   cutoffPassed: boolean;
   cutoffTime: string;
+  /** Cutoff falls on the day after `today` — true for a shift crossing midnight. */
+  cutoffNextDay: boolean;
 }
 
 export interface QuickStats {
