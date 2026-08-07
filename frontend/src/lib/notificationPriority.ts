@@ -41,6 +41,7 @@ const BASE_PRIORITY_BY_TYPE: Record<string, NotificationPriority> = {
   EOD_REJECTED: 'High',            // emitted today (ApprovalService.reject)
   EOD_CHANGES_REQUESTED: 'High',   // emitted today — "pending corrections from manager"
   PENDING_CORRECTION: 'High',      // not yet emitted
+  BLOCKER_REPLY: 'High',           // emitted today (BlockerConversationService.postReplyAsLead)
   EOD_MISSED: 'High',              // not yet emitted
   EOD_OVERDUE: 'High',             // not yet emitted
   LEAVE_REJECTED: 'High',          // not yet emitted

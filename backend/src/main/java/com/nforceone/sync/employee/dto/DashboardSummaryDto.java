@@ -28,11 +28,19 @@ public record DashboardSummaryDto(
     ) {}
 
     public record BlockedTask(
+            Long taskId,
             Long entryId,
             LocalDate entryDate,
             String projectName,
             String description,
-            String blockerReason
+            String blockerReason,
+            boolean acknowledged,
+            java.time.OffsetDateTime acknowledgedAt,
+            String acknowledgedByName,
+            String status,              // "NEEDS_RESPONSE" | "ACKNOWLEDGED" | "RESOLVED" — same
+                                         // derivation as TeamBlockerDto.status (EodTask.getBlockerStatus())
+            java.time.OffsetDateTime resolvedAt,
+            String resolvedByName
     ) {}
 
     public record RecentEntry(

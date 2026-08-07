@@ -7,12 +7,15 @@ import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.businessrules.BusinessRuleConfig;
 import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.businessrules.HolidayRepository;
+import com.nforceone.sync.eod.BlockerReply;
+import com.nforceone.sync.eod.BlockerReplyRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
 import com.nforceone.sync.eod.EodTaskRepository;
 import com.nforceone.sync.org.Designation;
 import com.nforceone.sync.org.DesignationRepository;
+import com.nforceone.sync.teamlead.dto.BlockerStatusRequest;
 import com.nforceone.sync.teamlead.dto.DashboardTrendDto;
 import com.nforceone.sync.teamlead.dto.MemberEodStatusDto;
 import com.nforceone.sync.teamlead.dto.TeamBlockerDto;
@@ -33,6 +36,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -59,6 +63,7 @@ public class TeamLeadService {
     private final UtilizationService           utilizationService;
     private final ApprovalActionRepository     actionRepository;
     private final DesignationRepository        designationRepository;
+    private final BlockerReplyRepository       replyRepository;
 
     public TeamLeadService(AppUserRepository userRepository,
                             EodEntryRepository entryRepository,
@@ -67,7 +72,8 @@ public class TeamLeadService {
                             BusinessRuleConfigRepository configRepository,
                             UtilizationService utilizationService,
                             ApprovalActionRepository actionRepository,
-                            DesignationRepository designationRepository) {
+                            DesignationRepository designationRepository,
+                            BlockerReplyRepository replyRepository) {
         this.userRepository    = userRepository;
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
@@ -76,6 +82,7 @@ public class TeamLeadService {
         this.utilizationService = utilizationService;
         this.actionRepository  = actionRepository;
         this.designationRepository = designationRepository;
+        this.replyRepository   = replyRepository;
     }
 
     public ThresholdsDto getThresholds() {
@@ -140,7 +147,7 @@ public class TeamLeadService {
         boolean holidayToday = holidayRepository.existsByHolidayDate(to);
 
         List<AppUser> members = activeMembers(lead.getId());
-        List<TeamBlockerDto> openBlockers = getBlockers(from, to, actingEmail);
+        List<TeamBlockerDto> openBlockers = getBlockers(from, to, actingEmail, false);
 
         return members.stream().map(member -> {
             Optional<EodEntry> entry = entryRepository.findByEmployeeIdAndEntryDate(member.getId(), to);
@@ -158,19 +165,47 @@ public class TeamLeadService {
         }).sorted(TeamLeadService::compareByStatusPriority).toList();
     }
 
+    // `includeAcknowledged` defaults to false everywhere except the Blockers page's own list —
+    // the dashboard's "Open Blockers" KPI, "Blockers Today" widget, and per-member
+    // hasOpenBlocker flag all rely on this endpoint returning only *unresolved* blockers, so
+    // acknowledged ones must stay excluded by default rather than changing what those already show.
     @Transactional(readOnly = true)
-    public List<TeamBlockerDto> getBlockers(LocalDate from, LocalDate to, String actingEmail) {
+    public List<TeamBlockerDto> getBlockers(LocalDate from, LocalDate to, String actingEmail, boolean includeAcknowledged) {
         AppUser lead = requireLead(actingEmail);
-        return taskRepository.findBlockedByManagerId(lead.getId())
+        List<EodTask> tasks = taskRepository.findBlockedByManagerId(lead.getId())
                 .stream()
                 .filter(t -> inRange(t.getEodEntry().getEntryDate(), from, to))
-                .filter(t -> t.getAcknowledgedAt() == null)
-                .map(TeamBlockerDto::from)
+                .filter(t -> includeAcknowledged || t.getAcknowledgedAt() == null)
+                .toList();
+
+        // Batch-loaded once for the whole list rather than per row — the Replies/Last Reply
+        // columns need every task's full thread, not just whether it's currently acknowledged.
+        Map<Long, List<BlockerReply>> repliesByTask = replyRepository
+                .findByTaskIdInOrderByCreatedAtAsc(tasks.stream().map(EodTask::getId).toList())
+                .stream()
+                .collect(java.util.stream.Collectors.groupingBy(r -> r.getTask().getId()));
+
+        return tasks.stream()
+                .map(t -> TeamBlockerDto.from(t, repliesByTask.getOrDefault(t.getId(), List.of())))
                 .toList();
     }
 
     private boolean inRange(LocalDate d, LocalDate from, LocalDate to) {
         return !d.isBefore(from) && !d.isAfter(to);
+    }
+
+    /** Fetches a single blocker by task id, regardless of the caller's selected date range —
+     *  backs a BLOCKER_REPLY notification's deep link (`?highlight=<id>`), which must resolve
+     *  even when that blocker falls outside whatever range the Blockers page currently has. */
+    @Transactional(readOnly = true)
+    public TeamBlockerDto getBlockerById(Long taskId, String actingEmail) {
+        AppUser lead = requireLead(actingEmail);
+        EodTask task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
+        if (!task.getEodEntry().getEmployee().getManager().getId().equals(lead.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        return TeamBlockerDto.from(task, replyRepository.findByTaskIdOrderByCreatedAtAsc(taskId));
     }
 
     @Transactional
@@ -185,7 +220,54 @@ public class TeamLeadService {
 
         task.setAcknowledgedAt(OffsetDateTime.now());
         task.setAcknowledgedBy(lead);
-        return TeamBlockerDto.from(taskRepository.save(task));
+        EodTask saved = taskRepository.save(task);
+        return TeamBlockerDto.from(saved, replyRepository.findByTaskIdOrderByCreatedAtAsc(taskId));
+    }
+
+    /** Manual status change from the Blockers page's status dropdown (TeamBlockerDto.status).
+     *  RESOLVED implies ACKNOWLEDGED (sets both), so acknowledgedAt-only checks elsewhere
+     *  (Team Dashboard's "Open Blockers" KPI, hasOpenBlocker) keep treating a resolved blocker
+     *  as not-open without any change to their own logic. */
+    @Transactional
+    public TeamBlockerDto setBlockerStatus(Long taskId, String actingEmail, BlockerStatusRequest body) {
+        AppUser lead = requireLead(actingEmail);
+        EodTask task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
+
+        if (!task.getEodEntry().getEmployee().getManager().getId().equals(lead.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        switch (body.status() == null ? "" : body.status()) {
+            case "RESOLVED" -> {
+                if (task.getAcknowledgedAt() == null) {
+                    task.setAcknowledgedAt(now);
+                    task.setAcknowledgedBy(lead);
+                }
+                task.setResolvedAt(now);
+                task.setResolvedBy(lead);
+            }
+            case "ACKNOWLEDGED" -> {
+                if (task.getAcknowledgedAt() == null) {
+                    task.setAcknowledgedAt(now);
+                    task.setAcknowledgedBy(lead);
+                }
+                task.setResolvedAt(null);
+                task.setResolvedBy(null);
+            }
+            case "NEEDS_RESPONSE" -> {
+                task.setAcknowledgedAt(null);
+                task.setAcknowledgedBy(null);
+                task.setResolvedAt(null);
+                task.setResolvedBy(null);
+            }
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "status must be one of NEEDS_RESPONSE, ACKNOWLEDGED, RESOLVED");
+        }
+
+        EodTask saved = taskRepository.save(task);
+        return TeamBlockerDto.from(saved, replyRepository.findByTaskIdOrderByCreatedAtAsc(taskId));
     }
 
     public DashboardTrendDto getTrend(LocalDate endDate, int days, String actingEmail) {

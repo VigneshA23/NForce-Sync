@@ -38,6 +38,13 @@ spring:
     baseline-on-migrate: true
     validate-on-migrate: false
 
+  servlet:
+    multipart:
+      # Blocker reply attachments: BlockerConversationService enforces 5 MB/file, 4
+      # files/reply — sized headroom here so Spring's own limit isn't hit first.
+      max-file-size: 5MB
+      max-request-size: 25MB
+
 server:
   port: 8080
   error:

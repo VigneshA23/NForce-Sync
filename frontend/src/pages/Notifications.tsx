@@ -93,6 +93,10 @@ const NOTIFICATION_META: Record<string, NotificationMeta> = {
     icon: <MessageSquare size={15} />, color: 'var(--info)', bg: 'rgba(76,141,214,.12)',
     category: 'Manager', generatedBy: 'Team Lead',
   },
+  BLOCKER_REPLY: {
+    icon: <MessageSquare size={15} />, color: 'var(--risk)', bg: 'rgba(228,55,61,.12)',
+    category: 'Blocker', generatedBy: 'Blocker Thread',
+  },
   RESOURCE_ALLOCATION: {
     icon: <Users size={15} />, color: 'var(--info)', bg: 'rgba(76,141,214,.12)',
     category: 'Project', generatedBy: 'Delivery Management',
@@ -431,6 +435,9 @@ export default function Notifications() {
     queryKey: ['notifications', 'list', page],
     queryFn: () => fetchNotifications(page, PAGE_SIZE),
     staleTime: 30_000,
+    // Polled on the same 30s cadence as the unread count (useUnreadNotificationsCount)
+    // so a new blocker-reply notification appears in the list without a manual refresh.
+    refetchInterval: 30_000,
     placeholderData: (prev) => prev,
   });
 
@@ -649,7 +656,11 @@ export default function Notifications() {
                       selected={isWide && n.id === selectedId}
                       onSelect={handleSelect}
                       onMarkRead={(id) => markRead.mutate(id)}
-                      navigable={!isWide}
+                      // Blocker replies always navigate straight to the conversation's side
+                      // panel on click, even on wide screens — the master/detail preview
+                      // pane doesn't apply since the useful "detail" is the live thread,
+                      // not a text summary.
+                      navigable={!isWide || n.type === 'BLOCKER_REPLY'}
                     />
                   ))}
                 </div>
