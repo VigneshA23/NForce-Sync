@@ -5,14 +5,17 @@ import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
+import com.nforceone.sync.eod.EodTaskRepository;
 import com.nforceone.sync.employee.dto.DashboardSummaryDto;
 import com.nforceone.sync.employee.dto.UtilizationDetailDto;
 import com.nforceone.sync.utilization.UtilSnapshot;
 import com.nforceone.sync.utilization.UtilSnapshotRepository;
 import com.nforceone.sync.utilization.UtilizationService;
 import com.nforceone.sync.utilization.dto.UtilSnapshotDto;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -28,15 +31,18 @@ import java.util.stream.Collectors;
 public class EmployeeService {
 
     private final EodEntryRepository        entryRepository;
+    private final EodTaskRepository         taskRepository;
     private final UtilSnapshotRepository    snapshotRepository;
     private final BusinessRuleConfigRepository rulesRepository;
     private final UtilizationService        utilizationService;
 
     public EmployeeService(EodEntryRepository entryRepository,
+                           EodTaskRepository taskRepository,
                            UtilSnapshotRepository snapshotRepository,
                            BusinessRuleConfigRepository rulesRepository,
                            UtilizationService utilizationService) {
         this.entryRepository  = entryRepository;
+        this.taskRepository   = taskRepository;
         this.snapshotRepository = snapshotRepository;
         this.rulesRepository  = rulesRepository;
         this.utilizationService = utilizationService;
@@ -75,7 +81,7 @@ public class EmployeeService {
                 weekApprovedHours, monthAvgUtil, streak, daysSinceLastIssue);
 
         // ── Blocked tasks: from last 14 days' non-APPROVED entries still active ─
-        List<DashboardSummaryDto.BlockedTask> blockedTasks = buildBlockedTasks(employeeId, today);
+        List<DashboardSummaryDto.BlockedTask> blockedTasks = buildBlockedTasks(employeeId, today.minusDays(14), today);
 
         // ── Recent entries: last 5 ─────────────────────────────────────────────
         List<DashboardSummaryDto.RecentEntry> recentEntries = buildRecentEntries(employeeId, today);
@@ -167,10 +173,44 @@ public class EmployeeService {
                 .orElse(-1); // -1 = no issues found in 90-day window
     }
 
-    private List<DashboardSummaryDto.BlockedTask> buildBlockedTasks(Long employeeId, LocalDate today) {
-        LocalDate lookback = today.minusDays(14);
+    /** Fetches a single blocker by task id, regardless of age or current task status —
+     *  unlike {@link #buildBlockedTasks}'s 14-day/BLOCKED-only dashboard window, this backs
+     *  a notification's deep link, which must resolve even to an old or since-resolved blocker. */
+    @Transactional(readOnly = true)
+    public DashboardSummaryDto.BlockedTask getBlockedTask(Long taskId, Long employeeId) {
+        EodTask task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
+        EodEntry entry = task.getEodEntry();
+        if (!entry.getEmployee().getId().equals(employeeId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        String projectName = task.getProject() != null ? task.getProject().getName() : "—";
+        return new DashboardSummaryDto.BlockedTask(
+                task.getId(),
+                entry.getId(),
+                entry.getEntryDate(),
+                projectName,
+                task.getDescription(),
+                task.getBlockerReason(),
+                task.getAcknowledgedAt() != null,
+                task.getAcknowledgedAt(),
+                task.getAcknowledgedBy() != null ? task.getAcknowledgedBy().getFullName() : null,
+                task.getBlockerStatus(),
+                task.getResolvedAt(),
+                task.getResolvedBy() != null ? task.getResolvedBy().getFullName() : null
+        );
+    }
+
+    /** Full blocker history for the "My Blockers" page — unlike the dashboard's fixed
+     *  14-day window, this takes an arbitrary caller-supplied range. */
+    @Transactional(readOnly = true)
+    public List<DashboardSummaryDto.BlockedTask> getBlockers(Long employeeId, LocalDate from, LocalDate to) {
+        return buildBlockedTasks(employeeId, from, to);
+    }
+
+    private List<DashboardSummaryDto.BlockedTask> buildBlockedTasks(Long employeeId, LocalDate from, LocalDate to) {
         List<EodEntry> recent = entryRepository
-                .findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(employeeId, lookback, today);
+                .findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(employeeId, from, to);
 
         List<DashboardSummaryDto.BlockedTask> blocked = new ArrayList<>();
         for (EodEntry entry : recent) {
@@ -179,11 +219,18 @@ public class EmployeeService {
                 if (task.getTaskStatus() == EodTask.TaskStatus.BLOCKED) {
                     String projectName = task.getProject() != null ? task.getProject().getName() : "—";
                     blocked.add(new DashboardSummaryDto.BlockedTask(
+                            task.getId(),
                             entry.getId(),
                             entry.getEntryDate(),
                             projectName,
                             task.getDescription(),
-                            task.getBlockerReason()
+                            task.getBlockerReason(),
+                            task.getAcknowledgedAt() != null,
+                            task.getAcknowledgedAt(),
+                            task.getAcknowledgedBy() != null ? task.getAcknowledgedBy().getFullName() : null,
+                            task.getBlockerStatus(),
+                            task.getResolvedAt(),
+                            task.getResolvedBy() != null ? task.getResolvedBy().getFullName() : null
                     ));
                 }
             }

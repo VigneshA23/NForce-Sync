@@ -680,8 +680,10 @@ function UtilPeriodCard({
         </div>
       </div>
 
+      <CategoryDonut billableHours={billableHours} nonBillableHours={nonBillableHours} benchHours={benchHours} />
+
       {breakdown && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginTop: 16 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
             Weekly Trend
           </div>
@@ -702,8 +704,6 @@ function UtilPeriodCard({
           </div>
         </div>
       )}
-
-      <CategoryDonut billableHours={billableHours} nonBillableHours={nonBillableHours} benchHours={benchHours} />
     </Card>
   );
 }
@@ -779,7 +779,7 @@ function CutoffBanner({
 
 // ── Blocked tasks panel ────────────────────────────────────────────────────────
 
-function BlockersPanel({ tasks }: { tasks: BlockedTask[] }) {
+function BlockersPanel({ tasks, onSelect }: { tasks: BlockedTask[]; onSelect: (t: BlockedTask) => void }) {
   if (tasks.length === 0) {
     return (
       <Card>
@@ -794,20 +794,33 @@ function BlockersPanel({ tasks }: { tasks: BlockedTask[] }) {
 
   return (
     <Card pad={0}>
-      <div style={{ padding: '12px 16px 8px' }}>
-        <SectionLabel>My Blockers</SectionLabel>
+      <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <SectionLabel style={{ marginBottom: 0 }}>My Blockers</SectionLabel>
+        <Link
+          to="/blockers"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            color: 'var(--info)', fontSize: 11, fontWeight: 500, textDecoration: 'none',
+          }}
+        >
+          View all <ArrowRight size={11} />
+        </Link>
       </div>
       {tasks.map((t, i) => {
         const d = new Date(t.entryDate + 'T12:00:00');
         const dateLabel = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
         return (
-          <div key={`${t.entryId}-${i}`} style={{
-            padding: '9px 16px', borderTop: '1px solid var(--line)',
-            display: 'flex', gap: 10, alignItems: 'flex-start',
-          }}>
+          <div
+            key={`${t.taskId}-${i}`}
+            onClick={() => onSelect(t)}
+            style={{
+              padding: '9px 16px', borderTop: '1px solid var(--line)', cursor: 'pointer',
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+            }}
+          >
             <div style={{
               width: 6, height: 6, borderRadius: 3,
-              background: 'var(--risk)', marginTop: 5, flexShrink: 0,
+              background: t.acknowledged ? 'var(--ok)' : 'var(--risk)', marginTop: 5, flexShrink: 0,
             }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 11, color: 'var(--txt)', lineHeight: 1.4, marginBottom: 3 }}>
@@ -818,11 +831,14 @@ function BlockersPanel({ tasks }: { tasks: BlockedTask[] }) {
                   {t.blockerReason}
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 6, fontSize: 10, color: 'var(--txt-dim)' }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 10, color: 'var(--txt-dim)' }}>
                 <span style={{ padding: '1px 5px', borderRadius: 3, background: 'var(--raised2)', color: 'var(--txt-mut)' }}>
                   {t.projectName}
                 </span>
                 <span>{dateLabel}</span>
+                {t.acknowledged && (
+                  <span style={{ color: 'var(--ok)', fontWeight: 600 }}>Team Lead replied</span>
+                )}
               </div>
             </div>
           </div>
@@ -1217,7 +1233,7 @@ export default function Dashboard() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <PendingCorrectionsPanel corrections={dashStats?.pendingCorrections ?? []} />
           <MissedSubmissionsPanel dates={dashStats?.missedDates ?? []} count={dashStats?.missedCount ?? 0} />
-          <BlockersPanel tasks={blockedTasks} />
+          <BlockersPanel tasks={blockedTasks} onSelect={(t) => navigate(`/blockers?highlight=${t.taskId}`)} />
         </div>
       </div>
 

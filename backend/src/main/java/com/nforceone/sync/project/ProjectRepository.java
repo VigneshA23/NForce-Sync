@@ -30,4 +30,18 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 
     // The Project Dashboard is scoped to the projects a given PM owns.
     List<Project> findByPmIdOrderByNameAsc(Long pmId);
+
+    // "My Projects" for a Team Lead: the Team Lead's OWN allocation rows — not their team's.
+    // A Team Lead is an AppUser like any other and can hold Allocation rows directly (e.g. they
+    // are personally staffed on a client engagement), so this is the same shape as
+    // findAllocatedToEmployeeOnDate but without the ACTIVE-project restriction (My Projects
+    // should still show a Team Lead's own project even if it is on hold or completed) and with
+    // pm JOIN FETCHed to avoid N+1 when mapping to ProjectFullDto.
+    @Query("SELECT DISTINCT a.project FROM Allocation a LEFT JOIN FETCH a.project.pm " +
+           "WHERE a.employee.id = :teamLeadId " +
+           "AND a.effectiveFrom <= :onDate " +
+           "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :onDate) " +
+           "ORDER BY a.project.name ASC")
+    List<Project> findAllocatedToTeamLeadOnDate(@Param("teamLeadId") Long teamLeadId,
+                                                @Param("onDate") LocalDate onDate);
 }
