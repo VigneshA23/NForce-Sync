@@ -2,7 +2,10 @@ package com.nforceone.sync.project;
 
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.org.BillingModel;
+import com.nforceone.sync.org.BillingModelRepository;
 import com.nforceone.sync.project.dto.CreateProjectRequest;
+import com.nforceone.sync.project.dto.EmployeeRefDto;
 import com.nforceone.sync.project.dto.ProjectDto;
 import com.nforceone.sync.project.dto.ProjectFullDto;
 import com.nforceone.sync.project.dto.UpdateProjectRequest;
@@ -22,13 +25,16 @@ public class ProjectService {
     private final ProjectRepository projectRepository;
     private final AllocationRepository allocationRepository;
     private final AppUserRepository appUserRepository;
+    private final BillingModelRepository billingModelRepository;
 
     public ProjectService(ProjectRepository projectRepository,
                           AllocationRepository allocationRepository,
-                          AppUserRepository appUserRepository) {
+                          AppUserRepository appUserRepository,
+                          BillingModelRepository billingModelRepository) {
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
         this.appUserRepository = appUserRepository;
+        this.billingModelRepository = billingModelRepository;
     }
 
     /**
@@ -61,14 +67,22 @@ public class ProjectService {
                 .toList();
     }
 
-    public ProjectFullDto create(CreateProjectRequest req, String actingEmail) {
+    /** Users assignable as a project's TL: active Team Leads (MANAGER) and Project Managers. */
+    @Transactional(readOnly = true)
+    public List<EmployeeRefDto> listAssignableLeads() {
+        return appUserRepository
+                .findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
+                        List.of(AppUser.Role.MANAGER, AppUser.Role.PM), AppUser.Status.ACTIVE)
+                .stream()
+                .map(EmployeeRefDto::from)
+                .toList();
+    }
+
+    public ProjectFullDto create(CreateProjectRequest req) {
         if (projectRepository.existsByCode(req.code())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A project with this code already exists");
         }
-        AppUser actor = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
 
         String client = resolveClient(req.projectType(), req.client());
         requireDateOrder(req.startDate(), req.endDate());
@@ -78,9 +92,9 @@ public class ProjectService {
         project.setName(req.name());
         project.setClient(client);
         project.setProjectType(req.projectType());
-        project.setBillingModel(req.billingModel());
+        project.setBillingModel(resolveBillingModel(req.billingModelId(), null));
         project.setStatus(Project.Status.ACTIVE);
-        project.setPm(actor);
+        project.setPm(resolveLead(req.pmId(), null));
         project.setStartDate(req.startDate());
         project.setEndDate(req.endDate());
         project.setCreatedAt(OffsetDateTime.now());
@@ -113,8 +127,9 @@ public class ProjectService {
         project.setName(req.name());
         project.setClient(client);
         project.setProjectType(req.projectType());
-        project.setBillingModel(req.billingModel());
+        project.setBillingModel(resolveBillingModel(req.billingModelId(), project.getBillingModel()));
         project.setStatus(status);
+        project.setPm(resolveLead(req.pmId(), project.getPm()));
         project.setStartDate(req.startDate());
         project.setEndDate(req.endDate());
 
@@ -124,6 +139,62 @@ public class ProjectService {
 
     private static final java.util.Set<String> VALID_PROJECT_TYPES = java.util.Set.of(
             "CLIENT", "INTERNAL", "PRODUCT_DEVELOPMENT", "SUPPORT", "BENCH");
+
+    /**
+     * Resolves the optional billing model from the Organization Master.
+     *
+     * <p>An inactive model can't be newly assigned, but {@code current} — the project's existing
+     * model on update — is always allowed through, so deactivating a model doesn't block edits to
+     * projects already on it. Same grandfathering as {@link #resolveLead}.
+     */
+    private BillingModel resolveBillingModel(Long billingModelId, BillingModel current) {
+        if (billingModelId == null) {
+            return null;
+        }
+        if (current != null && current.getId().equals(billingModelId)) {
+            return current;
+        }
+        BillingModel model = billingModelRepository.findById(billingModelId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Billing model not found"));
+        if (!model.isActive()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "That billing model is inactive");
+        }
+        return model;
+    }
+
+    /**
+     * Resolves the project's TL, which must be an active Team Lead (MANAGER) or Project Manager.
+     *
+     * <p>This field is not merely a label: whoever holds it may approve EOD entries on the project
+     * (see {@code ApprovalService.checkManagerAuthorization}) and it scopes their Approvals queue,
+     * Project Dashboard and reports. So an out-of-role assignment is rejected.
+     *
+     * <p>{@code currentHolder} is the project's existing TL on update, and null on create. Re-sending
+     * the current holder unchanged is always allowed — several seeded projects are owned by a
+     * SUPERADMIN, and editing an unrelated field on them must not force a reassignment (which would
+     * silently move approval authority).
+     */
+    private AppUser resolveLead(Long pmId, AppUser currentHolder) {
+        AppUser lead = appUserRepository.findById(pmId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "TL not found"));
+
+        boolean unchanged = currentHolder != null && currentHolder.getId().equals(lead.getId());
+        if (unchanged) {
+            return lead;
+        }
+
+        if (lead.getStatus() != AppUser.Status.ACTIVE || lead.getDeletedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "TL must be an active user");
+        }
+        if (lead.getRole() != AppUser.Role.MANAGER && lead.getRole() != AppUser.Role.PM) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Only a Team Lead or Project Manager can be assigned as TL");
+        }
+        return lead;
+    }
 
     /**
      * Validates the project type and returns the client name to store.

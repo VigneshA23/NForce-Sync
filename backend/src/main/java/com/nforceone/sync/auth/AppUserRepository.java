@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -71,6 +72,9 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long>, JpaSpec
 
     List<AppUser> findByRoleAndStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Role role,
                                                                          AppUser.Status status);
+
+    List<AppUser> findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
+            Collection<AppUser.Role> roles, AppUser.Status status);
 
     // Fix 2: FK reference checks before deleting org master records
     long countByDepartmentId(Long departmentId);

@@ -16,7 +16,9 @@ public record CreateProjectRequest(
         @NotBlank @Size(max = 200) String name,
         @Size(max = 200) String client,
         @NotBlank @Size(max = 50) String projectType,
-        @Size(max = 50) String billingModel,
+        Long billingModelId,
         @NotNull LocalDate startDate,
-        LocalDate endDate
+        LocalDate endDate,
+        /** The project's TL. Must be an active MANAGER (Team Lead) or PM — see ProjectService. */
+        @NotNull Long pmId
 ) {}

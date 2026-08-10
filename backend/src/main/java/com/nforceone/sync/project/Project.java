@@ -1,6 +1,7 @@
 package com.nforceone.sync.project;
 
 import com.nforceone.sync.auth.AppUser;
+import com.nforceone.sync.org.BillingModel;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -30,8 +31,10 @@ public class Project {
     @Column(name = "project_type", length = 50)
     private String projectType;
 
-    @Column(name = "billing_model", length = 50)
-    private String billingModel;
+    /** Admin-managed Organization Master (V49); optional, as the free-text column before it was. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "billing_model_id")
+    private BillingModel billingModel;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

@@ -565,7 +565,7 @@ function AssignedProjectsPanel({ projects }: { projects: EmployeeProjectDto[] })
                 </span>
               </div>
               <div style={{ fontSize: 10, color: 'var(--txt-dim)' }}>
-                {p.pmName ? `PM: ${p.pmName} · ` : ''}
+                {p.pmName ? `TL: ${p.pmName} · ` : ''}
                 {formatDate(p.assignedFrom)} – {p.assignedTo ? formatDate(p.assignedTo) : 'Ongoing'}
               </div>
             </div>

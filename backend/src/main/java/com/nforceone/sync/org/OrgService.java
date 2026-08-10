@@ -1,12 +1,16 @@
 package com.nforceone.sync.org;
 
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.project.ProjectRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Transactional
@@ -15,16 +19,84 @@ public class OrgService {
     private final DepartmentRepository departmentRepository;
     private final DesignationRepository designationRepository;
     private final OrgLocationRepository locationRepository;
+    private final BillingModelRepository billingModelRepository;
     private final AppUserRepository appUserRepository;
+    private final ProjectRepository projectRepository;
 
     public OrgService(DepartmentRepository departmentRepository,
                       DesignationRepository designationRepository,
                       OrgLocationRepository locationRepository,
-                      AppUserRepository appUserRepository) {
+                      BillingModelRepository billingModelRepository,
+                      AppUserRepository appUserRepository,
+                      ProjectRepository projectRepository) {
         this.departmentRepository = departmentRepository;
         this.designationRepository = designationRepository;
         this.locationRepository = locationRepository;
+        this.billingModelRepository = billingModelRepository;
         this.appUserRepository = appUserRepository;
+        this.projectRepository = projectRepository;
+    }
+
+    // ── Billing model ─────────────────────────────────────────────────────────
+
+    /**
+     * Unlike the other masters — which employees reference directly — a billing model belongs to a
+     * project, so its headcount travels billing model → project → allocation → employee. The counts
+     * come from one grouped query; a model with nobody allocated simply has no row and reads 0.
+     */
+    @Transactional(readOnly = true)
+    public List<BillingModelDto> listBillingModels() {
+        Map<Long, Long> countsByModel = new HashMap<>();
+        for (Object[] row : projectRepository.countCurrentEmployeesByBillingModel(LocalDate.now())) {
+            countsByModel.put((Long) row[0], ((Number) row[1]).longValue());
+        }
+        return billingModelRepository.findAllByOrderByNameAsc()
+                .stream()
+                .map(b -> BillingModelDto.from(b, countsByModel.getOrDefault(b.getId(), 0L)))
+                .toList();
+    }
+
+    public BillingModelDto createBillingModel(CreateBillingModelRequest req) {
+        if (billingModelRepository.existsByName(req.name())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A billing model with this name already exists");
+        }
+        BillingModel model = BillingModel.builder()
+                .name(req.name())
+                .active(true)
+                .build();
+        return BillingModelDto.from(billingModelRepository.save(model), 0L);
+    }
+
+    public BillingModelDto toggleBillingModel(Long id) {
+        BillingModel model = billingModelRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Billing model not found"));
+        model.setActive(!model.isActive());
+        BillingModel saved = billingModelRepository.save(model);
+        return BillingModelDto.from(saved, currentEmployeeCount(saved.getId()));
+    }
+
+    public void deleteBillingModel(Long id) {
+        billingModelRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Billing model not found"));
+        long projectCount = projectRepository.countByBillingModelId(id);
+        if (projectCount > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot delete — " + projectCount + " project" + (projectCount == 1 ? " uses" : "s use")
+                            + " this billing model");
+        }
+        billingModelRepository.deleteById(id);
+    }
+
+    private long currentEmployeeCount(Long billingModelId) {
+        return projectRepository.countCurrentEmployeesByBillingModel(LocalDate.now())
+                .stream()
+                .filter(row -> billingModelId.equals(row[0]))
+                .map(row -> ((Number) row[1]).longValue())
+                .findFirst()
+                .orElse(0L);
     }
 
     // ── Department ────────────────────────────────────────────────────────────

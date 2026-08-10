@@ -26,7 +26,10 @@ export interface ProjectFullDto {
   name: string;
   client: string | null;
   projectType: string | null;
+  /** Display name of the billing model; null when unset. */
   billingModel: string | null;
+  /** Id of the same, for preselecting the edit form. */
+  billingModelId: number | null;
   status: 'ACTIVE' | 'INACTIVE' | 'COMPLETED' | 'ON_HOLD';
   pmId: number | null;
   pmName: string | null;
@@ -41,20 +44,24 @@ export interface CreateProjectPayload {
   /** Required when projectType is 'CLIENT'; forced to null for 'INTERNAL'. */
   client?: string | null;
   projectType: string;
-  billingModel?: string | null;
+  billingModelId?: number | null;
   startDate: string;
   /** Null means the project is ongoing — no fixed end date. */
   endDate?: string | null;
+  /** The project's TL. Must be an active MANAGER (Team Lead) or PM. */
+  pmId: number;
 }
 
 export interface UpdateProjectPayload {
   name: string;
   client?: string | null;
   projectType: string;
-  billingModel?: string | null;
+  billingModelId?: number | null;
   status: ProjectFullDto['status'];
   startDate: string;
   endDate?: string | null;
+  /** The project's TL. The existing holder may be re-sent even if now out-of-role. */
+  pmId: number;
 }
 
 export interface EmployeeRefDto {
@@ -116,6 +123,12 @@ export async function listAssignableEmployees(): Promise<EmployeeRefDto[]> {
   return res.data;
 }
 
+/** Users who may be a project's TL — active Team Leads (MANAGER) and Project Managers. */
+export async function listAssignableLeads(): Promise<EmployeeRefDto[]> {
+  const res = await api.get<EmployeeRefDto[]>('/projects/leads');
+  return res.data;
+}
+
 export async function createAllocation(data: CreateAllocationPayload): Promise<AllocationDto> {
   const res = await api.post<AllocationDto>('/allocations', data);
   return res.data;
@@ -142,6 +155,10 @@ export function useAllocations(projectId?: number) {
 
 export function useAssignableEmployees() {
   return useQuery({ queryKey: ['allocations', 'employees'], queryFn: listAssignableEmployees });
+}
+
+export function useAssignableLeads() {
+  return useQuery({ queryKey: ['projects', 'leads'], queryFn: listAssignableLeads });
 }
 
 export function useCreateProject() {

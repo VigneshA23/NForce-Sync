@@ -222,6 +222,14 @@ export interface DepartmentDto {
   active: boolean;
 }
 
+export interface BillingModelDto {
+  id: number;
+  name: string;
+  active: boolean;
+  /** Distinct employees currently allocated to a project on this billing model. */
+  employeeCount: number;
+}
+
 export interface DesignationDto {
   id: number;
   title: string;
@@ -298,6 +306,28 @@ export async function listShifts(): Promise<ShiftDefinitionDto[]> {
 // Fix 2: Delete org master records (FK-safe — backend returns 409 if employees assigned)
 export async function deleteDepartment(id: number): Promise<void> {
   await api.delete(`/org/departments/${id}`);
+}
+
+// ── Billing models ─────────────────────────────────────────────────────────────
+
+export async function listBillingModels(): Promise<BillingModelDto[]> {
+  const res = await api.get<BillingModelDto[]>('/org/billing-models');
+  return res.data;
+}
+
+export async function createBillingModel(name: string): Promise<BillingModelDto> {
+  const res = await api.post<BillingModelDto>('/org/billing-models', { name });
+  return res.data;
+}
+
+export async function toggleBillingModel(id: number): Promise<BillingModelDto> {
+  const res = await api.patch<BillingModelDto>(`/org/billing-models/${id}`);
+  return res.data;
+}
+
+/** Backend returns 409 if any project still uses the model. */
+export async function deleteBillingModel(id: number): Promise<void> {
+  await api.delete(`/org/billing-models/${id}`);
 }
 
 export async function deleteDesignation(id: number): Promise<void> {

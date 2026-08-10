@@ -5,9 +5,10 @@ import {
   listDepartments, createDepartment, toggleDepartment, deleteDepartment,
   listDesignations, createDesignation, toggleDesignation, deleteDesignation,
   listLocations, createLocation, toggleLocation, deleteLocation,
+  listBillingModels, createBillingModel, toggleBillingModel, deleteBillingModel,
   extractApiError, isHttpStatus,
 } from '../../api/admin';
-import type { DepartmentDto, DesignationDto, OrgLocationDto } from '../../api/admin';
+import type { DepartmentDto, DesignationDto, OrgLocationDto, BillingModelDto } from '../../api/admin';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../lib/toast';
 
@@ -51,7 +52,7 @@ const tdStyle: React.CSSProperties = {
   borderBottom: '1px solid var(--line)',
 };
 
-type Tab = 'departments' | 'designations' | 'locations';
+type Tab = 'departments' | 'designations' | 'locations' | 'billing-models';
 
 // ── Status pill ────────────────────────────────────────────────────────────────
 
@@ -348,11 +349,17 @@ interface OrgTableProps<T extends { id: number; active: boolean }> {
   isTogglePending: boolean;
   onDelete: (item: T) => void;
   isDeletePending: boolean;
+  /** Supply both to render an extra numeric column (used by Billing Models for its headcount). */
+  countKey?: keyof T;
+  countLabel?: string;
 }
 
 function OrgTable<T extends { id: number; active: boolean }>({
   data, isPending, isError, onRefetch, nameKey, onToggle, isTogglePending, onDelete, isDeletePending,
+  countKey, countLabel,
 }: OrgTableProps<T>) {
+  const showCount = countKey != null && countLabel != null;
+  const columnCount = showCount ? 4 : 3;
   return (
     <div style={{
       background: 'var(--panel)',
@@ -420,13 +427,14 @@ function OrgTable<T extends { id: number; active: boolean }>({
             <tr>
               <th style={thStyle}>Name / Title</th>
               <th style={thStyle}>Status</th>
+              {showCount && <th style={thStyle}>{countLabel}</th>}
               <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan={3} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                <td colSpan={columnCount} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
                   No entries yet. Add one above.
                 </td>
               </tr>
@@ -446,6 +454,11 @@ function OrgTable<T extends { id: number; active: boolean }>({
                   <td style={tdStyle}>
                     <ActiveBadge active={item.active} />
                   </td>
+                  {showCount && (
+                    <td style={{ ...tdStyle, fontVariantNumeric: 'tabular-nums' }}>
+                      {String(item[countKey!])}
+                    </td>
+                  )}
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                       {/* Fix 4: Toggle button triggers ConfirmModal (handled by parent) */}
@@ -518,6 +531,137 @@ function OrgTable<T extends { id: number; active: boolean }>({
 }
 
 // ── Departments tab ────────────────────────────────────────────────────────────
+
+// ── Billing models tab ─────────────────────────────────────────────────────────
+
+function BillingModelsTab() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [addOpen, setAddOpen] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [confirmToggleItem, setConfirmToggleItem] = useState<BillingModelDto | null>(null);
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<BillingModelDto | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const { data, isPending, isError, refetch } = useQuery({
+    queryKey: ['org', 'billing-models'],
+    queryFn: listBillingModels,
+  });
+
+  const addMutation = useMutation({
+    mutationFn: createBillingModel,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['org', 'billing-models'] });
+      toast.showToast('success', `Billing model "${result.name}" added`);
+      setAddOpen(false);
+      setAddError(null);
+    },
+    onError: (err) => {
+      if (isHttpStatus(err, 409)) {
+        setAddError('A billing model with this name already exists.');
+        return;
+      }
+      const msg = extractApiError(err, 'Failed to add billing model.');
+      setAddError(msg);
+      toast.showToast('error', msg);
+    },
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: toggleBillingModel,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['org', 'billing-models'] });
+      toast.showToast('success', `"${result.name}" ${result.active ? 'activated' : 'deactivated'}`);
+      setConfirmToggleItem(null);
+    },
+    onError: (err) => {
+      const msg = extractApiError(err, 'Failed to update billing model.');
+      toast.showToast('error', msg);
+      setConfirmToggleItem(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteBillingModel,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['org', 'billing-models'] });
+      toast.showToast('success', `Billing model "${confirmDeleteItem?.name}" deleted`);
+      setConfirmDeleteItem(null);
+      setDeleteError(null);
+    },
+    onError: (err) => {
+      // The server returns 409 naming the project count when the model is still referenced.
+      const msg = extractApiError(err, 'Failed to delete billing model.');
+      setDeleteError(msg);
+      toast.showToast('error', msg);
+    },
+  });
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+        <button
+          onClick={() => { setAddError(null); setAddOpen(true); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 14px', background: 'var(--brand)', border: 'none',
+            borderRadius: 7, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          <Plus size={13} aria-hidden="true" />
+          Add Billing Model
+        </button>
+      </div>
+
+      <OrgTable<BillingModelDto>
+        data={data}
+        isPending={isPending}
+        isError={isError}
+        onRefetch={refetch}
+        nameKey="name"
+        countKey="employeeCount"
+        countLabel="Employees"
+        onToggle={(item) => setConfirmToggleItem(item)}
+        isTogglePending={toggleMutation.isPending}
+        onDelete={(item) => { setDeleteError(null); setConfirmDeleteItem(item); }}
+        isDeletePending={deleteMutation.isPending}
+      />
+
+      <AddModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        title="Add Billing Model"
+        fieldLabel="Billing Model Name"
+        placeholder="e.g. Retainer"
+        onSubmit={(name) => addMutation.mutateAsync(name)}
+        isPending={addMutation.isPending}
+        error={addError}
+      />
+
+      <ConfirmModal
+        open={confirmToggleItem != null}
+        onClose={() => setConfirmToggleItem(null)}
+        onConfirm={() => { if (confirmToggleItem) toggleMutation.mutate(confirmToggleItem.id); }}
+        title={confirmToggleItem?.active ? 'Deactivate Billing Model' : 'Activate Billing Model'}
+        message={confirmToggleItem?.active
+          ? <>Deactivating <b style={{ color: 'var(--txt)' }}>{confirmToggleItem?.name}</b> hides it from the Project form. Projects already on it keep it and stay editable.</>
+          : <>Reactivate <b style={{ color: 'var(--txt)' }}>{confirmToggleItem?.name}</b>?</>}
+        confirmLabel={confirmToggleItem?.active ? 'Deactivate' : 'Activate'}
+        danger={confirmToggleItem?.active}
+        isPending={toggleMutation.isPending}
+      />
+
+      <DeleteConfirmModal
+        open={confirmDeleteItem != null}
+        onClose={() => { setConfirmDeleteItem(null); setDeleteError(null); }}
+        onConfirm={() => { if (confirmDeleteItem) deleteMutation.mutate(confirmDeleteItem.id); }}
+        itemName={confirmDeleteItem?.name ?? ''}
+        isPending={deleteMutation.isPending}
+        error={deleteError}
+      />
+    </div>
+  );
+}
 
 function DepartmentsTab() {
   const toast = useToast();
@@ -911,6 +1055,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'departments',  label: 'Departments' },
   { key: 'designations', label: 'Designations' },
   { key: 'locations',    label: 'Locations' },
+  { key: 'billing-models', label: 'Billing Models' },
 ];
 
 export default function OrganizationMasters() {
@@ -931,7 +1076,7 @@ export default function OrganizationMasters() {
           Organization Masters
         </h1>
         <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-          Manage departments, designations, and locations used across the platform.
+          Manage departments, designations, locations, and billing models used across the platform.
         </p>
       </div>
 
@@ -971,6 +1116,7 @@ export default function OrganizationMasters() {
       {activeTab === 'departments'  && <DepartmentsTab />}
       {activeTab === 'designations' && <DesignationsTab />}
       {activeTab === 'locations'    && <LocationsTab />}
+      {activeTab === 'billing-models' && <BillingModelsTab />}
     </div>
   );
 }

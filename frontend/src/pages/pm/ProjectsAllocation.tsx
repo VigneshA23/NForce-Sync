@@ -6,10 +6,12 @@ import {
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../lib/toast';
 import { todayISO } from '../../lib/date';
-import { extractApiError } from '../../api/admin';
+import { useQuery } from '@tanstack/react-query';
+import { extractApiError, listBillingModels } from '../../api/admin';
 import {
   useAllProjects, useAllocations, useAssignableEmployees,
   useCreateProject, useUpdateProject, useCreateAllocation, useUpdateAllocation, useDeleteAllocation,
+  useAssignableLeads,
 } from '../../api/projects';
 import type { ProjectFullDto, AllocationDto } from '../../api/projects';
 
@@ -206,10 +208,13 @@ interface ProjectFormState {
   name: string;
   client: string;
   projectType: string;
-  billingModel: string;
+  /** Billing Model id from the Organization Master, as a string for the <select>. */
+  billingModelId: string;
   status: ProjectFullDto['status'];
   startDate: string;
   endDate: string;
+  /** The project's TL, held as a string because it is bound to a <select>. */
+  pmId: string;
 }
 
 /**
@@ -248,8 +253,8 @@ function dayAfterISO(iso: string): string | undefined {
 }
 
 const EMPTY_PROJECT_FORM: ProjectFormState = {
-  code: '', name: '', client: '', projectType: '', billingModel: '',
-  status: 'ACTIVE', startDate: todayISO(), endDate: '',
+  code: '', name: '', client: '', projectType: '', billingModelId: '',
+  status: 'ACTIVE', startDate: todayISO(), endDate: '', pmId: '',
 };
 
 function ProjectModal({ open, onClose, editing }: {
@@ -258,6 +263,11 @@ function ProjectModal({ open, onClose, editing }: {
   const { showToast } = useToast();
   const createMutation = useCreateProject();
   const updateMutation = useUpdateProject();
+  const { data: leads } = useAssignableLeads();
+  const { data: billingModels } = useQuery({
+    queryKey: ['org', 'billing-models'],
+    queryFn: listBillingModels,
+  });
   const [form, setForm] = useState<ProjectFormState>(EMPTY_PROJECT_FORM);
   const [error, setError] = useState<string | null>(null);
 
@@ -268,14 +278,28 @@ function ProjectModal({ open, onClose, editing }: {
       name: editing.name,
       client: editing.client ?? '',
       projectType: editing.projectType ?? '',
-      billingModel: editing.billingModel ?? '',
+      billingModelId: editing.billingModelId != null ? String(editing.billingModelId) : '',
       status: editing.status,
       startDate: editing.startDate ?? '',
       endDate: editing.endDate ?? '',
+      pmId: editing.pmId != null ? String(editing.pmId) : '',
     } : EMPTY_PROJECT_FORM);
   }, [open, editing]);
 
   const isPending = createMutation.isPending || updateMutation.isPending;
+
+  // Several seeded projects are owned by a SUPERADMIN, who is not an eligible TL. Offer the current
+  // holder as an extra option so editing an unrelated field can't silently reassign the project —
+  // the server likewise accepts the unchanged holder.
+  const leadOptions = leads ?? [];
+  const currentLeadMissing = editing?.pmId != null
+    && !leadOptions.some(l => l.id === editing.pmId);
+
+  // Only active models are offered; a project already on a deactivated one keeps it (see the option
+  // rendered below), which matches how the server grandfathers an unchanged value.
+  const activeBillingModels = (billingModels ?? []).filter(b => b.active);
+  const currentBillingModelMissing = editing?.billingModelId != null
+    && !activeBillingModels.some(b => b.id === editing.billingModelId);
 
   // Client Name only applies to client work; internal projects have no client by definition.
   const showClient = form.projectType === 'CLIENT';
@@ -289,6 +313,7 @@ function ProjectModal({ open, onClose, editing }: {
     && form.startDate !== ''
     && (!showClient || form.client.trim() !== '')
     && (!endDateRequired || form.endDate !== '')
+    && form.pmId !== ''
     && !badDateOrder;
 
   function handleClose() {
@@ -316,10 +341,11 @@ function ProjectModal({ open, onClose, editing }: {
             // Server also nulls this for INTERNAL; sent as null here so the two agree.
             client: showClient ? form.client.trim() : null,
             projectType: form.projectType,
-            billingModel: form.billingModel.trim() || null,
+            billingModelId: form.billingModelId === '' ? null : Number(form.billingModelId),
             status: form.status,
             startDate: form.startDate,
             endDate: form.endDate || null,
+            pmId: Number(form.pmId),
           },
         });
         showToast('success', 'Project updated');
@@ -329,9 +355,10 @@ function ProjectModal({ open, onClose, editing }: {
           name: form.name.trim(),
           client: showClient ? form.client.trim() : null,
           projectType: form.projectType,
-          billingModel: form.billingModel.trim() || null,
+          billingModelId: form.billingModelId === '' ? null : Number(form.billingModelId),
           startDate: form.startDate,
           endDate: form.endDate || null,
+          pmId: Number(form.pmId),
         });
         showToast('success', 'Project created');
       }
@@ -383,15 +410,18 @@ function ProjectModal({ open, onClose, editing }: {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: editing ? '1fr 1fr' : '1fr', gap: 14, marginBottom: 14 }}>
           <div>
+            {/* Maintained by a Super Admin in Organization Masters → Billing Models. */}
             <label style={labelStyle}>Billing Model</label>
-            <select style={inputStyle} value={form.billingModel}
-              onChange={e => setForm(f => ({ ...f, billingModel: e.target.value }))}>
+            <select style={inputStyle} value={form.billingModelId}
+              onChange={e => setForm(f => ({ ...f, billingModelId: e.target.value }))}>
               <option value="">—</option>
-              <option value="BILLABLE">Billable</option>
-              <option value="T_AND_M">T &amp; M</option>
-              <option value="FIXED_BID">Fixed Bid</option>
-              <option value="INTERNAL">Internal</option>
-              <option value="NON_BILLABLE">Non-Billable</option>
+              {/* An inactive model is hidden, but keep the project's own so editing can't clear it. */}
+              {currentBillingModelMissing && (
+                <option value={String(editing!.billingModelId)}>{editing!.billingModel} (inactive)</option>
+              )}
+              {activeBillingModels.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
             </select>
           </div>
           {editing && (
@@ -406,6 +436,21 @@ function ProjectModal({ open, onClose, editing }: {
               </select>
             </div>
           )}
+        </div>
+
+        {/* TL — whoever holds this may approve EOD entries on the project, so it is required. */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>TL *</label>
+          <select style={inputStyle} value={form.pmId}
+            onChange={e => setForm(f => ({ ...f, pmId: e.target.value }))}>
+            <option value="">Select TL…</option>
+            {currentLeadMissing && (
+              <option value={String(editing!.pmId)}>{editing!.pmName} (current)</option>
+            )}
+            {leadOptions.map(l => (
+              <option key={l.id} value={l.id}>{l.fullName} ({l.employeeCode})</option>
+            ))}
+          </select>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
           <div>
@@ -546,7 +591,7 @@ function ProjectsTab() {
               <th style={thStyle}>Name</th>
               <th style={thStyle}>Client</th>
               <th style={thStyle}>Timeline</th>
-              <th style={thStyle}>PM</th>
+              <th style={thStyle}>TL</th>
               <th style={thStyle}>Headcount</th>
               <th style={thStyle}>Status</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>

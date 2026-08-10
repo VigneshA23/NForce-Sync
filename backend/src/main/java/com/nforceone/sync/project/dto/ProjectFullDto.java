@@ -10,7 +10,10 @@ public record ProjectFullDto(
         String name,
         String client,
         String projectType,
+        /** Display name of the billing model; null when unset. */
         String billingModel,
+        /** Id of the same, so the edit form can preselect it. */
+        Long billingModelId,
         String status,
         Long pmId,
         String pmName,
@@ -25,7 +28,8 @@ public record ProjectFullDto(
                 p.getName(),
                 p.getClient(),
                 p.getProjectType(),
-                p.getBillingModel(),
+                p.getBillingModel() != null ? p.getBillingModel().getName() : null,
+                p.getBillingModel() != null ? p.getBillingModel().getId() : null,
                 p.getStatus().name(),
                 p.getPm() != null ? p.getPm().getId() : null,
                 p.getPm() != null ? p.getPm().getFullName() : null,

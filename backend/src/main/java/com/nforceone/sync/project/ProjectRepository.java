@@ -31,6 +31,24 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     // The Project Dashboard is scoped to the projects a given PM owns.
     List<Project> findByPmIdOrderByNameAsc(Long pmId);
 
+    /** FK guard for deleting a billing model — mirrors AppUserRepository.countByDepartmentId. */
+    long countByBillingModelId(Long billingModelId);
+
+    /**
+     * Distinct employees currently allocated per billing model, resolved in one grouped query so the
+     * Organization Masters list does not run a count per row.
+     *
+     * <p>"Currently" means the allocation's effective window covers {@code today}. No nullable bind
+     * parameter is used — Postgres cannot infer the type of {@code :param IS NULL}.
+     */
+    @Query("SELECT p.billingModel.id, COUNT(DISTINCT a.employee.id) " +
+           "FROM Allocation a JOIN a.project p " +
+           "WHERE p.billingModel IS NOT NULL " +
+           "AND a.effectiveFrom <= :today " +
+           "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :today) " +
+           "GROUP BY p.billingModel.id")
+    List<Object[]> countCurrentEmployeesByBillingModel(@Param("today") LocalDate today);
+
     // "My Projects" for a Team Lead: the Team Lead's OWN allocation rows — not their team's.
     // A Team Lead is an AppUser like any other and can hold Allocation rows directly (e.g. they
     // are personally staffed on a client engagement), so this is the same shape as

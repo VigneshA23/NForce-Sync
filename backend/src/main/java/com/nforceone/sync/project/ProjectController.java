@@ -1,6 +1,7 @@
 package com.nforceone.sync.project;
 
 import com.nforceone.sync.project.dto.CreateProjectRequest;
+import com.nforceone.sync.project.dto.EmployeeRefDto;
 import com.nforceone.sync.project.dto.ProjectDto;
 import com.nforceone.sync.project.dto.ProjectFullDto;
 import com.nforceone.sync.project.dto.UpdateProjectRequest;
@@ -47,7 +48,14 @@ public class ProjectController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
     public ProjectFullDto create(@Valid @RequestBody CreateProjectRequest request) {
-        return projectService.create(request, actingEmail());
+        return projectService.create(request);
+    }
+
+    /** Users assignable as a project's TL — active Team Leads (MANAGER) and Project Managers. */
+    @GetMapping("/leads")
+    @PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
+    public List<EmployeeRefDto> listAssignableLeads() {
+        return projectService.listAssignableLeads();
     }
 
     @PatchMapping("/{id}")
