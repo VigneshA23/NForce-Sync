@@ -2,6 +2,7 @@ package com.nforceone.sync.teamlead;
 
 import com.nforceone.sync.project.dto.CreateProjectCategoryRequest;
 import com.nforceone.sync.project.dto.ProjectCategoryDto;
+import com.nforceone.sync.project.dto.ProjectDetailDto;
 import com.nforceone.sync.project.dto.ProjectFullDto;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -34,6 +35,13 @@ public class TeamLeadProjectController {
     public List<ProjectFullDto> listMyProjects(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return teamLeadProjectService.listMyProjects(actingEmail(), date != null ? date : LocalDate.now());
+    }
+
+    @GetMapping("/projects/{id}")
+    public ProjectDetailDto getProjectDetail(
+            @PathVariable Long id,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return teamLeadProjectService.getProjectDetail(actingEmail(), id, date != null ? date : LocalDate.now());
     }
 
     @GetMapping("/categories")

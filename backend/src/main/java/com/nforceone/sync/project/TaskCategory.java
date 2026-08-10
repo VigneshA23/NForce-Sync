@@ -1,5 +1,6 @@
 package com.nforceone.sync.project;
 
+import com.nforceone.sync.auth.AppUser;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,7 +15,7 @@ public class TaskCategory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = false, length = 100)
     private String name;
 
     @Column(name = "is_productive", nullable = false)
@@ -25,4 +26,11 @@ public class TaskCategory {
 
     @Column(nullable = false)
     private Boolean active;
+
+    // Null = global category, visible to every employee (the original seeded list). Non-null =
+    // owned by that Team Lead's team — mirrors a ProjectCategory the Team Lead created under
+    // "My Projects" > Category Management; see TeamLeadProjectService.createCategory.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "manager_id")
+    private AppUser manager;
 }

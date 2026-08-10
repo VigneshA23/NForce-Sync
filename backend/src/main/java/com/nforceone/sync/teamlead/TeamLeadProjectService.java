@@ -7,8 +7,13 @@ import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectCategory;
 import com.nforceone.sync.project.ProjectCategoryRepository;
 import com.nforceone.sync.project.ProjectRepository;
+import com.nforceone.sync.project.TaskCategory;
+import com.nforceone.sync.project.TaskCategoryRepository;
+import com.nforceone.sync.project.Allocation;
 import com.nforceone.sync.project.dto.CreateProjectCategoryRequest;
+import com.nforceone.sync.project.dto.EmployeeRefDto;
 import com.nforceone.sync.project.dto.ProjectCategoryDto;
+import com.nforceone.sync.project.dto.ProjectDetailDto;
 import com.nforceone.sync.project.dto.ProjectFullDto;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,15 +46,18 @@ public class TeamLeadProjectService {
     private final ProjectCategoryRepository categoryRepository;
     private final AllocationRepository allocationRepository;
     private final AppUserRepository appUserRepository;
+    private final TaskCategoryRepository taskCategoryRepository;
 
     public TeamLeadProjectService(ProjectRepository projectRepository,
                                    ProjectCategoryRepository categoryRepository,
                                    AllocationRepository allocationRepository,
-                                   AppUserRepository appUserRepository) {
+                                   AppUserRepository appUserRepository,
+                                   TaskCategoryRepository taskCategoryRepository) {
         this.projectRepository = projectRepository;
         this.categoryRepository = categoryRepository;
         this.allocationRepository = allocationRepository;
         this.appUserRepository = appUserRepository;
+        this.taskCategoryRepository = taskCategoryRepository;
     }
 
     public List<ProjectFullDto> listMyProjects(String actingEmail, LocalDate onDate) {
@@ -59,6 +67,30 @@ public class TeamLeadProjectService {
                 .map(p -> ProjectFullDto.from(p,
                         (int) allocationRepository.countByProjectIdAndEmployeeRole(p.getId(), AppUser.Role.EMPLOYEE)))
                 .toList();
+    }
+
+    /**
+     * Project details plus its currently assigned employees, for the project details popup.
+     * Re-derives the Team Lead's own project list (via {@link #requireProjectAssignedToTeamLead})
+     * so a Team Lead cannot view another Team Lead's project by supplying an arbitrary id.
+     */
+    public ProjectDetailDto getProjectDetail(String actingEmail, Long projectId, LocalDate onDate) {
+        AppUser actor = resolveActor(actingEmail);
+        Project project = requireProjectAssignedToTeamLead(projectId, actor.getId(), onDate);
+
+        List<EmployeeRefDto> employees = allocationRepository.findByProjectIdWithRefs(projectId)
+                .stream()
+                .filter(a -> isActiveOn(a, onDate))
+                .map(a -> EmployeeRefDto.from(a.getEmployee()))
+                .distinct()
+                .toList();
+
+        return ProjectDetailDto.from(project, employees);
+    }
+
+    private boolean isActiveOn(Allocation a, LocalDate onDate) {
+        return !a.getEffectiveFrom().isAfter(onDate)
+                && (a.getEffectiveTo() == null || !a.getEffectiveTo().isBefore(onDate));
     }
 
     public List<ProjectCategoryDto> listCategories(String actingEmail) {
@@ -85,15 +117,30 @@ public class TeamLeadProjectService {
         }
 
         ProjectCategory.Status status = resolveStatus(req.status());
+        String name = req.name().trim();
+
+        // Mirror into a team-scoped TaskCategory row so this category becomes selectable in the
+        // Employee EOD dropdown for everyone on this Team Lead's team (app_user.manager_id =
+        // actor.id), without affecting the global, unscoped seeded categories. Defaults match
+        // what this form collects — no productivity/billability distinction is asked of the
+        // Team Lead here.
+        TaskCategory taskCategory = new TaskCategory();
+        taskCategory.setName(name);
+        taskCategory.setIsProductive(true);
+        taskCategory.setIsBillableDefault(false);
+        taskCategory.setActive(status == ProjectCategory.Status.ACTIVE);
+        taskCategory.setManager(actor);
+        taskCategory = taskCategoryRepository.save(taskCategory);
 
         ProjectCategory category = new ProjectCategory();
         category.setProject(project);
-        category.setName(req.name().trim());
+        category.setName(name);
         category.setCode(blankToNull(req.code()));
         category.setDescription(blankToNull(req.description()));
         category.setColor(blankToNull(req.color()));
         category.setStatus(status);
         category.setCreatedBy(actor);
+        category.setTaskCategoryId(taskCategory.getId());
         OffsetDateTime now = OffsetDateTime.now();
         category.setCreatedAt(now);
         category.setUpdatedAt(now);

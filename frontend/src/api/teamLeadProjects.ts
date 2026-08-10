@@ -29,6 +29,23 @@ export interface CreateCategoryPayload {
   status?: ProjectCategoryDto['status'];
 }
 
+export interface ProjectDetailEmployeeDto {
+  id: number;
+  fullName: string;
+  employeeCode: string;
+}
+
+export interface ProjectDetailDto {
+  id: number;
+  code: string;
+  name: string;
+  client: string | null;
+  status: string;
+  startDate: string | null;
+  endDate: string | null;
+  employees: ProjectDetailEmployeeDto[];
+}
+
 /** Projects the signed-in Team Lead is personally allocated to (not their team's). */
 export async function listMyLeadProjects(date?: string): Promise<ProjectFullDto[]> {
   const res = await api.get<ProjectFullDto[]>('/team-lead/projects', { params: date ? { date } : undefined });
@@ -46,6 +63,12 @@ export async function createProjectCategory(data: CreateCategoryPayload): Promis
   return res.data;
 }
 
+/** Details + currently assigned employees for one of the Team Lead's own projects. */
+export async function getProjectDetail(id: number): Promise<ProjectDetailDto> {
+  const res = await api.get<ProjectDetailDto>(`/team-lead/projects/${id}`);
+  return res.data;
+}
+
 // ── Query hooks ────────────────────────────────────────────────────────────────
 
 export function useMyLeadProjects(date?: string) {
@@ -54,6 +77,14 @@ export function useMyLeadProjects(date?: string) {
 
 export function useMyCategories() {
   return useQuery({ queryKey: ['team-lead', 'categories'], queryFn: listMyCategories });
+}
+
+export function useProjectDetail(id: number | null) {
+  return useQuery({
+    queryKey: ['team-lead', 'project-detail', id],
+    queryFn: () => getProjectDetail(id as number),
+    enabled: id != null,
+  });
 }
 
 export function useCreateProjectCategory() {

@@ -40,6 +40,12 @@ public class ProjectCategory {
     @Column(nullable = false, length = 20)
     private Status status;
 
+    // Links to the TaskCategory row mirroring this one — set on create so the Team Lead's
+    // category is selectable in the Employee EOD dropdown, scoped to their team; see
+    // TeamLeadProjectService.createCategory and TaskCategoryController.
+    @Column(name = "task_category_id")
+    private Long taskCategoryId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", nullable = false)
     private AppUser createdBy;

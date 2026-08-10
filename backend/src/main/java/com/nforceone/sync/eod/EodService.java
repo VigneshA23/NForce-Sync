@@ -197,9 +197,16 @@ public class EodService {
         AppUser actor = requireUserByEmail(actingEmail);
         Long targetId = resolveTargetEmployee(actor, employeeId);
 
-        List<EodEntry> entries = (from != null && to != null)
-                ? entryRepository.findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(targetId, from, to)
-                : entryRepository.findByEmployeeIdOrderByEntryDateDesc(targetId);
+        List<EodEntry> entries;
+        if (from != null && to != null) {
+            entries = entryRepository.findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(targetId, from, to);
+        } else if (from != null) {
+            entries = entryRepository.findByEmployeeIdAndEntryDateGreaterThanEqualOrderByEntryDateDesc(targetId, from);
+        } else if (to != null) {
+            entries = entryRepository.findByEmployeeIdAndEntryDateLessThanEqualOrderByEntryDateDesc(targetId, to);
+        } else {
+            entries = entryRepository.findByEmployeeIdOrderByEntryDateDesc(targetId);
+        }
 
         return mapWithBatchedComments(entries);
     }

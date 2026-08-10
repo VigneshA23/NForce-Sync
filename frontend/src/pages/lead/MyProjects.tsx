@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FolderKanban, Plus, RefreshCw, AlertTriangle, Users, Calendar, Tag } from 'lucide-react';
+import { Plus, RefreshCw, AlertTriangle, Search, X } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../lib/toast';
 import { extractApiError } from '../../api/admin';
 import {
-  useMyLeadProjects, useMyCategories, useCreateProjectCategory,
+  useMyLeadProjects, useMyCategories, useCreateProjectCategory, useProjectDetail,
 } from '../../api/teamLeadProjects';
 import type { ProjectFullDto, ProjectCategoryDto } from '../../api/teamLeadProjects';
+
+type ProjectStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ON_HOLD';
+type CategoryStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
 // ── Shared styles (mirrors pages/pm/ProjectsAllocation.tsx for visual consistency) ────
 
@@ -56,8 +59,6 @@ const STATUS_CFG: Record<string, { color: string; label: string }> = {
   INACTIVE:  { color: '#9BA1AC', label: 'Inactive' },
 };
 
-const CATEGORY_COLORS = ['#4C8DD6', '#2FB67C', '#E0A93B', '#E4373D', '#9B6DFF', '#14B8A6'];
-
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CFG[status] ?? { color: '#9BA1AC', label: status };
   return (
@@ -94,86 +95,265 @@ function fmtDateDMY(iso: string | null | undefined): string {
   return y && m && d ? `${d}-${m}-${y}` : iso;
 }
 
-// ── Project card ───────────────────────────────────────────────────────────────
+// ── Search box (mirrors pages/pm/ProjectsAllocation.tsx search pattern) ─────────
 
-function ProjectCard({ project, selected, onSelect }: {
-  project: ProjectFullDto; selected: boolean; onSelect: () => void;
+function SearchBox({ value, onChange, placeholder, ariaLabel }: {
+  value: string; onChange: (v: string) => void; placeholder: string; ariaLabel: string;
 }) {
   return (
-    <button
-      onClick={onSelect}
-      style={{
-        textAlign: 'left', cursor: 'pointer', width: '100%',
-        background: 'var(--panel)',
-        border: `1px solid ${selected ? 'var(--brand)' : 'var(--line)'}`,
-        borderRadius: 10, padding: 16,
-        display: 'flex', flexDirection: 'column', gap: 10,
-        boxShadow: selected ? '0 0 0 1px var(--brand)' : 'none',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--txt)' }}>{project.name}</div>
-          <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', marginTop: 2 }}>
-            {project.code}
+    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: '100%', maxWidth: 320 }}>
+      <Search
+        size={13} aria-hidden="true"
+        style={{ position: 'absolute', left: 10, color: 'var(--txt-dim)', pointerEvents: 'none' }}
+      />
+      <input
+        type="search"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        style={{ ...inputStyle, paddingLeft: 30, paddingRight: value !== '' ? 30 : 12, fontWeight: 400 }}
+      />
+      {value !== '' && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label="Clear search"
+          style={{
+            position: 'absolute', right: 8, background: 'transparent', border: 'none',
+            cursor: 'pointer', color: 'var(--txt-dim)', padding: 4, display: 'flex',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--txt)'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'var(--txt-dim)'; }}
+        >
+          <X size={14} aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Status filter select (toolbar, alongside search) ────────────────────────────
+
+function StatusFilterSelect({ value, onChange, options, ariaLabel }: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+}) {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+      <label style={{ fontSize: 12, fontWeight: 550, color: 'var(--txt-mut)', whiteSpace: 'nowrap' }}>
+        Status
+      </label>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        aria-label={ariaLabel}
+        style={{ ...inputStyle, width: 'auto', minWidth: 130, fontWeight: 400 }}
+      >
+        {options.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// ── Projects panel ──────────────────────────────────────────────────────────────
+
+function ProjectsPanel({ projects, isPending, isError, refetch, selectedProjectId, onSelect, onOpenDetails }: {
+  projects: ProjectFullDto[];
+  isPending: boolean;
+  isError: boolean;
+  refetch: () => void;
+  selectedProjectId: number | undefined;
+  onSelect: (id: number) => void;
+  onOpenDetails: (id: number) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>('ALL');
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return projects.filter(p => {
+      const matchesSearch = term === ''
+        || p.name.toLowerCase().includes(term)
+        || p.code.toLowerCase().includes(term)
+        || (p.client ?? '').toLowerCase().includes(term);
+      const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [projects, search, statusFilter]);
+
+  return (
+    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
+      <div style={{
+        padding: '14px 20px', borderBottom: '1px solid var(--line)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+      }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+          Assigned Projects{projects.length > 0 ? ` (${projects.length})` : ''}
+        </span>
+        <button
+          onClick={() => refetch()}
+          aria-label="Refresh"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: 'transparent', border: '1px solid var(--line2)', cursor: 'pointer',
+            color: 'var(--txt-mut)', padding: '7px 10px', borderRadius: 6, fontSize: 12,
+          }}
+        >
+          <RefreshCw size={13} aria-hidden="true" />
+        </button>
+      </div>
+
+      {!isPending && !isError && projects.length > 0 && (
+        <div style={{
+          padding: '14px 20px', borderBottom: '1px solid var(--line)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+        }}>
+          <div style={{ flex: '1 1 260px', maxWidth: 320 }}>
+            <SearchBox
+              value={search}
+              onChange={setSearch}
+              placeholder="Search assigned projects..."
+              ariaLabel="Search assigned projects by name, client, or code"
+            />
           </div>
+          <StatusFilterSelect
+            value={statusFilter}
+            onChange={v => setStatusFilter(v as ProjectStatusFilter)}
+            ariaLabel="Filter assigned projects by status"
+            options={[
+              { value: 'ALL', label: 'All' },
+              { value: 'ACTIVE', label: 'Active' },
+              { value: 'INACTIVE', label: 'Inactive' },
+              { value: 'ON_HOLD', label: 'On Hold' },
+            ]}
+          />
         </div>
-        <StatusBadge status={project.status} />
-      </div>
+      )}
 
-      <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
-        {project.client ?? 'Internal'}
-      </div>
+      {isPending && (
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 40, borderRadius: 6 }} />
+          ))}
+        </div>
+      )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12, color: 'var(--txt-dim)' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <Calendar size={12} aria-hidden="true" />
-          {fmtDateDMY(project.startDate)} → {project.endDate ? fmtDateDMY(project.endDate) : 'Ongoing'}
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <Users size={12} aria-hidden="true" />
-          {project.allocatedHeadcount} on team
-        </span>
-      </div>
-    </button>
+      {isError && (
+        <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, color: 'var(--risk)', marginBottom: 12 }}>Failed to load your projects.</div>
+          <button onClick={() => refetch()} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+            background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6,
+            color: 'var(--txt)', fontSize: 12, cursor: 'pointer',
+          }}>
+            <RefreshCw size={13} aria-hidden="true" /> Retry
+          </button>
+        </div>
+      )}
+
+      {!isPending && !isError && (
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={thStyle}>Project</th>
+              <th style={thStyle}>Client</th>
+              <th style={thStyle}>Status</th>
+              <th style={thStyle}>Start Date</th>
+              <th style={thStyle}>End Date</th>
+              <th style={thStyle}>Team Size</th>
+            </tr>
+          </thead>
+          <tbody>
+            {projects.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                  No projects are currently assigned to you.
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                  No matching projects found.
+                </td>
+              </tr>
+            ) : (
+              filtered.map(p => (
+                <tr
+                  key={p.id}
+                  onClick={() => onSelect(p.id)}
+                  style={{
+                    cursor: 'pointer',
+                    background: p.id === selectedProjectId ? 'color-mix(in srgb, var(--brand) 8%, transparent)' : 'transparent',
+                  }}
+                >
+                  <td style={tdStyle}>
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); onOpenDetails(p.id); }}
+                      title="View project details"
+                      style={{
+                        background: 'none', border: 'none', padding: 0, margin: 0,
+                        cursor: 'pointer', textAlign: 'left', font: 'inherit',
+                        color: 'var(--brand)', fontWeight: 500,
+                        textDecoration: 'underline',
+                        textDecorationColor: 'color-mix(in srgb, var(--brand) 40%, transparent)',
+                      }}
+                    >
+                      {p.name}
+                    </button>
+                    <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', marginTop: 2 }}>
+                      {p.code}
+                    </div>
+                  </td>
+                  <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{p.client ?? 'Internal'}</td>
+                  <td style={tdStyle}><StatusBadge status={p.status} /></td>
+                  <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{fmtDateDMY(p.startDate)}</td>
+                  <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{p.endDate ? fmtDateDMY(p.endDate) : 'Ongoing'}</td>
+                  <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{p.allocatedHeadcount}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 
 // ── New Category modal ────────────────────────────────────────────────────────
 
 interface CategoryFormState {
-  projectId: string;
   name: string;
-  code: string;
   description: string;
-  color: string;
   status: 'ACTIVE' | 'INACTIVE';
 }
 
-function emptyForm(defaultProjectId: number | undefined): CategoryFormState {
-  return {
-    projectId: defaultProjectId != null ? String(defaultProjectId) : '',
-    name: '', code: '', description: '', color: CATEGORY_COLORS[0], status: 'ACTIVE',
-  };
+function emptyForm(): CategoryFormState {
+  return { name: '', description: '', status: 'ACTIVE' };
 }
 
-function NewCategoryModal({ open, onClose, projects, defaultProjectId }: {
-  open: boolean; onClose: () => void; projects: ProjectFullDto[]; defaultProjectId: number | undefined;
+function NewCategoryModal({ open, onClose }: {
+  open: boolean; onClose: () => void;
 }) {
   const { showToast } = useToast();
   const createMutation = useCreateProjectCategory();
-  const [form, setForm] = useState<CategoryFormState>(emptyForm(defaultProjectId));
+  const [form, setForm] = useState<CategoryFormState>(emptyForm());
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) setForm(emptyForm(defaultProjectId));
+    if (open) setForm(emptyForm());
     setError(null);
-  }, [open, defaultProjectId]);
+  }, [open]);
 
   const canSubmit = form.name.trim() !== '';
 
   function handleClose() {
-    setForm(emptyForm(undefined));
+    setForm(emptyForm());
     setError(null);
     onClose();
   }
@@ -184,11 +364,8 @@ function NewCategoryModal({ open, onClose, projects, defaultProjectId }: {
     setError(null);
     try {
       await createMutation.mutateAsync({
-        projectId: form.projectId !== '' ? Number(form.projectId) : null,
         name: form.name.trim(),
-        code: form.code.trim() || null,
         description: form.description.trim() || null,
-        color: form.color || null,
         status: form.status,
       });
       showToast('success', 'Category created');
@@ -209,28 +386,6 @@ function NewCategoryModal({ open, onClose, projects, defaultProjectId }: {
             onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-          <div>
-            <label style={labelStyle}>
-              Associated Project<span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}> (Optional)</span>
-            </label>
-            <select style={inputStyle} value={form.projectId}
-              onChange={e => setForm(f => ({ ...f, projectId: e.target.value }))}>
-              <option value="">None</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>
-              Category Code<span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}> (Optional)</span>
-            </label>
-            <input style={inputStyle} value={form.code}
-              onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} />
-          </div>
-        </div>
-
         <div style={{ marginBottom: 14 }}>
           <label style={labelStyle}>
             Description<span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}> (Optional)</span>
@@ -242,35 +397,13 @@ function NewCategoryModal({ open, onClose, projects, defaultProjectId }: {
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
-          <div>
-            <label style={labelStyle}>
-              Color<span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}> (Optional)</span>
-            </label>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', paddingTop: 4 }}>
-              {CATEGORY_COLORS.map(c => (
-                <button
-                  key={c}
-                  type="button"
-                  aria-label={`Color ${c}`}
-                  onClick={() => setForm(f => ({ ...f, color: c }))}
-                  style={{
-                    width: 22, height: 22, borderRadius: '50%', background: c, cursor: 'pointer',
-                    border: form.color === c ? '2px solid var(--txt)' : '2px solid transparent',
-                    padding: 0,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-          <div>
-            <label style={labelStyle}>Status</label>
-            <select style={inputStyle} value={form.status}
-              onChange={e => setForm(f => ({ ...f, status: e.target.value as CategoryFormState['status'] }))}>
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-            </select>
-          </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelStyle}>Status</label>
+          <select style={inputStyle} value={form.status}
+            onChange={e => setForm(f => ({ ...f, status: e.target.value as CategoryFormState['status'] }))}>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
         </div>
 
         <div style={{ display: 'flex', gap: 10 }}>
@@ -299,13 +432,24 @@ function NewCategoryModal({ open, onClose, projects, defaultProjectId }: {
 
 // ── Category panel ─────────────────────────────────────────────────────────────
 
-function CategoryPanel({ projects, defaultProjectId }: {
-  projects: ProjectFullDto[]; defaultProjectId: number | undefined;
-}) {
+function CategoryPanel() {
   // Categories are generic master data owned by the Team Lead — always fetched, never gated
   // on whether any project is assigned.
   const { data, isPending, isError, refetch } = useMyCategories();
   const [modalOpen, setModalOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<CategoryStatusFilter>('ALL');
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return (data ?? []).filter(c => {
+      const matchesSearch = term === ''
+        || c.name.toLowerCase().includes(term)
+        || (c.description ?? '').toLowerCase().includes(term);
+      const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [data, search, statusFilter]);
 
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
@@ -325,6 +469,32 @@ function CategoryPanel({ projects, defaultProjectId }: {
           <Plus size={14} aria-hidden="true" /> New Category
         </button>
       </div>
+
+      {!isPending && !isError && (data ?? []).length > 0 && (
+        <div style={{
+          padding: '14px 20px', borderBottom: '1px solid var(--line)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+        }}>
+          <div style={{ flex: '1 1 260px', maxWidth: 320 }}>
+            <SearchBox
+              value={search}
+              onChange={setSearch}
+              placeholder="Search existing categories..."
+              ariaLabel="Search existing categories by name or description"
+            />
+          </div>
+          <StatusFilterSelect
+            value={statusFilter}
+            onChange={v => setStatusFilter(v as CategoryStatusFilter)}
+            ariaLabel="Filter existing categories by status"
+            options={[
+              { value: 'ALL', label: 'All' },
+              { value: 'ACTIVE', label: 'Active' },
+              { value: 'INACTIVE', label: 'Inactive' },
+            ]}
+          />
+        </div>
+      )}
 
       {isPending && (
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -363,8 +533,14 @@ function CategoryPanel({ projects, defaultProjectId }: {
                   No categories yet. Create one above.
                 </td>
               </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={3} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                  No matching categories found.
+                </td>
+              </tr>
             ) : (
-              data.map((c: ProjectCategoryDto) => (
+              filtered.map((c: ProjectCategoryDto) => (
                 <tr key={c.id}>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{c.name}</td>
                   <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{c.description ?? '-'}</td>
@@ -379,9 +555,129 @@ function CategoryPanel({ projects, defaultProjectId }: {
       <NewCategoryModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        projects={projects}
-        defaultProjectId={defaultProjectId}
       />
+    </div>
+  );
+}
+
+// ── Project details modal ───────────────────────────────────────────────────────
+
+const detailLabelStyle: React.CSSProperties = { ...labelStyle, marginBottom: 0 };
+const detailValueStyle: React.CSSProperties = { fontSize: 13, color: 'var(--txt)' };
+
+function ProjectDetailsModal({ projectId, onClose }: { projectId: number | null; onClose: () => void }) {
+  const { data, isPending, isError } = useProjectDetail(projectId);
+
+  return (
+    <Modal open={projectId != null} title={data ? data.name : 'Project Details'} onClose={onClose} width={560}>
+      {isPending && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 18, borderRadius: 6 }} />
+          ))}
+        </div>
+      )}
+
+      {isError && <ErrorBanner message="Failed to load project details." />}
+
+      {data && (
+        <>
+          <div style={{
+            display: 'grid', gridTemplateColumns: '120px 1fr',
+            rowGap: 10, columnGap: 12, marginBottom: 24,
+          }}>
+            <span style={detailLabelStyle}>Project Name</span>
+            <span style={{ ...detailValueStyle, fontWeight: 500 }}>{data.name}</span>
+
+            <span style={detailLabelStyle}>Client</span>
+            <span style={{ ...detailValueStyle, color: 'var(--txt-mut)' }}>{data.client ?? 'Internal'}</span>
+
+            <span style={detailLabelStyle}>Status</span>
+            <span><StatusBadge status={data.status} /></span>
+
+            <span style={detailLabelStyle}>Start Date</span>
+            <span style={{ ...detailValueStyle, color: 'var(--txt-mut)' }}>{fmtDateDMY(data.startDate)}</span>
+
+            <span style={detailLabelStyle}>End Date</span>
+            <span style={{ ...detailValueStyle, color: 'var(--txt-mut)' }}>
+              {data.endDate ? fmtDateDMY(data.endDate) : 'Ongoing'}
+            </span>
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)', marginBottom: 10, letterSpacing: '0.02em' }}>
+            Assigned Employees{data.employees.length > 0 ? ` (${data.employees.length})` : ''}
+          </div>
+
+          <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thStyle, width: 56 }}>S.No</th>
+                  <th style={thStyle}>Employee Name</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.employees.length === 0 ? (
+                  <tr>
+                    <td colSpan={2} style={{ padding: '24px 16px', textAlign: 'center', fontSize: 12, color: 'var(--txt-dim)' }}>
+                      No employees are currently assigned to this project.
+                    </td>
+                  </tr>
+                ) : (
+                  data.employees.map((emp, i) => (
+                    <tr key={emp.id}>
+                      <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{i + 1}</td>
+                      <td style={tdStyle}>{emp.fullName}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+// ── Section tabs ───────────────────────────────────────────────────────────────
+
+type SectionTab = 'projects' | 'categories';
+
+const SECTION_TABS: { key: SectionTab; label: string }[] = [
+  { key: 'projects', label: 'My Projects' },
+  { key: 'categories', label: 'Category Management' },
+];
+
+function SectionTabBar({ active, onChange }: { active: SectionTab; onChange: (tab: SectionTab) => void }) {
+  return (
+    <div
+      role="tablist"
+      style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}
+    >
+      {SECTION_TABS.map(tab => {
+        const isActive = tab.key === active;
+        return (
+          <button
+            key={tab.key}
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => onChange(tab.key)}
+            style={{
+              padding: '8px 15px',
+              borderRadius: 20,
+              border: `1px solid ${isActive ? 'var(--brand)' : 'var(--line2)'}`,
+              background: isActive ? 'var(--brand)' : 'var(--raised2)',
+              color: isActive ? '#fff' : 'var(--txt-dim)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -391,6 +687,8 @@ function CategoryPanel({ projects, defaultProjectId }: {
 export default function MyProjects() {
   const { data: projects, isPending, isError, refetch } = useMyLeadProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined);
+  const [activeSection, setActiveSection] = useState<SectionTab>('projects');
+  const [detailsProjectId, setDetailsProjectId] = useState<number | null>(null);
 
   const list = useMemo(() => projects ?? [], [projects]);
 
@@ -405,84 +703,35 @@ export default function MyProjects() {
     <div>
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-          My Projects
+          {activeSection === 'projects' ? 'My Projects' : 'Category Management'}
         </h1>
         <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-          View the projects assigned to you, and manage the categories you use to organize your work.
+          {activeSection === 'projects'
+            ? 'View and track the projects assigned to you.'
+            : 'View and manage the categories used to organize your work.'}
         </p>
       </div>
 
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 12,
-      }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--txt-dim)' }}>
-          <FolderKanban size={14} aria-hidden="true" />
-          {list.length} {list.length === 1 ? 'project' : 'projects'}
-        </span>
-        <button
-          onClick={() => refetch()}
-          aria-label="Refresh"
-          style={{
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: 'var(--txt-dim)', padding: 6, display: 'flex', alignItems: 'center', borderRadius: 5,
-          }}
-        >
-          <RefreshCw size={14} aria-hidden="true" />
-        </button>
-      </div>
+      <SectionTabBar active={activeSection} onChange={setActiveSection} />
 
-      {isPending && (
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14, marginBottom: 24,
-        }}>
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="skeleton" style={{ height: 120, borderRadius: 10 }} />
-          ))}
-        </div>
+      {activeSection === 'projects' && (
+        <ProjectsPanel
+          projects={list}
+          isPending={isPending}
+          isError={isError}
+          refetch={refetch}
+          selectedProjectId={selectedProjectId}
+          onSelect={setSelectedProjectId}
+          onOpenDetails={setDetailsProjectId}
+        />
       )}
 
-      {isError && (
-        <div style={{ padding: '40px 20px', textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ fontSize: 13, color: 'var(--risk)', marginBottom: 12 }}>Failed to load your projects.</div>
-          <button onClick={() => refetch()} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-            background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6,
-            color: 'var(--txt)', fontSize: 12, cursor: 'pointer',
-          }}>
-            <RefreshCw size={13} aria-hidden="true" /> Retry
-          </button>
-        </div>
-      )}
+      {activeSection === 'categories' && <CategoryPanel />}
 
-      {projects && (
-        list.length === 0 ? (
-          <div style={{
-            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10,
-            padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)', marginBottom: 24,
-          }}>
-            No projects are currently assigned to you.
-          </div>
-        ) : (
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14, marginBottom: 24,
-          }}>
-            {list.map(p => (
-              <ProjectCard
-                key={p.id}
-                project={p}
-                selected={p.id === selectedProjectId}
-                onSelect={() => setSelectedProjectId(p.id)}
-              />
-            ))}
-          </div>
-        )
-      )}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
-        <Tag size={14} aria-hidden="true" /> Category Management
-      </div>
-      <CategoryPanel projects={list} defaultProjectId={selectedProjectId} />
+      <ProjectDetailsModal
+        projectId={detailsProjectId}
+        onClose={() => setDetailsProjectId(null)}
+      />
     </div>
   );
 }

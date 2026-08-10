@@ -26,6 +26,15 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
     @EntityGraph(attributePaths = {"employee", "tasks", "tasks.project", "tasks.taskCategory"})
     List<EodEntry> findByEmployeeIdOrderByEntryDateDesc(Long employeeId);
 
+    // From-only / to-only history filters — the Between query above requires both bounds.
+    @EntityGraph(attributePaths = {"employee", "tasks", "tasks.project", "tasks.taskCategory"})
+    List<EodEntry> findByEmployeeIdAndEntryDateGreaterThanEqualOrderByEntryDateDesc(
+            Long employeeId, LocalDate from);
+
+    @EntityGraph(attributePaths = {"employee", "tasks", "tasks.project", "tasks.taskCategory"})
+    List<EodEntry> findByEmployeeIdAndEntryDateLessThanEqualOrderByEntryDateDesc(
+            Long employeeId, LocalDate to);
+
     // Project Dashboard missing-EOD breakdown: one batch query for every employee in scope,
     // rather than one query per employee per day.
     @Query("SELECT e FROM EodEntry e WHERE e.employee.id IN :employeeIds " +

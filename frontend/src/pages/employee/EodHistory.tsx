@@ -46,6 +46,36 @@ const STATUS_FILTERS = [
 
 const PAGE_SIZE = 10;
 
+// ── Date filter validation ──────────────────────────────────────────────────────
+// Native <input type="date"> always binds to/from ISO `YYYY-MM-DD` internally (the
+// DD-MM-YYYY the user sees is just the browser's locale rendering of that same value) — but
+// some browsers let a manual year keystroke run past 4 digits mid-edit before that resolves.
+// Re-validate defensively here so a malformed value (extra year digits, day 32, month 13, etc.)
+// never reaches component state or the history query, without touching the input type itself.
+const MIN_ISO_DATE = '1900-01-01';
+const MAX_ISO_DATE = '2099-12-31';
+
+function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split('-').map(Number);
+  const dt = new Date(`${value}T00:00:00`);
+  return dt.getFullYear() === y && dt.getMonth() + 1 === m && dt.getDate() === d;
+}
+
+// `from`/`to` are always the browser's own YYYY-MM-DD value for the native date input — already
+// normalized off of whatever DD-MM-YYYY the user sees/types, never the display string itself.
+// Compare by Year → Month → Day explicitly (not a Date object, which risks timezone shifting;
+// not the DD-MM-YYYY display string, which sorts nothing like calendar order — e.g. "06-07-2022"
+// vs "06-11-2024" is a false positive under naive string/Date comparison of the display form).
+function isRangeValid(from: string, to: string): boolean {
+  if (from === '' || to === '') return true;
+  const [fy, fm, fd] = from.split('-').map(Number);
+  const [ty, tm, td] = to.split('-').map(Number);
+  if (fy !== ty) return fy < ty;
+  if (fm !== tm) return fm < tm;
+  return fd <= td;
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function EodHistory() {
@@ -54,6 +84,7 @@ export default function EodHistory() {
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [dateError, setDateError] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
   const [page, setPage] = useState(0);
 
@@ -103,6 +134,32 @@ export default function EodHistory() {
 
   function resetPage<T>(setter: (v: T) => void) {
     return (v: T) => { setter(v); setPage(0); };
+  }
+
+  // Only commits a date filter change — and only lets it reach the history query — when it's
+  // empty (cleared) or a genuinely valid DD-MM-YYYY-displayed / YYYY-MM-DD-internal calendar
+  // date (rejects a mid-typed overlong year, an impossible date like 31-02-2024, or a From
+  // that lands after To) rather than letting a bad value drive the query or silently no-op.
+  function handleDateFilterChange(field: 'from' | 'to', e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value;
+
+    // jsdom/some browsers report an unparsable manual entry as an empty value with
+    // `validity.badInput` set, rather than surfacing the invalid text itself.
+    const typedButUnparsable = raw === '' && e.target.validity.badInput;
+    if (typedButUnparsable || (raw !== '' && !isValidIsoDate(raw))) {
+      setDateError('Please enter a valid date.');
+      return;
+    }
+
+    const nextFrom = field === 'from' ? raw : dateFrom;
+    const nextTo = field === 'to' ? raw : dateTo;
+    if (!isRangeValid(nextFrom, nextTo)) {
+      setDateError('From date cannot be later than To date.');
+      return;
+    }
+
+    setDateError(null);
+    resetPage(field === 'from' ? setDateFrom : setDateTo)(raw);
   }
 
   // Weekday kept (useful in a history list scanned day-by-day), date portion
@@ -168,11 +225,23 @@ export default function EodHistory() {
         </div>
         <div>
           <label style={labelStyle} htmlFor="date-from">From</label>
-          <input id="date-from" type="date" value={dateFrom} onChange={e => resetPage(setDateFrom)(e.target.value)} style={{ ...selectStyle, cursor: 'text' }} />
+          <input
+            id="date-from" type="date" min={MIN_ISO_DATE} max={MAX_ISO_DATE}
+            value={dateFrom}
+            onChange={e => handleDateFilterChange('from', e)}
+            aria-invalid={dateError != null}
+            style={{ ...selectStyle, cursor: 'text' }}
+          />
         </div>
         <div>
           <label style={labelStyle} htmlFor="date-to">To</label>
-          <input id="date-to" type="date" value={dateTo} onChange={e => resetPage(setDateTo)(e.target.value)} style={{ ...selectStyle, cursor: 'text' }} />
+          <input
+            id="date-to" type="date" min={MIN_ISO_DATE} max={MAX_ISO_DATE}
+            value={dateTo}
+            onChange={e => handleDateFilterChange('to', e)}
+            aria-invalid={dateError != null}
+            style={{ ...selectStyle, cursor: 'text' }}
+          />
         </div>
         <button
           onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
@@ -189,6 +258,18 @@ export default function EodHistory() {
           {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
         </span>
       </div>
+
+      {dateError && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '8px 12px', borderRadius: 6, marginBottom: 16, marginTop: -6,
+          background: 'rgba(228,55,61,.08)', border: '1px solid rgba(228,55,61,.2)',
+          fontSize: 12, color: 'var(--risk)',
+        }} role="alert">
+          <AlertTriangle size={13} aria-hidden />
+          {dateError}
+        </div>
+      )}
 
       {/* Table */}
       {isLoading ? (
@@ -208,7 +289,7 @@ export default function EodHistory() {
       ) : filtered.length === 0 ? (
         <EmptyState
           hasFilter={!!statusFilter || !!search || !!dateFrom || !!dateTo}
-          onClear={() => { setStatusFilter(''); setSearch(''); setDateFrom(''); setDateTo(''); setPage(0); }}
+          onClear={() => { setStatusFilter(''); setSearch(''); setDateFrom(''); setDateTo(''); setDateError(null); setPage(0); }}
         />
       ) : (
         <div style={{
