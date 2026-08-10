@@ -24,6 +24,7 @@ import { Modal } from '../../components/Modal';
 import { DatePicker } from '../../components/DatePicker';
 import { useToast } from '../../lib/toast';
 import { useBodyScrollLock } from '../../lib/useBodyScrollLock';
+import { focusNextOnEnter } from '../../lib/formFocus';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -485,6 +486,7 @@ function AddModal({
                 value={form.fullName}
                 placeholder="Enter name"
                 onChange={e => set('fullName', e.target.value)}
+                onKeyDown={focusNextOnEnter}
                 onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
                 onBlur={e => Object.assign(e.target.style, inputStyle)}
               />
@@ -501,6 +503,7 @@ function AddModal({
                 value={form.email}
                 placeholder="Enter email"
                 onChange={e => set('email', e.target.value.toLowerCase())}
+                onKeyDown={focusNextOnEnter}
                 onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
                 onBlur={e => { Object.assign(e.target.style, inputStyle); set('email', form.email.trim().toLowerCase()); }}
               />
@@ -515,7 +518,7 @@ function AddModal({
               value={form.role}
               onChange={e => set('role', e.target.value)}
             >
-              <option value="" disabled style={placeholderOptionStyle}>Select role</option>
+              <option value="" style={placeholderOptionStyle}>Select role</option>
               {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value} style={realOptionStyle}>{r.label}</option>)}
             </select>
             <FieldError msg={errors.role} />
@@ -528,6 +531,7 @@ function AddModal({
               value={form.employeeCode}
               placeholder="Enter employee ID"
               onChange={e => set('employeeCode', e.target.value.toUpperCase())}
+              onKeyDown={focusNextOnEnter}
               onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
               onBlur={e => Object.assign(e.target.style, inputStyle)}
             />
@@ -540,6 +544,8 @@ function AddModal({
               value={form.joiningDate ?? ''}
               onChange={iso => set('joiningDate', iso)}
               inputStyle={inputStyle}
+              quickNav
+              clearable
             />
             <FieldError msg={errors.joiningDate} />
           </Field>
@@ -551,7 +557,7 @@ function AddModal({
               value={form.employmentType ?? ''}
               onChange={e => set('employmentType', e.target.value)}
             >
-              <option value="" disabled style={placeholderOptionStyle}>Select employment type</option>
+              <option value="" style={placeholderOptionStyle}>Select employment type</option>
               {EMPLOYMENT_TYPES.map(t => <option key={t.value} value={t.value} style={realOptionStyle}>{t.label}</option>)}
             </select>
             <FieldError msg={errors.employmentType} />
@@ -564,7 +570,7 @@ function AddModal({
               value={form.workMode ?? ''}
               onChange={e => set('workMode', e.target.value)}
             >
-              <option value="" disabled style={placeholderOptionStyle}>Select work mode</option>
+              <option value="" style={placeholderOptionStyle}>Select work mode</option>
               {WORK_MODES.map(m => <option key={m.value} value={m.value} style={realOptionStyle}>{m.label}</option>)}
             </select>
             <FieldError msg={errors.workMode} />
@@ -582,7 +588,7 @@ function AddModal({
                 set('departmentId', v === 'none' ? null : v ? Number(v) : undefined);
               }}
             >
-              <option value="" disabled style={placeholderOptionStyle}>Select department</option>
+              <option value="" style={placeholderOptionStyle}>Select department</option>
               <option value="none" style={realOptionStyle}>No department</option>
               {departments.map((d: DepartmentDto) => (
                 <option key={d.id} value={d.id} style={realOptionStyle}>{d.name}</option>
@@ -602,7 +608,7 @@ function AddModal({
                 set('designationId', v === 'none' ? null : v ? Number(v) : undefined);
               }}
             >
-              <option value="" disabled style={placeholderOptionStyle}>Select designation</option>
+              <option value="" style={placeholderOptionStyle}>Select designation</option>
               <option value="none" style={realOptionStyle}>No designation</option>
               {designations.map((d: DesignationDto) => (
                 <option key={d.id} value={d.id} style={realOptionStyle}>{d.title}</option>
@@ -622,7 +628,7 @@ function AddModal({
                 set('shiftId', v === 'none' ? null : v ? Number(v) : undefined);
               }}
             >
-              <option value="" disabled style={placeholderOptionStyle}>Select shift</option>
+              <option value="" style={placeholderOptionStyle}>Select shift</option>
               <option value="none" style={realOptionStyle}>No shift</option>
               {shifts.map((s: ShiftDefinitionDto) => <option key={s.id} value={s.id} style={realOptionStyle}>{formatShiftLabel(s)}</option>)}
             </select>
@@ -642,7 +648,7 @@ function AddModal({
                   set('locationId', v === 'none' ? null : v ? Number(v) : undefined);
                 }}
               >
-                <option value="" disabled style={placeholderOptionStyle}>Select location</option>
+                <option value="" style={placeholderOptionStyle}>Select location</option>
                 <option value="none" style={realOptionStyle}>No location</option>
                 {locations.map((l: OrgLocationDto) => (
                   <option key={l.id} value={l.id} style={realOptionStyle}>{l.name}</option>
@@ -664,7 +670,7 @@ function AddModal({
                   set('managerId', v === 'none' ? null : v ? Number(v) : undefined);
                 }}
               >
-                <option value="" disabled style={placeholderOptionStyle}>Select manager</option>
+                <option value="" style={placeholderOptionStyle}>Select manager</option>
                 <option value="none" style={realOptionStyle}>No manager</option>
                 {managers.map(m => (
                   <option key={m.id} value={m.id} style={realOptionStyle}>{m.fullName} ({m.email})</option>

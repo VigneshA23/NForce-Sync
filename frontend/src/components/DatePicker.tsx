@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { formatDate } from '../lib/date';
+import { focusNextOnEnter } from '../lib/formFocus';
 
 /**
  * Calendar picker with a **toggling** icon: click opens, clicking the same icon
@@ -27,11 +28,101 @@ const MONTH_LABELS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+// Quick-nav year range: covers existing employees' past joining dates plus future onboarding.
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: 76 }, (_, i) => CURRENT_YEAR + 25 - i);
+
 function formatDateDisplay(iso: string): string {
   if (!iso) return '';
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return '';
   return formatDate(iso);
+}
+
+/** Themed replacement for a native `<select>`: a compact button that opens a scrollable grid popover. Used for the quickNav month/year pickers so long option lists don't render as an unstyled native list. */
+function GridDropdown({
+  ariaLabel,
+  items,
+  selected,
+  onSelect,
+  popupWidth,
+  columns,
+  flex = '1 1 0',
+}: {
+  ariaLabel: string;
+  items: { value: number; label: string }[];
+  selected: number;
+  onSelect: (value: number) => void;
+  popupWidth: number;
+  columns: number;
+  flex?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const selectedBtnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) selectedBtnRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [open]);
+
+  const selectedLabel = items.find(i => i.value === selected)?.label ?? selected;
+
+  return (
+    <div ref={boxRef} style={{ position: 'relative', flex }}>
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2,
+          fontSize: 12, fontWeight: 600, color: 'var(--txt)', background: 'var(--panel)',
+          border: '1px solid var(--line)', borderRadius: 5, padding: '2px 4px', cursor: 'pointer',
+        }}
+      >
+        {selectedLabel}
+        <ChevronDown size={11} style={{ flexShrink: 0 }} />
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 4, width: popupWidth,
+          maxHeight: 168, overflowY: 'auto', background: 'var(--panel)', border: '1px solid var(--line)',
+          borderRadius: 7, boxShadow: '0 8px 24px rgba(0,0,0,.3)', zIndex: 101, padding: 5,
+          display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: 3,
+        }}>
+          {items.map(item => {
+            const isSelected = item.value === selected;
+            return (
+              <button
+                type="button"
+                key={item.value}
+                ref={isSelected ? selectedBtnRef : undefined}
+                onClick={() => { onSelect(item.value); setOpen(false); }}
+                style={{
+                  border: 'none', borderRadius: 4, cursor: 'pointer', padding: '4px 2px',
+                  fontSize: 11.5, background: isSelected ? 'var(--brand)' : 'transparent',
+                  color: isSelected ? '#fff' : 'var(--txt)',
+                }}
+                onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--raised)'; }}
+                onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function DatePicker({
@@ -41,6 +132,8 @@ export function DatePicker({
   max,
   inputStyle,
   placeholder = 'Select date',
+  quickNav = false,
+  clearable = false,
 }: {
   value: string;
   onChange: (iso: string) => void;
@@ -49,6 +142,10 @@ export function DatePicker({
   /** Page-local input styling, so this matches whichever form it sits in. */
   inputStyle?: React.CSSProperties;
   placeholder?: string;
+  /** Opt-in month/year dropdowns in the header, alongside the prev/next arrows. Off by default so existing call sites are unaffected. */
+  quickNav?: boolean;
+  /** Opt-in "X" to reset the field back to empty. Off by default — several call sites (EOD entry date, report/dashboard filters) always need a real date and aren't safe to clear. */
+  clearable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -124,11 +221,26 @@ export function DatePicker({
       <div style={{ position: 'relative' }}>
         <input
           readOnly
-          style={{ ...inputStyle, paddingRight: 36, cursor: 'pointer' }}
+          style={{ ...inputStyle, paddingRight: clearable && value ? 58 : 36, cursor: 'pointer' }}
           value={formatDateDisplay(value)}
           placeholder={placeholder}
           onClick={toggleOpen}
+          onKeyDown={focusNextOnEnter}
         />
+        {clearable && value && (
+          <button
+            type="button"
+            aria-label="Clear date"
+            onClick={() => onChange('')}
+            style={{
+              position: 'absolute', right: 28, top: '50%', transform: 'translateY(-50%)',
+              background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+              display: 'flex', color: 'var(--txt-dim)', borderRadius: 4,
+            }}
+          >
+            <X size={14} />
+          </button>
+        )}
         <button
           type="button"
           aria-label={open ? 'Close date picker' : 'Open date picker'}
@@ -153,9 +265,31 @@ export function DatePicker({
             <button type="button" onClick={() => shiftMonth(-1)} aria-label="Previous month" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', display: 'flex', padding: 4 }}>
               <ChevronLeft size={15} />
             </button>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
-              {MONTH_LABELS[viewMonth]} {viewYear}
-            </span>
+            {quickNav ? (
+              <div style={{ display: 'flex', gap: 4, minWidth: 0 }}>
+                <GridDropdown
+                  ariaLabel="Select month"
+                  items={MONTH_LABELS.map((label, i) => ({ value: i, label: label.slice(0, 3) }))}
+                  selected={viewMonth}
+                  onSelect={setViewMonth}
+                  popupWidth={110}
+                  columns={3}
+                />
+                <GridDropdown
+                  ariaLabel="Select year"
+                  items={YEAR_OPTIONS.map(y => ({ value: y, label: String(y) }))}
+                  selected={viewYear}
+                  onSelect={setViewYear}
+                  popupWidth={132}
+                  columns={3}
+                  flex="0 0 56px"
+                />
+              </div>
+            ) : (
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+                {MONTH_LABELS[viewMonth]} {viewYear}
+              </span>
+            )}
             <button type="button" onClick={() => shiftMonth(1)} aria-label="Next month" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', display: 'flex', padding: 4 }}>
               <ChevronRight size={15} />
             </button>
