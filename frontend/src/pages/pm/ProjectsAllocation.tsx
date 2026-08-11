@@ -7,7 +7,7 @@ import { Modal } from '../../components/Modal';
 import { useToast } from '../../lib/toast';
 import { todayISO } from '../../lib/date';
 import { useQuery } from '@tanstack/react-query';
-import { extractApiError, listBillingModels } from '../../api/admin';
+import { extractApiError, listBillingModels, listProjectTypes } from '../../api/admin';
 import {
   useAllProjects, useAllocations, useAssignableEmployees,
   useCreateProject, useUpdateProject, useCreateAllocation, useUpdateAllocation, useDeleteAllocation,
@@ -207,7 +207,8 @@ interface ProjectFormState {
   code: string;
   name: string;
   client: string;
-  projectType: string;
+  /** Project Type id from the Organization Master, as a string for the <select>. */
+  projectTypeId: string;
   /** Billing Model id from the Organization Master, as a string for the <select>. */
   billingModelId: string;
   status: ProjectFullDto['status'];
@@ -253,7 +254,7 @@ function dayAfterISO(iso: string): string | undefined {
 }
 
 const EMPTY_PROJECT_FORM: ProjectFormState = {
-  code: '', name: '', client: '', projectType: '', billingModelId: '',
+  code: '', name: '', client: '', projectTypeId: '', billingModelId: '',
   status: 'ACTIVE', startDate: todayISO(), endDate: '', pmId: '',
 };
 
@@ -268,6 +269,10 @@ function ProjectModal({ open, onClose, editing }: {
     queryKey: ['org', 'billing-models'],
     queryFn: listBillingModels,
   });
+  const { data: projectTypes } = useQuery({
+    queryKey: ['org', 'project-types'],
+    queryFn: listProjectTypes,
+  });
   const [form, setForm] = useState<ProjectFormState>(EMPTY_PROJECT_FORM);
   const [error, setError] = useState<string | null>(null);
 
@@ -277,7 +282,7 @@ function ProjectModal({ open, onClose, editing }: {
       code: editing.code,
       name: editing.name,
       client: editing.client ?? '',
-      projectType: editing.projectType ?? '',
+      projectTypeId: editing.projectTypeId != null ? String(editing.projectTypeId) : '',
       billingModelId: editing.billingModelId != null ? String(editing.billingModelId) : '',
       status: editing.status,
       startDate: editing.startDate ?? '',
@@ -301,15 +306,23 @@ function ProjectModal({ open, onClose, editing }: {
   const currentBillingModelMissing = editing?.billingModelId != null
     && !activeBillingModels.some(b => b.id === editing.billingModelId);
 
-  // Client Name only applies to client work; internal projects have no client by definition.
-  const showClient = form.projectType === 'CLIENT';
+  // Project types come from the Organization Master; a project already on a deactivated one keeps
+  // it (option rendered below), matching the server's grandfathering.
+  const activeProjectTypes = (projectTypes ?? []).filter(t => t.active);
+  const currentProjectTypeMissing = editing?.projectTypeId != null
+    && !activeProjectTypes.some(t => t.id === editing.projectTypeId);
+
+  // Whether a client is required is a property of the chosen type, not a hardcoded "CLIENT" — so a
+  // Super Admin adding a client-bearing type gets the Client Name field with no code change.
+  const selectedProjectType = (projectTypes ?? []).find(t => String(t.id) === form.projectTypeId);
+  const showClient = selectedProjectType?.requiresClient === true;
   // End must be strictly after start — a project cannot begin and end on the same day.
   const badDateOrder = form.endDate !== '' && form.endDate <= form.startDate;
   // A completed project has to record when it finished. Status only appears when editing.
   const endDateRequired = editing != null && form.status === 'COMPLETED';
   const canSubmit = form.name.trim() !== ''
-    && (editing || form.code.trim() !== '')
-    && form.projectType !== ''
+    && form.code.trim() !== ''
+    && form.projectTypeId !== ''
     && form.startDate !== ''
     && (!showClient || form.client.trim() !== '')
     && (!endDateRequired || form.endDate !== '')
@@ -322,10 +335,15 @@ function ProjectModal({ open, onClose, editing }: {
     onClose();
   }
 
-  // Switching away from CLIENT clears the client name, so a value hidden from the form is
-  // never submitted (the server also nulls it for INTERNAL).
+  // Switching to a type that doesn't require a client clears the name, so a value hidden from the
+  // form is never submitted (the server nulls it too).
   function handleProjectTypeChange(value: string) {
-    setForm(f => ({ ...f, projectType: value, client: value === 'CLIENT' ? f.client : '' }));
+    const nextType = (projectTypes ?? []).find(t => String(t.id) === value);
+    setForm(f => ({
+      ...f,
+      projectTypeId: value,
+      client: nextType?.requiresClient ? f.client : '',
+    }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -337,10 +355,11 @@ function ProjectModal({ open, onClose, editing }: {
         await updateMutation.mutateAsync({
           id: editing.id,
           data: {
+            code: form.code.trim(),
             name: form.name.trim(),
-            // Server also nulls this for INTERNAL; sent as null here so the two agree.
+            // Server also nulls this for a type without requiresClient; sent as null so the two agree.
             client: showClient ? form.client.trim() : null,
-            projectType: form.projectType,
+            projectTypeId: Number(form.projectTypeId),
             billingModelId: form.billingModelId === '' ? null : Number(form.billingModelId),
             status: form.status,
             startDate: form.startDate,
@@ -354,7 +373,7 @@ function ProjectModal({ open, onClose, editing }: {
           code: form.code.trim(),
           name: form.name.trim(),
           client: showClient ? form.client.trim() : null,
-          projectType: form.projectType,
+          projectTypeId: Number(form.projectTypeId),
           billingModelId: form.billingModelId === '' ? null : Number(form.billingModelId),
           startDate: form.startDate,
           endDate: form.endDate || null,
@@ -372,14 +391,13 @@ function ProjectModal({ open, onClose, editing }: {
     <Modal open={open} title={editing ? 'Edit Project' : 'New Project'} onClose={handleClose} width={480}>
       <form onSubmit={handleSubmit} noValidate>
         {error && <ErrorBanner message={error} />}
-        <div style={{ display: 'grid', gridTemplateColumns: editing ? '1fr' : '1fr 1fr', gap: 14, marginBottom: 14 }}>
-          {!editing && (
-            <div>
-              <label style={labelStyle}>Code *</label>
-              <input style={inputStyle} value={form.code} autoFocus
-                onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} />
-            </div>
-          )}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+          {/* Editable on both create and edit; the server keeps it unique across projects. */}
+          <div>
+            <label style={labelStyle}>Code *</label>
+            <input style={inputStyle} value={form.code} autoFocus
+              onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} />
+          </div>
           <div>
             <label style={labelStyle}>Name *</label>
             <input style={inputStyle} value={form.name}
@@ -389,15 +407,18 @@ function ProjectModal({ open, onClose, editing }: {
         {/* Project Type leads, because whether Client Name is shown depends on it. */}
         <div style={{ display: 'grid', gridTemplateColumns: showClient ? '1fr 1fr' : '1fr', gap: 14, marginBottom: 14 }}>
           <div>
+            {/* Maintained by a Super Admin in Organization Masters → Project Types. */}
             <label style={labelStyle}>Project Type *</label>
-            <select style={inputStyle} value={form.projectType}
+            <select style={inputStyle} value={form.projectTypeId}
               onChange={e => handleProjectTypeChange(e.target.value)}>
               <option value="">Select type…</option>
-              <option value="CLIENT">Client</option>
-              <option value="INTERNAL">Internal</option>
-              <option value="PRODUCT_DEVELOPMENT">Product Development</option>
-              <option value="SUPPORT">Support</option>
-              <option value="BENCH">Bench Activity</option>
+              {/* Inactive types are hidden, but keep this project's own so editing can't clear it. */}
+              {currentProjectTypeMissing && (
+                <option value={String(editing!.projectTypeId)}>{editing!.projectType} (inactive)</option>
+              )}
+              {activeProjectTypes.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
             </select>
           </div>
           {showClient && (

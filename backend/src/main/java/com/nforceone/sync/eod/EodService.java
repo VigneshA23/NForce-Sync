@@ -15,6 +15,7 @@ import com.nforceone.sync.eod.dto.SaveEodRequest;
 import com.nforceone.sync.eod.dto.SaveEodTaskRequest;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
+import com.nforceone.sync.project.dto.ProjectDto;
 import com.nforceone.sync.project.TaskCategory;
 import com.nforceone.sync.project.TaskCategoryRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -516,6 +517,13 @@ public class EodService {
             task.setProject(null);
             task.setIsBillable(Boolean.FALSE);
             task.setTaskStatus(EodTask.TaskStatus.COMPLETED);
+        }
+
+        // Only work on a CLIENT project with an active billing model can be billable. Forced after
+        // assignment for the same reason as above: the disabled checkbox is a cue, not the rule.
+        // A project with no billing model counts as not billable — nothing to bill against.
+        if (task.getProject() != null && !ProjectDto.billableAllowed(task.getProject())) {
+            task.setIsBillable(Boolean.FALSE);
         }
         return task;
     }

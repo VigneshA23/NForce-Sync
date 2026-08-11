@@ -222,6 +222,24 @@ export interface DepartmentDto {
   active: boolean;
 }
 
+export interface ProjectTypeDto {
+  id: number;
+  name: string;
+  /** When set, a project of this type must name its client. */
+  requiresClient: boolean;
+  /** When set, EOD time on such a project may be flagged billable. */
+  billableAllowed: boolean;
+  active: boolean;
+  /** Distinct employees currently allocated to a project of this type. */
+  employeeCount: number;
+}
+
+export interface CreateProjectTypePayload {
+  name: string;
+  requiresClient: boolean;
+  billableAllowed: boolean;
+}
+
 export interface BillingModelDto {
   id: number;
   name: string;
@@ -306,6 +324,28 @@ export async function listShifts(): Promise<ShiftDefinitionDto[]> {
 // Fix 2: Delete org master records (FK-safe — backend returns 409 if employees assigned)
 export async function deleteDepartment(id: number): Promise<void> {
   await api.delete(`/org/departments/${id}`);
+}
+
+// ── Project types ──────────────────────────────────────────────────────────────
+
+export async function listProjectTypes(): Promise<ProjectTypeDto[]> {
+  const res = await api.get<ProjectTypeDto[]>('/org/project-types');
+  return res.data;
+}
+
+export async function createProjectType(data: CreateProjectTypePayload): Promise<ProjectTypeDto> {
+  const res = await api.post<ProjectTypeDto>('/org/project-types', data);
+  return res.data;
+}
+
+export async function toggleProjectType(id: number): Promise<ProjectTypeDto> {
+  const res = await api.patch<ProjectTypeDto>(`/org/project-types/${id}`);
+  return res.data;
+}
+
+/** Backend returns 409 if any project still uses the type. */
+export async function deleteProjectType(id: number): Promise<void> {
+  await api.delete(`/org/project-types/${id}`);
 }
 
 // ── Billing models ─────────────────────────────────────────────────────────────

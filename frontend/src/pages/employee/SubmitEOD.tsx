@@ -108,7 +108,6 @@ interface TaskRow {
   projectCode: string | null;
   taskCategoryId: number | null;
   categoryName: string | null;
-  isBillableDefault: boolean;
   description: string;
   hours: string;
   taskStatus: string;
@@ -126,7 +125,6 @@ function newRow(): TaskRow {
     projectCode:      null,
     taskCategoryId:   null,
     categoryName:     null,
-    isBillableDefault: true,
     description:      '',
     hours:            '',
     taskStatus:       'COMPLETED',
@@ -136,14 +134,13 @@ function newRow(): TaskRow {
   };
 }
 
-function rowFromDto(dto: EodTaskDto, isBillableDefault: boolean): TaskRow {
+function rowFromDto(dto: EodTaskDto): TaskRow {
   return {
     localId:          `row-${++rowSeq}`,
     projectId:        dto.projectId,
     projectCode:      dto.projectCode,
     taskCategoryId:   dto.taskCategoryId,
     categoryName:     dto.categoryName,
-    isBillableDefault,
     description:      dto.description ?? '',
     hours:            dto.hours != null ? String(dto.hours) : '',
     taskStatus:       dto.taskStatus ?? 'COMPLETED',
@@ -325,9 +322,8 @@ export default function SubmitEOD() {
       setRemarks(entry.remarks ?? '');
       setReviewerComment(entry.reviewerComment ?? null);
 
-      const catMap = new Map(categories.map(c => [c.id, c]));
       setTasks(entry.tasks.length > 0
-        ? entry.tasks.map(t => rowFromDto(t, catMap.get(t.taskCategoryId ?? 0)?.isBillableDefault ?? true))
+        ? entry.tasks.map(t => rowFromDto(t))
         : [newRow()],
       );
     } else {
@@ -629,12 +625,13 @@ export default function SubmitEOD() {
     updateTask(localId, {
       taskCategoryId:   id,
       categoryName:     cat?.name ?? null,
-      isBillableDefault: cat?.isBillableDefault ?? true,
-      // A leave row is not project work: no project, never billable, always complete.
-      // Mirrored server-side in EodService.buildTask, which is what actually enforces it.
+      // Billable is NOT derived from the category — the employee decides, and changing category
+      // leaves their choice alone. Leave is the one exception: it is not project work, so no
+      // project, never billable, always complete. Mirrored server-side in EodService.buildTask,
+      // which is what actually enforces it.
       ...(isLeave
         ? { projectId: null, projectCode: null, isBillable: false, taskStatus: 'COMPLETED' }
-        : { isBillable: cat?.isBillableDefault ?? true }),
+        : {}),
       // Leave rows now carry real hours (8 full day, 4 half day), so no longer forced to 0.
       hours: '',
     });
@@ -1091,7 +1088,7 @@ function PageHeader({
 interface TaskCardProps {
   task: TaskRow;
   index: number;
-  projects: { id: number; code: string; name: string; client: string | null }[];
+  projects: { id: number; code: string; name: string; client: string | null; billableAllowed: boolean }[];
   categories: { id: number; name: string; isProductive: boolean; isBillableDefault: boolean }[];
   isReadOnly: boolean;
   onUpdate: (patch: Partial<TaskRow>) => void;
@@ -1105,6 +1102,19 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
   // fields are locked. Hours stay editable (8 full day, 4 half day).
   const isLeave   = task.categoryName === LEAVE;
   const isBlocked = task.taskStatus === 'BLOCKED';
+
+  // Billable is only available on a CLIENT project with an active billing model. Eligibility is
+  // computed server-side (ProjectDto.billableAllowed) and re-enforced there on save, so this is
+  // purely the visible cue. A row with no project chosen yet has nothing to judge, so it stays
+  // enabled and resolves as soon as one is picked.
+  const selectedProject = projects.find(p => p.id === task.projectId);
+  const projectBlocksBillable = selectedProject != null && !selectedProject.billableAllowed;
+  const billableLocked = isLeave || projectBlocksBillable;
+  const billableReason = isLeave
+    ? 'Leave is never billable'
+    : projectBlocksBillable
+      ? `${selectedProject.code} is not billable — it must be a client project with an active billing model`
+      : undefined;
 
   const statusColor: Record<string, string> = {
     COMPLETED:   '#2FB67C',
@@ -1135,7 +1145,15 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
             ) : (
               <Sel
                 value={isLeave ? '' : (task.projectId ?? '')}
-                onChange={e => onUpdate({ projectId: e.target.value ? Number(e.target.value) : null })}
+                onChange={e => {
+                  const nextId = e.target.value ? Number(e.target.value) : null;
+                  const next = projects.find(p => p.id === nextId);
+                  // Clear billable when switching to a project that can't carry it, so the value
+                  // sent matches the (now disabled, unticked) checkbox rather than a stale true.
+                  onUpdate(next && !next.billableAllowed
+                    ? { projectId: nextId, isBillable: false }
+                    : { projectId: nextId });
+                }}
                 disabled={isLeave}
               >
                 <option value="">— Project —</option>
@@ -1204,10 +1222,11 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
               <input
                 type="checkbox"
                 id={`bill-${task.localId}`}
-                checked={isLeave ? false : task.isBillable}
+                checked={billableLocked ? false : task.isBillable}
                 onChange={e => onUpdate({ isBillable: e.target.checked })}
-                disabled={isReadOnly || isLeave}
-                style={{ width: 14, height: 14, accentColor: 'var(--brand)', cursor: (isReadOnly || isLeave) ? 'not-allowed' : 'pointer' }}
+                disabled={isReadOnly || billableLocked}
+                title={billableReason}
+                style={{ width: 14, height: 14, accentColor: 'var(--brand)', cursor: (isReadOnly || billableLocked) ? 'not-allowed' : 'pointer' }}
               />
               {!isReadOnly && canRemove && (
                 <button

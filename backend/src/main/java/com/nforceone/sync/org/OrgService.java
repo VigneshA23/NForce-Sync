@@ -20,6 +20,7 @@ public class OrgService {
     private final DesignationRepository designationRepository;
     private final OrgLocationRepository locationRepository;
     private final BillingModelRepository billingModelRepository;
+    private final ProjectTypeRepository projectTypeRepository;
     private final AppUserRepository appUserRepository;
     private final ProjectRepository projectRepository;
 
@@ -27,14 +28,76 @@ public class OrgService {
                       DesignationRepository designationRepository,
                       OrgLocationRepository locationRepository,
                       BillingModelRepository billingModelRepository,
+                      ProjectTypeRepository projectTypeRepository,
                       AppUserRepository appUserRepository,
                       ProjectRepository projectRepository) {
         this.departmentRepository = departmentRepository;
         this.designationRepository = designationRepository;
         this.locationRepository = locationRepository;
         this.billingModelRepository = billingModelRepository;
+        this.projectTypeRepository = projectTypeRepository;
         this.appUserRepository = appUserRepository;
         this.projectRepository = projectRepository;
+    }
+
+    // ── Project type ──────────────────────────────────────────────────────────
+
+    /** Headcount travels project type → project → allocation → employee, as for billing models. */
+    @Transactional(readOnly = true)
+    public List<ProjectTypeDto> listProjectTypes() {
+        Map<Long, Long> countsByType = new HashMap<>();
+        for (Object[] row : projectRepository.countCurrentEmployeesByProjectType(LocalDate.now())) {
+            countsByType.put((Long) row[0], ((Number) row[1]).longValue());
+        }
+        return projectTypeRepository.findAllByOrderByNameAsc()
+                .stream()
+                .map(t -> ProjectTypeDto.from(t, countsByType.getOrDefault(t.getId(), 0L)))
+                .toList();
+    }
+
+    public ProjectTypeDto createProjectType(CreateProjectTypeRequest req) {
+        if (projectTypeRepository.existsByName(req.name())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A project type with this name already exists");
+        }
+        ProjectType type = ProjectType.builder()
+                .name(req.name())
+                .requiresClient(req.requiresClient())
+                .billableAllowed(req.billableAllowed())
+                .active(true)
+                .build();
+        return ProjectTypeDto.from(projectTypeRepository.save(type), 0L);
+    }
+
+    public ProjectTypeDto toggleProjectType(Long id) {
+        ProjectType type = projectTypeRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Project type not found"));
+        type.setActive(!type.isActive());
+        ProjectType saved = projectTypeRepository.save(type);
+        return ProjectTypeDto.from(saved, currentEmployeeCountByType(saved.getId()));
+    }
+
+    public void deleteProjectType(Long id) {
+        projectTypeRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Project type not found"));
+        long projectCount = projectRepository.countByProjectTypeId(id);
+        if (projectCount > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot delete — " + projectCount + " project" + (projectCount == 1 ? " uses" : "s use")
+                            + " this project type");
+        }
+        projectTypeRepository.deleteById(id);
+    }
+
+    private long currentEmployeeCountByType(Long projectTypeId) {
+        return projectRepository.countCurrentEmployeesByProjectType(LocalDate.now())
+                .stream()
+                .filter(row -> projectTypeId.equals(row[0]))
+                .map(row -> ((Number) row[1]).longValue())
+                .findFirst()
+                .orElse(0L);
     }
 
     // ── Billing model ─────────────────────────────────────────────────────────

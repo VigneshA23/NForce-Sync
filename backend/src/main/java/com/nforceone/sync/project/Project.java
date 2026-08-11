@@ -2,6 +2,7 @@ package com.nforceone.sync.project;
 
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.org.BillingModel;
+import com.nforceone.sync.org.ProjectType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -28,8 +29,10 @@ public class Project {
     @Column(length = 200)
     private String client;
 
-    @Column(name = "project_type", length = 50)
-    private String projectType;
+    /** Admin-managed Organization Master (V51). Mandatory — the FK column is NOT NULL. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "project_type_id", nullable = false)
+    private ProjectType projectType;
 
     /** Admin-managed Organization Master (V49); optional, as the free-text column before it was. */
     @ManyToOne(fetch = FetchType.LAZY)

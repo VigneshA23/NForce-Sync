@@ -10,10 +10,15 @@ import java.util.List;
 public interface ProjectRepository extends JpaRepository<Project, Long> {
     boolean existsByCode(String code);
 
+    /** Uniqueness check for an edit — excludes the project being edited from the clash test. */
+    boolean existsByCodeAndIdNot(String code, Long id);
+
     // Projects the employee may log EOD time against on a given date: an allocation whose
     // effective window covers that date, on a project that is still ACTIVE. DISTINCT because
     // nothing prevents an employee holding more than one allocation row for the same project.
-    @Query("SELECT DISTINCT a.project FROM Allocation a " +
+    // billingModel JOIN FETCHed because ProjectDto computes billableAllowed from it — lazy access
+    // inside the mapper would fire one query per project.
+    @Query("SELECT DISTINCT a.project FROM Allocation a LEFT JOIN FETCH a.project.billingModel " +
            "WHERE a.employee.id = :employeeId " +
            "AND a.project.status = :status " +
            "AND a.effectiveFrom <= :onDate " +
@@ -33,6 +38,17 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 
     /** FK guard for deleting a billing model — mirrors AppUserRepository.countByDepartmentId. */
     long countByBillingModelId(Long billingModelId);
+
+    /** FK guard for deleting a project type. */
+    long countByProjectTypeId(Long projectTypeId);
+
+    /** Same grouped-headcount idiom as countCurrentEmployeesByBillingModel, keyed on project type. */
+    @Query("SELECT p.projectType.id, COUNT(DISTINCT a.employee.id) " +
+           "FROM Allocation a JOIN a.project p " +
+           "WHERE a.effectiveFrom <= :today " +
+           "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :today) " +
+           "GROUP BY p.projectType.id")
+    List<Object[]> countCurrentEmployeesByProjectType(@Param("today") LocalDate today);
 
     /**
      * Distinct employees currently allocated per billing model, resolved in one grouped query so the
