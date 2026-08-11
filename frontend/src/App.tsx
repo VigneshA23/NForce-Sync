@@ -24,6 +24,7 @@ const RolesAccess         = lazy(() => import('./pages/admin/RolesAccess'));
 const OrganizationMasters = lazy(() => import('./pages/admin/OrganizationMasters'));
 const BusinessRules       = lazy(() => import('./pages/admin/BusinessRules'));
 const EmployeeDashboard   = lazy(() => import('./pages/employee/Dashboard'));
+const EmployeeMyProjects  = lazy(() => import('./pages/employee/MyProjects'));
 const MyBlockers          = lazy(() => import('./pages/employee/MyBlockers'));
 const MyUtilization       = lazy(() => import('./pages/employee/MyUtilization'));
 const SubmitEOD           = lazy(() => import('./pages/employee/SubmitEOD'));
@@ -150,8 +151,9 @@ function AppRoutes() {
           <Route element={<Suspense fallback={<PageFallback />}><Outlet /></Suspense>}>
 
             {/* ── Employee ───────────────────────────── */}
-            <Route path="/dashboard"   element={<EmployeeDashboard />} />
-            <Route path="/blockers"    element={<MyBlockers />} />
+            <Route path="/dashboard"    element={<EmployeeDashboard />} />
+            <Route path="/my-projects"  element={<EmployeeMyProjects />} />
+            <Route path="/blockers"     element={<MyBlockers />} />
             <Route path="/eod/submit"  element={<SubmitEOD />} />
             <Route path="/eod/history" element={<EodHistory />} />
             <Route path="/utilization" element={<MyUtilization />} />

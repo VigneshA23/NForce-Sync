@@ -7,6 +7,8 @@ import com.nforceone.sync.eod.BlockerReplyAttachment;
 import com.nforceone.sync.eod.dto.BlockerReplyDto;
 import com.nforceone.sync.employee.dto.DashboardSummaryDto;
 import com.nforceone.sync.employee.dto.UtilizationDetailDto;
+import com.nforceone.sync.project.dto.ProjectDetailDto;
+import com.nforceone.sync.project.dto.ProjectFullDto;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -27,12 +29,30 @@ public class EmployeeController {
     private final AppUserRepository userRepository;
     private final EmployeeService   employeeService;
     private final BlockerConversationService conversationService;
+    private final EmployeeProjectService employeeProjectService;
 
     public EmployeeController(AppUserRepository userRepository, EmployeeService employeeService,
-                               BlockerConversationService conversationService) {
+                               BlockerConversationService conversationService,
+                               EmployeeProjectService employeeProjectService) {
         this.userRepository  = userRepository;
         this.employeeService = employeeService;
         this.conversationService = conversationService;
+        this.employeeProjectService = employeeProjectService;
+    }
+
+    /** The signed-in Employee's own allocated projects — see {@link EmployeeProjectService}. */
+    @GetMapping("/projects")
+    public List<ProjectFullDto> myProjects(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return employeeProjectService.listMyProjects(actingEmail(), date != null ? date : LocalDate.now());
+    }
+
+    /** Details for one of the signed-in Employee's own assigned projects. */
+    @GetMapping("/projects/{id}")
+    public ProjectDetailDto myProjectDetail(
+            @PathVariable Long id,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return employeeProjectService.getProjectDetail(actingEmail(), id, date != null ? date : LocalDate.now());
     }
 
     @GetMapping("/dashboard-summary")

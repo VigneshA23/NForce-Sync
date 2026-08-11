@@ -56,6 +56,7 @@ export const NAV: Record<Role, RoleNav> = {
       section: 'Work',
       items: [
         { key: 'emp-dash',    label: 'My Dashboard',   path: '/dashboard',   icon: LayoutDashboard },
+        { key: 'my-projects', label: 'My Projects',     path: '/my-projects', icon: FolderKanban },
         { key: 'my-blockers', label: 'My Blockers',     path: '/blockers',    icon: AlertOctagon },
         { key: 'eod-submit',  label: 'Submit EOD',      path: '/eod/submit',  icon: ClipboardList },
         { key: 'eod-history', label: 'My EOD History',  path: '/eod/history', icon: BarChart3 },

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle, Clock, XCircle, ChevronRight, AlertTriangle,
-  Search, ArrowUpDown, ChevronLeft,
+  Search, ArrowUpDown, ChevronLeft, Calendar as CalendarIcon,
 } from 'lucide-react';
 import { listEntries } from '../../api/eod';
 import type { EodEntryDto } from '../../api/eod';
@@ -47,33 +47,63 @@ const STATUS_FILTERS = [
 const PAGE_SIZE = 10;
 
 // ── Date filter validation ──────────────────────────────────────────────────────
-// Native <input type="date"> always binds to/from ISO `YYYY-MM-DD` internally (the
-// DD-MM-YYYY the user sees is just the browser's locale rendering of that same value) — but
-// some browsers let a manual year keystroke run past 4 digits mid-edit before that resolves.
-// Re-validate defensively here so a malformed value (extra year digits, day 32, month 13, etc.)
-// never reaches component state or the history query, without touching the input type itself.
+// Root cause of the earlier bug: the From/To fields were native <input type="date">
+// elements, whose manual-typing behavior (segmented day/month/year spinners, per-browser
+// quirks in what `.value`/`validity.badInput` report while typing) is not something we
+// control — some browsers silently normalize an impossible combination like 31 Feb into
+// a different, "valid" date rather than reporting an unparsable value at all, so a
+// malformed date could reach `.value` looking legitimate. Manual entry is now a plain text
+// field in the visible DD-MM-YYYY format, validated by OUR OWN arithmetic (never by
+// constructing a `Date` and reading back whatever it silently coerced to), so typing and the
+// calendar picker both resolve through the exact same `parseStrictDDMMYYYY` below.
 const MIN_ISO_DATE = '1900-01-01';
 const MAX_ISO_DATE = '2099-12-31';
+const MIN_YEAR = 1900;
+const MAX_YEAR = 2099;
 
-function isValidIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [y, m, d] = value.split('-').map(Number);
-  const dt = new Date(`${value}T00:00:00`);
-  return dt.getFullYear() === y && dt.getMonth() + 1 === m && dt.getDate() === d;
+const DDMMYYYY_RE = /^(\d{2})-(\d{2})-(\d{4})$/;
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
 
-// `from`/`to` are always the browser's own YYYY-MM-DD value for the native date input — already
-// normalized off of whatever DD-MM-YYYY the user sees/types, never the display string itself.
-// Compare by Year → Month → Day explicitly (not a Date object, which risks timezone shifting;
-// not the DD-MM-YYYY display string, which sorts nothing like calendar order — e.g. "06-07-2022"
-// vs "06-11-2024" is a false positive under naive string/Date comparison of the display form).
+function daysInMonth(month: number, year: number): number {
+  return month === 2 && isLeapYear(year) ? 29 : DAYS_IN_MONTH[month - 1];
+}
+
+/**
+ * Strictly parses a two-digit-day / two-digit-month / four-digit-year `DD-MM-YYYY` string
+ * into its `YYYY-MM-DD` equivalent — purely by digit-count regex plus arithmetic
+ * range/leap-year checks, never by constructing a `Date` and seeing what it normalized to.
+ * Rejects single/triple-digit day or month, 2-digit or 5+-digit years, out-of-range day/month,
+ * and impossible day-for-month combinations (Feb 30, day 31 in a 30-day month, etc.). Returns
+ * `null` for anything that isn't a genuine calendar date.
+ */
+function parseStrictDDMMYYYY(text: string): string | null {
+  const m = DDMMYYYY_RE.exec(text.trim());
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const year = Number(m[3]);
+  if (month < 1 || month > 12) return null;
+  if (year < MIN_YEAR || year > MAX_YEAR) return null;
+  if (day < 1 || day > daysInMonth(month, year)) return null;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+/** `YYYY-MM-DD` → `DD-MM-YYYY`, for mirroring a calendar-picker selection into the text field. */
+function isoToDDMMYYYY(iso: string): string {
+  const [y, mo, d] = iso.split('-');
+  return `${d}-${mo}-${y}`;
+}
+
+// Both `from`/`to` are always fixed-width, zero-padded `YYYY-MM-DD` by this point (never the
+// DD-MM-YYYY display string, which sorts nothing like calendar order), so a plain string
+// comparison is chronologically correct — no Date object, no timezone risk.
 function isRangeValid(from: string, to: string): boolean {
   if (from === '' || to === '') return true;
-  const [fy, fm, fd] = from.split('-').map(Number);
-  const [ty, tm, td] = to.split('-').map(Number);
-  if (fy !== ty) return fy < ty;
-  if (fm !== tm) return fm < tm;
-  return fd <= td;
+  return from <= to;
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -82,9 +112,18 @@ export default function EodHistory() {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
+  // Committed filter values (YYYY-MM-DD) — these, and only these, drive the history query.
+  // They only ever change once `applyDateFilter` has confirmed both fields are individually
+  // valid AND From <= To, so an invalid or incomplete manual entry can never reach the query.
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  // Raw text as displayed/typed in the two fields (DD-MM-YYYY) — independent of the committed
+  // values above so the user can freely type without every keystroke being judged.
+  const [fromText, setFromText] = useState('');
+  const [toText, setToText] = useState('');
   const [dateError, setDateError] = useState<string | null>(null);
+  const [fromInvalid, setFromInvalid] = useState(false);
+  const [toInvalid, setToInvalid] = useState(false);
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
   const [page, setPage] = useState(0);
 
@@ -136,30 +175,54 @@ export default function EodHistory() {
     return (v: T) => { setter(v); setPage(0); };
   }
 
-  // Only commits a date filter change — and only lets it reach the history query — when it's
-  // empty (cleared) or a genuinely valid DD-MM-YYYY-displayed / YYYY-MM-DD-internal calendar
-  // date (rejects a mid-typed overlong year, an impossible date like 31-02-2024, or a From
-  // that lands after To) rather than letting a bad value drive the query or silently no-op.
-  function handleDateFilterChange(field: 'from' | 'to', e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value;
+  // The single validation/commit path for BOTH manual typing (via onBlur/Enter) and the
+  // calendar picker (via handlePickerChange below) — always re-validates the pair of raw
+  // DD-MM-YYYY texts together so neither entry point can diverge from the other. Only commits
+  // to dateFrom/dateTo (and thus the history query) when both fields are individually real
+  // calendar dates AND From <= To; otherwise the error is shown and the previously committed,
+  // already-valid range is left exactly as it was — never silently applied, never silently
+  // cleared.
+  function applyDateFilter(nextFromText: string, nextToText: string) {
+    const fromTrimmed = nextFromText.trim();
+    const toTrimmed = nextToText.trim();
+    const fromIso = fromTrimmed === '' ? '' : parseStrictDDMMYYYY(fromTrimmed);
+    const toIso = toTrimmed === '' ? '' : parseStrictDDMMYYYY(toTrimmed);
 
-    // jsdom/some browsers report an unparsable manual entry as an empty value with
-    // `validity.badInput` set, rather than surfacing the invalid text itself.
-    const typedButUnparsable = raw === '' && e.target.validity.badInput;
-    if (typedButUnparsable || (raw !== '' && !isValidIsoDate(raw))) {
-      setDateError('Please enter a valid date.');
+    const fromBad = fromTrimmed !== '' && fromIso === null;
+    const toBad = toTrimmed !== '' && toIso === null;
+    setFromInvalid(fromBad);
+    setToInvalid(toBad);
+
+    if (fromBad || toBad) {
+      setDateError('Invalid date. Please enter a valid date in DD-MM-YYYY format.');
       return;
     }
 
-    const nextFrom = field === 'from' ? raw : dateFrom;
-    const nextTo = field === 'to' ? raw : dateTo;
-    if (!isRangeValid(nextFrom, nextTo)) {
+    if (!isRangeValid(fromIso ?? '', toIso ?? '')) {
       setDateError('From date cannot be later than To date.');
       return;
     }
 
     setDateError(null);
-    resetPage(field === 'from' ? setDateFrom : setDateTo)(raw);
+    setDateFrom(fromIso ?? '');
+    setDateTo(toIso ?? '');
+    setPage(0);
+  }
+
+  // The calendar picker's native <input type="date"> value is browser-guaranteed to be either
+  // empty or a genuine valid date — but it still funnels through applyDateFilter (mirrored into
+  // the text field first) so a picker selection and a manual entry are validated and committed
+  // identically, and a picker pick can still be rejected by the From <= To check.
+  function handlePickerChange(field: 'from' | 'to', e: React.ChangeEvent<HTMLInputElement>) {
+    const iso = e.target.value;
+    const ddmmyyyy = iso ? isoToDDMMYYYY(iso) : '';
+    if (field === 'from') {
+      setFromText(ddmmyyyy);
+      applyDateFilter(ddmmyyyy, toText);
+    } else {
+      setToText(ddmmyyyy);
+      applyDateFilter(fromText, ddmmyyyy);
+    }
   }
 
   // Weekday kept (useful in a history list scanned day-by-day), date portion
@@ -225,23 +288,59 @@ export default function EodHistory() {
         </div>
         <div>
           <label style={labelStyle} htmlFor="date-from">From</label>
-          <input
-            id="date-from" type="date" min={MIN_ISO_DATE} max={MAX_ISO_DATE}
-            value={dateFrom}
-            onChange={e => handleDateFilterChange('from', e)}
-            aria-invalid={dateError != null}
-            style={{ ...selectStyle, cursor: 'text' }}
-          />
+          <div style={{ position: 'relative', display: 'inline-flex' }}>
+            <input
+              id="date-from" type="text" inputMode="numeric" placeholder="DD-MM-YYYY"
+              value={fromText}
+              onChange={e => setFromText(e.target.value)}
+              onBlur={() => applyDateFilter(fromText, toText)}
+              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+              aria-invalid={fromInvalid}
+              style={{ ...selectStyle, cursor: 'text', width: 110, paddingRight: 26 }}
+            />
+            <div style={{
+              position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
+              color: 'var(--txt-dim)', display: 'flex', pointerEvents: 'none',
+            }}>
+              <CalendarIcon size={13} aria-hidden="true" />
+            </div>
+            <input
+              type="date" min={MIN_ISO_DATE} max={MAX_ISO_DATE}
+              value={dateFrom}
+              onChange={e => handlePickerChange('from', e)}
+              tabIndex={-1}
+              aria-label="Pick From date from calendar"
+              style={{ position: 'absolute', right: 0, top: 0, width: 24, height: '100%', opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }}
+            />
+          </div>
         </div>
         <div>
           <label style={labelStyle} htmlFor="date-to">To</label>
-          <input
-            id="date-to" type="date" min={MIN_ISO_DATE} max={MAX_ISO_DATE}
-            value={dateTo}
-            onChange={e => handleDateFilterChange('to', e)}
-            aria-invalid={dateError != null}
-            style={{ ...selectStyle, cursor: 'text' }}
-          />
+          <div style={{ position: 'relative', display: 'inline-flex' }}>
+            <input
+              id="date-to" type="text" inputMode="numeric" placeholder="DD-MM-YYYY"
+              value={toText}
+              onChange={e => setToText(e.target.value)}
+              onBlur={() => applyDateFilter(fromText, toText)}
+              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+              aria-invalid={toInvalid}
+              style={{ ...selectStyle, cursor: 'text', width: 110, paddingRight: 26 }}
+            />
+            <div style={{
+              position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
+              color: 'var(--txt-dim)', display: 'flex', pointerEvents: 'none',
+            }}>
+              <CalendarIcon size={13} aria-hidden="true" />
+            </div>
+            <input
+              type="date" min={MIN_ISO_DATE} max={MAX_ISO_DATE}
+              value={dateTo}
+              onChange={e => handlePickerChange('to', e)}
+              tabIndex={-1}
+              aria-label="Pick To date from calendar"
+              style={{ position: 'absolute', right: 0, top: 0, width: 24, height: '100%', opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }}
+            />
+          </div>
         </div>
         <button
           onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
@@ -288,8 +387,13 @@ export default function EodHistory() {
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState
-          hasFilter={!!statusFilter || !!search || !!dateFrom || !!dateTo}
-          onClear={() => { setStatusFilter(''); setSearch(''); setDateFrom(''); setDateTo(''); setDateError(null); setPage(0); }}
+          hasFilter={!!statusFilter || !!search || !!dateFrom || !!dateTo || !!fromText || !!toText}
+          onClear={() => {
+            setStatusFilter(''); setSearch('');
+            setDateFrom(''); setDateTo(''); setFromText(''); setToText('');
+            setFromInvalid(false); setToInvalid(false); setDateError(null);
+            setPage(0);
+          }}
         />
       ) : (
         <div style={{
