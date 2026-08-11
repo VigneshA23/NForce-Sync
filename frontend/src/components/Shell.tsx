@@ -14,6 +14,7 @@ import { useUnreadNotificationsCount } from '../api/notifications';
 import { usePendingApprovalsCount } from '../api/approvals';
 import { useTeamLeadSummary } from '../api/teamLead';
 import { usePmBlockers } from '../api/pmBlockers';
+import { resolveBlockersDateFilter } from '../lib/pmBlockersDateFilter';
 import { todayISO } from '../lib/date';
 
 // ─── Workspace search (top nav) ────────────────────────────────────────────────
@@ -203,11 +204,20 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   );
   const openBlockersCount = role === 'lead' ? (teamLeadSummary?.activeBlockersCount ?? 0) : 0;
 
-  // Sidebar Blockers badge for PM — same "today" scope as the Team Lead badge above (not
-  // all-time open blockers), so the two roles' badges mean the same thing at a glance.
-  const { data: pmTodayBlockers } = usePmBlockers({ from: todayISO(), to: todayISO() }, role === 'pm');
+  // Sidebar Blockers badge for PM — scoped to the same date range as the PM Blockers page
+  // itself (mode/from/to), counting open blockers (status !== RESOLVED) the same way the page's
+  // Needs Response + Acknowledged tiles do, so the badge never disagrees with what the page shows
+  // for that range. While on /projects/blockers, reads the live URL params (updates immediately
+  // as the user changes the date picker); everywhere else, resolveBlockersDateFilter falls back
+  // to the same sessionStorage-persisted range the page itself reads (see
+  // pmBlockersDateFilter.ts), or "today" if the page has never been visited this session —
+  // matching the page's own first-load default.
+  const pmBlockersRange = resolveBlockersDateFilter(
+    location.pathname === '/projects/blockers' ? new URLSearchParams(location.search) : new URLSearchParams(),
+  ).range;
+  const { data: pmRangeBlockers } = usePmBlockers(pmBlockersRange, role === 'pm');
   const pmOpenBlockersCount = role === 'pm'
-    ? (pmTodayBlockers ?? []).filter(b => b.status !== 'RESOLVED').length
+    ? (pmRangeBlockers ?? []).filter(b => b.status !== 'RESOLVED').length
     : 0;
 
   return (
