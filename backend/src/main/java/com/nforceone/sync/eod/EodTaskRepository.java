@@ -20,6 +20,15 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
            "ORDER BY t.eodEntry.entryDate DESC")
     List<EodTask> findBlockedByManagerId(@Param("managerId") Long managerId);
 
+    // Cross-team view for the Project Manager Blockers page: every blocker raised against any
+    // of the PM's own projects, regardless of which Team Lead the reporting employee belongs to.
+    @Query("SELECT t FROM EodTask t " +
+           "WHERE t.taskStatus = com.nforceone.sync.eod.EodTask.TaskStatus.BLOCKED " +
+           "AND t.project.id IN :projectIds " +
+           "AND t.eodEntry.status <> com.nforceone.sync.eod.EodEntry.Status.DRAFT " +
+           "ORDER BY t.eodEntry.entryDate DESC")
+    List<EodTask> findBlockedByProjectIds(@Param("projectIds") List<Long> projectIds);
+
     // ── Project Dashboard aggregates ──────────────────────────────────────────
     // All scoped to APPROVED entries only — matches UtilizationService's convention that only
     // approved hours count as "actual" utilization. employeeIds narrows to whatever the caller's
