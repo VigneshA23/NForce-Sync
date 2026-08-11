@@ -84,8 +84,8 @@ export default function Login() {
 
   return (
     <AuthLayout
-      leftHeadline="One source of truth for daily work and utilization."
-      leftSubtext="Submit your EOD, track approved hours, and give leadership real-time visibility — no more scattered emails and spreadsheets."
+      leftHeadline="Centralized Work & Utilization Management"
+      leftSubtext="Submit EOD updates, track approved hours, monitor utilization, and give leadership real-time insights all from one centralized platform."
       showStats
     >
       <motion.div

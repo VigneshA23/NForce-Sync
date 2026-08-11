@@ -273,6 +273,11 @@ public class EodService {
                     "Work location is required.");
         }
 
+        if (entry.getNextDayPlan() == null || entry.getNextDayPlan().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Next-day plan is required.");
+        }
+
         BigDecimal total = BigDecimal.ZERO;
         int rowNumber = 0;
 
