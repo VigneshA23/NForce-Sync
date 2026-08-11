@@ -224,7 +224,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
             letterSpacing: '0.04em',
             color: '#E8EAED',
           }}>
-            Nforce Sync
+            NForce Sync
           </div>
           <div style={{
             fontSize: 9,

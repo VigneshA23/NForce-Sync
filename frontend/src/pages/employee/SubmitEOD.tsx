@@ -13,7 +13,13 @@ import type { EodEntryDto, EodTaskDto } from '../../api/eod';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
+/**
+ * The empty first entry is the default, so status is a deliberate choice rather than a silent
+ * "Completed". Kept in this list (not a bare <option> in the markup) so the read-only view and
+ * the validator resolve labels from one place.
+ */
 const TASK_STATUSES = [
+  { value: '',            label: 'Select Status...' },
   { value: 'COMPLETED',   label: 'Completed' },
   { value: 'IN_PROGRESS', label: 'In Progress' },
   { value: 'BLOCKED',     label: 'Blocked' },
@@ -127,7 +133,7 @@ function newRow(): TaskRow {
     categoryName:     null,
     description:      '',
     hours:            '',
-    taskStatus:       'COMPLETED',
+    taskStatus:       '', // no default — the employee must pick one
     isBillable:       true,
     blockerReason:    '',
     supportNeeded:    '',
@@ -497,6 +503,10 @@ export default function SubmitEOD() {
       errs.push('Work location is required.');
     }
 
+    if (!nextDayPlan.trim()) {
+      errs.push('Next-day plan is required.');
+    }
+
     if (tasks.length === 0) {
       errs.push('At least one task row is required for a working/leave day.');
       return errs;
@@ -507,6 +517,9 @@ export default function SubmitEOD() {
       if (!t.taskCategoryId) errs.push(`Task ${n}: category is required.`);
       // Leave is not project work, so a project is required only on real work rows.
       if (!leaveRow && !t.projectId) errs.push(`Task ${n}: project is required.`);
+      // Status now defaults to blank, so it has to be chosen. A leave row is forced to COMPLETED
+      // and its select is disabled, so it never trips this.
+      if (!t.taskStatus) errs.push(`Task ${n}: status is required.`);
       if (leaveRow && (t.projectId || t.isBillable || t.taskStatus !== 'COMPLETED')) {
         errs.push(`Row #${n}: Leave rows cannot have a project or billable flag set.`);
       }
@@ -575,7 +588,7 @@ export default function SubmitEOD() {
         taskCategoryId: t.taskCategoryId,
         description:    t.description || null,
         hours:          parseFloat(t.hours) || 0,
-        taskStatus:     t.taskStatus,
+        taskStatus:     t.taskStatus || null, // '' would fail enum parsing server-side
         isBillable:     t.isBillable,
         blockerReason:  t.blockerReason || null,
         supportNeeded:  t.supportNeeded || null,
@@ -997,7 +1010,7 @@ export default function SubmitEOD() {
 
           {/* Next-day plan */}
           <div style={{ marginTop: 24 }}>
-            <Label>Next-day plan</Label>
+            <Label>Next-day plan <Req /></Label>
             {isReadOnly
               ? <div style={{ ...inputStyle, opacity: 0.7, minHeight: 60, lineHeight: 1.5 }}>{nextDayPlan || '—'}</div>
               : <Txt value={nextDayPlan} onChange={e => setNextDayPlan(e.target.value)} placeholder="What are you planning to work on tomorrow?" rows={3} />}
@@ -1200,7 +1213,7 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
           </div>
           {/* Status */}
           <div>
-            <Label>Status</Label>
+            <Label>Status <Req /></Label>
             {isReadOnly ? (
               <div style={{ ...inputStyle, fontSize: 12, color: statusColor[task.taskStatus] ?? 'var(--txt)' }}>
                 {TASK_STATUSES.find(s => s.value === task.taskStatus)?.label ?? task.taskStatus}

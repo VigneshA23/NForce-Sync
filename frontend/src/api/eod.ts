@@ -48,7 +48,8 @@ export interface SaveTaskRequest {
   taskCategoryId: number | null;
   description: string | null;
   hours: number | null;
-  taskStatus: string;
+  /** Null while the employee hasn't chosen one — '' would fail enum parsing server-side. */
+  taskStatus: string | null;
   isBillable: boolean;
   blockerReason: string | null;
   supportNeeded: string | null;
