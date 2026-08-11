@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
 import { Avatar, avatarColor } from '../../components/BlockerThread';
-import { FilterDropdown, toggleFilterVal } from '../../components/FilterDropdown';
+import { FilterDropdown, SortDropdown, toggleFilterVal } from '../../components/FilterDropdown';
 import { usePmBlockers, usePmBlockersFilters, type PmBlockerDto } from '../../api/pmBlockers';
 import type { DateRange } from '../../api/teamLead';
 import { todayISO as localTodayISO, toLocalISODate } from '../../lib/date';
@@ -356,6 +356,14 @@ function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
 
 const PAGE_SIZE = 8;
 
+type SortOption = 'newest' | 'oldest' | 'employee';
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: 'newest', label: 'Newest First' },
+  { value: 'oldest', label: 'Oldest First' },
+  { value: 'employee', label: 'Employee A–Z' },
+];
+
 // ── main ───────────────────────────────────────────────────────────────────────────
 
 export default function PmBlockers() {
@@ -381,6 +389,7 @@ export default function PmBlockers() {
   const [projectFilter, setProjectFilter] = useState<Set<string>>(new Set());
   const [teamFilter, setTeamFilter] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [page, setPage] = useState(1);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
 
@@ -412,10 +421,14 @@ export default function PmBlockers() {
         || b.teamName.toLowerCase().includes(q),
       );
     }
-    return [...list].sort((a, b) => new Date(b.submittedAt ?? 0).getTime() - new Date(a.submittedAt ?? 0).getTime());
-  }, [blockers, projectFilter, teamFilter, statusFilter, search]);
+    return [...list].sort((a, b) => {
+      if (sortBy === 'employee') return a.employeeName.localeCompare(b.employeeName);
+      const diff = new Date(b.submittedAt ?? 0).getTime() - new Date(a.submittedAt ?? 0).getTime();
+      return sortBy === 'oldest' ? -diff : diff;
+    });
+  }, [blockers, projectFilter, teamFilter, statusFilter, search, sortBy]);
 
-  useEffect(() => { setPage(1); }, [search, projectFilter, teamFilter, statusFilter]);
+  useEffect(() => { setPage(1); }, [search, projectFilter, teamFilter, statusFilter, sortBy]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -577,6 +590,7 @@ export default function PmBlockers() {
             onClear={() => setStatusFilter(new Set())}
             getLabel={(v) => STATUS_META[v as PmBlockerDto['status']].label}
           />
+          <SortDropdown label="Sort" options={SORT_OPTIONS} value={sortBy} onChange={setSortBy} defaultValue="newest" />
           {hasFilters && (
             <button
               onClick={clearFilters}

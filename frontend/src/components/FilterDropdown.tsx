@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ListFilter } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, ListFilter } from 'lucide-react';
 
 // ── checkbox multi-select filter dropdown with a "Clear all" option ────────────
 // Shared by Approvals and Team Lead Blockers so both pages behave identically:
@@ -73,4 +73,68 @@ export function toggleFilterVal(set: Set<string>, setFn: (s: Set<string>) => voi
   const next = new Set(set);
   if (next.has(val)) next.delete(val); else next.add(val);
   setFn(next);
+}
+
+// ── single-select sort dropdown — same button/panel styling as FilterDropdown above, but
+// radio (exactly-one, always-selected) rather than checkbox (any-of, clearable). ─────────
+
+export function SortDropdown<T extends string>({ label, options, value, onChange, defaultValue }: {
+  label: string;
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+  /** When set, shows a "Clear" option that resets sort back to this value — mirrors
+   *  FilterDropdown's "Clear all", except sort always has some value selected. */
+  defaultValue?: T;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = options.find(o => o.value === value);
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 500,
+          background: 'var(--raised2)', border: '1px solid var(--line2)',
+          color: 'var(--txt)', cursor: 'pointer',
+        }}
+      >
+        <ArrowUpDown size={13} aria-hidden="true" />
+        {label}: {current?.label ?? ''}
+        <ChevronDown size={12} aria-hidden="true" />
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, minWidth: 180,
+            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 10,
+            boxShadow: '0 12px 28px rgba(0,0,0,0.35)', maxHeight: 260, overflowY: 'auto',
+          }}>
+            {defaultValue !== undefined && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+                <button
+                  onClick={() => { onChange(defaultValue); setOpen(false); }}
+                  style={{ background: 'none', border: 'none', color: 'var(--brand-bright)', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: '4px' }}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+            {options.map(opt => (
+              <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--txt)', padding: '5px 4px', cursor: 'pointer' }}>
+                <input
+                  type="radio" name={label} checked={value === opt.value}
+                  onChange={() => { onChange(opt.value); setOpen(false); }}
+                  style={{ accentColor: 'var(--brand-bright)' }}
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
