@@ -17,6 +17,35 @@ public class OrgController {
         this.orgService = orgService;
     }
 
+    // ── Project types ──────────────────────────────────────────────────────────
+
+    /** Readable by any signed-in user — the PM Project form needs the list for its dropdown. */
+    @GetMapping("/project-types")
+    @PreAuthorize("isAuthenticated()")
+    public List<ProjectTypeDto> listProjectTypes() {
+        return orgService.listProjectTypes();
+    }
+
+    @PostMapping("/project-types")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ProjectTypeDto createProjectType(@Valid @RequestBody CreateProjectTypeRequest request) {
+        return orgService.createProjectType(request);
+    }
+
+    @PatchMapping("/project-types/{id}")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ProjectTypeDto toggleProjectType(@PathVariable Long id) {
+        return orgService.toggleProjectType(id);
+    }
+
+    @DeleteMapping("/project-types/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public void deleteProjectType(@PathVariable Long id) {
+        orgService.deleteProjectType(id);
+    }
+
     // ── Billing models ─────────────────────────────────────────────────────────
 
     /** Readable by any signed-in user — the PM Project form needs the list to populate its dropdown. */

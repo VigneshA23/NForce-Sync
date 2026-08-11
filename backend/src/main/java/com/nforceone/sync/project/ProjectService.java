@@ -4,6 +4,8 @@ import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.org.BillingModel;
 import com.nforceone.sync.org.BillingModelRepository;
+import com.nforceone.sync.org.ProjectType;
+import com.nforceone.sync.org.ProjectTypeRepository;
 import com.nforceone.sync.project.dto.CreateProjectRequest;
 import com.nforceone.sync.project.dto.EmployeeRefDto;
 import com.nforceone.sync.project.dto.ProjectDto;
@@ -26,15 +28,18 @@ public class ProjectService {
     private final AllocationRepository allocationRepository;
     private final AppUserRepository appUserRepository;
     private final BillingModelRepository billingModelRepository;
+    private final ProjectTypeRepository projectTypeRepository;
 
     public ProjectService(ProjectRepository projectRepository,
                           AllocationRepository allocationRepository,
                           AppUserRepository appUserRepository,
-                          BillingModelRepository billingModelRepository) {
+                          BillingModelRepository billingModelRepository,
+                          ProjectTypeRepository projectTypeRepository) {
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
         this.appUserRepository = appUserRepository;
         this.billingModelRepository = billingModelRepository;
+        this.projectTypeRepository = projectTypeRepository;
     }
 
     /**
@@ -84,14 +89,15 @@ public class ProjectService {
                     "A project with this code already exists");
         }
 
-        String client = resolveClient(req.projectType(), req.client());
+        ProjectType projectType = resolveProjectType(req.projectTypeId(), null);
+        String client = resolveClient(projectType, req.client());
         requireDateOrder(req.startDate(), req.endDate());
 
         Project project = new Project();
         project.setCode(req.code());
         project.setName(req.name());
         project.setClient(client);
-        project.setProjectType(req.projectType());
+        project.setProjectType(projectType);
         project.setBillingModel(resolveBillingModel(req.billingModelId(), null));
         project.setStatus(Project.Status.ACTIVE);
         project.setPm(resolveLead(req.pmId(), null));
@@ -114,7 +120,15 @@ public class ProjectService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status: " + req.status());
         }
 
-        String client = resolveClient(req.projectType(), req.client());
+        // Code is editable, but must stay unique. Excluding this project from the check is what
+        // lets an unrelated edit re-send the unchanged code without tripping a false clash.
+        if (projectRepository.existsByCodeAndIdNot(req.code(), id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A project with this code already exists");
+        }
+
+        ProjectType projectType = resolveProjectType(req.projectTypeId(), project.getProjectType());
+        String client = resolveClient(projectType, req.client());
         requireDateOrder(req.startDate(), req.endDate());
 
         // A completed project must say when it finished. Only reachable on update — create()
@@ -124,9 +138,10 @@ public class ProjectService {
                     "End Date is required when status is Completed");
         }
 
+        project.setCode(req.code());
         project.setName(req.name());
         project.setClient(client);
-        project.setProjectType(req.projectType());
+        project.setProjectType(projectType);
         project.setBillingModel(resolveBillingModel(req.billingModelId(), project.getBillingModel()));
         project.setStatus(status);
         project.setPm(resolveLead(req.pmId(), project.getPm()));
@@ -136,9 +151,6 @@ public class ProjectService {
         Project saved = projectRepository.save(project);
         return ProjectFullDto.from(saved, (int) allocationRepository.countByProjectIdAndEmployeeRole(saved.getId(), AppUser.Role.EMPLOYEE));
     }
-
-    private static final java.util.Set<String> VALID_PROJECT_TYPES = java.util.Set.of(
-            "CLIENT", "INTERNAL", "PRODUCT_DEVELOPMENT", "SUPPORT", "BENCH");
 
     /**
      * Resolves the optional billing model from the Organization Master.
@@ -197,18 +209,36 @@ public class ProjectService {
     }
 
     /**
-     * Validates the project type and returns the client name to store.
+     * Resolves the project type from the Organization Master (V51). Mandatory — the column is NOT NULL.
      *
-     * <p>Only a CLIENT project names a client. Every other type never stores one — returning null
-     * here is what clears a stale name when an existing client project is switched to another
-     * type, so a value hidden in the UI can never be silently retained.
+     * <p>An inactive type can't be newly assigned, but {@code current} — the project's existing type
+     * on update — passes through, so deactivating a type doesn't block edits to projects already on
+     * it. Same grandfathering as {@link #resolveBillingModel} and {@link #resolveLead}.
      */
-    private String resolveClient(String projectType, String client) {
-        if (!VALID_PROJECT_TYPES.contains(projectType)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Invalid project type: " + projectType);
+    private ProjectType resolveProjectType(Long projectTypeId, ProjectType current) {
+        if (current != null && current.getId().equals(projectTypeId)) {
+            return current;
         }
-        if (!"CLIENT".equals(projectType)) {
+        ProjectType type = projectTypeRepository.findById(projectTypeId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Project type not found"));
+        if (!type.isActive()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "That project type is inactive");
+        }
+        return type;
+    }
+
+    /**
+     * The client name to store, decided by the type's {@code requiresClient} flag rather than a
+     * hardcoded "CLIENT" — so renaming or adding a type can't silently change the rule.
+     *
+     * <p>A type that doesn't require a client never stores one: returning null clears a stale name
+     * when a client project is switched to another type, so a value hidden in the UI is never
+     * silently retained.
+     */
+    private String resolveClient(ProjectType type, String client) {
+        if (!type.isRequiresClient()) {
             return null;
         }
         if (client == null || client.isBlank()) {

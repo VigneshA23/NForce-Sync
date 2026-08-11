@@ -8,9 +8,11 @@ import java.time.LocalDate;
 
 /** See CreateProjectRequest for why {@code client} is not @NotBlank and {@code endDate} is optional. */
 public record UpdateProjectRequest(
+        /** Editable, but still unique across projects. Nothing looks a project up by code. */
+        @NotBlank @Size(max = 50) String code,
         @NotBlank @Size(max = 200) String name,
         @Size(max = 200) String client,
-        @NotBlank @Size(max = 50) String projectType,
+        @NotNull Long projectTypeId,
         Long billingModelId,
         @NotBlank String status,
         @NotNull LocalDate startDate,

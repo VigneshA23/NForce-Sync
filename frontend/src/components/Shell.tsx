@@ -13,6 +13,7 @@ import { toRole } from '../api/auth';
 import { useUnreadNotificationsCount } from '../api/notifications';
 import { usePendingApprovalsCount } from '../api/approvals';
 import { useTeamLeadSummary } from '../api/teamLead';
+import { usePmBlockers } from '../api/pmBlockers';
 import { todayISO } from '../lib/date';
 
 // ─── Workspace search (top nav) ────────────────────────────────────────────────
@@ -202,6 +203,13 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   );
   const openBlockersCount = role === 'lead' ? (teamLeadSummary?.activeBlockersCount ?? 0) : 0;
 
+  // Sidebar Blockers badge for PM — same "today" scope as the Team Lead badge above (not
+  // all-time open blockers), so the two roles' badges mean the same thing at a glance.
+  const { data: pmTodayBlockers } = usePmBlockers({ from: todayISO(), to: todayISO() }, role === 'pm');
+  const pmOpenBlockersCount = role === 'pm'
+    ? (pmTodayBlockers ?? []).filter(b => b.status !== 'RESOLVED').length
+    : 0;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
@@ -263,7 +271,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                   ? unreadNotificationsCount
                   : role === 'lead' && item.key === 'blockers'
                     ? openBlockersCount
-                    : item.badge;
+                    : role === 'pm' && item.key === 'blockers'
+                      ? pmOpenBlockersCount
+                      : item.badge;
               return (
                 <Link
                   key={item.key}

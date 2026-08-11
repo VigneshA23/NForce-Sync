@@ -37,6 +37,7 @@ const ProjectsAllocation  = lazy(() => import('./pages/pm/ProjectsAllocation'));
 const ApprovalsPM         = lazy(() => import('./pages/pm/ApprovalsPM'));
 const ProjectDashboard    = lazy(() => import('./pages/pm/ProjectDashboard'));
 const ReportsDashboard    = lazy(() => import('./pages/pm/ReportsDashboard'));
+const PmBlockers          = lazy(() => import('./pages/pm/Blockers'));
 const Profile             = lazy(() => import('./pages/Profile'));
 const Notifications       = lazy(() => import('./pages/Notifications'));
 const ChangePassword      = lazy(() => import('./pages/ChangePassword'));
@@ -90,6 +91,7 @@ function ChunkPrefetcher() {
       import('./pages/pm/ApprovalsPM');
       import('./pages/pm/ProjectDashboard');
       import('./pages/pm/ReportsDashboard');
+      import('./pages/pm/Blockers');
       import('./pages/Approvals');
     }
   }, [user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -167,7 +169,7 @@ function AppRoutes() {
             <Route path="/projects"                element={<ProjectsAllocation />} />
             <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
             <Route path="/projects/planned-actual" element={<Placeholder title="Planned vs Actual" />} />
-            <Route path="/projects/blockers"       element={<Placeholder title="Blockers" />} />
+            <Route path="/projects/blockers"       element={<PmBlockers />} />
             <Route path="/projects/approvals"      element={<ApprovalsPM />} />
             <Route path="/projects/reports"        element={<ReportsDashboard />} />
 

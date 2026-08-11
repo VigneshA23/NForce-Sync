@@ -9,7 +9,10 @@ public record ProjectFullDto(
         String code,
         String name,
         String client,
+        /** Display name of the project type. */
         String projectType,
+        /** Id of the same, so the edit form can preselect it. */
+        Long projectTypeId,
         /** Display name of the billing model; null when unset. */
         String billingModel,
         /** Id of the same, so the edit form can preselect it. */
@@ -27,7 +30,8 @@ public record ProjectFullDto(
                 p.getCode(),
                 p.getName(),
                 p.getClient(),
-                p.getProjectType(),
+                p.getProjectType() != null ? p.getProjectType().getName() : null,
+                p.getProjectType() != null ? p.getProjectType().getId() : null,
                 p.getBillingModel() != null ? p.getBillingModel().getName() : null,
                 p.getBillingModel() != null ? p.getBillingModel().getId() : null,
                 p.getStatus().name(),
