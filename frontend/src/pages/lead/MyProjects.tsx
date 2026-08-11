@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, RefreshCw, AlertTriangle, Search, X } from 'lucide-react';
+import { Plus, RefreshCw, AlertTriangle, Search, X, Pencil, Trash2 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
+import { DropdownMenu } from '../../components/DropdownMenu';
 import { useToast } from '../../lib/toast';
 import { extractApiError } from '../../api/admin';
 import {
-  useMyLeadProjects, useMyCategories, useCreateProjectCategory, useProjectDetail,
+  useMyLeadProjects, useMyCategories, useCreateProjectCategory, useUpdateProjectCategory,
+  useDeleteProjectCategory, useProjectDetail,
 } from '../../api/teamLeadProjects';
 import type { ProjectFullDto, ProjectCategoryDto } from '../../api/teamLeadProjects';
 
@@ -162,11 +164,14 @@ function StatusFilterSelect({ value, onChange, options, ariaLabel }: {
 
 // ── Projects panel ──────────────────────────────────────────────────────────────
 
-function ProjectsPanel({ projects, isPending, isError, refetch, selectedProjectId, onSelect, onOpenDetails }: {
+function ProjectsPanel({
+  projects, isPending, isError, isRefreshing, onRefresh, selectedProjectId, onSelect, onOpenDetails,
+}: {
   projects: ProjectFullDto[];
   isPending: boolean;
   isError: boolean;
-  refetch: () => void;
+  isRefreshing: boolean;
+  onRefresh: () => void;
   selectedProjectId: number | undefined;
   onSelect: (id: number) => void;
   onOpenDetails: (id: number) => void;
@@ -196,15 +201,19 @@ function ProjectsPanel({ projects, isPending, isError, refetch, selectedProjectI
           Assigned Projects{projects.length > 0 ? ` (${projects.length})` : ''}
         </span>
         <button
-          onClick={() => refetch()}
-          aria-label="Refresh"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          aria-label={isRefreshing ? 'Refreshing…' : 'Refresh'}
+          title="Refresh"
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: 'transparent', border: '1px solid var(--line2)', cursor: 'pointer',
+            background: 'transparent', border: '1px solid var(--line2)',
+            cursor: isRefreshing ? 'not-allowed' : 'pointer',
             color: 'var(--txt-mut)', padding: '7px 10px', borderRadius: 6, fontSize: 12,
+            opacity: isRefreshing ? 0.7 : 1,
           }}
         >
-          <RefreshCw size={13} aria-hidden="true" />
+          <RefreshCw size={13} aria-hidden="true" style={isRefreshing ? { animation: 'spin 0.8s linear infinite' } : undefined} />
         </button>
       </div>
 
@@ -246,12 +255,13 @@ function ProjectsPanel({ projects, isPending, isError, refetch, selectedProjectI
       {isError && (
         <div style={{ padding: '40px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 13, color: 'var(--risk)', marginBottom: 12 }}>Failed to load your projects.</div>
-          <button onClick={() => refetch()} style={{
+          <button onClick={onRefresh} disabled={isRefreshing} style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
             background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6,
-            color: 'var(--txt)', fontSize: 12, cursor: 'pointer',
+            color: 'var(--txt)', fontSize: 12, cursor: isRefreshing ? 'not-allowed' : 'pointer',
           }}>
-            <RefreshCw size={13} aria-hidden="true" /> Retry
+            <RefreshCw size={13} aria-hidden="true" style={isRefreshing ? { animation: 'spin 0.8s linear infinite' } : undefined} />
+            {isRefreshing ? 'Retrying…' : 'Retry'}
           </button>
         </div>
       )}
@@ -321,6 +331,7 @@ function ProjectsPanel({ projects, isPending, isError, refetch, selectedProjectI
           </tbody>
         </table>
       )}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -430,6 +441,169 @@ function NewCategoryModal({ open, onClose }: {
   );
 }
 
+// ── Edit Category modal ──────────────────────────────────────────────────────
+
+function EditCategoryModal({ category, onClose }: {
+  category: ProjectCategoryDto | null; onClose: () => void;
+}) {
+  const { showToast } = useToast();
+  const updateMutation = useUpdateProjectCategory();
+  const [form, setForm] = useState<CategoryFormState>(emptyForm());
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (category) {
+      setForm({
+        name: category.name,
+        description: category.description ?? '',
+        status: category.status,
+      });
+      setError(null);
+    }
+  }, [category]);
+
+  const canSubmit = form.name.trim() !== '';
+
+  function handleClose() {
+    setError(null);
+    onClose();
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!category || !canSubmit) return;
+    setError(null);
+    try {
+      await updateMutation.mutateAsync({
+        id: category.id,
+        data: {
+          name: form.name.trim(),
+          description: form.description.trim() || null,
+          status: form.status,
+        },
+      });
+      showToast('success', 'Category updated');
+      handleClose();
+    } catch (err) {
+      setError(extractApiError(err, 'Failed to update category'));
+    }
+  }
+
+  return (
+    <Modal open={category != null} title="Edit Category" onClose={handleClose} width={480}>
+      <form onSubmit={handleSubmit} noValidate>
+        {error && <ErrorBanner message={error} />}
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Category Name *</label>
+          <input style={inputStyle} value={form.name} autoFocus
+            onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>
+            Description<span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}> (Optional)</span>
+          </label>
+          <textarea
+            style={{ ...inputStyle, minHeight: 64, resize: 'vertical', fontFamily: 'Inter, sans-serif' }}
+            value={form.description}
+            onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+          />
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelStyle}>Status</label>
+          <select style={inputStyle} value={form.status}
+            onChange={e => setForm(f => ({ ...f, status: e.target.value as CategoryFormState['status'] }))}>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            type="submit"
+            disabled={updateMutation.isPending || !canSubmit}
+            style={{
+              padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
+              color: '#fff', fontSize: 13, fontWeight: 600,
+              cursor: updateMutation.isPending ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {updateMutation.isPending ? 'Saving…' : 'Save Changes'}
+          </button>
+          <button type="button" onClick={handleClose} style={{
+            padding: '9px 16px', background: 'transparent', border: '1px solid var(--line2)',
+            borderRadius: 7, color: 'var(--txt-mut)', fontSize: 13, cursor: 'pointer',
+          }}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ── Delete Category modal ────────────────────────────────────────────────────
+
+function DeleteCategoryModal({ category, onClose }: {
+  category: ProjectCategoryDto | null; onClose: () => void;
+}) {
+  const { showToast } = useToast();
+  const deleteMutation = useDeleteProjectCategory();
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { setError(null); }, [category]);
+
+  async function handleConfirm() {
+    if (!category) return;
+    setError(null);
+    try {
+      const result = await deleteMutation.mutateAsync(category.id);
+      showToast('success', result.deleted
+        ? 'Category deleted'
+        : 'Category has recorded EOD history — marked Inactive instead of deleted');
+      onClose();
+    } catch (err) {
+      setError(extractApiError(err, 'Failed to delete category'));
+    }
+  }
+
+  return (
+    <Modal open={category != null} title="Delete Category?" onClose={onClose} width={420}>
+      {category && (
+        <div>
+          {error && <ErrorBanner message={error} />}
+          <p style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.7, marginBottom: 20 }}>
+            Are you sure you want to delete <b style={{ color: 'var(--txt)' }}>&lsquo;{category.name}&rsquo;</b>?
+            If it has already been used in EOD submissions it will be marked Inactive instead of removed,
+            so historical records are not affected.
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={handleConfirm}
+              disabled={deleteMutation.isPending}
+              style={{
+                padding: '9px 20px', background: 'rgba(228,55,61,.15)', border: '1px solid rgba(228,55,61,.4)',
+                borderRadius: 7, color: '#E4373D', fontSize: 13, fontWeight: 600,
+                cursor: deleteMutation.isPending ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+            </button>
+            <button onClick={onClose} disabled={deleteMutation.isPending} style={{
+              padding: '9px 16px', background: 'transparent', border: '1px solid var(--line2)',
+              borderRadius: 7, color: 'var(--txt-mut)', fontSize: 13, cursor: 'pointer',
+            }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ── Category panel ─────────────────────────────────────────────────────────────
 
 function CategoryPanel() {
@@ -437,6 +611,9 @@ function CategoryPanel() {
   // on whether any project is assigned.
   const { data, isPending, isError, refetch } = useMyCategories();
   const [modalOpen, setModalOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<ProjectCategoryDto | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectCategoryDto | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<CategoryStatusFilter>('ALL');
 
@@ -524,18 +701,19 @@ function CategoryPanel() {
               <th style={thStyle}>Category Name</th>
               <th style={thStyle}>Description</th>
               <th style={thStyle}>Status</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan={3} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                <td colSpan={4} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
                   No categories yet. Create one above.
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={3} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                <td colSpan={4} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
                   No matching categories found.
                 </td>
               </tr>
@@ -545,12 +723,28 @@ function CategoryPanel() {
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{c.name}</td>
                   <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{c.description ?? '-'}</td>
                   <td style={tdStyle}><StatusBadge status={c.status} /></td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <DropdownMenu
+                        ariaLabel={`Actions for ${c.name}`}
+                        open={openMenuId === c.id}
+                        onOpenChange={o => setOpenMenuId(o ? c.id : null)}
+                        items={[
+                          { key: 'edit', label: 'Edit', icon: Pencil, onSelect: () => setEditTarget(c) },
+                          { key: 'delete', label: 'Delete', icon: Trash2, color: '#E4373D', onSelect: () => setDeleteTarget(c) },
+                        ]}
+                      />
+                    </div>
+                  </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
       )}
+
+      <EditCategoryModal category={editTarget} onClose={() => setEditTarget(null)} />
+      <DeleteCategoryModal category={deleteTarget} onClose={() => setDeleteTarget(null)} />
 
       <NewCategoryModal
         open={modalOpen}
@@ -685,12 +879,29 @@ function SectionTabBar({ active, onChange }: { active: SectionTab; onChange: (ta
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function MyProjects() {
-  const { data: projects, isPending, isError, refetch } = useMyLeadProjects();
+  const { data: projects, isPending, isError, isFetching, refetch } = useMyLeadProjects();
+  const { showToast } = useToast();
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined);
   const [activeSection, setActiveSection] = useState<SectionTab>('projects');
   const [detailsProjectId, setDetailsProjectId] = useState<number | null>(null);
 
   const list = useMemo(() => projects ?? [], [projects]);
+
+  // Background refetch only — the initial load already renders its own skeleton via isPending,
+  // so this only covers the icon-spin/disabled state on the Refresh button.
+  const isRefreshing = !isPending && isFetching;
+
+  // Pulls the latest projects/status/client/team-size data from the backend rather than
+  // re-rendering whatever is already cached. A failed refresh keeps the currently displayed
+  // data on screen (React Query never clears `data` on a background refetch error) and surfaces
+  // the failure via a toast so the Team Lead can simply try again.
+  async function handleRefresh() {
+    if (isRefreshing) return;
+    const result = await refetch();
+    if (result.isError) {
+      showToast('error', extractApiError(result.error, 'Failed to refresh projects'));
+    }
+  }
 
   // Default the category panel to the first assigned project once the list loads.
   useEffect(() => {
@@ -719,7 +930,8 @@ export default function MyProjects() {
           projects={list}
           isPending={isPending}
           isError={isError}
-          refetch={refetch}
+          isRefreshing={isRefreshing}
+          onRefresh={handleRefresh}
           selectedProjectId={selectedProjectId}
           onSelect={setSelectedProjectId}
           onOpenDetails={setDetailsProjectId}

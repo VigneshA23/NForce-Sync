@@ -15,4 +15,6 @@ public interface ProjectCategoryRepository extends JpaRepository<ProjectCategory
     List<ProjectCategory> findByCreatedByIdWithRefs(@Param("createdById") Long createdById);
 
     boolean existsByCreatedByIdAndNameIgnoreCase(Long createdById, String name);
+
+    boolean existsByCreatedByIdAndNameIgnoreCaseAndIdNot(Long createdById, String name, Long id);
 }

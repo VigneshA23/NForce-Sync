@@ -29,6 +29,19 @@ export interface CreateCategoryPayload {
   status?: ProjectCategoryDto['status'];
 }
 
+/** Edit surface intentionally matches the "Existing Categories" table columns only. */
+export interface UpdateCategoryPayload {
+  name: string;
+  description?: string | null;
+  status?: ProjectCategoryDto['status'];
+}
+
+export interface DeleteCategoryResult {
+  /** false when the category was deactivated instead of removed (it has EOD history). */
+  deleted: boolean;
+  category: ProjectCategoryDto | null;
+}
+
 export interface ProjectDetailEmployeeDto {
   id: number;
   fullName: string;
@@ -63,6 +76,16 @@ export async function createProjectCategory(data: CreateCategoryPayload): Promis
   return res.data;
 }
 
+export async function updateProjectCategory(id: number, data: UpdateCategoryPayload): Promise<ProjectCategoryDto> {
+  const res = await api.put<ProjectCategoryDto>(`/team-lead/categories/${id}`, data);
+  return res.data;
+}
+
+export async function deleteProjectCategory(id: number): Promise<DeleteCategoryResult> {
+  const res = await api.delete<DeleteCategoryResult>(`/team-lead/categories/${id}`);
+  return res.data;
+}
+
 /** Details + currently assigned employees for one of the Team Lead's own projects. */
 export async function getProjectDetail(id: number): Promise<ProjectDetailDto> {
   const res = await api.get<ProjectDetailDto>(`/team-lead/projects/${id}`);
@@ -91,6 +114,26 @@ export function useCreateProjectCategory() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createProjectCategory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-lead', 'categories'] });
+    },
+  });
+}
+
+export function useUpdateProjectCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdateCategoryPayload }) => updateProjectCategory(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-lead', 'categories'] });
+    },
+  });
+}
+
+export function useDeleteProjectCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => deleteProjectCategory(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-lead', 'categories'] });
     },

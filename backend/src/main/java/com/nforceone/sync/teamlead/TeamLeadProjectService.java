@@ -2,6 +2,7 @@ package com.nforceone.sync.teamlead;
 
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.eod.EodTaskRepository;
 import com.nforceone.sync.project.AllocationRepository;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectCategory;
@@ -11,10 +12,12 @@ import com.nforceone.sync.project.TaskCategory;
 import com.nforceone.sync.project.TaskCategoryRepository;
 import com.nforceone.sync.project.Allocation;
 import com.nforceone.sync.project.dto.CreateProjectCategoryRequest;
+import com.nforceone.sync.project.dto.DeleteCategoryResult;
 import com.nforceone.sync.project.dto.EmployeeRefDto;
 import com.nforceone.sync.project.dto.ProjectCategoryDto;
 import com.nforceone.sync.project.dto.ProjectDetailDto;
 import com.nforceone.sync.project.dto.ProjectFullDto;
+import com.nforceone.sync.project.dto.UpdateProjectCategoryRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,17 +50,20 @@ public class TeamLeadProjectService {
     private final AllocationRepository allocationRepository;
     private final AppUserRepository appUserRepository;
     private final TaskCategoryRepository taskCategoryRepository;
+    private final EodTaskRepository eodTaskRepository;
 
     public TeamLeadProjectService(ProjectRepository projectRepository,
                                    ProjectCategoryRepository categoryRepository,
                                    AllocationRepository allocationRepository,
                                    AppUserRepository appUserRepository,
-                                   TaskCategoryRepository taskCategoryRepository) {
+                                   TaskCategoryRepository taskCategoryRepository,
+                                   EodTaskRepository eodTaskRepository) {
         this.projectRepository = projectRepository;
         this.categoryRepository = categoryRepository;
         this.allocationRepository = allocationRepository;
         this.appUserRepository = appUserRepository;
         this.taskCategoryRepository = taskCategoryRepository;
+        this.eodTaskRepository = eodTaskRepository;
     }
 
     public List<ProjectFullDto> listMyProjects(String actingEmail, LocalDate onDate) {
@@ -146,6 +152,92 @@ public class TeamLeadProjectService {
         category.setUpdatedAt(now);
 
         return ProjectCategoryDto.from(categoryRepository.save(category));
+    }
+
+    /**
+     * Same editable surface as the "Existing Categories" table: name, description, status.
+     * Project/code/color/ownership are intentionally not touched here — categories are
+     * team-level and generic, and editing must not be able to move a category to another
+     * project or team.
+     */
+    @Transactional
+    public ProjectCategoryDto updateCategory(Long id, UpdateProjectCategoryRequest req, String actingEmail) {
+        AppUser actor = resolveActor(actingEmail);
+        ProjectCategory category = requireOwnedCategory(id, actor.getId());
+
+        String name = req.name().trim();
+        if (!name.equalsIgnoreCase(category.getName())
+                && categoryRepository.existsByCreatedByIdAndNameIgnoreCaseAndIdNot(actor.getId(), name, id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A category with this name already exists");
+        }
+
+        ProjectCategory.Status status = resolveStatus(req.status());
+
+        category.setName(name);
+        category.setDescription(blankToNull(req.description()));
+        category.setStatus(status);
+        category.setUpdatedAt(OffsetDateTime.now());
+
+        // Keep the mirrored TaskCategory in sync so the Employee EOD dropdown reflects the
+        // rename/status change for this Team Lead's team without touching any eod_task rows
+        // that already reference it.
+        if (category.getTaskCategoryId() != null) {
+            taskCategoryRepository.findById(category.getTaskCategoryId()).ifPresent(tc -> {
+                tc.setName(name);
+                tc.setActive(status == ProjectCategory.Status.ACTIVE);
+                taskCategoryRepository.save(tc);
+            });
+        }
+
+        return ProjectCategoryDto.from(categoryRepository.save(category));
+    }
+
+    /**
+     * Hard-deletes the category (and its mirrored TaskCategory) when nothing historical
+     * references it. If the mirrored TaskCategory is already referenced by an eod_task row,
+     * hard-deleting it would either violate the FK or destroy the ability to render that
+     * historical entry — so the category is deactivated instead, exactly like clicking
+     * "Deactivate" on the status field. Historical EOD records are never touched.
+     */
+    @Transactional
+    public DeleteCategoryResult deleteCategory(Long id, String actingEmail) {
+        AppUser actor = resolveActor(actingEmail);
+        ProjectCategory category = requireOwnedCategory(id, actor.getId());
+
+        Long taskCategoryId = category.getTaskCategoryId();
+        boolean inUse = taskCategoryId != null && eodTaskRepository.existsByTaskCategoryId(taskCategoryId);
+
+        if (inUse) {
+            category.setStatus(ProjectCategory.Status.INACTIVE);
+            category.setUpdatedAt(OffsetDateTime.now());
+            taskCategoryRepository.findById(taskCategoryId).ifPresent(tc -> {
+                tc.setActive(false);
+                taskCategoryRepository.save(tc);
+            });
+            return new DeleteCategoryResult(false, ProjectCategoryDto.from(categoryRepository.save(category)));
+        }
+
+        categoryRepository.delete(category);
+        if (taskCategoryId != null) {
+            taskCategoryRepository.deleteById(taskCategoryId);
+        }
+        return new DeleteCategoryResult(true, null);
+    }
+
+    /**
+     * Re-derives ownership from the category's own {@code createdBy} rather than trusting the
+     * caller — the authorization boundary for edit/delete, same pattern as
+     * {@link #requireProjectAssignedToTeamLead}: a Team Lead can never mutate another Team
+     * Lead's category by supplying its id.
+     */
+    private ProjectCategory requireOwnedCategory(Long id, Long actorId) {
+        ProjectCategory category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+        if (!category.getCreatedBy().getId().equals(actorId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Category does not belong to you");
+        }
+        return category;
     }
 
     private AppUser resolveActor(String actingEmail) {

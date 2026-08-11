@@ -16,6 +16,13 @@ interface DropdownMenuProps {
   items: DropdownMenuItem[];
   align?: 'left' | 'right';
   ariaLabel?: string;
+  /**
+   * Controlled open state — pass both to let a parent coordinate multiple menus (e.g. a table
+   * where opening one row's menu should close every other row's). Omit both to fall back to the
+   * default uncontrolled behavior (each instance manages its own state independently).
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -23,8 +30,11 @@ interface DropdownMenuProps {
  * pattern used by the profile dropdown and workspace search in Shell.tsx,
  * generalized so any row/toolbar can reuse it instead of hand-rolling popovers.
  */
-export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions' }: DropdownMenuProps) {
-  const [open, setOpen] = useState(false);
+export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', open: openProp, onOpenChange }: DropdownMenuProps) {
+  const isControlled = openProp !== undefined && onOpenChange !== undefined;
+  const [openState, setOpenState] = useState(false);
+  const open = isControlled ? openProp : openState;
+  const setOpen = isControlled ? onOpenChange : setOpenState;
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,7 +60,7 @@ export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions' }: 
         aria-label={ariaLabel}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen(!open)}
         style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           width: 28, height: 28, borderRadius: 6, cursor: 'pointer',

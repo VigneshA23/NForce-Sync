@@ -1,9 +1,11 @@
 package com.nforceone.sync.teamlead;
 
 import com.nforceone.sync.project.dto.CreateProjectCategoryRequest;
+import com.nforceone.sync.project.dto.DeleteCategoryResult;
 import com.nforceone.sync.project.dto.ProjectCategoryDto;
 import com.nforceone.sync.project.dto.ProjectDetailDto;
 import com.nforceone.sync.project.dto.ProjectFullDto;
+import com.nforceone.sync.project.dto.UpdateProjectCategoryRequest;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -53,6 +55,16 @@ public class TeamLeadProjectController {
     @ResponseStatus(HttpStatus.CREATED)
     public ProjectCategoryDto createCategory(@Valid @RequestBody CreateProjectCategoryRequest request) {
         return teamLeadProjectService.createCategory(request, actingEmail(), LocalDate.now());
+    }
+
+    @PutMapping("/categories/{id}")
+    public ProjectCategoryDto updateCategory(@PathVariable Long id, @Valid @RequestBody UpdateProjectCategoryRequest request) {
+        return teamLeadProjectService.updateCategory(id, request, actingEmail());
+    }
+
+    @DeleteMapping("/categories/{id}")
+    public DeleteCategoryResult deleteCategory(@PathVariable Long id) {
+        return teamLeadProjectService.deleteCategory(id, actingEmail());
     }
 
     private String actingEmail() {

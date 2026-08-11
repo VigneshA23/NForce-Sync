@@ -13,6 +13,11 @@ import java.util.List;
 
 public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
 
+    // Used to decide whether deleting a team-level category can hard-delete its mirrored
+    // TaskCategory row, or must deactivate instead to keep historical EOD tasks intact — see
+    // TeamLeadProjectService.deleteCategory.
+    boolean existsByTaskCategoryId(Long taskCategoryId);
+
     @Query("SELECT t FROM EodTask t " +
            "WHERE t.taskStatus = com.nforceone.sync.eod.EodTask.TaskStatus.BLOCKED " +
            "AND t.eodEntry.employee.manager.id = :managerId " +
