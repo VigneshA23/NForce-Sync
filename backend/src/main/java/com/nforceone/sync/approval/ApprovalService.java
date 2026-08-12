@@ -327,10 +327,14 @@ public class ApprovalService {
         AppUser manager = entry.getEmployee().getManager();
         boolean isDirectManager = manager != null && manager.getId().equals(actor.getId());
 
+        // Keys off projectManager, NOT pm — pm holds the project's Team Lead. Using pm here let a
+        // PM load entries via findByProjectManagerIdAndStatus (which correctly keys off
+        // projectManager) and then get 403 on approve/reject, since their id was being matched
+        // against the Team Lead field instead.
         boolean isProjectManager = entry.getTasks().stream()
                 .map(EodTask::getProject)
                 .filter(Objects::nonNull)
-                .map(Project::getPm)
+                .map(Project::getProjectManager)
                 .filter(Objects::nonNull)
                 .anyMatch(pm -> pm.getId().equals(actor.getId()));
 

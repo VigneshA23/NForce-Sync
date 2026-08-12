@@ -25,8 +25,10 @@ import java.util.stream.Collectors;
 /**
  * Backs the read-only, cross-team Project Manager Blockers page — every blocker raised against
  * any project the PM owns, regardless of which Team Lead the reporting employee belongs to.
- * Scoped server-side to {@code project.pm.id == caller.id} (SUPERADMIN may view any PM's
- * portfolio), matching {@code ProjectDashboardService}'s convention.
+ * Scoped server-side to {@code project.projectManager.id == caller.id} (SUPERADMIN may view any
+ * PM's portfolio), matching {@code ProjectDashboardService}'s convention. Keys off
+ * {@code projectManager}, not {@code pm} — the latter holds the Team Lead, so a PM id would
+ * never match it.
  */
 @Service
 @Transactional(readOnly = true)
@@ -120,6 +122,6 @@ public class PmBlockersService {
         if (pm.getRole() == AppUser.Role.SUPERADMIN) {
             return projectRepository.findAllWithPmOrderByNameAsc();
         }
-        return projectRepository.findByPmIdOrderByNameAsc(pm.getId());
+        return projectRepository.findByProjectManagerIdOrderByNameAsc(pm.getId());
     }
 }
