@@ -434,10 +434,14 @@ export default function Notifications() {
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: ['notifications', 'list', page],
     queryFn: () => fetchNotifications(page, PAGE_SIZE),
-    staleTime: 30_000,
-    // Polled on the same 30s cadence as the unread count (useUnreadNotificationsCount)
-    // so a new blocker-reply notification appears in the list without a manual refresh.
-    refetchInterval: 30_000,
+    // staleTime: 0 so arriving on this page (refetchOnMount) or tabbing back to it
+    // (refetchOnWindowFocus) always hits the network — a cached page from before a TL
+    // resolved/replied was why a new notification needed a hard page refresh to appear.
+    staleTime: 0,
+    refetchOnMount: 'always',
+    // Polled on the same cadence as the unread count (useUnreadNotificationsCount) so a
+    // new blocker-reply/resolve notification appears in the list without a manual refresh.
+    refetchInterval: 15_000,
     placeholderData: (prev) => prev,
   });
 

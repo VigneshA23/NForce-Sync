@@ -75,8 +75,8 @@ public class BlockerConversationService {
 
         AppUser employee = task.getEodEntry().getEmployee();
         notificationService.send(employee.getId(), "BLOCKER_REPLY",
-                "Your Team Lead replied to your blocker",
-                lead.getFullName() + " replied to your blocker: \"" + task.getDescription() + "\"",
+                lead.getFullName() + " replied to your blocker",
+                lead.getFullName() + " replied to your blocker: \"" + blockerLabel(task) + "\"",
                 "/blockers?highlight=" + task.getId());
 
         return BlockerReplyDto.from(saved, task, attachmentsFor(saved.getId()));
@@ -106,7 +106,7 @@ public class BlockerConversationService {
         AppUser lead = task.getEodEntry().getEmployee().getManager();
         notificationService.send(lead.getId(), "BLOCKER_REPLY",
                 "New reply on a blocker",
-                employee.getFullName() + " replied to their blocker: \"" + task.getDescription() + "\"",
+                employee.getFullName() + " replied to their blocker: \"" + blockerLabel(task) + "\"",
                 "/team/blockers?highlight=" + task.getId());
 
         return BlockerReplyDto.from(saved, task, attachmentsFor(saved.getId()));
@@ -225,5 +225,12 @@ public class BlockerConversationService {
     private AppUser requireUser(String email) {
         return userRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+    }
+
+    // task.getDescription() is a nullable free-text column — some legacy blockers have none,
+    // which would otherwise surface as a literal "null" in the notification message.
+    private static String blockerLabel(EodTask task) {
+        String description = task.getDescription();
+        return description == null || description.isBlank() ? "a blocker" : description;
     }
 }

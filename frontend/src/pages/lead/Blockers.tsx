@@ -8,6 +8,7 @@ import {
 import { Card } from '../../components/KpiCard';
 import { Avatar, avatarColor, TL_AVATAR_BG, BlockerThreadView } from '../../components/BlockerThread';
 import { FilterDropdown, toggleFilterVal } from '../../components/FilterDropdown';
+import { ConfirmModal } from '../../components/ConfirmModal';
 import {
   useTeamLeadBlockers, useTeamLeadBlocker, useSetBlockerStatus, type TeamBlockerDto, type DateRange,
 } from '../../api/teamLead';
@@ -350,6 +351,7 @@ function InfoField({ icon, label, children }: { icon: React.ReactNode; label: st
 function DetailPanel({ b, range, onClose }: { b: TeamBlockerDto; range: DateRange; onClose: () => void }) {
   const { date: reportedDate, time: reportedTime } = fmtDateTimeParts(b.submittedAt ?? `${b.entryDate}T09:00:00`);
   const setStatus = useSetBlockerStatus(range);
+  const [confirmResolve, setConfirmResolve] = useState(false);
 
   return (
     <Card style={{ padding: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -368,11 +370,18 @@ function DetailPanel({ b, range, onClose }: { b: TeamBlockerDto; range: DateRang
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <StatusDropdown
-              status={b.status}
-              disabled={setStatus.isPending}
-              onChange={(status) => setStatus.mutate({ taskId: b.taskId, status })}
-            />
+            {b.status === 'RESOLVED' ? (
+              <StatusBadge status={b.status} />
+            ) : (
+              <StatusDropdown
+                status={b.status}
+                disabled={setStatus.isPending}
+                onChange={(status) => {
+                  if (status === 'RESOLVED') setConfirmResolve(true);
+                  else setStatus.mutate({ taskId: b.taskId, status });
+                }}
+              />
+            )}
             <button
               onClick={onClose}
               aria-label="Close"
@@ -424,6 +433,20 @@ function DetailPanel({ b, range, onClose }: { b: TeamBlockerDto; range: DateRang
           />
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmResolve}
+        onClose={() => setConfirmResolve(false)}
+        onConfirm={() => {
+          setStatus.mutate({ taskId: b.taskId, status: 'RESOLVED' }, {
+            onSuccess: () => setConfirmResolve(false),
+          });
+        }}
+        title="Resolve this blocker?"
+        message={`This will mark the blocker as resolved and notify ${b.employeeName}. This cannot be undone.`}
+        confirmLabel="Yes, Resolve"
+        isPending={setStatus.isPending}
+      />
     </Card>
   );
 }

@@ -47,8 +47,11 @@ export function useUnreadNotificationsCount() {
   const { data } = useQuery({
     queryKey: ["notifications", "unread-count"],
     queryFn: fetchUnreadCount,
-    refetchInterval: 30_000,
-    staleTime: 15_000,
+    refetchInterval: 15_000,
+    // staleTime: 0 so tabbing back to the app (refetchOnWindowFocus) always hits the
+    // network instead of serving a cached count from before a TL resolved/replied —
+    // that gap was why the bell badge needed a hard page refresh to update.
+    staleTime: 0,
   });
   return data ?? 0;
 }

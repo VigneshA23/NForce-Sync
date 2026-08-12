@@ -13,6 +13,7 @@ import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
 import com.nforceone.sync.eod.EodTaskRepository;
+import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.org.Designation;
 import com.nforceone.sync.org.DesignationRepository;
 import com.nforceone.sync.teamlead.dto.BlockerStatusRequest;
@@ -64,6 +65,7 @@ public class TeamLeadService {
     private final ApprovalActionRepository     actionRepository;
     private final DesignationRepository        designationRepository;
     private final BlockerReplyRepository       replyRepository;
+    private final NotificationService          notificationService;
 
     public TeamLeadService(AppUserRepository userRepository,
                             EodEntryRepository entryRepository,
@@ -73,7 +75,8 @@ public class TeamLeadService {
                             UtilizationService utilizationService,
                             ApprovalActionRepository actionRepository,
                             DesignationRepository designationRepository,
-                            BlockerReplyRepository replyRepository) {
+                            BlockerReplyRepository replyRepository,
+                            NotificationService notificationService) {
         this.userRepository    = userRepository;
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
@@ -83,6 +86,7 @@ public class TeamLeadService {
         this.actionRepository  = actionRepository;
         this.designationRepository = designationRepository;
         this.replyRepository   = replyRepository;
+        this.notificationService = notificationService;
     }
 
     public ThresholdsDto getThresholds() {
@@ -238,6 +242,13 @@ public class TeamLeadService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
 
+        // Resolved is a terminal state — reject any further status change (including via a
+        // direct API call bypassing the UI's disabled control) rather than allowing it to be
+        // silently reopened or re-resolved.
+        if (task.getResolvedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Blocker already resolved");
+        }
+
         OffsetDateTime now = OffsetDateTime.now();
         switch (body.status() == null ? "" : body.status()) {
             case "RESOLVED" -> {
@@ -267,7 +278,30 @@ public class TeamLeadService {
         }
 
         EodTask saved = taskRepository.save(task);
+
+        if ("RESOLVED".equals(body.status())) {
+            AppUser employee = task.getEodEntry().getEmployee();
+            notificationService.send(employee.getId(), "BLOCKER_RESOLVED",
+                    "Blocker resolved",
+                    "Hi " + firstName(employee) + ", the blocker regarding \"" + blockerLabel(task) + "\" has been resolved.",
+                    "/blockers?highlight=" + task.getId());
+        }
+
         return TeamBlockerDto.from(saved, replyRepository.findByTaskIdOrderByCreatedAtAsc(taskId));
+    }
+
+    // AppUser has no dedicated first-name field — derive it from the space-separated full name.
+    private static String firstName(AppUser user) {
+        String full = user.getFullName();
+        if (full == null || full.isBlank()) return "there";
+        return full.trim().split("\\s+")[0];
+    }
+
+    // task.getDescription() is a nullable free-text column — some legacy blockers have none,
+    // which would otherwise surface as a literal "null" in the notification message.
+    private static String blockerLabel(EodTask task) {
+        String description = task.getDescription();
+        return description == null || description.isBlank() ? "a blocker" : description;
     }
 
     public DashboardTrendDto getTrend(LocalDate endDate, int days, String actingEmail) {
