@@ -51,11 +51,18 @@ public class ProjectController {
         return projectService.create(request);
     }
 
-    /** Users assignable as a project's TL — active Team Leads (MANAGER) and Project Managers. */
+    /** Users assignable as a project's Team Lead — active MANAGERs only. */
     @GetMapping("/leads")
     @PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
     public List<EmployeeRefDto> listAssignableLeads() {
         return projectService.listAssignableLeads();
+    }
+
+    /** Users assignable as a project's overseeing PM — active PM accounts. */
+    @GetMapping("/managers")
+    @PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
+    public List<EmployeeRefDto> listAssignableProjectManagers() {
+        return projectService.listAssignableProjectManagers();
     }
 
     @PatchMapping("/{id}")

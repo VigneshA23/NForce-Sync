@@ -12,6 +12,10 @@ export interface EodTaskDto {
   isBillable: boolean;
   blockerReason: string | null;
   supportNeeded: string | null;
+  /** Whether this task's project allows a billable flag at all (server-computed, mirrors ProjectDto.billableAllowed). */
+  billableAllowed: boolean;
+  /** Whether a Team Lead has explicitly decided this task's billable status (as opposed to it carrying isBillable's default). */
+  billableDecided: boolean;
 }
 
 export interface EodEntryDto {
@@ -41,6 +45,10 @@ export interface EodEntryDto {
   tlId?: number | null;
   undertimeHours?: number | null;
   isResubmission?: boolean | null;
+  /** Who last approved/rejected this entry (any role), and when — null while still SUBMITTED. */
+  decidedByName?: string | null;
+  decidedByRole?: string | null;
+  decidedAt?: string | null;
 }
 
 export interface SaveTaskRequest {

@@ -33,8 +33,12 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
             "SELECT p FROM Project p LEFT JOIN FETCH p.pm ORDER BY p.name ASC")
     List<Project> findAllWithPmOrderByNameAsc();
 
-    // The Project Dashboard is scoped to the projects a given PM owns.
-    List<Project> findByPmIdOrderByNameAsc(Long pmId);
+    /**
+     * Projects a given PM oversees — the scope for the Project Dashboard and the PM reports.
+     * Keys off {@code projectManager}, not {@code pm}: the latter holds the Team Lead, who is a
+     * MANAGER, so a PM id would never match it.
+     */
+    List<Project> findByProjectManagerIdOrderByNameAsc(Long projectManagerId);
 
     /** FK guard for deleting a billing model — mirrors AppUserRepository.countByDepartmentId. */
     long countByBillingModelId(Long billingModelId);

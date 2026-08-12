@@ -63,6 +63,40 @@ export function useApprove() {
   });
 }
 
+/**
+ * Sets one task's billable flag during review — only while the entry is still SUBMITTED.
+ *
+ * Updates the pending-list cache directly (optimistically on request, reconciled with the
+ * server's response on success) instead of invalidating — an invalidate would refetch the whole
+ * pending list and re-render every row/modal in the middle of the TL ticking through tasks,
+ * which reads as the checkbox area flickering for an unrelated network round trip.
+ */
+export function usePatchTaskBillable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entryId, taskId, isBillable }: { entryId: number; taskId: number; isBillable: boolean }) =>
+      api.patch<EodEntryDto>(`/approvals/${entryId}/tasks/${taskId}/billable`, { isBillable }).then(r => r.data),
+    onMutate: async ({ entryId, taskId, isBillable }) => {
+      const previous = qc.getQueriesData<EodEntryDto[]>({ queryKey: ['approvals', 'pending'] });
+      qc.setQueriesData<EodEntryDto[]>({ queryKey: ['approvals', 'pending'] }, old =>
+        old?.map(e => e.id !== entryId ? e : {
+          ...e,
+          tasks: e.tasks.map(t => t.id !== taskId ? t : { ...t, isBillable, billableDecided: true }),
+        }),
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      context?.previous.forEach(([key, data]) => qc.setQueryData(key, data));
+    },
+    onSuccess: (updated) => {
+      qc.setQueriesData<EodEntryDto[]>({ queryKey: ['approvals', 'pending'] }, old =>
+        old?.map(e => e.id === updated.id ? updated : e),
+      );
+    },
+  });
+}
+
 export function useReject() {
   const qc = useQueryClient();
   return useMutation({

@@ -12,6 +12,7 @@ import {
   useAllProjects, useAllocations, useAssignableEmployees,
   useCreateProject, useUpdateProject, useCreateAllocation, useUpdateAllocation, useDeleteAllocation,
   useAssignableLeads,
+  useAssignableProjectManagers,
 } from '../../api/projects';
 import type { ProjectFullDto, AllocationDto } from '../../api/projects';
 
@@ -214,8 +215,10 @@ interface ProjectFormState {
   status: ProjectFullDto['status'];
   startDate: string;
   endDate: string;
-  /** The project's TL, held as a string because it is bound to a <select>. */
+  /** The project's Team Lead, held as a string because it is bound to a <select>. */
   pmId: string;
+  /** The overseeing PM — what scopes their Approvals queue, dashboard and reports. */
+  projectManagerId: string;
 }
 
 /**
@@ -244,6 +247,29 @@ function fmtDateDMY(iso: string | null | undefined): string {
   return y && m && d ? `${d}-${m}-${y}` : iso;
 }
 
+/** Blank or null end date = open-ended; mirrors Allocation.OPEN_ENDED and V54's 9999-12-31. */
+const OPEN_ENDED_ISO = '9999-12-31';
+
+/**
+ * Whether two allocation windows overlap. Both are inclusive at each end, so windows that merely
+ * touch — one ends 31-07, the next starts 01-08 — do not overlap and a re-assignment is allowed.
+ *
+ * ISO `yyyy-MM-dd` sorts lexicographically, so these are plain string compares: no Date parsing and
+ * so no timezone shift. Advisory only — AllocationService enforces the same rule server-side.
+ */
+function windowsOverlap(aFrom: string, aTo: string | null, bFrom: string, bTo: string | null): boolean {
+  return aFrom <= (bTo || OPEN_ENDED_ISO) && (aTo || OPEN_ENDED_ISO) >= bFrom;
+}
+
+/** Shared wording for the clash message, so both allocation modals read identically. */
+function describeClash(a: AllocationDto): string {
+  const window = a.effectiveTo
+    ? `from ${fmtDateDMY(a.effectiveFrom)} to ${fmtDateDMY(a.effectiveTo)}`
+    : `from ${fmtDateDMY(a.effectiveFrom)} onwards (no end date)`;
+  return `${a.employeeName} is already allocated to ${a.projectCode} ${window}.`
+    + ' Choose dates outside that window.';
+}
+
 /** Earliest selectable end date: the day after the start, since the two may not be equal. */
 function dayAfterISO(iso: string): string | undefined {
   if (!iso) return undefined;
@@ -255,7 +281,7 @@ function dayAfterISO(iso: string): string | undefined {
 
 const EMPTY_PROJECT_FORM: ProjectFormState = {
   code: '', name: '', client: '', projectTypeId: '', billingModelId: '',
-  status: 'ACTIVE', startDate: todayISO(), endDate: '', pmId: '',
+  status: 'ACTIVE', startDate: todayISO(), endDate: '', pmId: '', projectManagerId: '',
 };
 
 function ProjectModal({ open, onClose, editing }: {
@@ -265,6 +291,7 @@ function ProjectModal({ open, onClose, editing }: {
   const createMutation = useCreateProject();
   const updateMutation = useUpdateProject();
   const { data: leads } = useAssignableLeads();
+  const { data: projectManagers } = useAssignableProjectManagers();
   const { data: billingModels } = useQuery({
     queryKey: ['org', 'billing-models'],
     queryFn: listBillingModels,
@@ -288,6 +315,7 @@ function ProjectModal({ open, onClose, editing }: {
       startDate: editing.startDate ?? '',
       endDate: editing.endDate ?? '',
       pmId: editing.pmId != null ? String(editing.pmId) : '',
+      projectManagerId: editing.projectManagerId != null ? String(editing.projectManagerId) : '',
     } : EMPTY_PROJECT_FORM);
   }, [open, editing]);
 
@@ -299,6 +327,12 @@ function ProjectModal({ open, onClose, editing }: {
   const leadOptions = leads ?? [];
   const currentLeadMissing = editing?.pmId != null
     && !leadOptions.some(l => l.id === editing.pmId);
+
+  // Same grandfathering for the overseeing PM: a deactivated PM stays selectable on projects they
+  // already hold, so an unrelated edit can't silently move oversight.
+  const managerOptions = projectManagers ?? [];
+  const currentManagerMissing = editing?.projectManagerId != null
+    && !managerOptions.some(m => m.id === editing.projectManagerId);
 
   // Only active models are offered; a project already on a deactivated one keeps it (see the option
   // rendered below), which matches how the server grandfathers an unchanged value.
@@ -323,10 +357,12 @@ function ProjectModal({ open, onClose, editing }: {
   const canSubmit = form.name.trim() !== ''
     && form.code.trim() !== ''
     && form.projectTypeId !== ''
+    && form.billingModelId !== ''
     && form.startDate !== ''
     && (!showClient || form.client.trim() !== '')
     && (!endDateRequired || form.endDate !== '')
     && form.pmId !== ''
+    && form.projectManagerId !== ''
     && !badDateOrder;
 
   function handleClose() {
@@ -360,11 +396,12 @@ function ProjectModal({ open, onClose, editing }: {
             // Server also nulls this for a type without requiresClient; sent as null so the two agree.
             client: showClient ? form.client.trim() : null,
             projectTypeId: Number(form.projectTypeId),
-            billingModelId: form.billingModelId === '' ? null : Number(form.billingModelId),
+            billingModelId: Number(form.billingModelId),
             status: form.status,
             startDate: form.startDate,
             endDate: form.endDate || null,
             pmId: Number(form.pmId),
+            projectManagerId: Number(form.projectManagerId),
           },
         });
         showToast('success', 'Project updated');
@@ -374,10 +411,11 @@ function ProjectModal({ open, onClose, editing }: {
           name: form.name.trim(),
           client: showClient ? form.client.trim() : null,
           projectTypeId: Number(form.projectTypeId),
-          billingModelId: form.billingModelId === '' ? null : Number(form.billingModelId),
+          billingModelId: Number(form.billingModelId),
           startDate: form.startDate,
           endDate: form.endDate || null,
           pmId: Number(form.pmId),
+          projectManagerId: Number(form.projectManagerId),
         });
         showToast('success', 'Project created');
       }
@@ -432,10 +470,12 @@ function ProjectModal({ open, onClose, editing }: {
         <div style={{ display: 'grid', gridTemplateColumns: editing ? '1fr 1fr' : '1fr', gap: 14, marginBottom: 14 }}>
           <div>
             {/* Maintained by a Super Admin in Organization Masters → Billing Models. */}
-            <label style={labelStyle}>Billing Model</label>
+            <label style={labelStyle}>Billing Model *</label>
             <select style={inputStyle} value={form.billingModelId}
               onChange={e => setForm(f => ({ ...f, billingModelId: e.target.value }))}>
-              <option value="">—</option>
+              {/* Placeholder rather than a blank "no model" choice — mandatory since V53, but it
+                  must not default to whichever model happens to sort first. */}
+              <option value="">Select billing model…</option>
               {/* An inactive model is hidden, but keep the project's own so editing can't clear it. */}
               {currentBillingModelMissing && (
                 <option value={String(editing!.billingModelId)}>{editing!.billingModel} (inactive)</option>
@@ -459,19 +499,38 @@ function ProjectModal({ open, onClose, editing }: {
           )}
         </div>
 
-        {/* TL — whoever holds this may approve EOD entries on the project, so it is required. */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>TL *</label>
-          <select style={inputStyle} value={form.pmId}
-            onChange={e => setForm(f => ({ ...f, pmId: e.target.value }))}>
-            <option value="">Select TL…</option>
-            {currentLeadMissing && (
-              <option value={String(editing!.pmId)}>{editing!.pmName} (current)</option>
-            )}
-            {leadOptions.map(l => (
-              <option key={l.id} value={l.id}>{l.fullName} ({l.employeeCode})</option>
-            ))}
-          </select>
+        {/* Two distinct roles: the Team Lead decides this project's EOD entries, while the Project
+            Manager oversees it — that is what puts the project in their Approvals queue, Project
+            Dashboard and reports. Both are required. */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+          <div>
+            <label style={labelStyle}>Team Lead *</label>
+            <select style={inputStyle} value={form.pmId}
+              onChange={e => setForm(f => ({ ...f, pmId: e.target.value }))}>
+              <option value="">Select Team Lead…</option>
+              {currentLeadMissing && (
+                <option value={String(editing!.pmId)}>{editing!.pmName} (current)</option>
+              )}
+              {leadOptions.map(l => (
+                <option key={l.id} value={l.id}>{l.fullName} ({l.employeeCode})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Project Manager *</label>
+            <select style={inputStyle} value={form.projectManagerId}
+              onChange={e => setForm(f => ({ ...f, projectManagerId: e.target.value }))}>
+              <option value="">Select Project Manager…</option>
+              {currentManagerMissing && (
+                <option value={String(editing!.projectManagerId)}>
+                  {editing!.projectManagerName} (current)
+                </option>
+              )}
+              {managerOptions.map(m => (
+                <option key={m.id} value={m.id}>{m.fullName} ({m.employeeCode})</option>
+              ))}
+            </select>
+          </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
           <div>
@@ -529,19 +588,42 @@ function ProjectsTab() {
   const [editing, setEditing] = useState<ProjectFullDto | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [leadFilter, setLeadFilter] = useState('');
 
-  // Only the free-text box is debounced; the status select applies immediately.
+  // Only the free-text box is debounced; the selects apply immediately.
   const debouncedSearch = useDebouncedValue(search, 300);
 
   const filtered = useMemo(() => {
     const term = debouncedSearch.trim().toLowerCase();
     return (data ?? []).filter(p =>
       (term === '' || p.name.toLowerCase().includes(term))
-      && (statusFilter === '' || p.status === statusFilter),
+      && (statusFilter === '' || p.status === statusFilter)
+      && (leadFilter === '' || String(p.pmId) === leadFilter),
     );
-  }, [data, debouncedSearch, statusFilter]);
+  }, [data, debouncedSearch, statusFilter, leadFilter]);
 
-  const filtersActive = debouncedSearch.trim() !== '' || statusFilter !== '';
+  // Team Lead options come from the leads actually holding a project, not the full assignable
+  // list — filtering by someone with no projects would only ever yield an empty table.
+  const leadOptions = useMemo(() => {
+    const byId = new Map<number, string>();
+    for (const p of data ?? []) {
+      if (p.pmId != null) byId.set(p.pmId, p.pmName ?? `#${p.pmId}`);
+    }
+    return [...byId.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [data]);
+
+  // Drives the empty-state wording, so it tracks the debounced term the list was actually filtered by.
+  const filtersActive = debouncedSearch.trim() !== '' || statusFilter !== '' || leadFilter !== '';
+  // Drives the Clear button, which must appear the moment you type rather than 300ms later.
+  const anyFilterSet = search !== '' || statusFilter !== '' || leadFilter !== '';
+
+  function clearFilters() {
+    setSearch('');
+    setStatusFilter('');
+    setLeadFilter('');
+  }
 
   function openCreate() { setEditing(null); setModalOpen(true); }
   function openEdit(p: ProjectFullDto) { setEditing(p); setModalOpen(true); }
@@ -575,6 +657,35 @@ function ProjectsTab() {
           <option key={value} value={value}>{cfg.label}</option>
         ))}
       </select>
+      <select
+        value={leadFilter}
+        onChange={e => setLeadFilter(e.target.value)}
+        aria-label="Filter by Team Lead"
+        style={{ ...inputStyle, width: 190, fontWeight: 400 }}
+      >
+        <option value="">Filter by Team Lead</option>
+        {leadOptions.map(l => (
+          <option key={l.id} value={String(l.id)}>{l.name}</option>
+        ))}
+      </select>
+      {/* Resets all three at once — with search, status and Team Lead set, clearing them one by one
+          is three interactions. Only rendered while something is actually filtered. */}
+      {anyFilterSet && (
+        <button
+          type="button"
+          onClick={clearFilters}
+          aria-label="Clear all filters"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 12px',
+            background: 'transparent', border: '1px solid var(--line2)', borderRadius: 7,
+            color: 'var(--txt-mut)', fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--txt)'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'var(--txt-mut)'; }}
+        >
+          <X size={13} aria-hidden="true" /> Clear
+        </button>
+      )}
     </>
   );
 
@@ -609,10 +720,12 @@ function ProjectsTab() {
           <thead>
             <tr>
               <th style={thStyle}>Code</th>
-              <th style={thStyle}>Name</th>
+              <th style={thStyle}>Project Name</th>
+              <th style={thStyle}>Project Type</th>
               <th style={thStyle}>Client</th>
+              <th style={thStyle}>Billing Model</th>
               <th style={thStyle}>Timeline</th>
-              <th style={thStyle}>TL</th>
+              <th style={thStyle}>Team Lead</th>
               <th style={thStyle}>Headcount</th>
               <th style={thStyle}>Status</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
@@ -621,7 +734,7 @@ function ProjectsTab() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                <td colSpan={10} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
                   {filtersActive
                     ? 'No projects match your search or filter.'
                     : 'No projects yet. Create one above.'}
@@ -632,8 +745,12 @@ function ProjectsTab() {
                 <tr key={p.id}>
                   <td style={{ ...tdStyle, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-mut)' }}>{p.code}</td>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{p.name}</td>
-                  {/* Internal projects have no client by design — the server forces it null. */}
+                  {/* Master-managed (Organization Masters → Project Types); the DTO sends its name. */}
+                  <td style={tdStyle}>{p.projectType ?? '-'}</td>
+                  {/* A type without requiresClient has no client by design — the server forces it null. */}
                   <td style={tdStyle}>{p.client ?? '-'}</td>
+                  {/* Optional on a project, so unset is normal rather than an error. */}
+                  <td style={tdStyle}>{p.billingModel ?? '-'}</td>
                   {/* Derived, never stored: a recorded end date always wins; with none, the status
                       supplies the word. Labels come straight from STATUS_CFG, so this reads
                       "On Hold" rather than ON_HOLD and a new status needs no change here. */}
@@ -671,6 +788,10 @@ function AllocationModal({ open, onClose, projects }: {
 }) {
   const { showToast } = useToast();
   const { data: employees } = useAssignableEmployees();
+  // Unfiltered on purpose: this form can pick any ACTIVE project, while the tab's own list is
+  // narrowed server-side by its project filter — reusing that would miss clashes on other projects.
+  // With no filter set it is the same cached query, so it costs no extra request.
+  const { data: allAllocations } = useAllocations();
   const createMutation = useCreateAllocation();
   const [employeeId, setEmployeeId] = useState('');
   const [projectId, setProjectId] = useState('');
@@ -679,6 +800,16 @@ function AllocationModal({ open, onClose, projects }: {
   const [error, setError] = useState<string | null>(null);
 
   const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
+
+  // Tells the PM the person is already on this project before they submit. The server repeats the
+  // check and is the authority — this only saves a round trip.
+  const clash = useMemo(() => {
+    if (!employeeId || !projectId || !effectiveFrom || badDateOrder) return null;
+    return (allAllocations ?? []).find(a =>
+      a.employeeId === Number(employeeId)
+      && a.projectId === Number(projectId)
+      && windowsOverlap(a.effectiveFrom, a.effectiveTo, effectiveFrom, effectiveTo || null)) ?? null;
+  }, [allAllocations, employeeId, projectId, effectiveFrom, effectiveTo, badDateOrder]);
 
   // Only ACTIVE projects are allocatable — you cannot staff someone onto work that is
   // completed, on hold, or inactive. It would also be invisible to them: the EOD Project
@@ -697,7 +828,7 @@ function AllocationModal({ open, onClose, projects }: {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!employeeId || !projectId || !effectiveFrom || badDateOrder) return;
+    if (!employeeId || !projectId || !effectiveFrom || badDateOrder || clash) return;
     setError(null);
     try {
       await createMutation.mutateAsync({
@@ -760,11 +891,16 @@ function AllocationModal({ open, onClose, projects }: {
             )}
           </div>
         </div>
+        {clash && (
+          <p style={{ fontSize: 11, color: 'var(--risk)', margin: '0 0 14px' }} role="alert">
+            {describeClash(clash)}
+          </p>
+        )}
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             type="submit"
             disabled={createMutation.isPending || !employeeId || !projectId
-              || !effectiveFrom || badDateOrder}
+              || !effectiveFrom || badDateOrder || clash != null}
             style={{
               padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
               color: '#fff', fontSize: 13, fontWeight: 600,
@@ -788,6 +924,7 @@ function AllocationModal({ open, onClose, projects }: {
 function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDto | null; onClose: () => void }) {
   const { showToast } = useToast();
   const updateMutation = useUpdateAllocation();
+  const { data: allAllocations } = useAllocations();
   const [effectiveFrom, setEffectiveFrom] = useState('');
   const [effectiveTo, setEffectiveTo] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -802,9 +939,20 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
 
   const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
 
+  // Widening a window can collide with another allocation of the same pair. Excludes this row, so
+  // re-saving its own dates is never a conflict with itself.
+  const clash = useMemo(() => {
+    if (!allocation || !effectiveFrom || badDateOrder) return null;
+    return (allAllocations ?? []).find(a =>
+      a.id !== allocation.id
+      && a.employeeId === allocation.employeeId
+      && a.projectId === allocation.projectId
+      && windowsOverlap(a.effectiveFrom, a.effectiveTo, effectiveFrom, effectiveTo || null)) ?? null;
+  }, [allAllocations, allocation, effectiveFrom, effectiveTo, badDateOrder]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!allocation || !effectiveFrom || badDateOrder) return;
+    if (!allocation || !effectiveFrom || badDateOrder || clash) return;
     setError(null);
     try {
       await updateMutation.mutateAsync({
@@ -868,10 +1016,16 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
             </div>
           </div>
 
+          {clash && (
+            <p style={{ fontSize: 11, color: 'var(--risk)', margin: '0 0 14px' }} role="alert">
+              {describeClash(clash)}
+            </p>
+          )}
+
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="submit"
-              disabled={updateMutation.isPending || !effectiveFrom || badDateOrder}
+              disabled={updateMutation.isPending || !effectiveFrom || badDateOrder || clash != null}
               style={{
                 padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
                 color: '#fff', fontSize: 13, fontWeight: 600,

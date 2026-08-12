@@ -13,14 +13,19 @@ public record UpdateProjectRequest(
         @NotBlank @Size(max = 200) String name,
         @Size(max = 200) String client,
         @NotNull Long projectTypeId,
-        Long billingModelId,
+        @NotNull Long billingModelId,
         @NotBlank String status,
         @NotNull LocalDate startDate,
         LocalDate endDate,
         /**
-         * The project's TL. Must be an active MANAGER (Team Lead) or PM, except that the project's
+         * The project's Team Lead. Must be an active MANAGER, except that the project's
          * existing owner may be re-sent unchanged — that is what lets legacy superadmin-owned
          * projects be edited without forcing a reassignment.
          */
-        @NotNull Long pmId
+        @NotNull Long pmId,
+        /**
+         * The overseeing PM. Must be an active PM, except that the project's current holder may be
+         * re-sent unchanged, so an unrelated edit never forces oversight to move.
+         */
+        @NotNull Long projectManagerId
 ) {}

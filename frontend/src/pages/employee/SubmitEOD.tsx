@@ -19,7 +19,7 @@ import type { EodEntryDto, EodTaskDto } from '../../api/eod';
  * the validator resolve labels from one place.
  */
 const TASK_STATUSES = [
-  { value: '',            label: 'Select Status...' },
+  { value: '',            label: 'Status' },
   { value: 'COMPLETED',   label: 'Completed' },
   { value: 'IN_PROGRESS', label: 'In Progress' },
   { value: 'BLOCKED',     label: 'Blocked' },
@@ -638,10 +638,10 @@ export default function SubmitEOD() {
     updateTask(localId, {
       taskCategoryId:   id,
       categoryName:     cat?.name ?? null,
-      // Billable is NOT derived from the category — the employee decides, and changing category
-      // leaves their choice alone. Leave is the one exception: it is not project work, so no
-      // project, never billable, always complete. Mirrored server-side in EodService.buildTask,
-      // which is what actually enforces it.
+      // Billable is not visible/editable by the employee (server-derived from project
+      // eligibility), so changing category otherwise leaves it alone. Leave is the one
+      // exception: it is not project work, so no project, never billable, always complete.
+      // Mirrored server-side in EodService.buildTask, which is what actually enforces it.
       ...(isLeave
         ? { projectId: null, projectCode: null, isBillable: false, taskStatus: 'COMPLETED' }
         : {}),
@@ -1116,19 +1116,6 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
   const isLeave   = task.categoryName === LEAVE;
   const isBlocked = task.taskStatus === 'BLOCKED';
 
-  // Billable is only available on a CLIENT project with an active billing model. Eligibility is
-  // computed server-side (ProjectDto.billableAllowed) and re-enforced there on save, so this is
-  // purely the visible cue. A row with no project chosen yet has nothing to judge, so it stays
-  // enabled and resolves as soon as one is picked.
-  const selectedProject = projects.find(p => p.id === task.projectId);
-  const projectBlocksBillable = selectedProject != null && !selectedProject.billableAllowed;
-  const billableLocked = isLeave || projectBlocksBillable;
-  const billableReason = isLeave
-    ? 'Leave is never billable'
-    : projectBlocksBillable
-      ? `${selectedProject.code} is not billable — it must be a client project with an active billing model`
-      : undefined;
-
   const statusColor: Record<string, string> = {
     COMPLETED:   '#2FB67C',
     IN_PROGRESS: '#4C8DD6',
@@ -1169,7 +1156,7 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
                 }}
                 disabled={isLeave}
               >
-                <option value="">— Project —</option>
+                <option value="">Project</option>
                 {projects.map(p => (
                   <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
                 ))}
@@ -1190,7 +1177,7 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
               <div style={{ ...inputStyle, fontSize: 12 }}>{task.categoryName ?? '—'}</div>
             ) : (
               <Sel value={task.taskCategoryId ?? ''} onChange={e => onCategoryChange(e.target.value)}>
-                <option value="">— Category —</option>
+                <option value="">Category</option>
                 {categories.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
@@ -1216,7 +1203,10 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
             <Label>Status <Req /></Label>
             {isReadOnly ? (
               <div style={{ ...inputStyle, fontSize: 12, color: statusColor[task.taskStatus] ?? 'var(--txt)' }}>
-                {TASK_STATUSES.find(s => s.value === task.taskStatus)?.label ?? task.taskStatus}
+                {/* An unset status must not echo the dropdown's own placeholder back as a value. */}
+                {task.taskStatus
+                  ? TASK_STATUSES.find(s => s.value === task.taskStatus)?.label ?? task.taskStatus
+                  : '-'}
               </div>
             ) : (
               <Sel
@@ -1228,31 +1218,19 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
               </Sel>
             )}
           </div>
-          {/* Billable + remove */}
+          {/* Remove */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Label>Billable</Label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 2 }}>
-              <input
-                type="checkbox"
-                id={`bill-${task.localId}`}
-                checked={billableLocked ? false : task.isBillable}
-                onChange={e => onUpdate({ isBillable: e.target.checked })}
-                disabled={isReadOnly || billableLocked}
-                title={billableReason}
-                style={{ width: 14, height: 14, accentColor: 'var(--brand)', cursor: (isReadOnly || billableLocked) ? 'not-allowed' : 'pointer' }}
-              />
-              {!isReadOnly && canRemove && (
-                <button
-                  onClick={onRemove}
-                  title="Remove task"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', padding: 2, display: 'flex', marginLeft: 4 }}
-                  onMouseEnter={e => (e.currentTarget.style.color = '#E4373D')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--txt-dim)')}
-                >
-                  <Trash2 size={13} aria-hidden />
-                </button>
-              )}
-            </div>
+            {!isReadOnly && canRemove && (
+              <button
+                onClick={onRemove}
+                title="Remove task"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', padding: 2, display: 'flex', alignSelf: 'flex-end' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#E4373D')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'var(--txt-dim)')}
+              >
+                <Trash2 size={13} aria-hidden />
+              </button>
+            )}
           </div>
         </div>
       </div>

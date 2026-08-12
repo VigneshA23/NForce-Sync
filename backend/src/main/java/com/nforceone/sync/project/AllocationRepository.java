@@ -29,6 +29,33 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
     long countByProjectIdAndEmployeeRole(@Param("projectId") Long projectId,
                                         @Param("role") AppUser.Role role);
 
+    /**
+     * Existing allocations of the same employee to the same project whose window overlaps
+     * [newFrom, newTo]. Both windows are inclusive at both ends, so windows that merely touch —
+     * one ends 31-07, the next starts 01-08 — do NOT overlap, which is what makes a genuine
+     * re-assignment legal.
+     *
+     * <p>Callers substitute {@link Allocation#OPEN_ENDED} for a null end date on both sides (the
+     * stored one via COALESCE, the incoming one before binding), so no parameter is ever null.
+     * {@code excludeId} is the row being edited, or -1 on create; a sentinel for the same reason.
+     *
+     * <p>Returns a list rather than Optional: data predating V54 can hold more than one overlapping
+     * row, and a single-result query would fail on those instead of reporting the conflict.
+     */
+    @Query("SELECT a FROM Allocation a " +
+           "WHERE a.employee.id = :employeeId " +
+           "AND a.project.id = :projectId " +
+           "AND a.id <> :excludeId " +
+           "AND a.effectiveFrom <= :newTo " +
+           "AND COALESCE(a.effectiveTo, :openEnded) >= :newFrom " +
+           "ORDER BY a.effectiveFrom ASC")
+    List<Allocation> findOverlapping(@Param("employeeId") Long employeeId,
+                                     @Param("projectId") Long projectId,
+                                     @Param("newFrom") LocalDate newFrom,
+                                     @Param("newTo") LocalDate newTo,
+                                     @Param("openEnded") LocalDate openEnded,
+                                     @Param("excludeId") Long excludeId);
+
     // Project Dashboard: every allocation on one of a PM's projects whose effective window
     // overlaps the requested date range, with employee+project JOIN FETCHed to avoid N+1.
     @Query("SELECT a FROM Allocation a JOIN FETCH a.employee JOIN FETCH a.project " +

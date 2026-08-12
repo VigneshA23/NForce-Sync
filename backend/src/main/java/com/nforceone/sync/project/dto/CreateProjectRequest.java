@@ -16,9 +16,11 @@ public record CreateProjectRequest(
         @NotBlank @Size(max = 200) String name,
         @Size(max = 200) String client,
         @NotNull Long projectTypeId,
-        Long billingModelId,
+        @NotNull Long billingModelId,
         @NotNull LocalDate startDate,
         LocalDate endDate,
-        /** The project's TL. Must be an active MANAGER (Team Lead) or PM — see ProjectService. */
-        @NotNull Long pmId
+        /** The project's Team Lead, who approves its EOD entries. Must be an active MANAGER. */
+        @NotNull Long pmId,
+        /** The overseeing PM — scopes their Approvals queue, dashboard and reports. Active PM only. */
+        @NotNull Long projectManagerId
 ) {}

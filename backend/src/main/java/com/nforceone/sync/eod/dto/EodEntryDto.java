@@ -32,7 +32,14 @@ public record EodEntryDto(
         String           tlName,
         Long             tlId,
         BigDecimal       undertimeHours,
-        Boolean          isResubmission
+        Boolean          isResubmission,
+        /** Actor who last approved/rejected this entry, its role (TEAM_LEAD/PM/SUPERADMIN), and
+         *  when — null while the entry is still SUBMITTED. Not scoped to any particular viewer:
+         *  a Team Lead's own decided entries just show themself; a PM sees who really decided,
+         *  which may be the entry's Team Lead rather than the PM. */
+        String           decidedByName,
+        String           decidedByRole,
+        OffsetDateTime   decidedAt
 ) {
     // Default factory — no reviewer comment (used in approval flow, saveDraft, submit)
     public static EodEntryDto from(EodEntry e) {
@@ -73,7 +80,10 @@ public record EodEntryDto(
                 enrichment != null ? enrichment.tlName() : null,
                 enrichment != null ? enrichment.tlId() : null,
                 enrichment != null ? enrichment.undertimeHours() : null,
-                enrichment != null ? enrichment.isResubmission() : null
+                enrichment != null ? enrichment.isResubmission() : null,
+                enrichment != null ? enrichment.decidedByName() : null,
+                enrichment != null ? enrichment.decidedByRole() : null,
+                enrichment != null ? enrichment.decidedAt() : null
         );
     }
 }

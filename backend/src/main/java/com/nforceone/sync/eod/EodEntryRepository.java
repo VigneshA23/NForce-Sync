@@ -80,9 +80,15 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
                                                              @Param("from") LocalDate from,
                                                              @Param("to") LocalDate to);
 
-    // Pending approvals for a Project Manager — any entry with at least one task on a project
-    // this PM owns (Project.pm). An entry can span multiple projects, so this is an EXISTS
-    // check rather than a strict join, and DISTINCT dedupes entries matching on >1 task.
+    // Every entry with at least one task on a project this PM oversees (Project.projectManager —
+    // NOT Project.pm, which is the Team Lead who decides entries), at a given
+    // status — used for BOTH the PM's Pending tab (status=SUBMITTED) and, unlike a Team Lead's
+    // decided query, the PM's Approved/Rejected tabs too (status=APPROVED/REJECTED): a PM
+    // oversees every team touching their projects, not just the entries they personally acted
+    // on, so "decided" here deliberately isn't scoped to ApprovalAction.actor = this PM the way
+    // findDecidedByManagerId is scoped to a Team Lead's own actions. An entry can span multiple
+    // projects, so this is an EXISTS check rather than a strict join, and DISTINCT dedupes
+    // entries matching on >1 task.
     @Query("""
         SELECT DISTINCT e FROM EodEntry e
         JOIN FETCH e.employee emp
@@ -92,33 +98,16 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
         WHERE e.status = :status
           AND EXISTS (
             SELECT 1 FROM EodTask pt
-            WHERE pt.eodEntry = e AND pt.project.pm.id = :pmId
+            WHERE pt.eodEntry = e AND pt.project.projectManager.id = :pmId
           )
         """)
-    List<EodEntry> findPendingByProjectManagerId(@Param("pmId") Long pmId,
-                                                 @Param("status") EodEntry.Status status);
+    List<EodEntry> findByProjectManagerIdAndStatus(@Param("pmId") Long pmId,
+                                                    @Param("status") EodEntry.Status status);
 
-    // Entries a PM has personally decided (APPROVED/REJECTED), for the PM's own Approved/Rejected
-    // tabs. Deliberately narrower than findPendingByProjectManagerId's "any entry on my projects" —
-    // scoped to ApprovalAction.actor = this PM, so a PM doesn't see entries the TL decided on
-    // without the PM ever touching them.
-    @Query("""
-        SELECT DISTINCT e FROM EodEntry e
-        JOIN FETCH e.employee emp
-        LEFT JOIN FETCH e.tasks t
-        LEFT JOIN FETCH t.project
-        LEFT JOIN FETCH t.taskCategory
-        WHERE e.status = :status
-          AND EXISTS (
-            SELECT 1 FROM com.nforceone.sync.approval.ApprovalAction a
-            WHERE a.eodEntry = e AND a.actor.id = :pmId
-          )
-        """)
-    List<EodEntry> findDecidedByProjectManagerId(@Param("pmId") Long pmId,
-                                                  @Param("status") EodEntry.Status status);
-
-    // Same idea as findDecidedByProjectManagerId, but for a Team Lead: entries belonging to
-    // this manager's direct reports, decided by this manager personally.
+    // A Team Lead's own decided entries — belonging to this manager's direct reports AND
+    // decided by this manager personally. Unlike findByProjectManagerIdAndStatus above, this
+    // stays actor-scoped: a Team Lead's Approved/Rejected tabs are about their own actions,
+    // not every team's (they only have their own direct reports to begin with).
     @Query("""
         SELECT DISTINCT e FROM EodEntry e
         JOIN FETCH e.employee emp

@@ -15,6 +15,7 @@ import com.nforceone.sync.eod.dto.EodEntryDto;
 import com.nforceone.sync.eod.dto.EodEntryEnrichment;
 import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.project.Project;
+import com.nforceone.sync.project.dto.ProjectDto;
 import com.nforceone.sync.utilization.UtilizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -81,7 +82,7 @@ public class ApprovalService {
     public List<EodEntryDto> getPendingForActor(String actorEmail, LocalDate from, LocalDate to) {
         AppUser actor = requireUserByEmail(actorEmail);
         if (actor.getRole() == AppUser.Role.PM) {
-            List<EodEntry> entries = entryRepository.findPendingByProjectManagerId(actor.getId(), EodEntry.Status.SUBMITTED);
+            List<EodEntry> entries = entryRepository.findByProjectManagerIdAndStatus(actor.getId(), EodEntry.Status.SUBMITTED);
             return enrichAll(entries);
         }
         List<EodEntry> entries = (from != null && to != null)
@@ -93,12 +94,20 @@ public class ApprovalService {
         return enrichAll(entries);
     }
 
-    /** Entries this actor has personally approved/rejected, for the Approved/Rejected tabs. */
+    /**
+     * Entries for the Approved/Rejected tabs. For a Team Lead, scoped to their own direct
+     * reports' entries they personally decided. For a PM, broader: every entry touching a
+     * project they own at this status, regardless of who (them or the entry's Team Lead) decided
+     * it — a PM oversees every team on their projects, not just their own actions.
+     */
     @Transactional(readOnly = true)
     public List<EodEntryDto> getDecidedForActor(String actorEmail, EodEntry.Status status) {
         AppUser actor = requireUserByEmail(actorEmail);
         if (actor.getRole() == AppUser.Role.PM) {
-            List<EodEntry> entries = entryRepository.findDecidedByProjectManagerId(actor.getId(), status);
+            // Deliberately NOT scoped to actions this PM personally took — a PM oversees every
+            // team touching their projects, so Approved/Rejected must include entries a Team
+            // Lead decided too. See findByProjectManagerIdAndStatus's javadoc.
+            List<EodEntry> entries = entryRepository.findByProjectManagerIdAndStatus(actor.getId(), status);
             return enrichAll(entries);
         }
         List<EodEntry> entries = entryRepository.findDecidedByManagerId(actor.getId(), status);
@@ -120,7 +129,41 @@ public class ApprovalService {
                                Boolean billableOverride, String comment) {
         AppUser actor = requireUserByEmail(actorEmail);
         EodEntry entry = requireEntryById(entryId);
+        checkManagerAuthorization(actor, entry);
+        requireStatus(entry, EodEntry.Status.SUBMITTED);
+        if (!isEntryFullyDecided(entry)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Set Billable on every eligible task before approving.");
+        }
         return approveEntry(entry, actor, billableOverride, comment);
+    }
+
+    /**
+     * Sets a single task's billable flag during review and marks it as explicitly decided, so
+     * the approval gate (isEntryFullyDecided) stops counting it as undecided. Only callable while
+     * the entry is still SUBMITTED — once approved/rejected, billable is frozen with the decision.
+     */
+    public EodEntryDto setTaskBillable(Long entryId, Long taskId, String actorEmail, boolean isBillable) {
+        AppUser actor = requireUserByEmail(actorEmail);
+        EodEntry entry = requireEntryById(entryId);
+        checkManagerAuthorization(actor, entry);
+        requireStatus(entry, EodEntry.Status.SUBMITTED);
+
+        EodTask task = entry.getTasks().stream()
+                .filter(t -> t.getId().equals(taskId))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Task " + taskId + " not found on entry " + entryId));
+
+        if (isBillable && !(task.getProject() != null && ProjectDto.billableAllowed(task.getProject()))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "This project is Non-Billable — task cannot be marked billable.");
+        }
+
+        task.setIsBillable(isBillable);
+        task.setBillableDecided(true);
+        entryRepository.save(entry);
+        return EodEntryDto.from(entry);
     }
 
     public EodEntryDto reject(Long entryId, String actorEmail, String comment) {
@@ -148,10 +191,17 @@ public class ApprovalService {
     // requestChanges() removed in V44 — reject() covers it. A rejected entry is editable and
     // resubmittable, which is all "changes requested" ever did.
 
+    // Entries not yet SUBMITTED (already decided elsewhere) or with an undecided billable-eligible
+    // task are silently skipped rather than aborting the whole batch — a TL clicking "Approve all"
+    // expects the ready ones to go through, not to be blocked by the couple that still need a
+    // per-task billable decision. checkManagerAuthorization inside approveEntry still throws hard
+    // for an unauthorized entry that otherwise passed this filter.
     public List<EodEntryDto> batchApprove(List<Long> entryIds, String actorEmail) {
         AppUser actor = requireUserByEmail(actorEmail);
         return entryIds.stream()
-                .map(id -> approveEntry(requireEntryById(id), actor, null, null))
+                .map(this::requireEntryById)
+                .filter(entry -> entry.getStatus() == EodEntry.Status.SUBMITTED && isEntryFullyDecided(entry))
+                .map(entry -> approveEntry(entry, actor, null, null))
                 .toList();
     }
 
@@ -215,14 +265,27 @@ public class ApprovalService {
                 ? standardHours.subtract(totalHours).max(BigDecimal.ZERO)
                 : BigDecimal.ZERO;
 
+        ApprovalAction decision = latestDecision(actions);
+
         return new EodEntryEnrichment(
                 escalated,
                 tlInactivityHours,
                 tl != null ? tl.getFullName() : null,
                 tl != null ? tl.getId() : null,
                 undertimeHours,
-                isResubmission
+                isResubmission,
+                decision != null ? decision.getActor().getFullName() : null,
+                decision != null ? decision.getActor().getRole().name() : null,
+                decision != null ? decision.getActedAt() : null
         );
+    }
+
+    /** Most recent APPROVE/REJECT action, or null if the entry is still undecided. */
+    private ApprovalAction latestDecision(List<ApprovalAction> actions) {
+        return actions.stream()
+                .filter(a -> a.getAction() == ApprovalAction.Action.APPROVE || a.getAction() == ApprovalAction.Action.REJECT)
+                .max(Comparator.comparing(ApprovalAction::getActedAt))
+                .orElse(null);
     }
 
     /** Most recent REJECT/REQUEST_CHANGES comment, or null if the entry has never been rejected/changes-requested. */
@@ -275,6 +338,17 @@ public class ApprovalService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Only the employee's direct manager or a project manager on this entry can perform this action");
         }
+    }
+
+    /**
+     * True once every billable-eligible task on the entry has had its billable status explicitly
+     * decided by a Team Lead (see setTaskBillable) — tasks whose project isn't billable-eligible
+     * (ProjectDto.billableAllowed) never require a decision and don't count against this.
+     */
+    private boolean isEntryFullyDecided(EodEntry entry) {
+        return entry.getTasks().stream()
+                .filter(t -> t.getProject() != null && ProjectDto.billableAllowed(t.getProject()))
+                .allMatch(t -> Boolean.TRUE.equals(t.getBillableDecided()));
     }
 
     private void requireStatus(EodEntry entry, EodEntry.Status required) {

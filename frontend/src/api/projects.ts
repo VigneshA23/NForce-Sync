@@ -40,8 +40,12 @@ export interface ProjectFullDto {
   /** Id of the same, for preselecting the edit form. */
   billingModelId: number | null;
   status: 'ACTIVE' | 'INACTIVE' | 'COMPLETED' | 'ON_HOLD';
+  /** The Team Lead who approves this project's EOD entries. */
   pmId: number | null;
   pmName: string | null;
+  /** The overseeing PM — whose Approvals queue, dashboard and reports this project feeds. */
+  projectManagerId: number | null;
+  projectManagerName: string | null;
   startDate: string | null;
   endDate: string | null;
   allocatedHeadcount: number;
@@ -53,12 +57,14 @@ export interface CreateProjectPayload {
   /** Required when the chosen project type has requiresClient; forced to null otherwise. */
   client?: string | null;
   projectTypeId: number;
-  billingModelId?: number | null;
+  billingModelId: number;
   startDate: string;
   /** Null means the project is ongoing — no fixed end date. */
   endDate?: string | null;
-  /** The project's TL. Must be an active MANAGER (Team Lead) or PM. */
+  /** The project's Team Lead. Must be an active MANAGER. */
   pmId: number;
+  /** The overseeing PM. Must be an active PM. */
+  projectManagerId: number;
 }
 
 export interface UpdateProjectPayload {
@@ -67,12 +73,14 @@ export interface UpdateProjectPayload {
   name: string;
   client?: string | null;
   projectTypeId: number;
-  billingModelId?: number | null;
+  billingModelId: number;
   status: ProjectFullDto['status'];
   startDate: string;
   endDate?: string | null;
-  /** The project's TL. The existing holder may be re-sent even if now out-of-role. */
+  /** The project's Team Lead. The existing holder may be re-sent even if now out-of-role. */
   pmId: number;
+  /** The overseeing PM. Same grandfathering as pmId. */
+  projectManagerId: number;
 }
 
 export interface EmployeeRefDto {
@@ -134,9 +142,15 @@ export async function listAssignableEmployees(): Promise<EmployeeRefDto[]> {
   return res.data;
 }
 
-/** Users who may be a project's TL — active Team Leads (MANAGER) and Project Managers. */
+/** Users who may be a project's Team Lead — active Team Leads (MANAGER) only. */
 export async function listAssignableLeads(): Promise<EmployeeRefDto[]> {
   const res = await api.get<EmployeeRefDto[]>('/projects/leads');
+  return res.data;
+}
+
+/** Users who may oversee a project as its PM — active PM accounts. */
+export async function listAssignableProjectManagers(): Promise<EmployeeRefDto[]> {
+  const res = await api.get<EmployeeRefDto[]>('/projects/managers');
   return res.data;
 }
 
@@ -170,6 +184,10 @@ export function useAssignableEmployees() {
 
 export function useAssignableLeads() {
   return useQuery({ queryKey: ['projects', 'leads'], queryFn: listAssignableLeads });
+}
+
+export function useAssignableProjectManagers() {
+  return useQuery({ queryKey: ['projects', 'managers'], queryFn: listAssignableProjectManagers });
 }
 
 export function useCreateProject() {

@@ -4,295 +4,26 @@ import {
   Search,
 } from 'lucide-react';
 import {
-  usePendingApprovals, useDecidedApprovals, useApprovalHistory,
+  usePendingApprovals, useDecidedApprovals,
   useApprove, useReject, useBatchApprove, type PendingApprovalsRange,
 } from '../api/approvals';
 import { Modal } from '../components/Modal';
 import { FilterDropdown } from '../components/FilterDropdown';
 import { useToast } from '../lib/toast';
-import { formatDate as fmtDate, formatDateTime, formatDurationMinutes } from '../lib/date';
-import type { EodEntryDto, EodTaskDto } from '../api/eod';
+import { formatDate as fmtDate } from '../lib/date';
+import type { EodEntryDto } from '../api/eod';
 import { useSearchParams } from 'react-router-dom';
-
-// ── helpers ────────────────────────────────────────────────────────────────────
-
-const LEAVE_CATEGORY = 'Leave';
-
-function sumHours(tasks: EodTaskDto[]): number {
-  return tasks.reduce((s, t) => s + (Number(t.hours) || 0), 0);
-}
-
-function hrs(v: number): string {
-  return Number.isInteger(v) ? String(v) : v.toFixed(1);
-}
-
-function entryProjects(e: EodEntryDto): string[] {
-  return [...new Set(e.tasks.map(t => t.projectCode).filter((p): p is string => !!p))];
-}
-
-function entryCategories(e: EodEntryDto): string[] {
-  return [...new Set(e.tasks.map(t => t.categoryName).filter((c): c is string => !!c))];
-}
-
-/**
- * One plain-language summary of the day: leave taken, hours worked, and how much of that was
- * overtime.
- *
- * Overtime is stated as a SPLIT of the hours worked, never as a separate addend. A "Half-day
- * leave 4h" chip beside an "OT +1h" chip and a "9h total" chip forces the reader to work out
- * that 5 were actually worked, and invites reading leave + worked + OT as additive. Spelling it
- * out as "worked 4h + 1h OT = 5h" removes the arithmetic.
- *
- * regular = worked - overtime, which always lands on the day's expected hours: with 4h leave the
- * expected work is 8 - 4 = 4, so logging 5 gives 4 regular + 1 OT.
- *
- * Returns null for an ordinary working day with no overtime — nothing to clarify there.
- */
-function daySummary(entry: EodEntryDto): string | null {
-  if (entry.dayType === 'HOLIDAY') return 'Holiday — no tasks';
-
-  const leaveHours = sumHours(entry.tasks.filter(t => t.categoryName === LEAVE_CATEGORY));
-  const worked = sumHours(entry.tasks.filter(t => t.categoryName !== LEAVE_CATEGORY));
-  const overtime = entry.isOvertime && entry.overtimeHours != null ? Number(entry.overtimeHours) : 0;
-
-  const parts: string[] = [];
-  if (entry.dayType === 'LEAVE' && leaveHours > 0) {
-    parts.push(worked > 0
-      ? `Half-day leave ${hrs(leaveHours)}h`
-      : `Full-day leave ${hrs(leaveHours)}h`);
-  }
-
-  if (overtime > 0) {
-    const regular = Math.max(0, worked - overtime);
-    parts.push(`worked ${hrs(regular)}h + ${hrs(overtime)}h OT = ${hrs(worked)}h`);
-  } else if (parts.length > 0 && worked > 0) {
-    parts.push(`worked ${hrs(worked)}h`);
-  }
-
-  return parts.length > 0 ? parts.join(' · ') : null;
-}
-
-/** One of late-arrival / early-leave / mid-shift-gap — the schema stores at most one per day. */
-function timeAdjustmentLabel(entry: EodEntryDto): string | null {
-  const { timeAdjustmentType: type, timeAdjustmentMinutes: mins } = entry;
-  if (!type || mins == null || mins <= 0) return null;
-  const dur = formatDurationMinutes(mins);
-  switch (type) {
-    case 'LATE_ARRIVAL': return `${dur} late start`;
-    case 'EARLY_LEAVE':  return `${dur} early log-off`;
-    case 'INTERVENING':  return `${dur} away mid-shift`;
-    default:             return `${dur} time adjustment`;
-  }
-}
-
-function formatRelative(iso: string | null): string {
-  if (!iso) return '—';
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60_000);
-  const h = Math.floor(diff / 3_600_000);
-  const d = Math.floor(diff / 86_400_000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  if (h < 24) return `${h}h ago`;
-  return `${d}d ago`;
-}
-
-function extractError(err: unknown): string {
-  const e = err as { response?: { data?: { error?: string; message?: string } } };
-  return e?.response?.data?.error ?? e?.response?.data?.message ?? 'Something went wrong';
-}
-
-function initials(name: string): string {
-  return name.split(' ').map(p => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
-}
-
-// ── primitives ─────────────────────────────────────────────────────────────────
-
-function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
-  return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
-}
-
-function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return (
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, ...style }}>
-      {children}
-    </div>
-  );
-}
-
-function Btn({
-  children, onClick, variant = 'default', disabled = false, style,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  variant?: 'default' | 'danger' | 'warn' | 'primary' | 'success';
-  disabled?: boolean;
-  style?: React.CSSProperties;
-}) {
-  const bg = { default: 'var(--raised2)', danger: 'var(--raised2)', warn: 'var(--raised2)', primary: 'var(--brand)', success: 'var(--ok)' }[variant];
-  const border = { default: 'var(--line2)', danger: 'rgba(228,55,61,.4)', warn: 'rgba(224,169,59,.4)', primary: 'var(--brand)', success: 'var(--ok)' }[variant];
-  const color = { default: 'var(--txt)', danger: 'var(--risk)', warn: 'var(--warn)', primary: '#fff', success: '#fff' }[variant];
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 500,
-        border: `1px solid ${border}`, background: bg, color,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-        transition: 'opacity 0.14s',
-        ...style,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Chip({ children, tone = 'neutral', dashed = false }: {
-  children: React.ReactNode;
-  tone?: 'neutral' | 'warn' | 'info' | 'ok' | 'risk';
-  dashed?: boolean;
-}) {
-  const color = { neutral: 'var(--txt-dim)', warn: 'var(--warn)', info: 'var(--info)', ok: 'var(--ok)', risk: 'var(--risk)' }[tone];
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '2px 9px', borderRadius: 20, fontSize: 11, fontWeight: 600,
-      color,
-      background: dashed ? 'transparent' : `color-mix(in srgb, ${color} 14%, transparent)`,
-      border: dashed ? `1px dashed var(--line2)` : `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
-    }}>
-      {children}
-    </span>
-  );
-}
-
-// ── action panel (approve / reject / request changes) ──────────────────────────
-
-interface ActionPanelProps {
-  type: 'approve' | 'reject' | null;
-  entryId: number;
-  onClose: () => void;
-}
-
-function ActionPanel({ type, entryId, onClose }: ActionPanelProps) {
-  const [comment, setComment] = useState('');
-  const [billableOverride, setBillable] = useState<boolean | undefined>(undefined);
-  const { show } = useToast();
-
-  const approve = useApprove();
-  const reject = useReject();
-
-  if (!type) return null;
-  const busy = approve.isPending || reject.isPending;
-
-  async function submit() {
-    try {
-      if (type === 'approve') {
-        await approve.mutateAsync({ entryId, billableOverride, comment: comment || undefined });
-        show('Entry approved. Utilization recomputed.', 'success');
-      } else {
-        if (!comment.trim()) return;
-        await reject.mutateAsync({ entryId, comment });
-        show('Entry rejected.', 'success');
-      }
-      onClose();
-    } catch (err) {
-      show(extractError(err), 'error');
-    }
-  }
-
-  const needsComment = type !== 'approve';
-  const commentEmpty = needsComment && !comment.trim();
-
-  return (
-    <div style={{ background: 'var(--raised)', borderTop: '1px solid var(--line)', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {type === 'approve' && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--txt-mut)', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={billableOverride === true}
-            onChange={e => setBillable(e.target.checked ? true : undefined)}
-            style={{ accentColor: 'var(--brand-bright)' }}
-          />
-          Override all tasks as billable
-        </label>
-      )}
-      {needsComment && (
-        <textarea
-          rows={2}
-          placeholder={type === 'reject' ? 'Rejection reason (required)' : 'Comment for changes needed (required)'}
-          value={comment}
-          onChange={e => setComment(e.target.value)}
-          style={{
-            width: '100%', resize: 'vertical', padding: '8px 10px',
-            background: 'var(--panel)', border: `1px solid ${commentEmpty ? 'var(--risk)' : 'var(--line2)'}`,
-            borderRadius: 6, color: 'var(--txt)', fontSize: 12, fontFamily: '"Inter", sans-serif',
-            outline: 'none', boxSizing: 'border-box',
-          }}
-        />
-      )}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Btn variant={type === 'approve' ? 'success' : type === 'reject' ? 'danger' : 'warn'} onClick={submit} disabled={busy || commentEmpty}>
-          {busy ? 'Saving…' : type === 'approve' ? 'Confirm Approve' : type === 'reject' ? 'Confirm Reject' : 'Request Changes'}
-        </Btn>
-        <Btn onClick={onClose}>Cancel</Btn>
-      </div>
-    </div>
-  );
-}
-
-// ── audit trail (submitted → actions) ───────────────────────────────────────────
-
-function AuditTrail({ entry }: { entry: EodEntryDto }) {
-  const { data: actions, isPending } = useApprovalHistory(entry.id, true);
-
-  if (isPending) return <div style={{ padding: '12px 16px' }}><Skel h={12} w="60%" /></div>;
-
-  const actionLabel: Record<string, string> = {
-    APPROVE: 'Approved',
-    REJECT: 'Rejected',
-    REQUEST_CHANGES: 'Changes requested',
-  };
-
-  return (
-    <div style={{ padding: '12px 16px 16px', background: 'var(--raised)', borderTop: '1px solid var(--line)' }}>
-      <div style={{ fontSize: 10.5, letterSpacing: '0.06em', color: 'var(--txt-dim)', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8 }}>
-        Submission history
-      </div>
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderLeft: '2px solid var(--line)', maxWidth: 520 }}>
-        {entry.submittedAt && (
-          <li style={{ position: 'relative', padding: '0 0 12px 16px', fontSize: 12.5, color: 'var(--txt-mut)' }}>
-            <span style={{ position: 'absolute', left: -5, top: 3, width: 8, height: 8, borderRadius: '50%', background: 'var(--brand-bright)', border: '2px solid var(--raised)' }} />
-            <b style={{ color: 'var(--txt)' }}>Submitted</b>
-            <span style={{ display: 'block', color: 'var(--txt-dim)', fontSize: 11 }}>{formatDateTime(entry.submittedAt)}</span>
-          </li>
-        )}
-        {(actions ?? []).map(a => (
-          <li key={a.id} style={{ position: 'relative', padding: '0 0 12px 16px', fontSize: 12.5, color: 'var(--txt-mut)' }}>
-            <span style={{ position: 'absolute', left: -5, top: 3, width: 8, height: 8, borderRadius: '50%', background: 'var(--brand-bright)', border: '2px solid var(--raised)' }} />
-            <b style={{ color: 'var(--txt)' }}>{actionLabel[a.action] ?? a.action} by {a.actorName}</b>
-            <span style={{ display: 'block', color: 'var(--txt-dim)', fontSize: 11 }}>{formatDateTime(a.actedAt)}</span>
-          </li>
-        ))}
-      </ul>
-      {entry.reviewerComment && (
-        <div style={{ background: 'color-mix(in srgb, var(--risk) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--risk) 30%, transparent)', borderRadius: 8, padding: '10px 12px', fontSize: 12.5, color: 'var(--txt)', marginTop: 10, maxWidth: 520 }}>
-          <strong>Reject reason: </strong>{entry.reviewerComment}
-        </div>
-      )}
-    </div>
-  );
-}
+import {
+  sumHours, hrs, entryProjects, entryCategories,
+  daySummary, timeAdjustmentLabel, formatRelative, extractError, initials,
+  Skel, Card, Btn, Chip, AuditTrail, SubmissionDetailModal,
+} from './approvals/shared';
 
 // ── entry row ─────────────────────────────────────────────────────────────────
 
 function EntryRow({
   entry, actionable, checked, onToggleCheck,
-  expanded, onToggleExpand, onOpenReject, highlighted,
+  expanded, onToggleExpand, onOpenDetails, highlighted,
 }: {
   entry: EodEntryDto;
   actionable: boolean;
@@ -300,10 +31,9 @@ function EntryRow({
   onToggleCheck: () => void;
   expanded: boolean;
   onToggleExpand: () => void;
-  onOpenReject: () => void;
+  onOpenDetails: () => void;
   highlighted?: boolean;
 }) {
-  const [action, setAction] = useState<'approve' | 'reject' | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const total = sumHours(entry.tasks);
   const overtime = entry.isOvertime && entry.overtimeHours != null ? Number(entry.overtimeHours) : 0;
@@ -317,11 +47,6 @@ function EntryRow({
     if (!highlighted) return;
     rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [highlighted]);
-
-  function openAction(a: typeof action) {
-    if (a === 'reject') { onOpenReject(); return; }
-    setAction(prev => prev === a ? null : a);
-  }
 
   const statusChip = entry.status === 'APPROVED'
     ? <Chip tone="ok">Approved</Chip>
@@ -367,7 +92,11 @@ function EntryRow({
           </div>
 
           {entry.tasks.length > 0 && (
-            <div style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)' }}>
+            <div
+              onClick={onOpenDetails}
+              title="View submission details"
+              style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)', cursor: 'pointer' }}
+            >
               {entry.tasks.map(t => (
                 <div key={t.id} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
@@ -401,13 +130,9 @@ function EntryRow({
           </div>
         </div>
 
+        {/* No Approve/Reject here by design — deciding an entry means opening it and reading the
+            work first, so those actions live only in the submission detail modal. */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-          {actionable ? (
-            <div style={{ display: 'flex', gap: 7 }}>
-              <Btn variant="danger" onClick={() => openAction('reject')}><X size={12} aria-hidden="true" /> Reject</Btn>
-              <Btn variant="success" onClick={() => openAction('approve')}><Check size={12} aria-hidden="true" /> Approve</Btn>
-            </div>
-          ) : null}
           <button
             onClick={onToggleExpand}
             title="View audit trail"
@@ -418,7 +143,6 @@ function EntryRow({
         </div>
       </div>
 
-      {action && <ActionPanel type={action} entryId={entry.id} onClose={() => setAction(null)} />}
       {expanded && <AuditTrail entry={entry} />}
     </div>
   );
@@ -458,12 +182,13 @@ export default function Approvals() {
   const [employeeFilter, setEmployeeFilter] = useState<Set<string>>(new Set());
   const [projectFilter, setProjectFilter] = useState<Set<string>>(new Set());
   const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set());
-  const [billableFilter, setBillableFilter] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [rejectTarget, setRejectTarget] = useState<'bulk' | number | null>(null);
   const [rejectReason, setRejectReason] = useState('');
-  const [confirmApproveAll, setConfirmApproveAll] = useState(false);
+  const [detailsEntryId, setDetailsEntryId] = useState<number | null>(null);
+
+  const modalApprove = useApprove();
 
   const isLoading = pendingLoading
     || (tab === 'approved' && approvedLoading)
@@ -495,12 +220,6 @@ export default function Approvals() {
     if (employeeFilter.size) list = list.filter(e => employeeFilter.has(e.employeeCode));
     if (projectFilter.size) list = list.filter(e => entryProjects(e).some(p => projectFilter.has(p)));
     if (categoryFilter.size) list = list.filter(e => entryCategories(e).some(c => categoryFilter.has(c)));
-    if (billableFilter.size) {
-      list = list.filter(e => {
-        const labels = new Set<string>(e.tasks.map(t => t.isBillable ? 'Billable' : 'Non-billable'));
-        return [...billableFilter].some(f => labels.has(f));
-      });
-    }
     const q = search.trim().toLowerCase();
     if (q) list = list.filter(e => e.employeeName.toLowerCase().includes(q) || e.employeeCode.toLowerCase().includes(q));
 
@@ -510,9 +229,35 @@ export default function Approvals() {
     else if (sort === 'latest') sorted.sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''));
     else sorted.sort((a, b) => (a.submittedAt ?? '').localeCompare(b.submittedAt ?? ''));
     return sorted;
-  }, [baseList, employeeFilter, projectFilter, categoryFilter, billableFilter, search, sort]);
+  }, [baseList, employeeFilter, projectFilter, categoryFilter, search, sort]);
 
   const actionable = tab === 'pending';
+
+  // Looked up from baseList (not `visible`) so the modal survives a filter change while open.
+  const detailsEntry = baseList.find(e => e.id === detailsEntryId) ?? null;
+
+  async function handleDetailApprove(entryId: number) {
+    try {
+      await modalApprove.mutateAsync({ entryId });
+      show('Entry approved. Utilization recomputed.', 'success');
+      setDetailsEntryId(null);
+    } catch (err) {
+      show(extractError(err), 'error');
+    }
+  }
+
+  // Rejected in place from the detail modal, which supplies the reason — no separate dialog. The
+  // bulk path below still uses one, since it spans entries and has no single entry to sit under.
+  async function handleDetailReject(entryId: number, reason: string) {
+    if (!reason) return;
+    try {
+      await reject.mutateAsync({ entryId, comment: reason });
+      show('Entry rejected.', 'success');
+      setDetailsEntryId(null);
+    } catch (err) {
+      show(extractError(err), 'error');
+    }
+  }
 
   const pendingCount = pending?.length ?? 0;
   const approvedCount = approved?.length ?? 0;
@@ -524,13 +269,12 @@ export default function Approvals() {
     setFn(next);
   }
 
-  const hasActiveFilters = employeeFilter.size > 0 || projectFilter.size > 0 || categoryFilter.size > 0 || billableFilter.size > 0;
+  const hasActiveFilters = employeeFilter.size > 0 || projectFilter.size > 0 || categoryFilter.size > 0;
 
   function clearAllFilters() {
     setEmployeeFilter(new Set());
     setProjectFilter(new Set());
     setCategoryFilter(new Set());
-    setBillableFilter(new Set());
   }
 
   function toggleCheck(id: number) {
@@ -553,8 +297,16 @@ export default function Approvals() {
   async function approveIds(ids: number[]) {
     if (ids.length === 0) return;
     try {
-      await batchApprove.mutateAsync(ids);
-      show(`${ids.length} entr${ids.length !== 1 ? 'ies' : 'y'} approved. Utilization recomputed.`, 'success');
+      const result = await batchApprove.mutateAsync(ids);
+      // The backend silently skips entries not fully billable-decided (or no longer SUBMITTED),
+      // so the response can be shorter than the request — report what actually happened.
+      const approvedCount = result.length;
+      const skipped = ids.length - approvedCount;
+      show(
+        `${approvedCount} entr${approvedCount !== 1 ? 'ies' : 'y'} approved.`
+          + (skipped > 0 ? ` ${skipped} skipped (billable not yet decided).` : ' Utilization recomputed.'),
+        'success',
+      );
       setSelected(new Set());
     } catch (err) {
       show(extractError(err), 'error');
@@ -576,8 +328,6 @@ export default function Approvals() {
     setRejectReason('');
   }
 
-  const approveAllProjects = [...new Set(visible.flatMap(entryProjects))];
-
   if (pendingError) {
     return (
       <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
@@ -598,21 +348,6 @@ export default function Approvals() {
             Approvals
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>Review and act on your team's EOD submissions</p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {actionable && visible.length > 0 && (
-            <button
-              onClick={() => setConfirmApproveAll(true)}
-              disabled={batchApprove.isPending}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 7,
-                fontSize: 13, fontWeight: 500, background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                cursor: batchApprove.isPending ? 'not-allowed' : 'pointer', opacity: batchApprove.isPending ? 0.6 : 1,
-              }}
-            >
-              <CheckCheck size={14} aria-hidden="true" /> Approve all ({visible.length})
-            </button>
-          )}
         </div>
       </div>
 
@@ -665,7 +400,6 @@ export default function Approvals() {
           />
           <FilterDropdown label="Project" options={allProjects} selected={projectFilter} onToggle={v => toggleFilterVal(projectFilter, setProjectFilter, v)} onClear={() => setProjectFilter(new Set())} />
           <FilterDropdown label="Category" options={allCategories} selected={categoryFilter} onToggle={v => toggleFilterVal(categoryFilter, setCategoryFilter, v)} onClear={() => setCategoryFilter(new Set())} />
-          <FilterDropdown label="Billable" options={['Billable', 'Non-billable']} selected={billableFilter} onToggle={v => toggleFilterVal(billableFilter, setBillableFilter, v)} onClear={() => setBillableFilter(new Set())} />
           {hasActiveFilters && (
             <button
               onClick={clearAllFilters}
@@ -733,7 +467,7 @@ export default function Approvals() {
               onToggleCheck={() => toggleCheck(entry.id)}
               expanded={expanded.has(entry.id)}
               onToggleExpand={() => toggleExpand(entry.id)}
-              onOpenReject={() => { setRejectTarget(entry.id); setRejectReason(''); }}
+              onOpenDetails={() => setDetailsEntryId(entry.id)}
               highlighted={highlightId != null && entry.id === highlightId}
             />
           ))}
@@ -764,24 +498,14 @@ export default function Approvals() {
         />
       </Modal>
 
-      {/* Approve-all confirm modal */}
-      <Modal
-        open={confirmApproveAll}
-        title="Approve all visible entries?"
-        onClose={() => setConfirmApproveAll(false)}
-        footer={
-          <>
-            <Btn onClick={() => setConfirmApproveAll(false)}>Cancel</Btn>
-            <Btn variant="primary" onClick={async () => { setConfirmApproveAll(false); await approveIds(visible.map(e => e.id)); }} disabled={batchApprove.isPending}>
-              {batchApprove.isPending ? 'Approving…' : `Approve ${visible.length}`}
-            </Btn>
-          </>
-        }
-      >
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--txt)' }}>
-          Approve {visible.length} entr{visible.length !== 1 ? 'ies' : 'y'} across {approveAllProjects.length} project{approveAllProjects.length !== 1 ? 's' : ''}?
-        </p>
-      </Modal>
+      <SubmissionDetailModal
+        entry={detailsEntry}
+        onClose={() => setDetailsEntryId(null)}
+        onApprove={handleDetailApprove}
+        onReject={handleDetailReject}
+        approveBusy={modalApprove.isPending}
+        rejectBusy={reject.isPending}
+      />
     </div>
   );
 }

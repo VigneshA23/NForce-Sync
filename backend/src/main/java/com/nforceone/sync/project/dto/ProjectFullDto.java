@@ -18,8 +18,12 @@ public record ProjectFullDto(
         /** Id of the same, so the edit form can preselect it. */
         Long billingModelId,
         String status,
+        /** The Team Lead who approves this project's EOD entries. */
         Long pmId,
         String pmName,
+        /** The overseeing PM, whose Approvals queue and dashboard this project appears in. */
+        Long projectManagerId,
+        String projectManagerName,
         LocalDate startDate,
         LocalDate endDate,
         int allocatedHeadcount
@@ -37,6 +41,8 @@ public record ProjectFullDto(
                 p.getStatus().name(),
                 p.getPm() != null ? p.getPm().getId() : null,
                 p.getPm() != null ? p.getPm().getFullName() : null,
+                p.getProjectManager() != null ? p.getProjectManager().getId() : null,
+                p.getProjectManager() != null ? p.getProjectManager().getFullName() : null,
                 p.getStartDate(),
                 p.getEndDate(),
                 allocatedHeadcount);

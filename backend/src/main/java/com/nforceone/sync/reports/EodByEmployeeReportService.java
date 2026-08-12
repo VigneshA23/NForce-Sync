@@ -232,6 +232,6 @@ public class EodByEmployeeReportService {
         if (pm.getRole() == AppUser.Role.SUPERADMIN) {
             return projectRepository.findAllWithPmOrderByNameAsc();
         }
-        return projectRepository.findByPmIdOrderByNameAsc(pm.getId());
+        return projectRepository.findByProjectManagerIdOrderByNameAsc(pm.getId());
     }
 }

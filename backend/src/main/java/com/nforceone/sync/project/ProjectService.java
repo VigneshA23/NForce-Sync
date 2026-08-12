@@ -72,12 +72,16 @@ public class ProjectService {
                 .toList();
     }
 
-    /** Users assignable as a project's TL: active Team Leads (MANAGER) and Project Managers. */
+    /**
+     * Users assignable as a project's Team Lead: active MANAGERs only. A PM is deliberately not
+     * offered — a PM sits above the TL in the approval chain (they are the escalation target when a
+     * TL goes quiet), so leading a project would put them on both sides of their own escalation.
+     */
     @Transactional(readOnly = true)
     public List<EmployeeRefDto> listAssignableLeads() {
         return appUserRepository
                 .findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
-                        List.of(AppUser.Role.MANAGER, AppUser.Role.PM), AppUser.Status.ACTIVE)
+                        List.of(AppUser.Role.MANAGER), AppUser.Status.ACTIVE)
                 .stream()
                 .map(EmployeeRefDto::from)
                 .toList();
@@ -101,6 +105,7 @@ public class ProjectService {
         project.setBillingModel(resolveBillingModel(req.billingModelId(), null));
         project.setStatus(Project.Status.ACTIVE);
         project.setPm(resolveLead(req.pmId(), null));
+        project.setProjectManager(resolveProjectManager(req.projectManagerId(), null));
         project.setStartDate(req.startDate());
         project.setEndDate(req.endDate());
         project.setCreatedAt(OffsetDateTime.now());
@@ -145,6 +150,7 @@ public class ProjectService {
         project.setBillingModel(resolveBillingModel(req.billingModelId(), project.getBillingModel()));
         project.setStatus(status);
         project.setPm(resolveLead(req.pmId(), project.getPm()));
+        project.setProjectManager(resolveProjectManager(req.projectManagerId(), project.getProjectManager()));
         project.setStartDate(req.startDate());
         project.setEndDate(req.endDate());
 
@@ -153,16 +159,14 @@ public class ProjectService {
     }
 
     /**
-     * Resolves the optional billing model from the Organization Master.
+     * Resolves the project's billing model from the Organization Master. Mandatory since V53, so a
+     * null id is a validation failure ({@code @NotNull} on the request) rather than "unset".
      *
      * <p>An inactive model can't be newly assigned, but {@code current} — the project's existing
      * model on update — is always allowed through, so deactivating a model doesn't block edits to
      * projects already on it. Same grandfathering as {@link #resolveLead}.
      */
     private BillingModel resolveBillingModel(Long billingModelId, BillingModel current) {
-        if (billingModelId == null) {
-            return null;
-        }
         if (current != null && current.getId().equals(billingModelId)) {
             return current;
         }
@@ -177,7 +181,8 @@ public class ProjectService {
     }
 
     /**
-     * Resolves the project's TL, which must be an active Team Lead (MANAGER) or Project Manager.
+     * Resolves the project's Team Lead, which must be an active MANAGER — see listAssignableLeads
+     * for why a PM is not eligible.
      *
      * <p>This field is not merely a label: whoever holds it may approve EOD entries on the project
      * (see {@code ApprovalService.checkManagerAuthorization}) and it scopes their Approvals queue,
@@ -190,7 +195,7 @@ public class ProjectService {
      */
     private AppUser resolveLead(Long pmId, AppUser currentHolder) {
         AppUser lead = appUserRepository.findById(pmId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "TL not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Team Lead not found"));
 
         boolean unchanged = currentHolder != null && currentHolder.getId().equals(lead.getId());
         if (unchanged) {
@@ -199,13 +204,51 @@ public class ProjectService {
 
         if (lead.getStatus() != AppUser.Status.ACTIVE || lead.getDeletedAt() != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "TL must be an active user");
+                    "Team Lead must be an active user");
         }
-        if (lead.getRole() != AppUser.Role.MANAGER && lead.getRole() != AppUser.Role.PM) {
+        if (lead.getRole() != AppUser.Role.MANAGER) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Only a Team Lead or Project Manager can be assigned as TL");
+                    "Only a Team Lead can lead a project");
         }
         return lead;
+    }
+
+    /**
+     * Resolves the overseeing Project Manager (V55). This is not the approver — the Team Lead is —
+     * but it decides whose Approvals queue, Project Dashboard and reports the project appears in,
+     * so an out-of-role assignment is rejected.
+     *
+     * <p>Grandfathers an unchanged current holder for the same reason {@link #resolveLead} does:
+     * editing an unrelated field must not force a reassignment that silently moves oversight.
+     */
+    private AppUser resolveProjectManager(Long projectManagerId, AppUser currentHolder) {
+        AppUser manager = appUserRepository.findById(projectManagerId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Project Manager not found"));
+
+        if (currentHolder != null && currentHolder.getId().equals(manager.getId())) {
+            return manager;
+        }
+        if (manager.getStatus() != AppUser.Status.ACTIVE || manager.getDeletedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Project Manager must be an active user");
+        }
+        if (manager.getRole() != AppUser.Role.PM) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Only a Project Manager can oversee a project");
+        }
+        return manager;
+    }
+
+    /** Users assignable as a project's overseeing PM: active PM accounts. */
+    @Transactional(readOnly = true)
+    public List<EmployeeRefDto> listAssignableProjectManagers() {
+        return appUserRepository
+                .findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
+                        List.of(AppUser.Role.PM), AppUser.Status.ACTIVE)
+                .stream()
+                .map(EmployeeRefDto::from)
+                .toList();
     }
 
     /**
