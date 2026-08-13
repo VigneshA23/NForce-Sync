@@ -59,7 +59,7 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
         LEFT JOIN FETCH e.tasks t
         LEFT JOIN FETCH t.project
         LEFT JOIN FETCH t.taskCategory
-        WHERE emp.manager.id = :managerId AND e.status = :status
+        WHERE e.managerId = :managerId AND e.status = :status
         """)
     List<EodEntry> findPendingByManagerId(@Param("managerId") Long managerId,
                                           @Param("status") EodEntry.Status status);
@@ -72,7 +72,7 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
         LEFT JOIN FETCH e.tasks t
         LEFT JOIN FETCH t.project
         LEFT JOIN FETCH t.taskCategory
-        WHERE emp.manager.id = :managerId AND e.status = :status
+        WHERE e.managerId = :managerId AND e.status = :status
         AND e.entryDate BETWEEN :from AND :to
         """)
     List<EodEntry> findPendingByManagerIdAndEntryDateBetween(@Param("managerId") Long managerId,
@@ -114,7 +114,7 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
         LEFT JOIN FETCH e.tasks t
         LEFT JOIN FETCH t.project
         LEFT JOIN FETCH t.taskCategory
-        WHERE emp.manager.id = :managerId AND e.status = :status
+        WHERE e.managerId = :managerId AND e.status = :status
           AND EXISTS (
             SELECT 1 FROM com.nforceone.sync.approval.ApprovalAction a
             WHERE a.eodEntry = e AND a.actor.id = :managerId

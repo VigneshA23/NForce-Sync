@@ -103,8 +103,8 @@ public class BlockerConversationService {
         task.setAcknowledgedBy(null);
         taskRepository.save(task);
 
-        AppUser lead = task.getEodEntry().getEmployee().getManager();
-        notificationService.send(lead.getId(), "BLOCKER_REPLY",
+        Long leadId = task.getEodEntry().getManagerId();
+        notificationService.send(leadId, "BLOCKER_REPLY",
                 "New reply on a blocker",
                 employee.getFullName() + " replied to their blocker: \"" + blockerLabel(task) + "\"",
                 "/team/blockers?highlight=" + task.getId());
@@ -202,7 +202,7 @@ public class BlockerConversationService {
     }
 
     private void requireLeadOwnsTask(EodTask task, AppUser lead) {
-        if (!task.getEodEntry().getEmployee().getManager().getId().equals(lead.getId())) {
+        if (!task.getEodEntry().getManagerId().equals(lead.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
     }

@@ -18,11 +18,23 @@ export interface ApprovalActionDto {
   actedAt: string;
 }
 
+// Polled (not just refetch-on-focus) for the same reason as the Team Dashboard queries in
+// teamLead.ts: team membership (app_user.manager_id) is resolved live on every fetch, so a
+// manager reassignment takes effect on the backend immediately — the only thing that can
+// still show a since-reassigned employee's pending EOD to their old manager is this list's
+// own cached response from before the reassignment. Polling (including while backgrounded)
+// bounds that window to ~10s instead of leaving it to sit until the tab is refocused/reloaded.
+const PENDING_STALE_TIME = 10_000;
+const PENDING_REFETCH_INTERVAL = 10_000;
+
 export function usePendingApprovals(enabled = true, range?: PendingApprovalsRange) {
   return useQuery({
     queryKey: pendingQueryKey(range),
     queryFn: () => api.get<EodEntryDto[]>('/approvals/pending', { params: range }).then(r => r.data),
     enabled,
+    staleTime: PENDING_STALE_TIME,
+    refetchInterval: PENDING_REFETCH_INTERVAL,
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -38,6 +50,9 @@ export function usePendingApprovalsCount(enabled = true, range?: PendingApproval
     queryFn: () => api.get<EodEntryDto[]>('/approvals/pending', { params: range }).then(r => r.data),
     enabled,
     select: (d) => d.length,
+    staleTime: PENDING_STALE_TIME,
+    refetchInterval: PENDING_REFETCH_INTERVAL,
+    refetchIntervalInBackground: true,
   });
   return data ?? 0;
 }
