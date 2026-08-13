@@ -206,7 +206,7 @@ public class TeamLeadService {
         AppUser lead = requireLead(actingEmail);
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
-        if (!task.getEodEntry().getEmployee().getManager().getId().equals(lead.getId())) {
+        if (!task.getEodEntry().getManagerId().equals(lead.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
         return TeamBlockerDto.from(task, replyRepository.findByTaskIdOrderByCreatedAtAsc(taskId));
@@ -218,7 +218,7 @@ public class TeamLeadService {
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
 
-        if (!task.getEodEntry().getEmployee().getManager().getId().equals(lead.getId())) {
+        if (!task.getEodEntry().getManagerId().equals(lead.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
 
@@ -238,7 +238,7 @@ public class TeamLeadService {
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
 
-        if (!task.getEodEntry().getEmployee().getManager().getId().equals(lead.getId())) {
+        if (!task.getEodEntry().getManagerId().equals(lead.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
 

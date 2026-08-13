@@ -112,12 +112,22 @@ export function prefetchTeamLeadLanding(queryClient: QueryClient, today: string)
 
 // ── hooks ───────────────────────────────────────────────────────────────────────
 
-// `live` enables 60s polling — pass it only while the Team Lead is viewing "today";
+// `live` enables 10s polling — pass it only while the Team Lead is viewing "today";
 // polling a historical date/range would silently overwrite the snapshot they asked to see.
 // A historical date/range can't change once its day is over, so it's cached far longer than
 // "today" — matches the staleTime convention already used by useTeamLeadTrend/useThresholds.
+//
+// The 10s figure (down from a former 30s/60s) matters specifically for manager reassignment:
+// team membership is resolved live from app_user.manager_id on every fetch (no denormalized
+// copy), so once an employee is reassigned, a fresh fetch already excludes them for the old
+// manager — the only thing that can still show them is this dashboard's own cached response
+// from before the reassignment. Polling in the background too (not just while focused) closes
+// that window even on a tab the previous manager isn't actively looking at.
+const LIVE_STALE_TIME = 10_000;
+const LIVE_REFETCH_INTERVAL = 10_000;
+
 function rangeStaleTime(live: boolean): number {
-  return live ? 30_000 : 5 * 60_000;
+  return live ? LIVE_STALE_TIME : 5 * 60_000;
 }
 
 export function useTeamLeadSummary(range: DateRange, live = false, enabled = true) {
@@ -127,7 +137,8 @@ export function useTeamLeadSummary(range: DateRange, live = false, enabled = tru
       api.get<TeamLeadSummaryDto>('/team-lead/dashboard/summary', { params: range }).then(r => r.data),
     enabled,
     staleTime: rangeStaleTime(live),
-    refetchInterval: live ? 60_000 : false,
+    refetchInterval: live ? LIVE_REFETCH_INTERVAL : false,
+    refetchIntervalInBackground: live,
     // Keep showing the previous range's data while a newly-picked range loads, instead of
     // unmounting the whole dashboard to a loading skeleton on every date/range change.
     placeholderData: keepPreviousData,
@@ -140,7 +151,8 @@ export function useTeamMemberStatuses(range: DateRange, live = false) {
     queryFn: () =>
       api.get<MemberEodStatusDto[]>('/team-lead/team-members/status', { params: range }).then(r => r.data),
     staleTime: rangeStaleTime(live),
-    refetchInterval: live ? 60_000 : false,
+    refetchInterval: live ? LIVE_REFETCH_INTERVAL : false,
+    refetchIntervalInBackground: live,
     placeholderData: keepPreviousData,
   });
 }
@@ -154,7 +166,8 @@ export function useTeamLeadBlockers(range: DateRange, live = false, includeAckno
     queryFn: () =>
       api.get<TeamBlockerDto[]>('/team-lead/blockers', { params: { ...range, includeAcknowledged } }).then(r => r.data),
     staleTime: rangeStaleTime(live),
-    refetchInterval: live ? 60_000 : false,
+    refetchInterval: live ? LIVE_REFETCH_INTERVAL : false,
+    refetchIntervalInBackground: live,
     placeholderData: keepPreviousData,
   });
 }

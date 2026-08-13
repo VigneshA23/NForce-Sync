@@ -615,6 +615,22 @@ export default function TeamUtilization() {
 
   const selected = visible.find(m => m.employeeId === selectedId) ?? null;
 
+  // Team-level summary — computed from all members (not just visible) for a consistent header.
+  const teamSummary = useMemo(() => {
+    const withPct = members.filter(m => m.pct !== null);
+    const avgPct = withPct.length > 0
+      ? withPct.reduce((s, m) => s + (m.pct ?? 0), 0) / withPct.length
+      : null;
+    const totalApproved  = members.reduce((s, m) => s + m.approvedHours, 0);
+    const totalAvailable = members.reduce((s, m) => s + m.availableHours, 0);
+    const healthy = members.filter(m => m.status === 'HEALTHY').length;
+    const under   = members.filter(m => m.status === 'UNDERUTILIZED').length;
+    const over    = members.filter(m => m.status === 'OVERALLOCATED').length;
+    const leave   = members.filter(m => m.status === 'ON_LEAVE' || m.status === 'HOLIDAY').length;
+    const noEod   = members.filter(m => m.status === 'NO_EOD').length;
+    return { avgPct, totalApproved, totalAvailable, healthy, under, over, leave, noEod };
+  }, [members]);
+
   if (isPending) {
     return (
       <div>
@@ -717,6 +733,60 @@ export default function TeamUtilization() {
           />
         </div>
       </div>
+
+      {/* Team summary strip */}
+      {members.length > 0 && (
+        <div style={{
+          background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10,
+          padding: '14px 18px', marginBottom: 16,
+          display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center',
+        }}>
+          {/* Avg util */}
+          <div style={{ minWidth: 180, flex: '1 1 180px' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+              Team Avg Utilization
+            </div>
+            <ProgressBar pct={teamSummary.avgPct} color={teamSummary.avgPct == null ? 'var(--txt-dim)' : teamSummary.avgPct < 60 ? 'var(--warn)' : teamSummary.avgPct > 100 ? 'var(--risk)' : 'var(--ok)'} />
+            <div style={{ marginTop: 4, fontSize: 12, fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums', color: teamSummary.avgPct == null ? 'var(--txt-dim)' : teamSummary.avgPct < 60 ? 'var(--warn)' : teamSummary.avgPct > 100 ? 'var(--risk)' : 'var(--ok)' }}>
+              {teamSummary.avgPct == null ? 'N/A' : `${Math.round(teamSummary.avgPct)}%`}
+            </div>
+          </div>
+
+          <div style={{ width: 1, height: 36, background: 'var(--line)', flexShrink: 0 }} />
+
+          {/* Hours */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Approved / Available</div>
+            <div style={{ fontSize: 13, fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums', color: 'var(--txt)' }}>
+              {teamSummary.totalApproved.toFixed(1)}h
+              <span style={{ color: 'var(--txt-dim)', marginLeft: 4, fontSize: 11 }}>/ {teamSummary.totalAvailable.toFixed(0)}h</span>
+            </div>
+          </div>
+
+          <div style={{ width: 1, height: 36, background: 'var(--line)', flexShrink: 0 }} />
+
+          {/* Status distribution chips */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {[
+              { label: 'Optimal',        count: teamSummary.healthy, color: 'var(--ok)' },
+              { label: 'Under',          count: teamSummary.under,   color: 'var(--warn)' },
+              { label: 'Over',           count: teamSummary.over,    color: 'var(--risk)' },
+              { label: 'On Leave',       count: teamSummary.leave,   color: 'var(--info)' },
+              { label: 'No EOD',         count: teamSummary.noEod,   color: 'var(--txt-dim)' },
+            ].filter(s => s.count > 0).map(({ label, count, color }) => (
+              <span key={label} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px',
+                borderRadius: 20, fontSize: 11, fontWeight: 600,
+                color, background: `color-mix(in srgb, ${color} 14%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${color} 28%, transparent)`,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                {count} {label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Two-column layout */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>

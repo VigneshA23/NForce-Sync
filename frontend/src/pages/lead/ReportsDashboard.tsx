@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import EodByEmployeeReport from './EodByEmployeeReport';
-import MissingEodReport from './MissingEodReport';
+import LeadEodByEmployeeReport from './EodByEmployeeReport';
+import LeadMissingEodReport from './MissingEodReport';
 
 type Tab = 'eod' | 'missing';
 
-export default function ReportsDashboard() {
+export default function LeadReportsDashboard() {
   const [tab, setTab] = useState<Tab>('eod');
 
   return (
@@ -13,7 +13,7 @@ export default function ReportsDashboard() {
         <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
           Reports
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>Employee-wise EOD exports and compliance — scoped to your projects</p>
+        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>EOD exports and compliance — scoped to your direct reports</p>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -31,8 +31,8 @@ export default function ReportsDashboard() {
         ))}
       </div>
 
-      {tab === 'eod' && <EodByEmployeeReport />}
-      {tab === 'missing' && <MissingEodReport />}
+      {tab === 'eod' && <LeadEodByEmployeeReport />}
+      {tab === 'missing' && <LeadMissingEodReport />}
     </div>
   );
 }
