@@ -35,6 +35,7 @@ const Approvals           = lazy(() => import('./pages/Approvals'));
 const TeamUtilization     = lazy(() => import('./pages/lead/TeamUtilization'));
 const Blockers            = lazy(() => import('./pages/lead/Blockers'));
 const ProjectsAllocation  = lazy(() => import('./pages/pm/ProjectsAllocation'));
+const ProjectsUtilization = lazy(() => import('./pages/pm/ProjectsUtilization'));
 const ApprovalsPM         = lazy(() => import('./pages/pm/ApprovalsPM'));
 const ProjectDashboard    = lazy(() => import('./pages/pm/ProjectDashboard'));
 const ReportsDashboard    = lazy(() => import('./pages/pm/ReportsDashboard'));
@@ -93,6 +94,7 @@ function ChunkPrefetcher() {
       import('./pages/pm/ApprovalsPM');
       import('./pages/pm/ProjectDashboard');
       import('./pages/pm/ReportsDashboard');
+      import('./pages/pm/ProjectsUtilization');
       import('./pages/pm/Blockers');
       import('./pages/Approvals');
     }
@@ -171,6 +173,7 @@ function AppRoutes() {
             <Route path="/projects/dashboard"      element={<ProjectDashboard />} />
             <Route path="/projects"                element={<ProjectsAllocation />} />
             <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
+            <Route path="/projects/utilization"     element={<ProjectsUtilization />} />
             <Route path="/projects/planned-actual" element={<Placeholder title="Planned vs Actual" />} />
             <Route path="/projects/blockers"       element={<PmBlockers />} />
             <Route path="/projects/approvals"      element={<ApprovalsPM />} />
