@@ -66,4 +66,22 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
     List<Allocation> findActiveInRangeForProjects(@Param("projectIds") List<Long> projectIds,
                                                    @Param("from") LocalDate from,
                                                    @Param("to") LocalDate to);
+
+    // Team Lead Reports: all allocations for a set of employees (manager_id scoping),
+    // used to populate the project/client filter dropdowns.
+    @Query("SELECT a FROM Allocation a JOIN FETCH a.employee JOIN FETCH a.project " +
+           "WHERE a.employee.id IN :employeeIds " +
+           "ORDER BY a.project.name ASC, a.employee.fullName ASC")
+    List<Allocation> findByEmployeeIdIn(@Param("employeeIds") List<Long> employeeIds);
+
+    // Team Lead Reports: active allocations for a team within a date range — used to narrow
+    // results when a project filter is applied.
+    @Query("SELECT a FROM Allocation a JOIN FETCH a.employee JOIN FETCH a.project " +
+           "WHERE a.employee.id IN :employeeIds " +
+           "AND a.effectiveFrom <= :to " +
+           "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :from) " +
+           "ORDER BY a.project.name ASC, a.employee.fullName ASC")
+    List<Allocation> findActiveInRangeForEmployees(@Param("employeeIds") List<Long> employeeIds,
+                                                    @Param("from") LocalDate from,
+                                                    @Param("to") LocalDate to);
 }

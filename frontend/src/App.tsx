@@ -38,6 +38,7 @@ const ProjectsAllocation  = lazy(() => import('./pages/pm/ProjectsAllocation'));
 const ApprovalsPM         = lazy(() => import('./pages/pm/ApprovalsPM'));
 const ProjectDashboard    = lazy(() => import('./pages/pm/ProjectDashboard'));
 const ReportsDashboard    = lazy(() => import('./pages/pm/ReportsDashboard'));
+const LeadReportsDashboard = lazy(() => import('./pages/lead/ReportsDashboard'));
 const PmBlockers          = lazy(() => import('./pages/pm/Blockers'));
 const Profile             = lazy(() => import('./pages/Profile'));
 const Notifications       = lazy(() => import('./pages/Notifications'));
@@ -164,7 +165,7 @@ function AppRoutes() {
             <Route path="/team/approvals"   element={<Approvals />} />
             <Route path="/team/utilization" element={<TeamUtilization />} />
             <Route path="/team/blockers"    element={<Blockers />} />
-            <Route path="/team/reports"     element={<Placeholder title="Reports" />} />
+            <Route path="/team/reports"     element={<LeadReportsDashboard />} />
 
             {/* ── Project Manager ────────────────────── */}
             <Route path="/projects/dashboard"      element={<ProjectDashboard />} />
