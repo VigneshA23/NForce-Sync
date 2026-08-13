@@ -188,6 +188,9 @@ public class EodService {
         entry.setStatus(EodEntry.Status.SUBMITTED);
         entry.setSubmittedAt(now);
         entry.setUpdatedAt(now);
+        // Snapshot who manages the employee right now — this locks in who the entry stays
+        // visible to even if the employee is reassigned to a different manager afterward.
+        entry.setManagerId(employee.getManager() != null ? employee.getManager().getId() : null);
 
         return EodEntryDto.from(entryRepository.save(entry));
     }

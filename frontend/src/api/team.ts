@@ -40,7 +40,9 @@ export function useDashboardStats(managerId: number | undefined) {
     queryFn: () =>
       api.get<DashboardStatsDto>(`/team/${managerId}/dashboard-stats`).then(r => r.data),
     enabled: managerId != null,
-    refetchInterval: 60_000,
+    staleTime: 10_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
   });
 }
 

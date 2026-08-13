@@ -26,6 +26,13 @@ public class EodEntry {
     @JoinColumn(name = "employee_id", nullable = false)
     private AppUser employee;
 
+    // Point-in-time snapshot of employee.getManager().getId() taken at submission — distinct
+    // from the employee's live app_user.manager_id, which keeps changing on reassignment. Every
+    // manager-scoped EOD query (Approvals, Team Lead dashboard/blockers) filters on THIS field so
+    // an entry stays with whoever was managing the employee when they submitted it.
+    @Column(name = "manager_id")
+    private Long managerId;
+
     @Column(name = "entry_date", nullable = false)
     private LocalDate entryDate;
 

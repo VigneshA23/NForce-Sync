@@ -753,6 +753,11 @@ function EditModal({
     mutationFn: ({ id, data }: { id: number; data: UpdateUserPayload }) => updateUser(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      // Manager/TL reassignment changes which employees a Team Lead's dashboard should show;
+      // without this, the old manager's already-open dashboard keeps its stale roster (and any
+      // new EOD the reassigned employee submits) until its staleTime/refetchInterval elapses.
+      queryClient.invalidateQueries({ queryKey: ['team-lead'] });
+      queryClient.invalidateQueries({ queryKey: ['team'] });
       toast.showToast('success', 'User updated successfully');
       onClose();
     },
