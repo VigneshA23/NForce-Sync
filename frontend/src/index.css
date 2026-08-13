@@ -37,6 +37,9 @@
   --risk:        #E4373D;
   --info:        #4C8DD6;
 
+  /* High-contrast clickable-text variant (e.g. Team Lead assigned-project links) */
+  --link-strong: #FFFFFF;
+
   /* BrandMark ring & glow — dark */
   --bm-ring:        rgba(228,55,61,.25);
   --bm-glow:        radial-gradient(circle, rgba(228,55,61,.18) 0%, rgba(228,55,61,0) 70%);
@@ -80,6 +83,9 @@
   --warn:        #896010;
   --risk:        #C81A1F;
   --info:        #1A5FAA;
+
+  /* High-contrast clickable-text variant (e.g. Team Lead assigned-project links) */
+  --link-strong: #000000;
 
   /* BrandMark ring & glow — light (logo is black disc; give it depth on white) */
   --bm-ring:        rgba(0,0,0,.15);

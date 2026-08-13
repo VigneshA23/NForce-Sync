@@ -2,12 +2,12 @@ import { useMemo, useState } from 'react';
 import {
   FolderKanban, CheckCircle2, PauseCircle, Archive, Gauge, Briefcase, Ban,
   Target, TrendingUp, AlertTriangle, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown, X,
+  Calendar as CalendarIcon,
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell,
 } from 'recharts';
 import { KpiCard } from '../../components/KpiCard';
-import { DatePicker } from '../../components/DatePicker';
 import { todayISO } from '../../lib/date';
 import {
   useProjectDashboardFilters, useProjectDashboardSummary,
@@ -142,6 +142,241 @@ function StatusPill({ color, label }: { color: string; label: string }) {
   );
 }
 
+// ── date range filter ────────────────────────────────────────────────────────
+// Self-contained DD-MM-YYYY manual entry + calendar picker for the dashboard's From/To
+// filters, mirroring the pattern built for Employee "My EOD History" (EodHistory.tsx):
+// character-level input masking (never leaves invalid text sitting in the field), explicit
+// calendar/leap-year arithmetic (never `new Date()` parsing/normalization), a future-date
+// check for To, and a From <= To check — all funnelled through one validation path shared by
+// both manual typing and the calendar picker. Kept local to this page rather than folded into
+// the shared `components/DatePicker.tsx`, since that component is also used by Submit EOD,
+// Admin User Management, and two other PM report pages that this change must not touch.
+
+const MIN_ISO_DATE = '1900-01-01';
+const MAX_ISO_DATE = '2099-12-31';
+const MIN_YEAR = 1900;
+const MAX_YEAR = 2099;
+
+const DDMMYYYY_RE = /^(\d{2})-(\d{2})-(\d{4})$/;
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+function daysInMonth(month: number, year: number): number {
+  return month === 2 && isLeapYear(year) ? 29 : DAYS_IN_MONTH[month - 1];
+}
+
+/** Strictly parses `DD-MM-YYYY` into `YYYY-MM-DD` by digit-count regex plus arithmetic
+ * range/leap-year checks — never by constructing a `Date` and reading back whatever it
+ * silently normalized to. Returns `null` for anything that isn't a genuine calendar date. */
+function parseStrictDDMMYYYY(text: string): string | null {
+  const m = DDMMYYYY_RE.exec(text.trim());
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const year = Number(m[3]);
+  if (month < 1 || month > 12) return null;
+  if (year < MIN_YEAR || year > MAX_YEAR) return null;
+  if (day < 1 || day > daysInMonth(month, year)) return null;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+/** `YYYY-MM-DD` → `DD-MM-YYYY`, for mirroring a calendar-picker selection into the text field. */
+function isoToDDMMYYYY(iso: string): string {
+  const [y, mo, d] = iso.split('-');
+  return `${d}-${mo}-${y}`;
+}
+
+// Both sides are always fixed-width, zero-padded `YYYY-MM-DD` by this point, so a plain
+// string comparison is chronologically correct — no Date object, no timezone risk.
+function isRangeValid(from: string, to: string): boolean {
+  if (from === '' || to === '') return true;
+  return from <= to;
+}
+
+/** Today as zero-padded `YYYY-MM-DD`, read from local date parts (never UTC/`toISOString`,
+ * which can shift the calendar day depending on the browser's timezone offset). */
+function todayIsoLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${day}`;
+}
+
+/** Restricts raw keystrokes to the DD-MM-YYYY structure itself: strips every non-digit
+ * character, caps at 8 digits (2+2+4), and auto-inserts the `-` separators as digits
+ * accumulate. Always a syntactically-valid prefix of DD-MM-YYYY — completeness and calendar
+ * validity are checked separately, on blur/Enter, by `parseStrictDDMMYYYY`. */
+function maskDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  if (digits.length > 4) return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+  if (digits.length > 2) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+  return digits;
+}
+
+/** Whether the dashboard should show data at all: 'ready' covers both a fully valid From+To
+ * pair and both-empty (falls back to the backend's own default range); 'invalid' — bad
+ * format, an incomplete pair, a future To date, or From > To — must never show data, so the
+ * page renders a validation notice instead. */
+type DateRangeStatus = 'ready' | 'invalid';
+
+function DateRangeFilter({ from, to, onApply, onStatusChange }: {
+  /** Committed ISO values from the parent — read only to seed this component's own text
+   * state on mount; never written back to directly (only via onApply). */
+  from: string;
+  to: string;
+  onApply: (from: string, to: string) => void;
+  onStatusChange: (status: DateRangeStatus) => void;
+}) {
+  const [fromText, setFromText] = useState(() => (from ? isoToDDMMYYYY(from) : ''));
+  const [toText, setToText] = useState(() => (to ? isoToDDMMYYYY(to) : ''));
+  const [dateError, setDateError] = useState<string | null>(null);
+  const [fromInvalid, setFromInvalid] = useState(false);
+  const [toInvalid, setToInvalid] = useState(false);
+
+  // The single validation/commit path for BOTH manual typing (via onBlur/Enter) and the
+  // calendar picker (via handlePickerChange below). Order: format/day/month/year/calendar
+  // validity → both-sides-present → To not in the future → From <= To. Only calls onApply
+  // once every step passes (or both fields are empty); any failure reports 'invalid' and
+  // leaves the parent's committed from/to exactly as they were — never a fallback to
+  // whatever was last valid.
+  function evaluate(nextFromText: string, nextToText: string) {
+    const fromTrimmed = nextFromText.trim();
+    const toTrimmed = nextToText.trim();
+    const fromEmpty = fromTrimmed === '';
+    const toEmpty = toTrimmed === '';
+
+    if (fromEmpty && toEmpty) {
+      setFromInvalid(false);
+      setToInvalid(false);
+      setDateError(null);
+      onStatusChange('ready');
+      onApply('', '');
+      return;
+    }
+
+    const fromIso = fromEmpty ? null : parseStrictDDMMYYYY(fromTrimmed);
+    const toIso = toEmpty ? null : parseStrictDDMMYYYY(toTrimmed);
+    const fromBad = !fromEmpty && fromIso === null;
+    const toBad = !toEmpty && toIso === null;
+    setFromInvalid(fromBad);
+    setToInvalid(toBad);
+
+    if (fromBad || toBad) {
+      setDateError('Invalid date. Please enter a valid date in DD-MM-YYYY format.');
+      onStatusChange('invalid');
+      return;
+    }
+
+    // Both individually well-formed at this point — an incomplete pair (only one side
+    // filled in) must not filter, and must not fall back to showing unfiltered/stale data.
+    if (fromEmpty || toEmpty) {
+      setDateError(null);
+      onStatusChange('invalid');
+      return;
+    }
+
+    if (toIso! > todayIsoLocal()) {
+      setToInvalid(true);
+      setDateError('To date cannot be a future date.');
+      onStatusChange('invalid');
+      return;
+    }
+
+    if (!isRangeValid(fromIso ?? '', toIso ?? '')) {
+      setDateError('From date cannot be later than To date.');
+      onStatusChange('invalid');
+      return;
+    }
+
+    setDateError(null);
+    onStatusChange('ready');
+    onApply(fromIso ?? '', toIso ?? '');
+  }
+
+  // The calendar picker's native <input type="date"> value is browser-guaranteed to be
+  // either empty or a genuine valid date, but it still funnels through the same `evaluate`
+  // so a picker pick and a manual entry are validated/committed identically — including
+  // still being subject to the From <= To and future-To checks.
+  function handlePickerChange(field: 'from' | 'to', e: React.ChangeEvent<HTMLInputElement>) {
+    const iso = e.target.value;
+    const ddmmyyyy = iso ? isoToDDMMYYYY(iso) : '';
+    if (field === 'from') {
+      setFromText(ddmmyyyy);
+      evaluate(ddmmyyyy, toText);
+    } else {
+      setToText(ddmmyyyy);
+      evaluate(fromText, ddmmyyyy);
+    }
+  }
+
+  return (
+    <>
+      <div style={{ position: 'relative', display: 'inline-flex' }}>
+        <input
+          type="text" inputMode="numeric" placeholder="From (DD-MM-YYYY)" maxLength={10}
+          value={fromText}
+          onChange={e => setFromText(maskDateInput(e.target.value))}
+          onBlur={() => evaluate(fromText, toText)}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          aria-label="From date"
+          aria-invalid={fromInvalid}
+          style={{ ...inputStyle, width: 150, paddingRight: 26, fontWeight: 400 }}
+        />
+        <div style={{
+          position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
+          color: 'var(--txt-dim)', display: 'flex', pointerEvents: 'none',
+        }}>
+          <CalendarIcon size={13} aria-hidden="true" />
+        </div>
+        <input
+          type="date" min={MIN_ISO_DATE} max={MAX_ISO_DATE}
+          value={from}
+          onChange={e => handlePickerChange('from', e)}
+          tabIndex={-1}
+          aria-label="Pick From date from calendar"
+          style={{ position: 'absolute', right: 0, top: 0, width: 24, height: '100%', opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }}
+        />
+      </div>
+      <span style={{ color: 'var(--txt-dim)', fontSize: 12 }}>→</span>
+      <div style={{ position: 'relative', display: 'inline-flex' }}>
+        <input
+          type="text" inputMode="numeric" placeholder="To (DD-MM-YYYY)" maxLength={10}
+          value={toText}
+          onChange={e => setToText(maskDateInput(e.target.value))}
+          onBlur={() => evaluate(fromText, toText)}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          aria-label="To date"
+          aria-invalid={toInvalid}
+          style={{ ...inputStyle, width: 150, paddingRight: 26, fontWeight: 400 }}
+        />
+        <div style={{
+          position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
+          color: 'var(--txt-dim)', display: 'flex', pointerEvents: 'none',
+        }}>
+          <CalendarIcon size={13} aria-hidden="true" />
+        </div>
+        <input
+          type="date" min={MIN_ISO_DATE} max={todayIsoLocal()}
+          value={to}
+          onChange={e => handlePickerChange('to', e)}
+          tabIndex={-1}
+          aria-label="Pick To date from calendar"
+          style={{ position: 'absolute', right: 0, top: 0, width: 24, height: '100%', opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }}
+        />
+      </div>
+      {dateError && (
+        <span role="alert" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--risk)' }}>
+          <AlertTriangle size={12} aria-hidden="true" /> {dateError}
+        </span>
+      )}
+    </>
+  );
+}
+
 // ── filter bar ─────────────────────────────────────────────────────────────────
 
 interface Filters {
@@ -158,8 +393,13 @@ function firstDayOfMonthISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
-function FilterBar({ filters, onChange }: { filters: Filters; onChange: (next: Filters) => void }) {
+function FilterBar({ filters, onChange, onDateStatusChange }: {
+  filters: Filters; onChange: (next: Filters) => void; onDateStatusChange: (status: DateRangeStatus) => void;
+}) {
   const { data: options } = useProjectDashboardFilters();
+  // Bumped on "Clear" to remount DateRangeFilter, resetting its internal text/error state to
+  // match the now-cleared from/to props — simpler than lifting that state up into this bar.
+  const [clearGen, setClearGen] = useState(0);
 
   return (
     <Card style={{ padding: '14px 16px', marginBottom: 20 }}>
@@ -204,16 +444,22 @@ function FilterBar({ filters, onChange }: { filters: Filters; onChange: (next: F
           {options?.clients.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
 
-        <DatePicker value={filters.from} onChange={iso => onChange({ ...filters, from: iso })}
-          max={filters.to} inputStyle={{ ...inputStyle, width: 140 }} placeholder="From" />
-        <span style={{ color: 'var(--txt-dim)', fontSize: 12 }}>→</span>
-        <DatePicker value={filters.to} onChange={iso => onChange({ ...filters, to: iso })}
-          min={filters.from} max={todayISO()} inputStyle={{ ...inputStyle, width: 140 }} placeholder="To" />
+        <DateRangeFilter
+          key={clearGen}
+          from={filters.from}
+          to={filters.to}
+          onApply={(from, to) => onChange({ ...filters, from, to })}
+          onStatusChange={onDateStatusChange}
+        />
 
         {(filters.projectId || filters.employeeId || filters.teamManagerId || filters.client) && (
           <button
             type="button"
-            onClick={() => onChange({ ...filters, projectId: '', employeeId: '', teamManagerId: '', client: '' })}
+            onClick={() => {
+              onChange({ ...filters, projectId: '', employeeId: '', teamManagerId: '', client: '', from: '', to: '' });
+              onDateStatusChange('ready');
+              setClearGen(g => g + 1);
+            }}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
               padding: '8px 10px', background: 'transparent', border: '1px solid var(--line2)',
@@ -413,15 +659,18 @@ export default function ProjectDashboard() {
     to: todayISO(),
     projectId: '', employeeId: '', teamManagerId: '', client: '',
   });
+  // Gates whether the dashboard shows data at all — see DateRangeFilter above. Starts
+  // 'ready' since the initial from/to are already a valid, backend-default-matching range.
+  const [dateFilterStatus, setDateFilterStatus] = useState<DateRangeStatus>('ready');
 
   const { data, isPending, isError, refetch } = useProjectDashboardSummary({
-    from: filters.from,
-    to: filters.to,
+    from: filters.from || undefined,
+    to: filters.to || undefined,
     projectId: filters.projectId ? Number(filters.projectId) : undefined,
     employeeId: filters.employeeId ? Number(filters.employeeId) : undefined,
     teamManagerId: filters.teamManagerId ? Number(filters.teamManagerId) : undefined,
     client: filters.client || undefined,
-  });
+  }, dateFilterStatus !== 'invalid');
 
   if (isPending) {
     return (
@@ -484,8 +733,16 @@ export default function ProjectDashboard() {
         </p>
       </div>
 
-      <FilterBar filters={filters} onChange={setFilters} />
+      <FilterBar filters={filters} onChange={setFilters} onDateStatusChange={setDateFilterStatus} />
 
+      {dateFilterStatus === 'invalid' ? (
+        <Card style={{ padding: '40px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
+            Enter valid From and To dates to view the dashboard for that range.
+          </div>
+        </Card>
+      ) : (
+        <>
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 20 }}>
         <KpiCard icon={<FolderKanban size={17} aria-hidden="true" />} label="Total Projects" value={cards.totalAssignedProjects} />
@@ -569,6 +826,8 @@ export default function ProjectDashboard() {
         <ResourceUtilizationTable rows={resourceUtilization} />
         <MissingEodTable rows={missingEod} />
       </div>
+        </>
+      )}
     </div>
   );
 }

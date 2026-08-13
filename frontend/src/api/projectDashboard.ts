@@ -116,11 +116,12 @@ export function useProjectDashboardFilters() {
   });
 }
 
-export function useProjectDashboardSummary(filters: ProjectDashboardFilterParams) {
+export function useProjectDashboardSummary(filters: ProjectDashboardFilterParams, enabled: boolean = true) {
   return useQuery({
     queryKey: ['project-dashboard', 'summary', filters],
     queryFn: () =>
       api.get<ProjectDashboardSummaryDto>('/project-dashboard/summary', { params: filters }).then(r => r.data),
     placeholderData: prev => prev,
+    enabled,
   });
 }

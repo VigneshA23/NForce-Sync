@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { RefreshCw, AlertTriangle, Search, X } from 'lucide-react';
+import { RefreshCw, AlertTriangle, Search, X, ChevronDown, ChevronUp } from 'lucide-react';
 import type { ProjectFullDto } from '../../api/projects';
 
 // ── Shared "My Projects" building blocks ─────────────────────────────────────────
@@ -160,10 +160,90 @@ export function StatusFilterSelect({ value, onChange, options, ariaLabel }: {
   );
 }
 
+// ── Status filter dropdown — same value/onChange contract as StatusFilterSelect above, but
+// shows "Status" inside the trigger itself (no separate label) instead of beside a <select>.
+// Closes on selecting an option or clicking anywhere outside, via the same full-screen overlay
+// trick used by SortDropdown/FilterDropdown in components/FilterDropdown.tsx, so it matches
+// the rest of the app's dropdown look/feel and interaction rather than inventing a new one.
+export function StatusFilterDropdown({ value, onChange, options, ariaLabel }: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = options.find(o => o.value === value);
+  // The "no filter applied" option (e.g. 'ALL') shows the "Status" placeholder in the trigger,
+  // exactly like the unselected state — selecting any other option swaps it for that label.
+  const showPlaceholder = !current || value === 'ALL';
+
+  return (
+    <div style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        style={{
+          ...inputStyle, width: 'auto', minWidth: 130, fontWeight: 500,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        }}
+      >
+        <span>{showPlaceholder ? 'Status' : current.label}</span>
+        {open ? <ChevronUp size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
+          <div
+            role="listbox"
+            aria-label={ariaLabel}
+            style={{
+              position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, minWidth: 150,
+              background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 6,
+              boxShadow: '0 12px 28px rgba(0,0,0,.35)', maxHeight: 260, overflowY: 'auto',
+            }}
+          >
+            {options.map(o => (
+              <button
+                key={o.value}
+                type="button"
+                role="option"
+                aria-selected={o.value === value}
+                onClick={() => { onChange(o.value); setOpen(false); }}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left', font: 'inherit',
+                  background: o.value === value ? 'var(--raised2)' : 'transparent',
+                  border: 'none', borderRadius: 6, padding: '7px 10px', margin: '1px 0',
+                  fontSize: 12.5, color: 'var(--txt)', cursor: 'pointer',
+                }}
+                onMouseEnter={e => { if (o.value !== value) e.currentTarget.style.background = 'var(--raised)'; }}
+                onMouseLeave={e => { if (o.value !== value) e.currentTarget.style.background = 'transparent'; }}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Projects panel ──────────────────────────────────────────────────────────────
 
 export function ProjectsPanel({
   projects, isPending, isError, isRefreshing, onRefresh, selectedProjectId, onSelect, onOpenDetails,
+  /** Team Lead-only presentation tweaks: bold high-contrast name link + toolbar with the
+   * status filter right next to search, instead of pushed to the far right. Defaults keep
+   * the Employee "My Projects" page unchanged. */
+  boldNameLink = false,
+  compactToolbar = false,
+  // Team Lead-only: render the status filter as a single dropdown button that shows "Status"
+  // (or the selected option) inside itself, instead of a separate "Status" label beside a
+  // native <select>. Defaults keep the Employee "My Projects" page unchanged.
+  statusAsDropdown = false,
 }: {
   projects: ProjectFullDto[];
   isPending: boolean;
@@ -173,6 +253,9 @@ export function ProjectsPanel({
   selectedProjectId: number | undefined;
   onSelect: (id: number) => void;
   onOpenDetails: (id: number) => void;
+  boldNameLink?: boolean;
+  compactToolbar?: boolean;
+  statusAsDropdown?: boolean;
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>('ALL');
@@ -218,9 +301,11 @@ export function ProjectsPanel({
       {!isPending && !isError && projects.length > 0 && (
         <div style={{
           padding: '14px 20px', borderBottom: '1px solid var(--line)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+          display: 'flex', alignItems: 'center',
+          justifyContent: compactToolbar ? 'flex-start' : 'space-between',
+          gap: 16, flexWrap: 'wrap',
         }}>
-          <div style={{ flex: '1 1 260px', maxWidth: 320 }}>
+          <div style={{ flex: compactToolbar ? '0 1 320px' : '1 1 260px', maxWidth: 320 }}>
             <SearchBox
               value={search}
               onChange={setSearch}
@@ -228,17 +313,22 @@ export function ProjectsPanel({
               ariaLabel="Search assigned projects by name, client, or code"
             />
           </div>
-          <StatusFilterSelect
-            value={statusFilter}
-            onChange={v => setStatusFilter(v as ProjectStatusFilter)}
-            ariaLabel="Filter assigned projects by status"
-            options={[
-              { value: 'ALL', label: 'All' },
-              { value: 'ACTIVE', label: 'Active' },
-              { value: 'INACTIVE', label: 'Inactive' },
-              { value: 'ON_HOLD', label: 'On Hold' },
-            ]}
-          />
+          {(() => {
+            const StatusControl = statusAsDropdown ? StatusFilterDropdown : StatusFilterSelect;
+            return (
+              <StatusControl
+                value={statusFilter}
+                onChange={v => setStatusFilter(v as ProjectStatusFilter)}
+                ariaLabel="Filter assigned projects by status"
+                options={[
+                  { value: 'ALL', label: 'All' },
+                  { value: 'ACTIVE', label: 'Active' },
+                  { value: 'INACTIVE', label: 'Inactive' },
+                  { value: 'ON_HOLD', label: 'On Hold' },
+                ]}
+              />
+            );
+          })()}
         </div>
       )}
 
@@ -304,7 +394,13 @@ export function ProjectsPanel({
                       type="button"
                       onClick={e => { e.stopPropagation(); onOpenDetails(p.id); }}
                       title="View project details"
-                      style={{
+                      style={boldNameLink ? {
+                        background: 'none', border: 'none', padding: 0, margin: 0,
+                        cursor: 'pointer', textAlign: 'left', font: 'inherit',
+                        color: 'var(--link-strong)', fontWeight: 700,
+                        textDecoration: 'underline',
+                        textDecorationColor: 'color-mix(in srgb, var(--link-strong) 40%, transparent)',
+                      } : {
                         background: 'none', border: 'none', padding: 0, margin: 0,
                         cursor: 'pointer', textAlign: 'left', font: 'inherit',
                         color: 'var(--brand)', fontWeight: 500,

@@ -95,6 +95,9 @@ export default function MyProjects() {
         selectedProjectId={selectedProjectId}
         onSelect={setSelectedProjectId}
         onOpenDetails={setDetailsProjectId}
+        boldNameLink
+        compactToolbar
+        statusAsDropdown
       />
 
       <ProjectDetailsModal

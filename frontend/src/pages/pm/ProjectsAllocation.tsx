@@ -155,8 +155,9 @@ function IconButton({ icon, label, danger, onClick, disabled }: {
   );
 }
 
-function Toolbar({ count, noun, onRefetch, onAdd, addLabel, filters }: {
-  count: number | undefined; noun: string; onRefetch: () => void; onAdd: () => void; addLabel: string;
+function Toolbar({ count, noun, onRefetch, isRefreshing, onAdd, addLabel, filters }: {
+  count: number | undefined; noun: string; onRefetch: () => void; isRefreshing?: boolean;
+  onAdd: () => void; addLabel: string;
   /** Optional filter controls, rendered in the left group after the count. */
   filters?: React.ReactNode;
 }) {
@@ -179,13 +180,16 @@ function Toolbar({ count, noun, onRefetch, onAdd, addLabel, filters }: {
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
         <button
           onClick={onRefetch}
-          aria-label="Refresh"
+          disabled={isRefreshing}
+          aria-label={isRefreshing ? 'Refreshing…' : 'Refresh'}
+          title="Refresh"
           style={{
-            background: 'transparent', border: 'none', cursor: 'pointer',
+            background: 'transparent', border: 'none', cursor: isRefreshing ? 'default' : 'pointer',
             color: 'var(--txt-dim)', padding: 6, display: 'flex', alignItems: 'center', borderRadius: 5,
+            opacity: isRefreshing ? 0.7 : 1,
           }}
         >
-          <RefreshCw size={14} aria-hidden="true" />
+          <RefreshCw size={14} aria-hidden="true" style={isRefreshing ? { animation: 'spin 1s linear infinite' } : undefined} />
         </button>
         <button
           onClick={onAdd}
@@ -583,7 +587,7 @@ function ProjectModal({ open, onClose, editing }: {
 // ── Projects tab ───────────────────────────────────────────────────────────────
 
 function ProjectsTab() {
-  const { data, isPending, isError, refetch } = useAllProjects();
+  const { data, isPending, isError, isFetching, refetch } = useAllProjects();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ProjectFullDto | null>(null);
   const [search, setSearch] = useState('');
@@ -692,7 +696,7 @@ function ProjectsTab() {
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
       <Toolbar count={data ? filtered.length : undefined} noun="project" onRefetch={() => refetch()}
-        onAdd={openCreate} addLabel="New Project" filters={projectFilters} />
+        isRefreshing={isFetching} onAdd={openCreate} addLabel="New Project" filters={projectFilters} />
 
       {isPending && (
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1103,7 +1107,7 @@ function DeleteAllocationModal({ allocation, onClose }: { allocation: Allocation
 function AllocationTab() {
   const { data: projects } = useAllProjects();
   const [projectFilter, setProjectFilter] = useState('');
-  const { data, isPending, isError, refetch } = useAllocations(projectFilter ? Number(projectFilter) : undefined);
+  const { data, isPending, isError, isFetching, refetch } = useAllocations(projectFilter ? Number(projectFilter) : undefined);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [toEdit, setToEdit] = useState<AllocationDto | null>(null);
@@ -1187,13 +1191,16 @@ function AllocationTab() {
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button
             onClick={() => refetch()}
-            aria-label="Refresh"
+            disabled={isFetching}
+            aria-label={isFetching ? 'Refreshing…' : 'Refresh'}
+            title="Refresh"
             style={{
-              background: 'transparent', border: 'none', cursor: 'pointer',
+              background: 'transparent', border: 'none', cursor: isFetching ? 'default' : 'pointer',
               color: 'var(--txt-dim)', padding: 6, display: 'flex', alignItems: 'center', borderRadius: 5,
+              opacity: isFetching ? 0.7 : 1,
             }}
           >
-            <RefreshCw size={14} aria-hidden="true" />
+            <RefreshCw size={14} aria-hidden="true" style={isFetching ? { animation: 'spin 1s linear infinite' } : undefined} />
           </button>
           <button
             onClick={() => setModalOpen(true)}
@@ -1322,6 +1329,7 @@ export default function ProjectsAllocation() {
       </div>
 
       {tab === 'projects' ? <ProjectsTab /> : <AllocationTab />}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

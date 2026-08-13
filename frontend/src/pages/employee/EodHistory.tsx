@@ -98,6 +98,21 @@ function isoToDDMMYYYY(iso: string): string {
   return `${d}-${mo}-${y}`;
 }
 
+/**
+ * Restricts a From/To field's raw keystrokes to the DD-MM-YYYY structure itself, rather than
+ * validating after the fact: strips every non-digit character (so letters/symbols/spaces can
+ * never enter state at all), caps at 8 digits total (2+2+4), and auto-inserts the `-`
+ * separators as digits accumulate. The result is always a syntactically-valid prefix of
+ * DD-MM-YYYY — it just may not yet be a *complete* or calendar-valid date, which is checked
+ * separately on blur/Enter by `parseStrictDDMMYYYY`.
+ */
+function maskDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  if (digits.length > 4) return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+  if (digits.length > 2) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+  return digits;
+}
+
 // Both `from`/`to` are always fixed-width, zero-padded `YYYY-MM-DD` by this point (never the
 // DD-MM-YYYY display string, which sorts nothing like calendar order), so a plain string
 // comparison is chronologically correct — no Date object, no timezone risk.
@@ -105,6 +120,24 @@ function isRangeValid(from: string, to: string): boolean {
   if (from === '' || to === '') return true;
   return from <= to;
 }
+
+/** Today as a zero-padded `YYYY-MM-DD`, read from local date parts (never UTC/`toISOString`,
+ * which can shift the calendar day depending on the browser's timezone offset). */
+function todayIsoLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${day}`;
+}
+
+/**
+ * Whether the EOD History table should show query results at all. `'none'` (both fields
+ * empty) shows the normal unfiltered list; `'valid'` shows the date-filtered list; `'invalid'`
+ * — bad format, an incomplete pair (only one side filled), a future To date, or From > To —
+ * must never show records, filtered or not, so the table renders a validation state instead.
+ */
+type DateFilterStatus = 'none' | 'valid' | 'invalid';
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -124,12 +157,20 @@ export default function EodHistory() {
   const [dateError, setDateError] = useState<string | null>(null);
   const [fromInvalid, setFromInvalid] = useState(false);
   const [toInvalid, setToInvalid] = useState(false);
+  // Both empty at first, matching the unfiltered default — see `applyDateFilter` for every
+  // transition. Gates the table render below: records are only ever shown for 'none' or
+  // 'valid', never 'invalid', regardless of what `dateFrom`/`dateTo` last held.
+  const [dateFilterStatus, setDateFilterStatus] = useState<DateFilterStatus>('none');
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
   const [page, setPage] = useState(0);
 
   const { data: entries = [], isLoading, isError } = useQuery({
     queryKey: ['eod-history', dateFrom, dateTo],
     queryFn:  () => listEntries(undefined, dateFrom || undefined, dateTo || undefined),
+    // Never issue a request for an invalid/incomplete range — `dateFrom`/`dateTo` are only
+    // ever committed (see `applyDateFilter`) once the full pair is valid, so this just blocks
+    // a stray refetch (e.g. window refocus) while the fields sit in an invalid state.
+    enabled: dateFilterStatus !== 'invalid',
   });
 
   const totalHours = (entry: EodEntryDto) =>
@@ -177,33 +218,66 @@ export default function EodHistory() {
 
   // The single validation/commit path for BOTH manual typing (via onBlur/Enter) and the
   // calendar picker (via handlePickerChange below) — always re-validates the pair of raw
-  // DD-MM-YYYY texts together so neither entry point can diverge from the other. Only commits
-  // to dateFrom/dateTo (and thus the history query) when both fields are individually real
-  // calendar dates AND From <= To; otherwise the error is shown and the previously committed,
-  // already-valid range is left exactly as it was — never silently applied, never silently
-  // cleared.
+  // DD-MM-YYYY texts together so neither entry point can diverge from the other. Follows a
+  // fixed order: format/day/month/year/calendar validity (parseStrictDDMMYYYY) → both-sides-
+  // present → To not in the future → From <= To. Only commits to dateFrom/dateTo (and thus the
+  // history query) once every step passes; any failure sets dateFilterStatus to 'invalid',
+  // which alone controls whether the table renders records — never a fallback to whatever
+  // dateFrom/dateTo last held.
   function applyDateFilter(nextFromText: string, nextToText: string) {
     const fromTrimmed = nextFromText.trim();
     const toTrimmed = nextToText.trim();
-    const fromIso = fromTrimmed === '' ? '' : parseStrictDDMMYYYY(fromTrimmed);
-    const toIso = toTrimmed === '' ? '' : parseStrictDDMMYYYY(toTrimmed);
+    const fromEmpty = fromTrimmed === '';
+    const toEmpty = toTrimmed === '';
 
-    const fromBad = fromTrimmed !== '' && fromIso === null;
-    const toBad = toTrimmed !== '' && toIso === null;
+    if (fromEmpty && toEmpty) {
+      setFromInvalid(false);
+      setToInvalid(false);
+      setDateError(null);
+      setDateFilterStatus('none');
+      setDateFrom('');
+      setDateTo('');
+      setPage(0);
+      return;
+    }
+
+    const fromIso = fromEmpty ? null : parseStrictDDMMYYYY(fromTrimmed);
+    const toIso = toEmpty ? null : parseStrictDDMMYYYY(toTrimmed);
+
+    const fromBad = !fromEmpty && fromIso === null;
+    const toBad = !toEmpty && toIso === null;
     setFromInvalid(fromBad);
     setToInvalid(toBad);
 
     if (fromBad || toBad) {
       setDateError('Invalid date. Please enter a valid date in DD-MM-YYYY format.');
+      setDateFilterStatus('invalid');
+      return;
+    }
+
+    // Both individually well-formed (or empty) at this point — an incomplete pair (only one
+    // side filled in) must not filter, and must not fall back to showing unfiltered records.
+    if (fromEmpty || toEmpty) {
+      setDateError(null);
+      setDateFilterStatus('invalid');
+      return;
+    }
+
+    if (toIso! > todayIsoLocal()) {
+      setToInvalid(true);
+      setDateError('To date cannot be a future date.');
+      setDateFilterStatus('invalid');
       return;
     }
 
     if (!isRangeValid(fromIso ?? '', toIso ?? '')) {
       setDateError('From date cannot be later than To date.');
+      setDateFilterStatus('invalid');
       return;
     }
 
     setDateError(null);
+    setDateFilterStatus('valid');
     setDateFrom(fromIso ?? '');
     setDateTo(toIso ?? '');
     setPage(0);
@@ -234,6 +308,14 @@ export default function EodHistory() {
 
   function handleView(entry: EodEntryDto) {
     navigate(`/eod/submit?date=${entry.entryDate}`);
+  }
+
+  function clearAllFilters() {
+    setStatusFilter(''); setSearch('');
+    setDateFrom(''); setDateTo(''); setFromText(''); setToText('');
+    setFromInvalid(false); setToInvalid(false); setDateError(null);
+    setDateFilterStatus('none');
+    setPage(0);
   }
 
   return (
@@ -290,9 +372,9 @@ export default function EodHistory() {
           <label style={labelStyle} htmlFor="date-from">From</label>
           <div style={{ position: 'relative', display: 'inline-flex' }}>
             <input
-              id="date-from" type="text" inputMode="numeric" placeholder="DD-MM-YYYY"
+              id="date-from" type="text" inputMode="numeric" placeholder="DD-MM-YYYY" maxLength={10}
               value={fromText}
-              onChange={e => setFromText(e.target.value)}
+              onChange={e => setFromText(maskDateInput(e.target.value))}
               onBlur={() => applyDateFilter(fromText, toText)}
               onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
               aria-invalid={fromInvalid}
@@ -318,9 +400,9 @@ export default function EodHistory() {
           <label style={labelStyle} htmlFor="date-to">To</label>
           <div style={{ position: 'relative', display: 'inline-flex' }}>
             <input
-              id="date-to" type="text" inputMode="numeric" placeholder="DD-MM-YYYY"
+              id="date-to" type="text" inputMode="numeric" placeholder="DD-MM-YYYY" maxLength={10}
               value={toText}
-              onChange={e => setToText(e.target.value)}
+              onChange={e => setToText(maskDateInput(e.target.value))}
               onBlur={() => applyDateFilter(fromText, toText)}
               onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
               aria-invalid={toInvalid}
@@ -333,7 +415,7 @@ export default function EodHistory() {
               <CalendarIcon size={13} aria-hidden="true" />
             </div>
             <input
-              type="date" min={MIN_ISO_DATE} max={MAX_ISO_DATE}
+              type="date" min={MIN_ISO_DATE} max={todayIsoLocal()}
               value={dateTo}
               onChange={e => handlePickerChange('to', e)}
               tabIndex={-1}
@@ -354,7 +436,9 @@ export default function EodHistory() {
           <ArrowUpDown size={12} /> {sortDir === 'desc' ? 'Newest first' : 'Oldest first'}
         </button>
         <span style={{ marginLeft: 'auto', fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-dim)' }}>
-          {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
+          {dateFilterStatus === 'invalid'
+            ? '0 entries'
+            : `${filtered.length} ${filtered.length === 1 ? 'entry' : 'entries'}`}
         </span>
       </div>
 
@@ -370,8 +454,16 @@ export default function EodHistory() {
         </div>
       )}
 
-      {/* Table */}
-      {isLoading ? (
+      {/* Table — a date filter in an 'invalid' state (bad format, incomplete pair, future
+          To, or From > To) must never render records, so it takes precedence over the
+          normal loading/error/empty/data states below. */}
+      {dateFilterStatus === 'invalid' ? (
+        <EmptyState
+          message="Enter valid dates to view EOD history."
+          hasFilter
+          onClear={clearAllFilters}
+        />
+      ) : isLoading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {[100, 85, 90, 78].map((w, i) => (
             <div key={i} className="skeleton" style={{ height: 56, width: `${w}%`, borderRadius: 8 }} />
@@ -387,13 +479,8 @@ export default function EodHistory() {
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState
-          hasFilter={!!statusFilter || !!search || !!dateFrom || !!dateTo || !!fromText || !!toText}
-          onClear={() => {
-            setStatusFilter(''); setSearch('');
-            setDateFrom(''); setDateTo(''); setFromText(''); setToText('');
-            setFromInvalid(false); setToInvalid(false); setDateError(null);
-            setPage(0);
-          }}
+          hasFilter={!!statusFilter || !!search || !!dateFrom || !!dateTo}
+          onClear={clearAllFilters}
         />
       ) : (
         <div style={{
@@ -491,7 +578,7 @@ export default function EodHistory() {
   );
 }
 
-function EmptyState({ hasFilter, onClear }: { hasFilter: boolean; onClear: () => void }) {
+function EmptyState({ hasFilter, onClear, message }: { hasFilter: boolean; onClear: () => void; message?: string }) {
   return (
     <div style={{
       padding: '40px 24px', borderRadius: 8,
@@ -500,12 +587,14 @@ function EmptyState({ hasFilter, onClear }: { hasFilter: boolean; onClear: () =>
     }}>
       <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
       <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--txt)', marginBottom: 6 }}>
-        {hasFilter ? 'No entries match this filter' : 'No EOD reports yet'}
+        {message ?? (hasFilter ? 'No entries match this filter' : 'No EOD reports yet')}
       </div>
       <div style={{ fontSize: 13, color: 'var(--txt-mut)', marginBottom: hasFilter ? 16 : 0 }}>
-        {hasFilter
-          ? 'Try a different status filter to see more entries.'
-          : 'Submit your first end-of-day report to get started.'}
+        {message
+          ? 'Correct the highlighted date field to see your reports.'
+          : hasFilter
+            ? 'Try a different status filter to see more entries.'
+            : 'Submit your first end-of-day report to get started.'}
       </div>
       {hasFilter && (
         <button
