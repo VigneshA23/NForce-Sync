@@ -1,12 +1,13 @@
 package com.nforceone.sync.businessrules;
 
 import java.math.BigDecimal;
-import java.time.LocalTime;
 
+// eodCutoffTime is deliberately absent: the EOD deadline is per shift now
+// (shift_definition.eod_cutoff_hours). The column still exists on business_rule_config but is no
+// longer read or exposed.
 public record BusinessRuleConfigDto(
         BigDecimal workingHoursPerDay,
         String weekendRule,
-        LocalTime eodCutoffTime,
         Integer reminderLeadMinutes,
         Integer escalationSlaHours,
         BigDecimal underutilizedThresholdPct,
@@ -21,7 +22,6 @@ public record BusinessRuleConfigDto(
         return new BusinessRuleConfigDto(
                 c.getWorkingHoursPerDay(),
                 c.getWeekendRule().name(),
-                c.getEodCutoffTime(),
                 c.getReminderLeadMinutes(),
                 c.getEscalationSlaHours(),
                 c.getUnderutilizedThresholdPct(),

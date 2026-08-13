@@ -2,10 +2,9 @@ package com.nforceone.sync.employee;
 
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
-import com.nforceone.sync.businessrules.BusinessRuleConfig;
-import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.businessrules.ShiftDefinition;
 import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
+import com.nforceone.sync.businessrules.ShiftSchedule;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
@@ -26,7 +25,6 @@ import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 // import java.time.OffsetDateTime;
 // import java.time.ZoneOffset;
 import java.util.*;
@@ -38,7 +36,6 @@ public class EmployeeService {
     private final EodEntryRepository        entryRepository;
     private final EodTaskRepository         taskRepository;
     private final UtilSnapshotRepository    snapshotRepository;
-    private final BusinessRuleConfigRepository rulesRepository;
     private final UtilizationService        utilizationService;
     private final AppUserRepository         userRepository;
     private final ShiftDefinitionRepository shiftRepository;
@@ -46,14 +43,12 @@ public class EmployeeService {
     public EmployeeService(EodEntryRepository entryRepository,
                            EodTaskRepository taskRepository,
                            UtilSnapshotRepository snapshotRepository,
-                           BusinessRuleConfigRepository rulesRepository,
                            UtilizationService utilizationService,
                            AppUserRepository userRepository,
                            ShiftDefinitionRepository shiftRepository) {
         this.entryRepository  = entryRepository;
         this.taskRepository   = taskRepository;
         this.snapshotRepository = snapshotRepository;
-        this.rulesRepository  = rulesRepository;
         this.utilizationService = utilizationService;
         this.userRepository   = userRepository;
         this.shiftRepository  = shiftRepository;
@@ -62,10 +57,9 @@ public class EmployeeService {
     @Transactional(readOnly = true)
     public DashboardSummaryDto getDashboardSummary(Long employeeId, LocalDate calendarFrom, LocalDate calendarTo) {
         LocalDate today = LocalDate.now();
-        LocalTime cutoffTime = getCutoffTime();
 
         // ── Cutoff status ──────────────────────────────────────────────────────
-        DashboardSummaryDto.CutoffStatus cutoffStatus = buildCutoffStatus(employeeId, today, cutoffTime);
+        DashboardSummaryDto.CutoffStatus cutoffStatus = buildCutoffStatus(employeeId, today);
 
         // ── Quick stats: current Mon–today (or full week) ──────────────────────
         LocalDate weekStart = today.with(DayOfWeek.MONDAY);
@@ -133,43 +127,38 @@ public class EmployeeService {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private LocalTime getCutoffTime() {
-        return rulesRepository.findById(1L)
-                .map(BusinessRuleConfig::getEodCutoffTime)
-                .orElse(LocalTime.of(19, 0));
-    }
-
-    private DashboardSummaryDto.CutoffStatus buildCutoffStatus(Long employeeId, LocalDate today, LocalTime cutoffTime) {
+    /**
+     * The cutoff comes from the employee's own shift as "shift end + N hours" — the previous
+     * global time-of-day needed a rollover flag to stay correct for shifts crossing midnight, and
+     * still could not give two shifts different deadlines. See {@link ShiftSchedule#cutoffAt}.
+     *
+     * <p>No shift assigned, or a shift with no cutoff configured, means there is no deadline to
+     * show: the banner is suppressed rather than a cutoff being invented.
+     */
+    private DashboardSummaryDto.CutoffStatus buildCutoffStatus(Long employeeId, LocalDate today) {
         Optional<EodEntry> todayEntry = entryRepository.findByEmployeeIdAndEntryDate(employeeId, today);
         String status = todayEntry.map(e -> e.getStatus().name()).orElse(null);
 
-        // The cutoff must be anchored to a DATE, not compared as a bare time-of-day. A shift that
-        // crosses midnight (Evening, 15:30-00:30) has its cutoff at 00:30 the FOLLOWING day; a
-        // plain time comparison made 00:30 read as 15 hours before the shift even started, so
-        // everyone on that shift was told the cutoff had passed the moment they clocked in.
-        //
-        // The rollover is derived from the employee's own shift rather than a global flag, so it
-        // stays correct for a mixed day/night workforce. No shift assigned means no start time to
-        // compare against, so it falls back to same-day.
-        LocalTime shiftStart = shiftStartFor(employeeId);
-        boolean cutoffNextDay = shiftStart != null && cutoffTime.isBefore(shiftStart);
+        ShiftDefinition shift = shiftFor(employeeId);
+        LocalDateTime cutoffAt = shift == null ? null : ShiftSchedule.cutoffAt(shift, today);
+        if (cutoffAt == null) {
+            return new DashboardSummaryDto.CutoffStatus(today, status, false, null, false);
+        }
 
-        LocalDateTime cutoffAt = LocalDateTime.of(today, cutoffTime);
-        if (cutoffNextDay) cutoffAt = cutoffAt.plusDays(1);
         boolean cutoffPassed = LocalDateTime.now().isAfter(cutoffAt);
-
-        return new DashboardSummaryDto.CutoffStatus(today, status, cutoffPassed, cutoffTime, cutoffNextDay);
+        // Still reported as time-of-day + "is it tomorrow", because that is what the banner
+        // renders; the difference is that it is now derived from a real instant.
+        return new DashboardSummaryDto.CutoffStatus(today, status, cutoffPassed,
+                cutoffAt.toLocalTime(), cutoffAt.toLocalDate().isAfter(today));
     }
 
-    /** Start time of this employee's assigned shift, or null when they have none. */
-    private LocalTime shiftStartFor(Long employeeId) {
+    /** This employee's assigned shift, or null when they have none. */
+    private ShiftDefinition shiftFor(Long employeeId) {
         Long shiftId = userRepository.findById(employeeId)
                 .map(AppUser::getShiftId)
                 .orElse(null);
         if (shiftId == null) return null;
-        return shiftRepository.findById(shiftId)
-                .map(ShiftDefinition::getStartTime)
-                .orElse(null);
+        return shiftRepository.findById(shiftId).orElse(null);
     }
 
     private int computeStreak(Long employeeId, LocalDate today) {

@@ -312,6 +312,8 @@ export interface ShiftDefinitionDto {
   name: string;
   startTime: string;
   endTime: string;
+  /** Hours after endTime the EOD is due; null when no deadline is configured. */
+  eodCutoffHours: number | null;
   active: boolean;
   assignedEmployeeCount: number;
 }

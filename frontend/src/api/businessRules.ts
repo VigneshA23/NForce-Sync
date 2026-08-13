@@ -7,7 +7,7 @@ export type WeekendRule = 'SAT_SUN' | 'SUN_ONLY';
 export interface BusinessRuleConfigDto {
   workingHoursPerDay: number;
   weekendRule: WeekendRule;
-  eodCutoffTime: string; // "HH:mm:ss"
+  // No eodCutoffTime: the EOD deadline is per shift now — see ShiftDefinitionDto.eodCutoffHours.
   reminderLeadMinutes: number;
   escalationSlaHours: number;
   /** Time-adjustment uses permitted per calendar month, per type. Global — no overrides. */
@@ -21,6 +21,9 @@ export interface ShiftDefinitionDto {
   name: string;
   startTime: string; // "HH:mm:ss"
   endTime: string;
+  /** Hours after endTime the EOD is due, e.g. 3 on a 15:30-00:30 shift means 03:30.
+   *  Null when no deadline is configured — no reminder is sent for that shift. */
+  eodCutoffHours: number | null;
   active: boolean;
   // Best-effort — matched by name against a legacy `employee` table, not a live FK.
   // Purely informational, shown in the delete-confirmation dialog.
@@ -50,10 +53,8 @@ export async function updateWeekendRule(weekendRule: WeekendRule): Promise<Busin
   return res.data;
 }
 
-export async function updateEodCutoff(cutoffTime: string): Promise<BusinessRuleConfigDto> {
-  const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/eod-cutoff', { cutoffTime });
-  return res.data;
-}
+// updateEodCutoff removed — the deadline is set per shift via createShift/updateShift's
+// eodCutoffHours; PUT /admin/business-rules/eod-cutoff no longer exists.
 
 export async function updateReminderLeadTime(leadMinutes: number): Promise<BusinessRuleConfigDto> {
   const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/reminder-lead-time', { leadMinutes });
@@ -87,6 +88,8 @@ export interface ShiftPayload {
   name: string;
   startTime: string;
   endTime: string;
+  /** Null clears the deadline, which disables the reminder for everyone on this shift. */
+  eodCutoffHours: number | null;
 }
 
 export async function createShift(payload: ShiftPayload): Promise<ShiftDefinitionDto> {

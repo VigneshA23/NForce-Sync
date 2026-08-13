@@ -27,6 +27,14 @@ public class BusinessRuleConfig {
     @Column(name = "weekend_rule", nullable = false, length = 20)
     private WeekendRule weekendRule;
 
+    /**
+     * @deprecated Superseded by {@code shift_definition.eod_cutoff_hours} — the deadline is now
+     * "shift end + N hours" per shift, which a single global time-of-day could not express for a
+     * shift crossing midnight. Nothing reads this any more and it is no longer exposed on
+     * {@link BusinessRuleConfigDto}, but the column is NOT NULL and still mapped so saves of this
+     * singleton row keep working; dropping it would need its own migration.
+     */
+    @Deprecated
     @Column(name = "eod_cutoff_time", nullable = false)
     private LocalTime eodCutoffTime;
 

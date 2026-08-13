@@ -2,12 +2,12 @@ import { useEffect, useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Bell, CalendarClock, CalendarDays, Clock, Clock3, Plus } from 'lucide-react';
 import {
-  getBusinessRuleConfig, updateWorkingHours, updateWeekendRule, updateEodCutoff,
+  getBusinessRuleConfig, updateWorkingHours, updateWeekendRule,
   updateReminderLeadTime, updateEscalationSla, updateAllowances,
   listShifts, createShift, updateShift, toggleShift, deleteShift,
   listHolidays, createHoliday, deleteHoliday,
 } from '../../api/businessRules';
-import type { ShiftDefinitionDto, HolidayDto, WeekendRule } from '../../api/businessRules';
+import type { ShiftDefinitionDto, ShiftPayload, HolidayDto, WeekendRule } from '../../api/businessRules';
 import { extractApiError, extractFieldErrors, isHttpStatus, listAuditLog } from '../../api/admin';
 import type { AuditLogDto } from '../../api/admin';
 import { formatRelative } from '../../lib/auditLog';
@@ -198,6 +198,33 @@ function toHm(time: string): string {
   return time.length >= 5 ? time.slice(0, 5) : time;
 }
 
+function toMinutes(time: string): number {
+  const [h, m] = toHm(time).split(':').map(Number);
+  return h * 60 + m;
+}
+
+/**
+ * When a shift's EOD is actually due, as an absolute clock time rather than an offset the reader
+ * has to add up — "+3h → 3:30 AM (next day)" for a 15:30-00:30 shift.
+ *
+ * Mirrors ShiftSchedule.cutoffAt on the backend: an end at or before the start crosses midnight,
+ * and the cutoff is measured from that end.
+ */
+function cutoffLabel(startTime: string, endTime: string, hours: number | null): string {
+  if (hours == null) return '—';
+  const startMin = toMinutes(startTime);
+  let endMin = toMinutes(endTime);
+  if (endMin <= startMin) endMin += 1440;
+
+  const cutoffMin = endMin + Math.round(hours * 60);
+  const clock = ((cutoffMin % 1440) + 1440) % 1440;
+  const daysAfter = Math.floor(cutoffMin / 1440);
+  const hhmmss = `${String(Math.floor(clock / 60)).padStart(2, '0')}:${String(clock % 60).padStart(2, '0')}:00`;
+
+  const suffix = daysAfter === 0 ? '' : daysAfter === 1 ? ' (next day)' : ` (+${daysAfter} days)`;
+  return `+${hours}h → ${formatTime12h(hhmmss)}${suffix}`;
+}
+
 const WEEKEND_OPTIONS: { value: WeekendRule; label: string }[] = [
   { value: 'SAT_SUN', label: 'Saturday + Sunday off' },
   { value: 'SUN_ONLY', label: 'Sunday only' },
@@ -227,6 +254,8 @@ export default function BusinessRules() {
 
   const timeAttendanceUpdate = findLastUpdate(auditEntries, (name) =>
     name === 'Working Hours Per Day' || name === 'Weekend Rule');
+  // 'EOD Cutoff Time' is intentionally still matched: the rule no longer exists, but historical
+  // audit rows carry that name and this caption should keep surfacing them.
   const notificationsUpdate = findLastUpdate(auditEntries, (name) =>
     name === 'EOD Cutoff Time' || name === 'Reminder Lead Time' || name === 'Escalation SLA');
   const allowancesUpdate = findLastUpdate(auditEntries, (name) =>
@@ -282,31 +311,9 @@ export default function BusinessRules() {
     onError: (err) => toast.showToast('error', extractApiError(err, 'Failed to update weekend rule.')),
   });
 
-  // ── 5. EOD cutoff time ──────────────────────────────────────────────────────
-  const [cutoffDraft, setCutoffDraft] = useState('');
-  const [cutoffError, setCutoffError] = useState<string | null>(null);
-  useEffect(() => {
-    if (configQuery.data) setCutoffDraft(toHm(configQuery.data.eodCutoffTime));
-  }, [configQuery.data]);
-
-  const cutoffMutation = useMutation({
-    mutationFn: updateEodCutoff,
-    onSuccess: () => { invalidateConfig(); toast.showToast('success', 'EOD cutoff time updated'); setCutoffError(null); },
-    onError: (err) => {
-      const msg = extractApiError(err, 'Failed to update EOD cutoff time.');
-      setCutoffError(msg);
-      toast.showToast('error', msg);
-    },
-  });
-
-  function saveCutoff() {
-    if (!/^\d{2}:\d{2}$/.test(cutoffDraft)) {
-      setCutoffError('Enter a valid time.');
-      return;
-    }
-    setCutoffError(null);
-    cutoffMutation.mutate(`${cutoffDraft}:00`);
-  }
+  // The EOD cutoff used to live here as one global time-of-day. It is now set per shift as an
+  // hours-after-shift-end offset, in the Shift Timings card below — a single time could not
+  // express a deadline for a shift ending after midnight.
 
   // ── 6. Reminder lead time ───────────────────────────────────────────────────
   const [reminderDraft, setReminderDraft] = useState('');
@@ -428,11 +435,10 @@ export default function BusinessRules() {
   const timeAttendancePending = hoursMutation.isPending || weekendMutation.isPending;
 
   function saveNotifications() {
-    saveCutoff();
     saveReminder();
     saveSla();
   }
-  const notificationsPending = cutoffMutation.isPending || reminderMutation.isPending || slaMutation.isPending;
+  const notificationsPending = reminderMutation.isPending || slaMutation.isPending;
 
   // ── 2. Shift timings state ──────────────────────────────────────────────────
   const [shiftModal, setShiftModal] = useState<{ mode: 'create' } | { mode: 'edit'; shift: ShiftDefinitionDto } | null>(null);
@@ -455,7 +461,7 @@ export default function BusinessRules() {
   });
 
   const updateShiftMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { name: string; startTime: string; endTime: string } }) =>
+    mutationFn: ({ id, payload }: { id: number; payload: ShiftPayload }) =>
       updateShift(id, payload),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['business-rules', 'shifts'] });
@@ -585,27 +591,16 @@ export default function BusinessRules() {
         </button>
       </RuleCard>
 
-      {/* Notifications & Escalation — cutoff + reminder lead time + SLA, one Save for all three */}
+      {/* Notifications & Escalation — reminder lead time + SLA, one Save for both. The EOD cutoff
+          moved to the Shift Timings card, as hours after each shift's end. */}
       <RuleCard
         title="Notifications & Escalation"
-        description="EOD cutoff, reminder timing, and how long an unapproved submission waits before escalating."
+        description="Reminder timing, and how long an unapproved submission waits before escalating. The EOD cutoff is set per shift below."
         icon={<Bell size={16} aria-hidden="true" />}
         accent="var(--warn)"
         footer={<LastUpdatedCaption info={notificationsUpdate} />}
       >
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 16 }}>
-          <div style={{ minWidth: 160 }}>
-            <label style={labelStyle} htmlFor="cutoff-input">Cutoff time</label>
-            <input
-              id="cutoff-input"
-              type="time"
-              lang="en-US"
-              value={cutoffDraft}
-              onChange={(e) => setCutoffDraft(e.target.value)}
-              style={inputStyle}
-            />
-            <FieldError msg={cutoffError ?? undefined} />
-          </div>
           <div style={{ minWidth: 160 }}>
             <label style={labelStyle} htmlFor="reminder-input">Reminder lead time</label>
             <UnitField unit="min">
@@ -874,17 +869,24 @@ function ShiftTable({ data, isPending, isError, onEdit, onToggle, isTogglePendin
             <tr>
               <th style={thStyle}>Name</th>
               <th style={thStyle}>Timing</th>
+              <th style={thStyle}>EOD cutoff</th>
               <th style={thStyle}>Status</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {data.length === 0 ? (
-              <tr><td colSpan={4} style={{ padding: '30px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>No shifts defined yet.</td></tr>
+              <tr><td colSpan={5} style={{ padding: '30px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>No shifts defined yet.</td></tr>
             ) : data.map((shift) => (
               <tr key={shift.id}>
                 <td style={tdStyle}><span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>{shift.name}</span></td>
                 <td style={tdStyle}><span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>{formatTime12h(shift.startTime)} – {formatTime12h(shift.endTime)}</span></td>
+                <td style={tdStyle}>
+                  <span style={{ fontSize: 13, color: shift.eodCutoffHours == null ? 'var(--txt-dim)' : 'var(--txt-mut)' }}
+                        title={shift.eodCutoffHours == null ? 'No deadline — no reminder is sent for this shift.' : undefined}>
+                    {cutoffLabel(shift.startTime, shift.endTime, shift.eodCutoffHours)}
+                  </span>
+                </td>
                 <td style={tdStyle}><ActiveBadge active={shift.active} /></td>
                 <td style={{ ...tdStyle, textAlign: 'right' }}>
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
@@ -971,7 +973,7 @@ type ShiftModalState = { mode: 'create' } | { mode: 'edit'; shift: ShiftDefiniti
 interface ShiftFormModalProps {
   state: ShiftModalState;
   onClose: () => void;
-  onSubmit: (payload: { name: string; startTime: string; endTime: string }) => void;
+  onSubmit: (payload: { name: string; startTime: string; endTime: string; eodCutoffHours: number | null }) => void;
   isPending: boolean;
   error: string | null;
   fieldErrors: Record<string, string>;
@@ -982,21 +984,30 @@ function ShiftFormModal({ state, onClose, onSubmit, isPending, error, fieldError
   const [name, setName] = useState('');
   const [start, setStart] = useState('09:00');
   const [end, setEnd] = useState('18:00');
+  const [cutoff, setCutoff] = useState('');
 
   useEffect(() => {
     if (state?.mode === 'edit') {
       setName(state.shift.name);
       setStart(toHm(state.shift.startTime));
       setEnd(toHm(state.shift.endTime));
+      setCutoff(state.shift.eodCutoffHours == null ? '' : String(state.shift.eodCutoffHours));
     } else if (state?.mode === 'create') {
-      setName(''); setStart('09:00'); setEnd('18:00');
+      setName(''); setStart('09:00'); setEnd('18:00'); setCutoff('');
     }
   }, [state]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !start || !end) return;
-    onSubmit({ name: name.trim(), startTime: `${start}:00`, endTime: `${end}:00` });
+    // Blank is a deliberate value, not a zero: it means "no deadline for this shift".
+    const trimmed = cutoff.trim();
+    onSubmit({
+      name: name.trim(),
+      startTime: `${start}:00`,
+      endTime: `${end}:00`,
+      eodCutoffHours: trimmed === '' ? null : Number(trimmed),
+    });
   }
 
   return (
@@ -1032,6 +1043,28 @@ function ShiftFormModal({ state, onClose, onSubmit, isPending, error, fieldError
             <input id="shift-end" type="time" lang="en-US" value={end} onChange={(e) => setEnd(e.target.value)} style={inputStyle} />
             <FieldError msg={fieldErrors.endTime} />
           </div>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <label style={labelStyle} htmlFor="shift-cutoff">EOD cutoff</label>
+          <UnitField unit="hrs after end">
+            <input
+              id="shift-cutoff"
+              type="number"
+              min={0}
+              max={24}
+              step={0.5}
+              placeholder="e.g. 3"
+              value={cutoff}
+              onChange={(e) => setCutoff(e.target.value)}
+              style={{ ...inputStyle, paddingRight: 96 }}
+            />
+          </UnitField>
+          <FieldError msg={fieldErrors.eodCutoffHours} />
+          <p style={{ fontSize: 11, color: 'var(--txt-dim)', margin: '6px 0 0' }}>
+            {cutoff.trim() === ''
+              ? 'Leave blank for no deadline — no reminder will be sent for this shift.'
+              : `EOD due ${cutoffLabel(`${start}:00`, `${end}:00`, Number(cutoff))}. A reminder is sent once it passes.`}
+          </p>
         </div>
       </form>
     </Modal>

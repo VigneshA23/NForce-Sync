@@ -8,6 +8,7 @@ import com.nforceone.sync.businessrules.BusinessRuleConfig;
 import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.businessrules.ShiftDefinition;
 import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
+import com.nforceone.sync.businessrules.ShiftSchedule;
 import com.nforceone.sync.eod.dto.TimeAdjustmentContextDto;
 import com.nforceone.sync.eod.dto.BlockedTaskDto;
 import com.nforceone.sync.eod.dto.EodEntryDto;
@@ -61,8 +62,6 @@ public class EodService {
     /** Per-use duration limits for a time adjustment. Distinct from the monthly allowance. */
     private static final int MIN_ADJUSTMENT_MINUTES = 30;
     private static final int MAX_ADJUSTMENT_MINUTES = 120;
-
-    private static final int MINUTES_PER_DAY = 24 * 60;
 
     private static final java.util.Set<EodEntry.Status> NEEDS_COMMENT = java.util.Set.of(
             EodEntry.Status.REJECTED);
@@ -350,17 +349,6 @@ public class EodService {
                 : shiftRepository.findById(employee.getShiftId()).orElse(null);
     }
 
-    /**
-     * Shift length in minutes. An end at or before the start means the shift crosses midnight
-     * (e.g. 15:30-00:30), so a day is added rather than yielding a negative duration.
-     */
-    private int shiftDurationMinutes(ShiftDefinition shift) {
-        int start = shift.getStartTime().getHour() * 60 + shift.getStartTime().getMinute();
-        int end   = shift.getEndTime().getHour()   * 60 + shift.getEndTime().getMinute();
-        if (end <= start) end += MINUTES_PER_DAY;
-        return end - start;
-    }
-
     private int allowanceFor(BusinessRuleConfig config, EodEntry.TimeAdjustmentType type) {
         return switch (type) {
             case LATE_ARRIVAL -> config.getLateArrivalAllowance();
@@ -420,7 +408,7 @@ public class EodService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "A time adjustment needs an assigned shift. Contact your administrator.");
         }
-        int shiftMinutes = shiftDurationMinutes(shift);
+        int shiftMinutes = ShiftSchedule.durationMinutes(shift);
         if (minutes > shiftMinutes) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Time adjustment minutes (" + minutes + ") cannot exceed the shift length ("
@@ -484,7 +472,7 @@ public class EodService {
                 shift.getName(),
                 shift.getStartTime(),
                 shift.getEndTime(),
-                shiftDurationMinutes(shift),
+                ShiftSchedule.durationMinutes(shift),
                 config != null ? config.getLateArrivalAllowance() : FALLBACK_ADJUSTMENT_ALLOWANCE,
                 config != null ? config.getEarlyLeaveAllowance()  : FALLBACK_ADJUSTMENT_ALLOWANCE,
                 config != null ? config.getInterveningAllowance() : FALLBACK_ADJUSTMENT_ALLOWANCE,

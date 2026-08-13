@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   ChevronDown, ChevronRight, Check, X, CheckCheck, RefreshCw,
-  Search, AlertTriangle, Users,
+  Search, AlertTriangle,
 } from 'lucide-react';
 import {
   usePendingApprovals, useDecidedApprovals,
@@ -39,14 +39,11 @@ function roleLabel(role: string | null | undefined): string {
   }
 }
 
-function groupByTL(entries: EodEntryDto[]): Map<string, EodEntryDto[]> {
-  const map = new Map<string, EodEntryDto[]>();
-  for (const e of entries) {
-    const key = e.tlName ?? 'No Team Lead assigned';
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(e);
-  }
-  return map;
+/** Shared so the Team Lead filter's options, its matching, and the group headings can't drift apart. */
+const NO_TL_LABEL = 'No Team Lead assigned';
+
+function teamLeadOf(entry: EodEntryDto): string {
+  return entry.tlName ?? NO_TL_LABEL;
 }
 
 // ── entry row ─────────────────────────────────────────────────────────────────
@@ -159,9 +156,10 @@ function EntryRow({
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
           <button
             onClick={onToggleExpand}
-            title="View audit trail"
-            style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
+            title="View submission history"
+            style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
           >
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Submission history</span>
             {expanded ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
           </button>
         </div>
@@ -201,6 +199,7 @@ export default function ApprovalsPM() {
   const [tab, setTab] = useState<Tab>('pending');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortMode>('oldest');
+  const [tlFilter, setTlFilter] = useState<Set<string>>(new Set());
   const [employeeFilter, setEmployeeFilter] = useState<Set<string>>(new Set());
   const [projectFilter, setProjectFilter] = useState<Set<string>>(new Set());
   const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set());
@@ -225,6 +224,7 @@ export default function ApprovalsPM() {
 
   const allProjects = useMemo(() => [...new Set(baseList.flatMap(entryProjects))].sort(), [baseList]);
   const allCategories = useMemo(() => [...new Set(baseList.flatMap(entryCategories))].sort(), [baseList]);
+  const allTeamLeads = useMemo(() => [...new Set(baseList.map(teamLeadOf))].sort(), [baseList]);
   // Now spans every team touching a PM-owned project, so an Employee filter is worth having —
   // scoped to whichever employees have entries in the current tab's already-fetched list, same
   // as Project/Category derive their options from.
@@ -240,6 +240,7 @@ export default function ApprovalsPM() {
 
   const visible = useMemo(() => {
     let list = baseList;
+    if (tlFilter.size) list = list.filter(e => tlFilter.has(teamLeadOf(e)));
     if (employeeFilter.size) list = list.filter(e => employeeFilter.has(e.employeeCode));
     if (projectFilter.size) list = list.filter(e => entryProjects(e).some(p => projectFilter.has(p)));
     if (categoryFilter.size) list = list.filter(e => entryCategories(e).some(c => categoryFilter.has(c)));
@@ -252,9 +253,8 @@ export default function ApprovalsPM() {
     else if (sort === 'latest') sorted.sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''));
     else sorted.sort((a, b) => (a.submittedAt ?? '').localeCompare(b.submittedAt ?? ''));
     return sorted;
-  }, [baseList, employeeFilter, projectFilter, categoryFilter, search, sort]);
+  }, [baseList, tlFilter, employeeFilter, projectFilter, categoryFilter, search, sort]);
 
-  const grouped = useMemo(() => groupByTL(visible), [visible]);
   const actionable = tab === 'pending' || tab === 'escalated';
 
   const detailsEntry = baseList.find(e => e.id === detailsEntryId) ?? null;
@@ -287,9 +287,10 @@ export default function ApprovalsPM() {
   const approvedCount = approved?.length ?? 0;
   const rejectedCount = rejected?.length ?? 0;
 
-  const hasActiveFilters = employeeFilter.size > 0 || projectFilter.size > 0 || categoryFilter.size > 0;
+  const hasActiveFilters = tlFilter.size > 0 || employeeFilter.size > 0 || projectFilter.size > 0 || categoryFilter.size > 0;
 
   function clearAllFilters() {
+    setTlFilter(new Set());
     setEmployeeFilter(new Set());
     setProjectFilter(new Set());
     setCategoryFilter(new Set());
@@ -427,6 +428,13 @@ export default function ApprovalsPM() {
         </div>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <FilterDropdown
+            label="Team Lead"
+            options={allTeamLeads}
+            selected={tlFilter}
+            onToggle={v => toggleFilterVal(tlFilter, setTlFilter, v)}
+            onClear={() => setTlFilter(new Set())}
+          />
+          <FilterDropdown
             label="Employee"
             options={allEmployeeCodes}
             selected={employeeFilter}
@@ -495,33 +503,24 @@ export default function ApprovalsPM() {
           </div>
         </Card>
       ) : (
-        <>
-          {[...grouped.entries()].map(([tlName, rows]) => {
-            const escInGroup = rows.filter(e => e.escalated).length;
-            return (
-              <Card key={tlName} style={{ marginBottom: 14, padding: 0, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', background: 'var(--raised)', borderBottom: '1px solid var(--line)' }}>
-                  <Users size={14} style={{ color: 'var(--txt-dim)' }} aria-hidden="true" />
-                  <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--txt)' }}>{tlName}</span>
-                  <span style={{ color: 'var(--txt-dim)', fontSize: 12 }}>{rows.length} {rows.length === 1 ? 'entry' : 'entries'}</span>
-                  {escInGroup > 0 && <span style={{ marginLeft: 'auto' }}><Chip tone="warn">⚠ {escInGroup} escalated</Chip></span>}
-                </div>
-                {rows.map(entry => (
-                  <EntryRow
-                    key={entry.id}
-                    entry={entry}
-                    actionable={actionable}
-                    checked={selected.has(entry.id)}
-                    onToggleCheck={() => toggleCheck(entry.id)}
-                    expanded={expanded.has(entry.id)}
-                    onToggleExpand={() => toggleExpand(entry.id)}
-                    onOpenDetails={() => setDetailsEntryId(entry.id)}
-                  />
-                ))}
-              </Card>
-            );
-          })}
-        </>
+        /* One flat list, not grouped per Team Lead — the Team Lead filter in the toolbar is how
+           you narrow to a single team, so splitting the list into "TL1 — n entries" cards on top
+           of that only fragmented the queue and buried the sort order. Each row still names the
+           Team Lead it's awaiting (see EntryRow's tlStatusNote). */
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          {visible.map(entry => (
+            <EntryRow
+              key={entry.id}
+              entry={entry}
+              actionable={actionable}
+              checked={selected.has(entry.id)}
+              onToggleCheck={() => toggleCheck(entry.id)}
+              expanded={expanded.has(entry.id)}
+              onToggleExpand={() => toggleExpand(entry.id)}
+              onOpenDetails={() => setDetailsEntryId(entry.id)}
+            />
+          ))}
+        </Card>
       )}
 
       {/* Reject modal */}

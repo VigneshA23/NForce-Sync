@@ -12,6 +12,16 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     long countByUserIdAndReadFalse(Long userId);
 
+    /**
+     * Whether this user already received a notification of {@code type} since {@code after}.
+     *
+     * Used by the EOD reminder job as its idempotency check instead of a "did I run in this
+     * window" flag: keyed off the cutoff instant, it still holds after a restart, and a reminder
+     * a manager already sent by hand counts as covering the same deadline.
+     */
+    boolean existsByUserIdAndTypeAndCreatedAtAfter(Long userId, String type,
+                                                    java.time.OffsetDateTime after);
+
     @Modifying
     @Query("UPDATE Notification n SET n.read = true WHERE n.id = :id AND n.user.id = :userId")
     int markRead(Long id, Long userId);

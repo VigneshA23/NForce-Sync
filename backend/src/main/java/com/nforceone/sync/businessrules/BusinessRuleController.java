@@ -36,10 +36,8 @@ public class BusinessRuleController {
         return businessRuleService.updateWeekendRule(request.weekendRule(), actingEmail());
     }
 
-    @PutMapping("/eod-cutoff")
-    public BusinessRuleConfigDto updateEodCutoff(@Valid @RequestBody UpdateEodCutoffRequest request) {
-        return businessRuleService.updateEodCutoff(request.cutoffTime(), actingEmail());
-    }
+    // PUT /eod-cutoff removed: the EOD deadline is now per shift (shift_definition.eod_cutoff_hours,
+    // set through the shift endpoints below) rather than one global time-of-day.
 
     @PutMapping("/reminder-lead-time")
     public BusinessRuleConfigDto updateReminderLeadTime(@Valid @RequestBody UpdateReminderLeadTimeRequest request) {

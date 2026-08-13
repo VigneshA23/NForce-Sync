@@ -84,4 +84,7 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long>, JpaSpec
     long countByLocationId(Long locationId);
 
     List<AppUser> findByStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Status status);
+
+    /** Everyone currently on a given shift — the audience for that shift's EOD cutoff reminder. */
+    List<AppUser> findByShiftIdAndStatusAndDeletedAtIsNull(Long shiftId, AppUser.Status status);
 }

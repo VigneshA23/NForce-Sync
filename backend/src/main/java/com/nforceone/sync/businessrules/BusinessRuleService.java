@@ -78,16 +78,8 @@ public class BusinessRuleService {
         return BusinessRuleConfigDto.from(config);
     }
 
-    public BusinessRuleConfigDto updateEodCutoff(java.time.LocalTime cutoffTime, String actingEmail) {
-        BusinessRuleConfig config = requireConfig();
-        AppUser actor = requireActorByEmail(actingEmail);
-        Map<String, Object> before = ruleSnapshot("EOD Cutoff Time", config.getEodCutoffTime());
-        config.setEodCutoffTime(cutoffTime);
-        touch(config, actor);
-        Map<String, Object> after = ruleSnapshot("EOD Cutoff Time", config.getEodCutoffTime());
-        writeAudit(CONFIG_ID, "UPDATE", before, after, actor);
-        return BusinessRuleConfigDto.from(config);
-    }
+    // updateEodCutoff removed — the EOD deadline moved onto the shift as an hours-after-end offset
+    // (see ShiftSchedule). createShift/updateShift below carry it now.
 
     public BusinessRuleConfigDto updateReminderLeadTime(Integer leadMinutes, String actingEmail) {
         BusinessRuleConfig config = requireConfig();
@@ -163,10 +155,11 @@ public class BusinessRuleService {
                 .name(req.name())
                 .startTime(req.startTime())
                 .endTime(req.endTime())
+                .eodCutoffHours(req.eodCutoffHours())
                 .active(true)
                 .build();
         shift = shiftRepository.save(shift);
-        writeAudit(shift.getId(), "CREATE", null, ruleSnapshot(shift.getName(), shift.getStartTime() + "-" + shift.getEndTime()), actor);
+        writeAudit(shift.getId(), "CREATE", null, shiftSnapshot(shift), actor);
         return ShiftDefinitionDto.from(shift);
     }
 
@@ -177,12 +170,13 @@ public class BusinessRuleService {
         }
         validateShiftTimes(req.startTime(), req.endTime());
         AppUser actor = requireActorByEmail(actingEmail);
-        Map<String, Object> before = ruleSnapshot(shift.getName(), shift.getStartTime() + "-" + shift.getEndTime());
+        Map<String, Object> before = shiftSnapshot(shift);
         shift.setName(req.name());
         shift.setStartTime(req.startTime());
         shift.setEndTime(req.endTime());
+        shift.setEodCutoffHours(req.eodCutoffHours());
         shift = shiftRepository.save(shift);
-        Map<String, Object> after = ruleSnapshot(shift.getName(), shift.getStartTime() + "-" + shift.getEndTime());
+        Map<String, Object> after = shiftSnapshot(shift);
         writeAudit(shift.getId(), "UPDATE", before, after, actor);
         return ShiftDefinitionDto.from(shift);
     }
@@ -201,9 +195,21 @@ public class BusinessRuleService {
     public void deleteShift(Long id, String actingEmail) {
         ShiftDefinition shift = requireShift(id);
         AppUser actor = requireActorByEmail(actingEmail);
-        Map<String, Object> before = ruleSnapshot(shift.getName(), shift.getStartTime() + "-" + shift.getEndTime());
+        Map<String, Object> before = shiftSnapshot(shift);
         shiftRepository.deleteById(id);
         writeAudit(id, "DELETE", before, null, actor);
+    }
+
+    /**
+     * Audit value for a shift: times plus the EOD cutoff, so changing the deadline is visible in
+     * the trail rather than looking like an unchanged row.
+     */
+    private Map<String, Object> shiftSnapshot(ShiftDefinition shift) {
+        String cutoff = shift.getEodCutoffHours() != null
+                ? "+" + shift.getEodCutoffHours().stripTrailingZeros().toPlainString() + "h"
+                : "none";
+        return ruleSnapshot(shift.getName(),
+                shift.getStartTime() + "-" + shift.getEndTime() + " (EOD cutoff " + cutoff + ")");
     }
 
     private void validateShiftTimes(java.time.LocalTime start, java.time.LocalTime end) {

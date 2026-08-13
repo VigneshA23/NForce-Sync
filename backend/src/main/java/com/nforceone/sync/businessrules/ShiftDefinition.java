@@ -3,6 +3,7 @@ package com.nforceone.sync.businessrules;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 
@@ -27,6 +28,16 @@ public class ShiftDefinition {
 
     @Column(name = "end_time", nullable = false)
     private LocalTime endTime;
+
+    /**
+     * Hours after {@link #endTime} by which an EOD must be submitted, e.g. 3 on a 15:30-00:30
+     * shift means 03:30. Expressed as an offset rather than a time-of-day so it stays unambiguous
+     * for a shift that crosses midnight — see {@link ShiftSchedule#cutoffAt}.
+     *
+     * <p>Null means no cutoff is configured: no reminder is sent and no cutoff is shown.
+     */
+    @Column(name = "eod_cutoff_hours")
+    private BigDecimal eodCutoffHours;
 
     @Column(name = "is_active", nullable = false)
     @Builder.Default

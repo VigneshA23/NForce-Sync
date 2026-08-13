@@ -11,7 +11,9 @@ export interface CutoffStatus {
   today: string;
   entryStatus: string | null;
   cutoffPassed: boolean;
-  cutoffTime: string;
+  /** Derived from the employee's shift (shift end + its cutoff hours). Null when they have no
+   *  shift assigned, or their shift has no cutoff configured — then there is no deadline. */
+  cutoffTime: string | null;
   /** Cutoff falls on the day after `today` — true for a shift crossing midnight. */
   cutoffNextDay: boolean;
 }

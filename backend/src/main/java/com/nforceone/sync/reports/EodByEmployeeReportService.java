@@ -2,8 +2,9 @@ package com.nforceone.sync.reports;
 
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
-import com.nforceone.sync.businessrules.BusinessRuleConfig;
-import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
+import com.nforceone.sync.businessrules.ShiftDefinition;
+import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
+import com.nforceone.sync.businessrules.ShiftSchedule;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
@@ -23,7 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalTime;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -41,27 +42,25 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class EodByEmployeeReportService {
 
-    private static final long CONFIG_ID = 1L;
-
     private final AppUserRepository appUserRepository;
     private final ProjectRepository projectRepository;
     private final AllocationRepository allocationRepository;
     private final EodEntryRepository eodEntryRepository;
     private final DesignationRepository designationRepository;
-    private final BusinessRuleConfigRepository configRepository;
+    private final ShiftDefinitionRepository shiftRepository;
 
     public EodByEmployeeReportService(AppUserRepository appUserRepository,
                                        ProjectRepository projectRepository,
                                        AllocationRepository allocationRepository,
                                        EodEntryRepository eodEntryRepository,
                                        DesignationRepository designationRepository,
-                                       BusinessRuleConfigRepository configRepository) {
+                                       ShiftDefinitionRepository shiftRepository) {
         this.appUserRepository = appUserRepository;
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
         this.eodEntryRepository = eodEntryRepository;
         this.designationRepository = designationRepository;
-        this.configRepository = configRepository;
+        this.shiftRepository = shiftRepository;
     }
 
     public EodByEmployeeReportDto getReport(String actingEmail, LocalDate from, LocalDate to,
@@ -129,9 +128,8 @@ public class EodByEmployeeReportService {
         Map<Long, List<EodEntry>> entriesByEmployee = entries.stream()
                 .collect(Collectors.groupingBy(e -> e.getEmployee().getId()));
 
-        LocalTime cutoffTime = configRepository.findById(CONFIG_ID)
-                .map(BusinessRuleConfig::getEodCutoffTime)
-                .orElse(LocalTime.of(19, 0));
+        Map<Long, ShiftDefinition> shiftsById = shiftRepository.findAll().stream()
+                .collect(Collectors.toMap(ShiftDefinition::getId, s -> s));
 
         Map<Long, Designation> designationsById = new HashMap<>();
 
@@ -148,7 +146,7 @@ public class EodByEmployeeReportService {
             BigDecimal billableHours = BigDecimal.ZERO;
             boolean anyLate = false;
             for (EodEntry entry : empEntries) {
-                boolean lateEntry = isLate(entry, cutoffTime);
+                boolean lateEntry = isLate(entry, shiftOf(emp, shiftsById));
                 if (lateEntry) anyLate = true;
 
                 // Hours/entries only count once a Team Lead/Manager has actually approved them —
@@ -210,12 +208,27 @@ public class EodByEmployeeReportService {
         return new EodByEmployeeReportDto(rows.size(), totalEntryCount, totalHoursAll, rows);
     }
 
-    private boolean isLate(EodEntry entry, LocalTime cutoffTime) {
-        if (entry.getSubmittedAt() == null) return false;
-        LocalDate submittedDate = entry.getSubmittedAt().toLocalDate();
-        if (submittedDate.isAfter(entry.getEntryDate())) return true;
-        if (submittedDate.isBefore(entry.getEntryDate())) return false;
-        return entry.getSubmittedAt().toLocalTime().isAfter(cutoffTime);
+    /** The employee's shift, or null when unassigned or the shift no longer exists. */
+    private ShiftDefinition shiftOf(AppUser employee, Map<Long, ShiftDefinition> shiftsById) {
+        return employee.getShiftId() == null ? null : shiftsById.get(employee.getShiftId());
+    }
+
+    /**
+     * Late means submitted after that shift's deadline — {@code shift end + eod_cutoff_hours}.
+     *
+     * <p>Previously this compared the submission's bare time-of-day against a global cutoff and
+     * treated any submission dated after the work date as late, which flagged every correct
+     * submission on a shift ending after midnight. Anchoring to the shift's own cutoff instant
+     * makes a 00:30 submission for the previous day's Evening shift simply on time.
+     *
+     * <p>Not flagged at all when there is no shift or no cutoff configured — there is no deadline
+     * to have missed.
+     */
+    private boolean isLate(EodEntry entry, ShiftDefinition shift) {
+        if (entry.getSubmittedAt() == null || shift == null) return false;
+        LocalDateTime cutoffAt = ShiftSchedule.cutoffAt(shift, entry.getEntryDate());
+        if (cutoffAt == null) return false;
+        return entry.getSubmittedAt().toLocalDateTime().isAfter(cutoffAt);
     }
 
     private AppUser requirePm(String actingEmail) {

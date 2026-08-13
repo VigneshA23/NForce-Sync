@@ -707,9 +707,11 @@ function UtilPeriodCard({
 
 function CutoffBanner({
   status, cutoffPassed, cutoffTime, cutoffNextDay,
-}: { status: string | null; cutoffPassed: boolean; cutoffTime: string; cutoffNextDay?: boolean }) {
+}: { status: string | null; cutoffPassed: boolean; cutoffTime: string | null; cutoffNextDay?: boolean }) {
   const needsAction = !status || status === 'DRAFT' || status === 'REJECTED';
   if (!needsAction) return null;
+  // No shift assigned, or no cutoff configured on it — there is no deadline to warn about.
+  if (!cutoffTime) return null;
 
   // 12-hour clock plus an explicit "next day": a bare "0:30" for a shift that ends after
   // midnight reads as though the deadline already passed this morning.
@@ -928,12 +930,13 @@ function TodayStatusCard({
 }: {
   status: string;
   submittedAt: string | null;
-  cutoffTime: string;
+  cutoffTime: string | null;
   isWeekend: boolean;
 }) {
   const meta = TODAY_STATUS_META[status] ?? { color: 'var(--txt-dim)', label: status };
   const actionable = !isWeekend && (status === 'MISSING' || status === 'DRAFT' || status === 'REJECTED');
-  const [h, m] = cutoffTime.split(':');
+  // Null when the employee has no shift, or their shift has no cutoff — nothing to count down to.
+  const cutoffLabel = cutoffTime ? `Not yet · cutoff ${formatTime12h(cutoffTime)}` : 'Not yet';
 
   return (
     <Card style={{ marginBottom: 20 }} pad={16}>
@@ -964,7 +967,7 @@ function TodayStatusCard({
             Submitted At
           </div>
           <div style={{ fontSize: 13, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
-            {submittedAt ? formatDateTime(submittedAt) : isWeekend ? 'Weekend — not required' : `Not yet · cutoff ${parseInt(h)}:${m}`}
+            {submittedAt ? formatDateTime(submittedAt) : isWeekend ? 'Weekend — not required' : cutoffLabel}
           </div>
         </div>
 
