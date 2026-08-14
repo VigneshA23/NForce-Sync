@@ -49,6 +49,14 @@ public class BusinessRuleController {
         return businessRuleService.updateEscalationSla(request.slaHours(), actingEmail());
     }
 
+    @PutMapping("/account-lockout")
+    public BusinessRuleConfigDto updateAccountLockout(@Valid @RequestBody UpdateAccountLockoutRequest request) {
+        return businessRuleService.updateAccountLockout(
+                request.attemptThreshold(),
+                request.durationMinutes(),
+                actingEmail());
+    }
+
     @PutMapping("/allowances")
     public BusinessRuleConfigDto updateAllowances(@Valid @RequestBody UpdateAllowancesRequest request) {
         return businessRuleService.updateAllowances(

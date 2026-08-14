@@ -1,17 +1,40 @@
-import { useNavigate } from 'react-router-dom';
+import { useRef } from 'react';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ShieldAlert } from 'lucide-react';
 import { AuthLayout } from './AuthLayout';
-import { useAuth } from '../../lib/auth';
+import { useCountdown, formatCountdown } from '../../lib/useCountdown';
+
+interface LockedState {
+  email?: string;
+  retryAfterSeconds?: number;
+}
 
 export default function Locked() {
   const navigate  = useNavigate();
   const reduced   = useReducedMotion();
-  const { resetFailCount } = useAuth();
+  const location  = useLocation();
 
-  function handleBack() {
-    resetFailCount();
+  const state = (location.state ?? null) as LockedState | null;
+
+  // Anchor the deadline once, on mount, from the server's remaining-seconds. Recomputing it on
+  // every render would restart the countdown each tick.
+  const targetRef = useRef<number | null>(
+    state?.retryAfterSeconds ? Date.now() + state.retryAfterSeconds * 1000 : null,
+  );
+  const remaining = useCountdown(targetRef.current);
+  const stillLocked = remaining > 0;
+
+  // Reached directly (typed URL, stale bookmark) with no lockout to show — nothing useful here.
+  if (!state?.retryAfterSeconds) return <Navigate to="/login" replace />;
+
+  function handleRetry() {
     navigate('/login', { replace: true });
+  }
+
+  function handleReset() {
+    // Carry the email so /forgot can prefill it — the user already typed it once.
+    navigate('/forgot', { state: { email: state?.email } });
   }
 
   return (
@@ -48,7 +71,7 @@ export default function Locked() {
             marginBottom: 12,
           }}
         >
-          Account temporarily locked
+          {stillLocked ? 'Account temporarily locked' : 'You can sign in again'}
         </h1>
 
         <p
@@ -56,20 +79,52 @@ export default function Locked() {
             fontSize: 13,
             color: 'var(--txt-mut)',
             lineHeight: 1.65,
-            marginBottom: 32,
+            marginBottom: stillLocked ? 20 : 32,
             maxWidth: 340,
             marginLeft: 'auto',
             marginRight: 'auto',
           }}
         >
-          Five consecutive failed sign-in attempts triggered a 15-minute lockout.
-          Wait and try again, or reset your password now.
+          {stillLocked ? (
+            <>
+              Too many consecutive failed sign-in attempts
+              {state.email ? <> for <strong style={{ color: 'var(--txt)' }}>{state.email}</strong></> : null}.
+              Wait for the timer, or reset your password to regain access now.
+            </>
+          ) : (
+            <>The lockout has lifted. You can try signing in again.</>
+          )}
         </p>
+
+        {/* Live countdown — the timer the lock actually runs on, served by the backend. */}
+        {stillLocked && (
+          <div
+            role="timer"
+            aria-live="off"
+            aria-label={`Lockout lifts in ${formatCountdown(remaining)}`}
+            style={{
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: 34,
+              fontWeight: 600,
+              color: 'var(--txt)',
+              letterSpacing: '0.02em',
+              fontVariantNumeric: 'tabular-nums',
+              marginBottom: 6,
+            }}
+          >
+            {formatCountdown(remaining)}
+          </div>
+        )}
+        {stillLocked && (
+          <p style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 28 }}>
+            until you can try again
+          </p>
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <button
             type="button"
-            onClick={() => navigate('/forgot')}
+            onClick={handleReset}
             style={primaryButtonStyle}
             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--brand-bright)')}
             onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--brand)')}
@@ -78,9 +133,15 @@ export default function Locked() {
           </button>
           <button
             type="button"
-            onClick={handleBack}
-            style={ghostButtonStyle}
+            onClick={handleRetry}
+            disabled={stillLocked}
+            style={{
+              ...ghostButtonStyle,
+              opacity: stillLocked ? 0.45 : 1,
+              cursor: stillLocked ? 'not-allowed' : 'pointer',
+            }}
             onMouseEnter={(e) => {
+              if (stillLocked) return;
               e.currentTarget.style.background = 'var(--raised)';
               e.currentTarget.style.borderColor = 'var(--txt-mut)';
             }}
@@ -89,7 +150,7 @@ export default function Locked() {
               e.currentTarget.style.borderColor = 'var(--line2)';
             }}
           >
-            Back to sign in
+            {stillLocked ? `Retry in ${formatCountdown(remaining)}` : 'Retry sign in'}
           </button>
         </div>
 
@@ -101,9 +162,15 @@ export default function Locked() {
             lineHeight: 1.5,
           }}
         >
-          Lockout lifts automatically after 15 minutes.
-          <br />
-          Contact your administrator if you need immediate access.
+          {stillLocked && <>The lockout lifts automatically — you can leave this page.<br /></>}
+          <a
+            href="/login"
+            onClick={(e) => { e.preventDefault(); navigate('/login', { replace: true }); }}
+            style={{ color: 'var(--txt-mut)', textDecoration: 'underline', cursor: 'pointer' }}
+          >
+            Back to sign in
+          </a>
+          {' · '}Contact your administrator if you need immediate access.
         </p>
       </motion.div>
     </AuthLayout>

@@ -8,13 +8,21 @@ import java.util.List;
 
 public interface ProjectCategoryRepository extends JpaRepository<ProjectCategory, Long> {
 
-    // Categories are generic master data scoped to their creator, not to a project — LEFT JOIN
-    // FETCH project since it is now optional. JOIN FETCH createdBy avoids an N+1 per row too.
+    // Categories are global, generic master data — every Team Lead sees the same list,
+    // regardless of who created each row. LEFT JOIN FETCH project since it is optional, JOIN
+    // FETCH createdBy avoids an N+1 per row.
     @Query("SELECT c FROM ProjectCategory c LEFT JOIN FETCH c.project JOIN FETCH c.createdBy " +
-           "WHERE c.createdBy.id = :createdById ORDER BY c.name ASC")
-    List<ProjectCategory> findByCreatedByIdWithRefs(@Param("createdById") Long createdById);
+           "ORDER BY c.name ASC")
+    List<ProjectCategory> findAllWithRefs();
 
-    boolean existsByCreatedByIdAndNameIgnoreCase(Long createdById, String name);
+    // Global uniqueness check (case-insensitive, whitespace-normalized) — a category with this
+    // name existing under ANY Team Lead blocks creation of another one. Backed by the DB-level
+    // project_category_normalized_name_uq index (see V60) as the final guard against races.
+    @Query("SELECT CASE WHEN COUNT(c) > 0 THEN true ELSE false END FROM ProjectCategory c " +
+           "WHERE LOWER(TRIM(c.name)) = LOWER(TRIM(:name))")
+    boolean existsByNormalizedName(@Param("name") String name);
 
-    boolean existsByCreatedByIdAndNameIgnoreCaseAndIdNot(Long createdById, String name, Long id);
+    @Query("SELECT CASE WHEN COUNT(c) > 0 THEN true ELSE false END FROM ProjectCategory c " +
+           "WHERE LOWER(TRIM(c.name)) = LOWER(TRIM(:name)) AND c.id <> :id")
+    boolean existsByNormalizedNameAndIdNot(@Param("name") String name, @Param("id") Long id);
 }

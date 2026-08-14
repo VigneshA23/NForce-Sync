@@ -65,7 +65,7 @@ export async function listMyLeadProjects(date?: string): Promise<ProjectFullDto[
   return res.data;
 }
 
-/** The signed-in Team Lead's own categories — generic master data, independent of any project. */
+/** The global category master — every Team Lead sees the same application-wide list, independent of who created each row or of any project. */
 export async function listMyCategories(): Promise<ProjectCategoryDto[]> {
   const res = await api.get<ProjectCategoryDto[]>('/team-lead/categories');
   return res.data;

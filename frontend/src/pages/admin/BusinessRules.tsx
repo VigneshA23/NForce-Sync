@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Bell, CalendarClock, CalendarDays, Clock, Clock3, Plus } from 'lucide-react';
 import {
   getBusinessRuleConfig, updateWorkingHours, updateWeekendRule,
-  updateReminderLeadTime, updateEscalationSla, updateAllowances,
+  updateReminderLeadTime, updateEscalationSla, updateAccountLockout, updateAllowances,
   listShifts, createShift, updateShift, toggleShift, deleteShift,
   listHolidays, createHoliday, deleteHoliday,
 } from '../../api/businessRules';
@@ -257,7 +257,8 @@ export default function BusinessRules() {
   // 'EOD Cutoff Time' is intentionally still matched: the rule no longer exists, but historical
   // audit rows carry that name and this caption should keep surfacing them.
   const notificationsUpdate = findLastUpdate(auditEntries, (name) =>
-    name === 'EOD Cutoff Time' || name === 'Reminder Lead Time' || name === 'Escalation SLA');
+    name === 'EOD Cutoff Time' || name === 'Reminder Lead Time' || name === 'Escalation SLA'
+    || name === 'Lockout Attempt Threshold' || name === 'Lockout Duration Minutes');
   const allowancesUpdate = findLastUpdate(auditEntries, (name) =>
     name === 'Late Arrival Allowance' || name === 'Early Leave Allowance'
     || name === 'Intervening Allowance');
@@ -369,6 +370,45 @@ export default function BusinessRules() {
     slaMutation.mutate(value);
   }
 
+  // ── 7b. Account Lockout ─────────────────────────────────────────────────────
+  // Threshold and duration save together as one rule, matching how they are stored and audited —
+  // a half-applied pair would be an inconsistent policy. Bounds mirror the server-side
+  // @Min/@Max on UpdateAccountLockoutRequest so the error surfaces before the round trip.
+  const [lockoutThresholdDraft, setLockoutThresholdDraft] = useState('');
+  const [lockoutDurationDraft, setLockoutDurationDraft]   = useState('');
+  const [lockoutError, setLockoutError] = useState<string | null>(null);
+  useEffect(() => {
+    if (configQuery.data) {
+      setLockoutThresholdDraft(String(configQuery.data.lockoutAttemptThreshold));
+      setLockoutDurationDraft(String(configQuery.data.lockoutDurationMinutes));
+    }
+  }, [configQuery.data]);
+
+  const lockoutMutation = useMutation({
+    mutationFn: updateAccountLockout,
+    onSuccess: () => { invalidateConfig(); toast.showToast('success', 'Account lockout updated'); setLockoutError(null); },
+    onError: (err) => {
+      const msg = extractApiError(err, 'Failed to update account lockout.');
+      setLockoutError(msg);
+      toast.showToast('error', msg);
+    },
+  });
+
+  function saveLockout() {
+    const attemptThreshold = Number(lockoutThresholdDraft);
+    const durationMinutes  = Number(lockoutDurationDraft);
+    if (!Number.isInteger(attemptThreshold) || attemptThreshold < 3 || attemptThreshold > 10) {
+      setLockoutError('Enter a whole number of attempts between 3 and 10.');
+      return;
+    }
+    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
+      setLockoutError('Enter a whole number of minutes between 1 and 1440.');
+      return;
+    }
+    setLockoutError(null);
+    lockoutMutation.mutate({ attemptThreshold, durationMinutes });
+  }
+
   // ── 8. Time adjustment allowances ───────────────────────────────────────────
   // All three save together as one rule, matching how they are stored and audited.
   // Drafts stay null until the admin actually types, and the rendered value falls back to the
@@ -437,8 +477,10 @@ export default function BusinessRules() {
   function saveNotifications() {
     saveReminder();
     saveSla();
+    saveLockout();
   }
-  const notificationsPending = reminderMutation.isPending || slaMutation.isPending;
+  const notificationsPending = reminderMutation.isPending || slaMutation.isPending
+    || lockoutMutation.isPending;
 
   // ── 2. Shift timings state ──────────────────────────────────────────────────
   const [shiftModal, setShiftModal] = useState<{ mode: 'create' } | { mode: 'edit'; shift: ShiftDefinitionDto } | null>(null);
@@ -595,7 +637,7 @@ export default function BusinessRules() {
           moved to the Shift Timings card, as hours after each shift's end. */}
       <RuleCard
         title="Notifications & Escalation"
-        description="Reminder timing, and how long an unapproved submission waits before escalating. The EOD cutoff is set per shift below."
+        description="Reminder timing, how long an unapproved submission waits before escalating, and the sign-in lockout applied after repeated failed attempts. The EOD cutoff is set per shift below."
         icon={<Bell size={16} aria-hidden="true" />}
         accent="var(--warn)"
         footer={<LastUpdatedCaption info={notificationsUpdate} />}
@@ -633,7 +675,40 @@ export default function BusinessRules() {
             </UnitField>
             <FieldError msg={slaError ?? undefined} />
           </div>
+          {/* Account Lockout — how many consecutive failed sign-ins lock an account, and for
+              how long. Enforced per account by the backend on every sign-in attempt. */}
+          <div style={{ minWidth: 160 }}>
+            <label style={labelStyle} htmlFor="lockout-threshold-input">Lock account after</label>
+            <UnitField unit="tries">
+              <input
+                id="lockout-threshold-input"
+                type="number"
+                min={3}
+                max={10}
+                step={1}
+                value={lockoutThresholdDraft}
+                onChange={(e) => setLockoutThresholdDraft(e.target.value)}
+                style={{ ...inputStyle, paddingRight: 48 }}
+              />
+            </UnitField>
+          </div>
+          <div style={{ minWidth: 160 }}>
+            <label style={labelStyle} htmlFor="lockout-duration-input">Lockout duration</label>
+            <UnitField unit="min">
+              <input
+                id="lockout-duration-input"
+                type="number"
+                min={1}
+                max={1440}
+                step={1}
+                value={lockoutDurationDraft}
+                onChange={(e) => setLockoutDurationDraft(e.target.value)}
+                style={{ ...inputStyle, paddingRight: 40 }}
+              />
+            </UnitField>
+          </div>
         </div>
+        <FieldError msg={lockoutError ?? undefined} />
         <button
           onClick={saveNotifications}
           disabled={notificationsPending || configQuery.isPending}

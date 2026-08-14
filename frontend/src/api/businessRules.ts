@@ -10,6 +10,9 @@ export interface BusinessRuleConfigDto {
   // No eodCutoffTime: the EOD deadline is per shift now — see ShiftDefinitionDto.eodCutoffHours.
   reminderLeadMinutes: number;
   escalationSlaHours: number;
+  /** Account Lockout: consecutive failed sign-ins that lock an account, and for how long. */
+  lockoutAttemptThreshold: number;
+  lockoutDurationMinutes: number;
   /** Time-adjustment uses permitted per calendar month, per type. Global — no overrides. */
   lateArrivalAllowance: number;
   earlyLeaveAllowance: number;
@@ -63,6 +66,17 @@ export async function updateReminderLeadTime(leadMinutes: number): Promise<Busin
 
 export async function updateEscalationSla(slaHours: number): Promise<BusinessRuleConfigDto> {
   const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/escalation-sla', { slaHours });
+  return res.data;
+}
+
+export interface AccountLockoutPayload {
+  attemptThreshold: number;
+  durationMinutes: number;
+}
+
+/** Both values are saved together — a half-applied lockout policy would be inconsistent. */
+export async function updateAccountLockout(payload: AccountLockoutPayload): Promise<BusinessRuleConfigDto> {
+  const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/account-lockout', payload);
   return res.data;
 }
 
