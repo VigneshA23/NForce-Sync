@@ -2,8 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Bell, CalendarClock, CalendarDays, Clock, Clock3, Plus } from 'lucide-react';
 import {
-  getBusinessRuleConfig, updateWorkingHours, updateWeekendRule,
-  updateReminderLeadTime, updateEscalationSla, updateAccountLockout, updateAllowances,
+  getBusinessRuleConfig, updateTimeAttendance, updateNotifications, updateAllowances,
   listShifts, createShift, updateShift, toggleShift, deleteShift,
   listHolidays, createHoliday, deleteHoliday,
 } from '../../api/businessRules';
@@ -276,40 +275,27 @@ export default function BusinessRules() {
     if (configQuery.data) setHoursDraft(String(configQuery.data.workingHoursPerDay));
   }, [configQuery.data]);
 
-  const hoursMutation = useMutation({
-    mutationFn: updateWorkingHours,
-    onSuccess: () => {
-      invalidateConfig();
-      toast.showToast('success', 'Working hours per day updated');
-      setHoursError(null);
-    },
-    onError: (err) => {
-      const msg = extractApiError(err, 'Failed to update working hours.');
-      setHoursError(msg);
-      toast.showToast('error', msg);
-    },
-  });
-
-  function saveHours() {
-    const value = Number(hoursDraft);
-    if (!Number.isFinite(value) || value <= 0 || value > 24) {
-      setHoursError('Enter a number of hours between 0 and 24.');
-      return;
-    }
-    setHoursError(null);
-    hoursMutation.mutate(value);
-  }
-
   // ── 4. Weekend rule ─────────────────────────────────────────────────────────
   const [weekendDraft, setWeekendDraft] = useState<WeekendRule>('SAT_SUN');
   useEffect(() => {
     if (configQuery.data) setWeekendDraft(configQuery.data.weekendRule);
   }, [configQuery.data]);
 
-  const weekendMutation = useMutation({
-    mutationFn: updateWeekendRule,
-    onSuccess: () => { invalidateConfig(); toast.showToast('success', 'Weekend rule updated'); },
-    onError: (err) => toast.showToast('error', extractApiError(err, 'Failed to update weekend rule.')),
+  // One mutation for the whole card. Previously each field had its own, all fired together by the
+  // Save button — they raced on the single config row and the last response to land reverted the
+  // others, so an edit only stuck on the second or third click.
+  const timeAttendanceMutation = useMutation({
+    mutationFn: updateTimeAttendance,
+    onSuccess: () => {
+      invalidateConfig();
+      toast.showToast('success', 'Time & attendance updated');
+      setHoursError(null);
+    },
+    onError: (err) => {
+      const msg = extractApiError(err, 'Failed to update time & attendance.');
+      setHoursError(msg);
+      toast.showToast('error', msg);
+    },
   });
 
   // The EOD cutoff used to live here as one global time-of-day. It is now set per shift as an
@@ -323,26 +309,6 @@ export default function BusinessRules() {
     if (configQuery.data) setReminderDraft(String(configQuery.data.reminderLeadMinutes));
   }, [configQuery.data]);
 
-  const reminderMutation = useMutation({
-    mutationFn: updateReminderLeadTime,
-    onSuccess: () => { invalidateConfig(); toast.showToast('success', 'Reminder lead time updated'); setReminderError(null); },
-    onError: (err) => {
-      const msg = extractApiError(err, 'Failed to update reminder lead time.');
-      setReminderError(msg);
-      toast.showToast('error', msg);
-    },
-  });
-
-  function saveReminder() {
-    const value = Number(reminderDraft);
-    if (!Number.isInteger(value) || value <= 0 || value > 720) {
-      setReminderError('Enter a whole number of minutes between 1 and 720.');
-      return;
-    }
-    setReminderError(null);
-    reminderMutation.mutate(value);
-  }
-
   // ── 7. Escalation SLA ───────────────────────────────────────────────────────
   const [slaDraft, setSlaDraft] = useState('');
   const [slaError, setSlaError] = useState<string | null>(null);
@@ -350,30 +316,9 @@ export default function BusinessRules() {
     if (configQuery.data) setSlaDraft(String(configQuery.data.escalationSlaHours));
   }, [configQuery.data]);
 
-  const slaMutation = useMutation({
-    mutationFn: updateEscalationSla,
-    onSuccess: () => { invalidateConfig(); toast.showToast('success', 'Escalation SLA updated'); setSlaError(null); },
-    onError: (err) => {
-      const msg = extractApiError(err, 'Failed to update escalation SLA.');
-      setSlaError(msg);
-      toast.showToast('error', msg);
-    },
-  });
-
-  function saveSla() {
-    const value = Number(slaDraft);
-    if (!Number.isInteger(value) || value <= 0 || value > 168) {
-      setSlaError('Enter a whole number of hours between 1 and 168.');
-      return;
-    }
-    setSlaError(null);
-    slaMutation.mutate(value);
-  }
-
   // ── 7b. Account Lockout ─────────────────────────────────────────────────────
-  // Threshold and duration save together as one rule, matching how they are stored and audited —
-  // a half-applied pair would be an inconsistent policy. Bounds mirror the server-side
-  // @Min/@Max on UpdateAccountLockoutRequest so the error surfaces before the round trip.
+  // Bounds mirror the server-side @Min/@Max on UpdateNotificationsRequest so an out-of-range
+  // value is caught before the round trip.
   const [lockoutThresholdDraft, setLockoutThresholdDraft] = useState('');
   const [lockoutDurationDraft, setLockoutDurationDraft]   = useState('');
   const [lockoutError, setLockoutError] = useState<string | null>(null);
@@ -384,30 +329,21 @@ export default function BusinessRules() {
     }
   }, [configQuery.data]);
 
-  const lockoutMutation = useMutation({
-    mutationFn: updateAccountLockout,
-    onSuccess: () => { invalidateConfig(); toast.showToast('success', 'Account lockout updated'); setLockoutError(null); },
+  // One mutation for the whole card — see timeAttendanceMutation for why per-field requests
+  // could not save reliably.
+  const notificationsMutation = useMutation({
+    mutationFn: updateNotifications,
+    onSuccess: () => {
+      invalidateConfig();
+      toast.showToast('success', 'Notifications & escalation updated');
+      setReminderError(null); setSlaError(null); setLockoutError(null);
+    },
     onError: (err) => {
-      const msg = extractApiError(err, 'Failed to update account lockout.');
+      const msg = extractApiError(err, 'Failed to update notifications & escalation.');
       setLockoutError(msg);
       toast.showToast('error', msg);
     },
   });
-
-  function saveLockout() {
-    const attemptThreshold = Number(lockoutThresholdDraft);
-    const durationMinutes  = Number(lockoutDurationDraft);
-    if (!Number.isInteger(attemptThreshold) || attemptThreshold < 3 || attemptThreshold > 10) {
-      setLockoutError('Enter a whole number of attempts between 3 and 10.');
-      return;
-    }
-    if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
-      setLockoutError('Enter a whole number of minutes between 1 and 1440.');
-      return;
-    }
-    setLockoutError(null);
-    lockoutMutation.mutate({ attemptThreshold, durationMinutes });
-  }
 
   // ── 8. Time adjustment allowances ───────────────────────────────────────────
   // All three save together as one rule, matching how they are stored and audited.
@@ -462,25 +398,55 @@ export default function BusinessRules() {
   }
 
   // ── Grouped-card save handlers ──────────────────────────────────────────────
-  // Each field keeps its own independent validation/error UI (saveHours/saveCutoff/
-  // saveReminder/saveSla above) — these just fire all of a card's saves from one
-  // button, per field, so an invalid field in the card doesn't block the others.
+  // One request per card. Every field is validated first and the card is only submitted if all of
+  // them pass: config is a single database row, so a partial save would write stale values over
+  // the fields that were left out.
 
   function saveTimeAttendance() {
-    saveHours();
-    if (weekendDraft !== configQuery.data?.weekendRule) {
-      weekendMutation.mutate(weekendDraft);
+    const hoursPerDay = Number(hoursDraft);
+    if (!Number.isFinite(hoursPerDay) || hoursPerDay <= 0 || hoursPerDay > 24) {
+      setHoursError('Enter a number of hours between 0 and 24.');
+      return;
     }
+    setHoursError(null);
+    timeAttendanceMutation.mutate({ hoursPerDay, weekendRule: weekendDraft });
   }
-  const timeAttendancePending = hoursMutation.isPending || weekendMutation.isPending;
+  const timeAttendancePending = timeAttendanceMutation.isPending;
 
   function saveNotifications() {
-    saveReminder();
-    saveSla();
-    saveLockout();
+    const reminderLeadMinutes = Number(reminderDraft);
+    const escalationSlaHours  = Number(slaDraft);
+    const lockoutAttemptThreshold = Number(lockoutThresholdDraft);
+    const lockoutDurationMinutes  = Number(lockoutDurationDraft);
+
+    let invalid = false;
+    if (!Number.isInteger(reminderLeadMinutes) || reminderLeadMinutes <= 0 || reminderLeadMinutes > 720) {
+      setReminderError('Enter a whole number of minutes between 1 and 720.');
+      invalid = true;
+    } else setReminderError(null);
+
+    if (!Number.isInteger(escalationSlaHours) || escalationSlaHours <= 0 || escalationSlaHours > 168) {
+      setSlaError('Enter a whole number of hours between 1 and 168.');
+      invalid = true;
+    } else setSlaError(null);
+
+    if (!Number.isInteger(lockoutAttemptThreshold) || lockoutAttemptThreshold < 3 || lockoutAttemptThreshold > 10) {
+      setLockoutError('Enter a whole number of attempts between 3 and 10.');
+      invalid = true;
+    } else if (!Number.isInteger(lockoutDurationMinutes) || lockoutDurationMinutes < 1 || lockoutDurationMinutes > 1440) {
+      setLockoutError('Enter a whole number of minutes between 1 and 1440.');
+      invalid = true;
+    } else setLockoutError(null);
+
+    if (invalid) return;
+    notificationsMutation.mutate({
+      reminderLeadMinutes,
+      escalationSlaHours,
+      lockoutAttemptThreshold,
+      lockoutDurationMinutes,
+    });
   }
-  const notificationsPending = reminderMutation.isPending || slaMutation.isPending
-    || lockoutMutation.isPending;
+  const notificationsPending = notificationsMutation.isPending;
 
   // ── 2. Shift timings state ──────────────────────────────────────────────────
   const [shiftModal, setShiftModal] = useState<{ mode: 'create' } | { mode: 'edit'; shift: ShiftDefinitionDto } | null>(null);
@@ -651,7 +617,7 @@ export default function BusinessRules() {
                 type="number"
                 min={1}
                 max={720}
-                step={5}
+                step={1}
                 value={reminderDraft}
                 onChange={(e) => setReminderDraft(e.target.value)}
                 style={{ ...inputStyle, paddingRight: 40 }}

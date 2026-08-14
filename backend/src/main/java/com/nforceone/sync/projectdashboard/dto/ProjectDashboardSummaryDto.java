@@ -9,5 +9,6 @@ public record ProjectDashboardSummaryDto(
         BillableSplitDto billableSplit,
         PlannedVsActualDto plannedVsActual,
         List<MissingEodRowDto> missingEod,
-        List<TaskCategoryUtilizationRowDto> taskCategoryBreakdown
+        List<TaskCategoryUtilizationRowDto> taskCategoryBreakdown,
+        List<UtilizationTrendPointDto> utilizationTrend
 ) {}

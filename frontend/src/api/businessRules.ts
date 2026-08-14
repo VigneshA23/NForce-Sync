@@ -46,37 +46,33 @@ export async function getBusinessRuleConfig(): Promise<BusinessRuleConfigDto> {
   return res.data;
 }
 
-export async function updateWorkingHours(hoursPerDay: number): Promise<BusinessRuleConfigDto> {
-  const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/working-hours', { hoursPerDay });
-  return res.data;
+// One request per CARD, not per field. business_rule_config is a single row and every update
+// rewrites all of it, so firing a request per field from one Save button raced on the server: the
+// last write to commit reverted the others, and the change looked like it hadn't saved.
+
+export interface TimeAttendancePayload {
+  hoursPerDay: number;
+  weekendRule: WeekendRule;
 }
 
-export async function updateWeekendRule(weekendRule: WeekendRule): Promise<BusinessRuleConfigDto> {
-  const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/weekend-rule', { weekendRule });
+export async function updateTimeAttendance(payload: TimeAttendancePayload): Promise<BusinessRuleConfigDto> {
+  const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/time-attendance', payload);
   return res.data;
 }
 
 // updateEodCutoff removed — the deadline is set per shift via createShift/updateShift's
 // eodCutoffHours; PUT /admin/business-rules/eod-cutoff no longer exists.
 
-export async function updateReminderLeadTime(leadMinutes: number): Promise<BusinessRuleConfigDto> {
-  const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/reminder-lead-time', { leadMinutes });
-  return res.data;
+export interface NotificationsPayload {
+  reminderLeadMinutes: number;
+  escalationSlaHours: number;
+  /** Account Lockout policy — saved with the rest of the card so the row is written once. */
+  lockoutAttemptThreshold: number;
+  lockoutDurationMinutes: number;
 }
 
-export async function updateEscalationSla(slaHours: number): Promise<BusinessRuleConfigDto> {
-  const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/escalation-sla', { slaHours });
-  return res.data;
-}
-
-export interface AccountLockoutPayload {
-  attemptThreshold: number;
-  durationMinutes: number;
-}
-
-/** Both values are saved together — a half-applied lockout policy would be inconsistent. */
-export async function updateAccountLockout(payload: AccountLockoutPayload): Promise<BusinessRuleConfigDto> {
-  const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/account-lockout', payload);
+export async function updateNotifications(payload: NotificationsPayload): Promise<BusinessRuleConfigDto> {
+  const res = await api.put<BusinessRuleConfigDto>('/admin/business-rules/notifications', payload);
   return res.data;
 }
 
