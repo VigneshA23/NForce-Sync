@@ -103,6 +103,28 @@ public class BusinessRuleService {
         return BusinessRuleConfigDto.from(config);
     }
 
+    /**
+     * Account Lockout policy — threshold and duration saved as one rule with one audit row, since
+     * applying half the pair would leave an inconsistent policy. Enforced by AccountLockoutService,
+     * which re-reads this config on every sign-in attempt, so a change here needs no restart.
+     */
+    public BusinessRuleConfigDto updateAccountLockout(Integer attemptThreshold, Integer durationMinutes,
+                                                      String actingEmail) {
+        BusinessRuleConfig config = requireConfig();
+        AppUser actor = requireActorByEmail(actingEmail);
+        Map<String, Object> before = Map.of(
+                "Lockout Attempt Threshold", config.getLockoutAttemptThreshold(),
+                "Lockout Duration Minutes",  config.getLockoutDurationMinutes());
+        config.setLockoutAttemptThreshold(attemptThreshold);
+        config.setLockoutDurationMinutes(durationMinutes);
+        touch(config, actor);
+        Map<String, Object> after = Map.of(
+                "Lockout Attempt Threshold", config.getLockoutAttemptThreshold(),
+                "Lockout Duration Minutes",  config.getLockoutDurationMinutes());
+        writeAudit(CONFIG_ID, "UPDATE", before, after, actor);
+        return BusinessRuleConfigDto.from(config);
+    }
+
     /** All three monthly time-adjustment allowances, saved as one rule with one audit row. */
     public BusinessRuleConfigDto updateAllowances(Integer lateArrival, Integer earlyLeave,
                                                   Integer intervening, String actingEmail) {

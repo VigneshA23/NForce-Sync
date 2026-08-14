@@ -19,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -29,36 +30,68 @@ public class AuthController {
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserService userService;
+    private final AccountLockoutService accountLockoutService;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtService jwtService,
                           AppUserRepository appUserRepository,
                           PasswordEncoder passwordEncoder,
-                          UserService userService) {
+                          UserService userService,
+                          AccountLockoutService accountLockoutService) {
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.appUserRepository = appUserRepository;
         this.passwordEncoder = passwordEncoder;
         this.userService = userService;
+        this.accountLockoutService = accountLockoutService;
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+        String email = request.email() == null ? null : request.email().trim().toLowerCase();
+
+        // Locked accounts never reach the authentication manager — a correct password must not
+        // unlock early, otherwise the lock is only a speed bump for a credential-stuffing run.
+        Optional<Long> lockedFor = accountLockoutService.lockedSecondsRemaining(email);
+        if (lockedFor.isPresent()) {
+            return lockedResponse(lockedFor.get());
+        }
+
         try {
-            String email = request.email() == null ? null : request.email().trim().toLowerCase();
             Authentication auth = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(email, request.password())
             );
             AppUser user = ((AppUserDetails) auth.getPrincipal()).getAppUser();
+            accountLockoutService.recordSuccess(email);
             String token = jwtService.generateToken(user);
             return ResponseEntity.ok(
                     new LoginResponse(token, UserDto.from(user), user.isMustChangePassword()));
         } catch (BadCredentialsException e) {
+            int attemptsRemaining = accountLockoutService.recordFailure(email);
+            if (attemptsRemaining == 0) {
+                // This failure tripped the lock — report the full window straight away rather than
+                // making the user submit once more to discover they are locked out.
+                return lockedResponse((long) accountLockoutService.durationMinutes() * 60);
+            }
             // Same message for wrong password, unknown email, and inactive account —
-            // never reveal which case it was (user enumeration prevention).
+            // never reveal which case it was (user enumeration prevention). attemptsRemaining is
+            // safe to include: unknown emails report the full allowance every time.
             return ResponseEntity.status(401)
-                    .body(Map.of("error", "Invalid email or password"));
+                    .body(Map.of("error", "Invalid email or password",
+                                 "attemptsRemaining", attemptsRemaining));
         }
+    }
+
+    /**
+     * 423 Locked — the account exists but is temporarily barred. Deliberately not 429, which would
+     * describe request throttling rather than account state. retryAfterSeconds drives the countdown
+     * on the sign-in and lockout screens, so the clock is anchored to the server, not the browser.
+     */
+    private ResponseEntity<Map<String, Object>> lockedResponse(long retryAfterSeconds) {
+        return ResponseEntity.status(HttpStatus.LOCKED)
+                .header("Retry-After", String.valueOf(retryAfterSeconds))
+                .body(Map.of("error", "Account temporarily locked",
+                             "retryAfterSeconds", retryAfterSeconds));
     }
 
     @PostMapping("/forgot-password")
@@ -93,6 +126,9 @@ public class AuthController {
 
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         user.setMustChangePassword(false);
+        // Setting a new password releases any lockout — otherwise "Reset password", the escape
+        // hatch the lock screen offers, would leave the user just as locked out as before.
+        accountLockoutService.clearLock(user);
         appUserRepository.save(user);
 
         // Issue a fresh token with mustChangePassword=false

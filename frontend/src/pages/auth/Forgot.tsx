@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import { AuthLayout } from './AuthLayout';
@@ -20,8 +20,13 @@ export default function Forgot() {
   const reduced  = useReducedMotion();
   const emailId  = useId();
   const errorId  = useId();
+  const location = useLocation();
 
-  const [email, setEmail]     = useState('');
+  // Prefilled when arriving from the lockout screen, which already knows the address —
+  // no reason to make a locked-out user type it again.
+  const prefilledEmail = (location.state as { email?: string } | null)?.email ?? '';
+
+  const [email, setEmail]     = useState(prefilledEmail);
   const [sent, setSent]       = useState(false);
   const [sending, setSending] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
