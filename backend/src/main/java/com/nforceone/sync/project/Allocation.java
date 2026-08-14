@@ -41,6 +41,14 @@ public class Allocation {
     @Column(name = "effective_to")
     private LocalDate effectiveTo;
 
+    /**
+     * Share of the employee's available capacity planned for this project, 1-100 (V61). Drives
+     * {@code PlannedVsActualService}'s planned-hours math: an employee split across concurrent
+     * projects plans each one at its own share rather than 100% each.
+     */
+    @Column(name = "allocation_pct", nullable = false)
+    private Integer allocationPct;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 }

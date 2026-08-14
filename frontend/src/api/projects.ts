@@ -100,21 +100,25 @@ export interface AllocationDto {
   effectiveFrom: string;
   /** Null means the assignment is open-ended. */
   effectiveTo: string | null;
+  /** Share (1-100) of the employee's available capacity planned for this project. */
+  allocationPct: number;
 }
 
-/** Assigns one employee to one project for a date range. */
+/** Assigns one employee to one project for a date range at a given capacity share. */
 export interface CreateAllocationPayload {
   employeeId: number;
   projectId: number;
   effectiveFrom: string;
   /** Null leaves the assignment open-ended. */
   effectiveTo?: string | null;
+  allocationPct: number;
 }
 
-/** In-place edit of an allocation's dates. Employee and project are not changeable. */
+/** In-place edit of an allocation's dates and capacity share. Employee and project are not changeable. */
 export interface UpdateAllocationPayload {
   effectiveFrom: string;
   effectiveTo?: string | null;
+  allocationPct: number;
 }
 
 export async function listAllProjects(): Promise<ProjectFullDto[]> {

@@ -75,6 +75,39 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
                                   @Param("from") LocalDate from,
                                   @Param("to") LocalDate to);
 
+    // ── Planned vs Actual (PM dashboard) ──────────────────────────────────────
+    // Same APPROVED/date-range scoping as sumHoursByProject/sumHoursByEmployeeAndProject above,
+    // narrowed to task_category.is_productive = true — bench/non-productive hours (e.g. time
+    // logged against the "Bench"/"Unassigned" categories) must not count toward Actual
+    // Productive Hours, per the utilization PRD's productive-hours definition.
+
+    @Query("SELECT new com.nforceone.sync.eod.dto.ProjectHoursRow(t.project.id, SUM(t.hours)) " +
+           "FROM EodTask t " +
+           "WHERE t.project.id IN :projectIds " +
+           "AND t.eodEntry.employee.id IN :employeeIds " +
+           "AND t.eodEntry.status = com.nforceone.sync.eod.EodEntry.Status.APPROVED " +
+           "AND t.eodEntry.entryDate BETWEEN :from AND :to " +
+           "AND t.taskCategory.isProductive = true " +
+           "GROUP BY t.project.id")
+    List<ProjectHoursRow> sumProductiveHoursByProject(@Param("projectIds") List<Long> projectIds,
+                                                       @Param("employeeIds") List<Long> employeeIds,
+                                                       @Param("from") LocalDate from,
+                                                       @Param("to") LocalDate to);
+
+    @Query("SELECT new com.nforceone.sync.eod.dto.EmployeeProjectHoursRow(" +
+           "t.eodEntry.employee.id, t.project.id, SUM(t.hours)) " +
+           "FROM EodTask t " +
+           "WHERE t.project.id IN :projectIds " +
+           "AND t.eodEntry.employee.id IN :employeeIds " +
+           "AND t.eodEntry.status = com.nforceone.sync.eod.EodEntry.Status.APPROVED " +
+           "AND t.eodEntry.entryDate BETWEEN :from AND :to " +
+           "AND t.taskCategory.isProductive = true " +
+           "GROUP BY t.eodEntry.employee.id, t.project.id")
+    List<EmployeeProjectHoursRow> sumProductiveHoursByEmployeeAndProject(@Param("projectIds") List<Long> projectIds,
+                                                                          @Param("employeeIds") List<Long> employeeIds,
+                                                                          @Param("from") LocalDate from,
+                                                                          @Param("to") LocalDate to);
+
     @Query("SELECT new com.nforceone.sync.eod.dto.CategoryHoursRow(t.taskCategory.name, SUM(t.hours)) " +
            "FROM EodTask t " +
            "WHERE t.project.id IN :projectIds " +

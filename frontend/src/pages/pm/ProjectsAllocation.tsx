@@ -274,6 +274,56 @@ function describeClash(a: AllocationDto): string {
     + ' Choose dates outside that window.';
 }
 
+/**
+ * Sum of allocation % across every one of this employee's allocations (any project) whose window
+ * overlaps [from, to] — the "current allocation" the PM is stacking a new/edited row on top of.
+ * `excludeId` drops the row being edited so it isn't counted against itself.
+ */
+function overlappingAllocationTotal(
+  allocations: AllocationDto[], employeeId: number, from: string, to: string | null, excludeId?: number,
+): number {
+  return allocations
+    .filter(a => a.employeeId === employeeId
+      && a.id !== excludeId
+      && windowsOverlap(a.effectiveFrom, a.effectiveTo, from, to))
+    .reduce((sum, a) => sum + a.allocationPct, 0);
+}
+
+/** Shared "Current / New / Total Allocation" summary shown in both allocation modals. */
+function AllocationTotalSummary({ current, incoming }: { current: number; incoming: number }) {
+  const total = current + incoming;
+  const over = total > 100;
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 4,
+      padding: '10px 14px', borderRadius: 7, marginBottom: 14,
+      background: over ? 'rgba(224,169,59,.10)' : 'var(--raised)',
+      border: `1px solid ${over ? 'rgba(224,169,59,.35)' : 'var(--line)'}`,
+      fontSize: 12,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--txt-mut)' }}>
+        <span>Current Allocation</span><span>{current}%</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--txt-mut)' }}>
+        <span>New Allocation</span><span>{incoming}%</span>
+      </div>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', fontWeight: 600, paddingTop: 4,
+        marginTop: 2, borderTop: '1px solid var(--line)',
+        color: over ? 'var(--warn)' : 'var(--txt)',
+      }}>
+        <span>Total Allocation</span><span>{total}%</span>
+      </div>
+      {over && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, color: 'var(--warn)', marginTop: 4 }}>
+          <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
+          <span>This employee's total allocation across overlapping projects will exceed 100% for this period.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Earliest selectable end date: the day after the start, since the two may not be equal. */
 function dayAfterISO(iso: string): string | undefined {
   if (!iso) return undefined;
@@ -801,9 +851,12 @@ function AllocationModal({ open, onClose, projects }: {
   const [projectId, setProjectId] = useState('');
   const [effectiveFrom, setEffectiveFrom] = useState(todayISO);
   const [effectiveTo, setEffectiveTo] = useState('');
+  const [allocationPct, setAllocationPct] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
+  const pctNum = allocationPct === '' ? null : Number(allocationPct);
+  const badPct = pctNum !== null && (!Number.isInteger(pctNum) || pctNum < 1 || pctNum > 100);
 
   // Tells the PM the person is already on this project before they submit. The server repeats the
   // check and is the authority — this only saves a round trip.
@@ -814,6 +867,13 @@ function AllocationModal({ open, onClose, projects }: {
       && a.projectId === Number(projectId)
       && windowsOverlap(a.effectiveFrom, a.effectiveTo, effectiveFrom, effectiveTo || null)) ?? null;
   }, [allAllocations, employeeId, projectId, effectiveFrom, effectiveTo, badDateOrder]);
+
+  // Sum of this employee's OTHER overlapping allocations (any project) — the "Current Allocation"
+  // the new row would stack on top of. Only meaningful once enough of the form is filled in.
+  const currentAllocationTotal = useMemo(() => {
+    if (!employeeId || !effectiveFrom || badDateOrder) return 0;
+    return overlappingAllocationTotal(allAllocations ?? [], Number(employeeId), effectiveFrom, effectiveTo || null);
+  }, [allAllocations, employeeId, effectiveFrom, effectiveTo, badDateOrder]);
 
   // Only ACTIVE projects are allocatable — you cannot staff someone onto work that is
   // completed, on hold, or inactive. It would also be invisible to them: the EOD Project
@@ -826,13 +886,15 @@ function AllocationModal({ open, onClose, projects }: {
   function handleClose() {
     setEmployeeId('');
     setProjectId('');
-    setEffectiveTo(''); setError(null);
+    setEffectiveTo('');
+    setAllocationPct('');
+    setError(null);
     onClose();
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!employeeId || !projectId || !effectiveFrom || badDateOrder || clash) return;
+    if (!employeeId || !projectId || !effectiveFrom || badDateOrder || clash || pctNum === null || badPct) return;
     setError(null);
     try {
       await createMutation.mutateAsync({
@@ -840,6 +902,7 @@ function AllocationModal({ open, onClose, projects }: {
         projectId: Number(projectId),
         effectiveFrom,
         effectiveTo: effectiveTo || null,
+        allocationPct: pctNum,
       });
       showToast('success', 'Allocation created');
       handleClose();
@@ -888,13 +951,40 @@ function AllocationModal({ open, onClose, projects }: {
             </label>
             <input type="date" lang="en-GB" style={inputStyle} value={effectiveTo} min={effectiveFrom || undefined}
               onChange={e => setEffectiveTo(e.target.value)} />
-            {badDateOrder && (
+            {badDateOrder ? (
               <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>
                 Effective To cannot be earlier than Effective From.
+              </p>
+            ) : effectiveTo === '' && (
+              <p style={{ fontSize: 11, color: 'var(--txt-dim)', margin: '5px 0 0' }}>
+                No end date means the allocation remains active until it is changed or ended.
               </p>
             )}
           </div>
         </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Allocation % *</label>
+          <input
+            type="number" min={1} max={100} step={1} style={{ ...inputStyle, width: 140 }}
+            value={allocationPct}
+            placeholder="e.g. 60"
+            onChange={e => setAllocationPct(e.target.value)}
+          />
+          <p style={{ fontSize: 11, color: 'var(--txt-dim)', margin: '5px 0 0' }}>
+            Share of the employee's available capacity planned for this project.
+          </p>
+          {badPct && (
+            <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>
+              Allocation % must be a whole number between 1 and 100.
+            </p>
+          )}
+        </div>
+
+        {employeeId && effectiveFrom && !badDateOrder && (
+          <AllocationTotalSummary current={currentAllocationTotal} incoming={pctNum ?? 0} />
+        )}
+
         {clash && (
           <p style={{ fontSize: 11, color: 'var(--risk)', margin: '0 0 14px' }} role="alert">
             {describeClash(clash)}
@@ -904,7 +994,7 @@ function AllocationModal({ open, onClose, projects }: {
           <button
             type="submit"
             disabled={createMutation.isPending || !employeeId || !projectId
-              || !effectiveFrom || badDateOrder || clash != null}
+              || !effectiveFrom || badDateOrder || clash != null || pctNum === null || badPct}
             style={{
               padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
               color: '#fff', fontSize: 13, fontWeight: 600,
@@ -931,6 +1021,7 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
   const { data: allAllocations } = useAllocations();
   const [effectiveFrom, setEffectiveFrom] = useState('');
   const [effectiveTo, setEffectiveTo] = useState('');
+  const [allocationPct, setAllocationPct] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   // Re-seed whenever a different row is opened.
@@ -938,10 +1029,13 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
     if (!allocation) return;
     setEffectiveFrom(allocation.effectiveFrom);
     setEffectiveTo(allocation.effectiveTo ?? '');
+    setAllocationPct(String(allocation.allocationPct));
     setError(null);
   }, [allocation]);
 
   const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
+  const pctNum = allocationPct === '' ? null : Number(allocationPct);
+  const badPct = pctNum !== null && (!Number.isInteger(pctNum) || pctNum < 1 || pctNum > 100);
 
   // Widening a window can collide with another allocation of the same pair. Excludes this row, so
   // re-saving its own dates is never a conflict with itself.
@@ -954,9 +1048,17 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
       && windowsOverlap(a.effectiveFrom, a.effectiveTo, effectiveFrom, effectiveTo || null)) ?? null;
   }, [allAllocations, allocation, effectiveFrom, effectiveTo, badDateOrder]);
 
+  // This row's own (old) percentage is excluded from "Current Allocation" — it is being replaced
+  // by whatever is typed into the field below, not stacked on top of itself.
+  const currentAllocationTotal = useMemo(() => {
+    if (!allocation || !effectiveFrom || badDateOrder) return 0;
+    return overlappingAllocationTotal(
+      allAllocations ?? [], allocation.employeeId, effectiveFrom, effectiveTo || null, allocation.id);
+  }, [allAllocations, allocation, effectiveFrom, effectiveTo, badDateOrder]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!allocation || !effectiveFrom || badDateOrder || clash) return;
+    if (!allocation || !effectiveFrom || badDateOrder || clash || pctNum === null || badPct) return;
     setError(null);
     try {
       await updateMutation.mutateAsync({
@@ -964,6 +1066,7 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
         data: {
           effectiveFrom,
           effectiveTo: effectiveTo || null,
+          allocationPct: pctNum,
         },
       });
       showToast('success', 'Allocation updated');
@@ -1020,6 +1123,24 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
             </div>
           </div>
 
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelStyle}>Allocation % *</label>
+            <input
+              type="number" min={1} max={100} step={1} style={{ ...inputStyle, width: 140 }}
+              value={allocationPct}
+              onChange={e => setAllocationPct(e.target.value)}
+            />
+            {badPct && (
+              <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>
+                Allocation % must be a whole number between 1 and 100.
+              </p>
+            )}
+          </div>
+
+          {effectiveFrom && !badDateOrder && (
+            <AllocationTotalSummary current={currentAllocationTotal} incoming={pctNum ?? 0} />
+          )}
+
           {clash && (
             <p style={{ fontSize: 11, color: 'var(--risk)', margin: '0 0 14px' }} role="alert">
               {describeClash(clash)}
@@ -1029,7 +1150,8 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="submit"
-              disabled={updateMutation.isPending || !effectiveFrom || badDateOrder || clash != null}
+              disabled={updateMutation.isPending || !effectiveFrom || badDateOrder || clash != null
+                || pctNum === null || badPct}
               style={{
                 padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
                 color: '#fff', fontSize: 13, fontWeight: 600,
@@ -1244,6 +1366,7 @@ function AllocationTab() {
                 onToggle={() => toggleSort('employee')} />
               <SortableTh label="Project" dir={sort?.key === 'project' ? sort.dir : null}
                 onToggle={() => toggleSort('project')} />
+              <th style={thStyle}>Allocation %</th>
               <th style={thStyle}>Effective From</th>
               <th style={thStyle}>Effective To</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
@@ -1252,7 +1375,7 @@ function AllocationTab() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                <td colSpan={6} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
                   {filtersActive
                     ? 'No allocations match that employee.'
                     : 'No allocations yet. Create one above.'}
@@ -1263,6 +1386,7 @@ function AllocationTab() {
                 <tr key={a.id}>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{a.employeeName} <span style={{ color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>{a.employeeCode}</span></td>
                   <td style={tdStyle}>{a.projectCode} — {a.projectName}</td>
+                  <td style={{ ...tdStyle, fontFamily: '"JetBrains Mono", monospace' }}>{a.allocationPct}%</td>
                   <td style={tdStyle}>{fmtDateDMY(a.effectiveFrom)}</td>
                   <td style={tdStyle}>{fmtDateDMY(a.effectiveTo)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
