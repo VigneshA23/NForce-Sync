@@ -1,13 +1,12 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Lock } from 'lucide-react';
 import axios from 'axios';
 import { AuthLayout } from './AuthLayout';
 import { useAuth, ROLE_LANDING, buildAuthUser } from '../../lib/auth';
-import { login } from '../../api/auth';
-
-const MAX_ATTEMPTS = 5;
+import { login, asLockedError, attemptsRemainingFrom } from '../../api/auth';
+import { useCountdown, formatCountdown } from '../../lib/useCountdown';
 
 function MicrosoftIcon() {
   return (
@@ -31,7 +30,7 @@ const itemVariants = {
 };
 
 export default function Login() {
-  const { loginWithCredentials, failCount, recordFailedAttempt } = useAuth();
+  const { loginWithCredentials } = useAuth();
   const navigate = useNavigate();
   const reduced = useReducedMotion();
 
@@ -44,11 +43,25 @@ export default function Login() {
   const [showPass, setShowPass]     = useState(false);
   const [error, setError]           = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Attempts left before this account locks, straight from the server — the client no longer
+  // keeps its own tally, which used to be shared across every email typed into this form.
+  const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
+  // Epoch ms when the lock lifts; drives the inline countdown and disables the submit button.
+  const [lockedUntilMs, setLockedUntilMs] = useState<number | null>(null);
+
+  const lockRemaining = useCountdown(lockedUntilMs);
+  const isLocked = lockRemaining > 0;
 
   const emailRef = useRef<HTMLInputElement>(null);
 
+  // Once the window elapses, drop the banner so the form is usable again without a reload.
+  useEffect(() => {
+    if (lockedUntilMs != null && lockRemaining === 0) setLockedUntilMs(null);
+  }, [lockRemaining, lockedUntilMs]);
+
   async function handleCredentialSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isLocked) return;
     setError(null);
     setSubmitting(true);
 
@@ -58,20 +71,33 @@ export default function Login() {
       // object — pass it through explicitly. Dropping it lets the user into the app with a
       // temp-password token, which JwtFilter then 403s on every request (empty dropdowns).
       const authUser = buildAuthUser(serverUser, mustChangePassword);
+      setAttemptsLeft(null);
       loginWithCredentials(token, authUser);
       navigate(
         authUser.mustChangePassword ? '/force-change-password' : ROLE_LANDING[authUser.role],
         { replace: true },
       );
     } catch (err) {
-      const attempts = recordFailedAttempt();
-      if (attempts >= MAX_ATTEMPTS) {
-        navigate('/locked', { replace: true });
+      const locked = asLockedError(err);
+      if (locked) {
+        // Hand the countdown to the lock screen, which owns the "what now?" options.
+        navigate('/locked', {
+          replace: true,
+          state: { email: email.trim(), retryAfterSeconds: locked.retryAfterSeconds },
+        });
         return;
       }
+
+      // Only a 401 is a credential failure. A network error or a 500 used to land here too and
+      // was counted as a failed attempt, which could lock someone out over a backend hiccup.
+      const remaining = attemptsRemainingFrom(err);
+      setAttemptsLeft(remaining);
+
       let message = 'Invalid email or password.';
       if (axios.isAxiosError(err) && typeof err.response?.data?.error === 'string') {
         message = err.response.data.error;
+      } else if (!axios.isAxiosError(err) || !err.response) {
+        message = 'Could not reach the server. Please try again.';
       }
       setError(message);
       emailRef.current?.focus();
@@ -159,8 +185,49 @@ export default function Login() {
           </div>
         </motion.div>
 
+        {/* Lockout banner — shown when this account is still inside its cooldown window.
+            Ticks down to 00:00, at which point the form re-enables on its own. */}
+        {isLocked && (
+          <motion.div
+            initial={reduced ? undefined : { opacity: 0, y: -6 }}
+            animate={reduced ? undefined : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            role="status"
+            aria-live="polite"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 10,
+              padding: '12px 14px',
+              borderRadius: 8,
+              background: 'rgba(228,55,61,.10)',
+              border: '1px solid rgba(228,55,61,.25)',
+              color: '#f4a5a8',
+              fontSize: 13,
+              marginBottom: 18,
+            }}
+          >
+            <Lock size={15} style={{ flexShrink: 0, marginTop: 1, color: 'var(--risk)' }} aria-hidden="true" />
+            <span>
+              Account temporarily locked. Try again in{' '}
+              <strong style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                {formatCountdown(lockRemaining)}
+              </strong>
+              , or{' '}
+              <a
+                href="/forgot"
+                onClick={(e) => { e.preventDefault(); navigate('/forgot', { state: { email: email.trim() } }); }}
+                style={{ color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}
+              >
+                reset your password
+              </a>
+              .
+            </span>
+          </motion.div>
+        )}
+
         {/* Error alert */}
-        {hasError && (
+        {hasError && !isLocked && (
           <motion.div
             initial={reduced ? undefined : { opacity: 0, y: -6 }}
             animate={reduced ? undefined : { opacity: 1, y: 0 }}
@@ -277,20 +344,26 @@ export default function Login() {
           <motion.div variants={reduced ? undefined : itemVariants}>
             <button
               type="submit"
-              disabled={submitting}
-              style={submitButtonStyle}
+              disabled={submitting || isLocked}
+              style={{ ...submitButtonStyle, opacity: isLocked ? 0.5 : 1, cursor: isLocked ? 'not-allowed' : 'pointer' }}
               onMouseEnter={(e) => {
-                if (!submitting) Object.assign(e.currentTarget.style, submitButtonHoverStyle);
+                if (!submitting && !isLocked) Object.assign(e.currentTarget.style, submitButtonHoverStyle);
               }}
-              onMouseLeave={(e) => Object.assign(e.currentTarget.style, submitButtonStyle)}
+              onMouseLeave={(e) => Object.assign(e.currentTarget.style, {
+                ...submitButtonStyle,
+                opacity: isLocked ? 0.5 : 1,
+                cursor: isLocked ? 'not-allowed' : 'pointer',
+              })}
             >
-              {submitting ? 'Signing in…' : 'Sign in'}
+              {isLocked
+                ? `Locked — ${formatCountdown(lockRemaining)}`
+                : submitting ? 'Signing in…' : 'Sign in'}
             </button>
           </motion.div>
         </form>
 
-        {/* Attempt warning */}
-        {failCount > 0 && failCount < MAX_ATTEMPTS && (
+        {/* Attempt warning — count comes from the server, so it reflects this account only. */}
+        {!isLocked && attemptsLeft != null && attemptsLeft > 0 && (
           <p
             style={{
               fontSize: 11,
@@ -301,7 +374,7 @@ export default function Login() {
             }}
             aria-live="polite"
           >
-            {MAX_ATTEMPTS - failCount} attempt{MAX_ATTEMPTS - failCount !== 1 ? 's' : ''} remaining before lockout.
+            {attemptsLeft} attempt{attemptsLeft !== 1 ? 's' : ''} remaining before lockout.
           </p>
         )}
       </motion.div>

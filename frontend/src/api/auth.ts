@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { api } from './client';
 import type { Role } from '../lib/types';
 
@@ -35,6 +36,32 @@ export async function login(
     { email, password },
   );
   return res.data;
+}
+
+// ── Sign-in failure shapes ────────────────────────────────────────────────────
+// The server distinguishes two failures: 401 (bad credentials, with how many tries are left before
+// the account locks) and 423 (Account Lockout in force, with the seconds until it lifts). Both are
+// read straight off the axios error, so the UI never has to guess at the policy.
+
+/** HTTP 423 Locked. */
+export const LOCKED_STATUS = 423;
+
+export interface LoginLockedError {
+  retryAfterSeconds: number;
+}
+
+/** Returns the lockout details when the error is a 423, otherwise null. */
+export function asLockedError(err: unknown): LoginLockedError | null {
+  if (!axios.isAxiosError(err) || err.response?.status !== LOCKED_STATUS) return null;
+  const seconds = Number(err.response?.data?.retryAfterSeconds);
+  return { retryAfterSeconds: Number.isFinite(seconds) && seconds > 0 ? seconds : 0 };
+}
+
+/** Attempts left before lockout, from a 401 body. Null when the server didn't say. */
+export function attemptsRemainingFrom(err: unknown): number | null {
+  if (!axios.isAxiosError(err) || err.response?.status !== 401) return null;
+  const remaining = Number(err.response?.data?.attemptsRemaining);
+  return Number.isFinite(remaining) ? remaining : null;
 }
 
 export async function changePassword(

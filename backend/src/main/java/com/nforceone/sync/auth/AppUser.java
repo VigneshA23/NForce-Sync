@@ -52,6 +52,16 @@ public class AppUser {
     @Column(name = "must_change_password", nullable = false)
     private boolean mustChangePassword = false;
 
+    // ── Account Lockout state (see AccountLockoutService) ──────────────────────
+    // Consecutive failed sign-ins. Reset to 0 on a successful sign-in and at the moment the
+    // lock is applied, so it always counts attempts *since* the last lock or success.
+    @Column(name = "failed_login_attempts", nullable = false)
+    private int failedLoginAttempts = 0;
+
+    /** When the temporary sign-in lock expires. Null means the account is not locked. */
+    @Column(name = "locked_until")
+    private OffsetDateTime lockedUntil;
+
     @Column(name = "department_id")
     private Long departmentId;
 

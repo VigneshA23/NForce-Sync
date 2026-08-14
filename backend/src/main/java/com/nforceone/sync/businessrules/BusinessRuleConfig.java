@@ -44,6 +44,14 @@ public class BusinessRuleConfig {
     @Column(name = "escalation_sla_hours", nullable = false)
     private Integer escalationSlaHours;
 
+    // Account Lockout policy — how many consecutive failed sign-ins lock an account, and for how
+    // long. Read per attempt by AccountLockoutService, so a change here takes effect immediately.
+    @Column(name = "lockout_attempt_threshold", nullable = false)
+    private Integer lockoutAttemptThreshold;
+
+    @Column(name = "lockout_duration_minutes", nullable = false)
+    private Integer lockoutDurationMinutes;
+
     // Team Lead Dashboard: individual-utilization flags and the "team at risk" rule read these.
     @Column(name = "underutilized_threshold_pct", nullable = false)
     private BigDecimal underutilizedThresholdPct;

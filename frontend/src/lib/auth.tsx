@@ -58,13 +58,13 @@ export function buildAuthUser(serverUser: ServerUser, mustChangePassword?: boole
   };
 }
 
+// No failed-attempt counter here: sign-in lockout is enforced per account by the backend
+// (see AccountLockoutService). A client-side tally was global across emails, reset on refresh,
+// and could be skipped entirely by calling the API directly.
 interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
-  failCount: number;
   loginWithCredentials: (token: string, user: AuthUser) => void;
-  recordFailedAttempt: () => number;
-  resetFailCount: () => void;
   logout: () => void;
 }
 
@@ -85,8 +85,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const initSession = useRef(loadSession());
   const [user, setUser]   = useState<AuthUser | null>(initSession.current?.user ?? null);
   const [token, setToken] = useState<string | null>(initSession.current?.token ?? null);
-  const failRef           = useRef(0);
-  const [failCount, setFailCount] = useState(0);
 
   useEffect(() => {
     const savedToken = initSession.current?.token;
@@ -110,36 +108,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   function loginWithCredentials(newToken: string, newUser: AuthUser) {
-    failRef.current = 0;
-    setFailCount(0);
     saveSession({ token: newToken, user: newUser });
     setToken(newToken);
     setUser(newUser);
   }
 
-  function recordFailedAttempt(): number {
-    failRef.current += 1;
-    setFailCount(failRef.current);
-    return failRef.current;
-  }
-
-  function resetFailCount() {
-    failRef.current = 0;
-    setFailCount(0);
-  }
-
   function logout() {
-    failRef.current = 0;
-    setFailCount(0);
     saveSession(null);
     setToken(null);
     setUser(null);
   }
 
   return (
-    <AuthContext.Provider
-      value={{ user, token, failCount, loginWithCredentials, recordFailedAttempt, resetFailCount, logout }}
-    >
+    <AuthContext.Provider value={{ user, token, loginWithCredentials, logout }}>
       {children}
     </AuthContext.Provider>
   );

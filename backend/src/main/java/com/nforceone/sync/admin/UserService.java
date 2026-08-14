@@ -249,6 +249,10 @@ public class UserService {
         String tempPassword = generateTempPassword();
         user.setPasswordHash(passwordEncoder.encode(tempPassword));
         user.setMustChangePassword(true);
+        // A reset releases any Account Lockout: the lock screen points the user here, so the temp
+        // password has to be usable immediately rather than waiting out the remaining window.
+        user.setFailedLoginAttempts(0);
+        user.setLockedUntil(null);
         userRepository.save(user);
 
         emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), tempPassword);
@@ -270,6 +274,10 @@ public class UserService {
                 String tempPassword = generateTempPassword();
                 user.setPasswordHash(passwordEncoder.encode(tempPassword));
                 user.setMustChangePassword(true);
+                // Same reasoning as the admin reset: a self-service reset must release the lockout,
+                // since "Reset password" is the documented way out of the lock screen.
+                user.setFailedLoginAttempts(0);
+                user.setLockedUntil(null);
                 userRepository.save(user);
                 emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), tempPassword);
                 writeAudit("APP_USER", user.getId(), "PASSWORD_RESET_SELF", null, null, user);
