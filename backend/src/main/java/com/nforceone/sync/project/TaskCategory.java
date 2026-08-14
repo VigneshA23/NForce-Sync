@@ -1,10 +1,12 @@
 package com.nforceone.sync.project;
 
-import com.nforceone.sync.auth.AppUser;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+// Global, application-wide master data — see V60. Never scoped to a Team Lead, team, project,
+// or employee; uniqueness is enforced DB-side via task_category_normalized_name_uq
+// (case-insensitive, whitespace-normalized on name).
 @Entity
 @Table(name = "task_category")
 @Getter
@@ -26,11 +28,4 @@ public class TaskCategory {
 
     @Column(nullable = false)
     private Boolean active;
-
-    // Null = global category, visible to every employee (the original seeded list). Non-null =
-    // owned by that Team Lead's team — mirrors a ProjectCategory the Team Lead created under
-    // "My Projects" > Category Management; see TeamLeadProjectService.createCategory.
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "manager_id")
-    private AppUser manager;
 }

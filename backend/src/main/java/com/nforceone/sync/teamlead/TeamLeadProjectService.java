@@ -18,6 +18,7 @@ import com.nforceone.sync.project.dto.ProjectCategoryDto;
 import com.nforceone.sync.project.dto.ProjectDetailDto;
 import com.nforceone.sync.project.dto.ProjectFullDto;
 import com.nforceone.sync.project.dto.UpdateProjectCategoryRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,12 +35,15 @@ import java.util.List;
  * their team members — currently holds an allocation on it (see
  * {@link ProjectRepository#findAllocatedToTeamLeadOnDate}).
  *
- * <p>Categories: generic master data owned by the creating Team Lead, independent of project
- * assignment — listed and deduplicated by {@code createdBy}, not by project. A category may
- * optionally reference one of the Team Lead's projects; when it does, {@code createCategory}
- * still re-derives the Team Lead's project list to check it rather than trusting the caller's
- * projectId, which is what keeps a Team Lead from tagging a category to another Team Lead's
- * project.
+ * <p>Categories: global, generic master data — every Team Lead sees and can add to the same
+ * application-wide list (see V60), independent of project, team, or who created each row.
+ * Uniqueness is case-insensitive and whitespace-normalized, checked here and enforced as the
+ * final guard by the DB (project_category_normalized_name_uq / task_category_normalized_name_uq).
+ * A category may optionally reference one of the Team Lead's projects; when it does,
+ * {@code createCategory} still re-derives the Team Lead's project list to check it rather than
+ * trusting the caller's projectId, which is what keeps a Team Lead from tagging a category to
+ * another Team Lead's project. Edit/delete remain restricted to the category's creator (see
+ * {@link #requireOwnedCategory}) — global visibility does not imply shared ownership.
  */
 @Service
 @Transactional(readOnly = true)
@@ -100,8 +104,10 @@ public class TeamLeadProjectService {
     }
 
     public List<ProjectCategoryDto> listCategories(String actingEmail) {
-        AppUser actor = resolveActor(actingEmail);
-        return categoryRepository.findByCreatedByIdWithRefs(actor.getId())
+        // Global list — every Team Lead sees the same application-wide categories, not just
+        // the ones they personally created (see V60 / class javadoc).
+        resolveActor(actingEmail);
+        return categoryRepository.findAllWithRefs()
                 .stream()
                 .map(ProjectCategoryDto::from)
                 .toList();
@@ -117,41 +123,52 @@ public class TeamLeadProjectService {
                 ? requireProjectAssignedToTeamLead(req.projectId(), actor.getId(), onDate)
                 : null;
 
-        if (categoryRepository.existsByCreatedByIdAndNameIgnoreCase(actor.getId(), req.name().trim())) {
+        String name = req.name().trim();
+
+        // Global existence check, case-insensitive and whitespace-normalized — a category with
+        // this name under ANY Team Lead blocks creation of another one (see V60). The DB-level
+        // unique index is the final guard for the concurrent-request race (two Team Leads
+        // submitting the same name at once); see the catch below.
+        if (categoryRepository.existsByNormalizedName(name)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "A category with this name already exists");
+                    "Category '" + name + "' already exists.");
         }
 
         ProjectCategory.Status status = resolveStatus(req.status());
-        String name = req.name().trim();
 
-        // Mirror into a team-scoped TaskCategory row so this category becomes selectable in the
-        // Employee EOD dropdown for everyone on this Team Lead's team (app_user.manager_id =
-        // actor.id), without affecting the global, unscoped seeded categories. Defaults match
-        // what this form collects — no productivity/billability distinction is asked of the
-        // Team Lead here.
-        TaskCategory taskCategory = new TaskCategory();
-        taskCategory.setName(name);
-        taskCategory.setIsProductive(true);
-        taskCategory.setIsBillableDefault(false);
-        taskCategory.setActive(status == ProjectCategory.Status.ACTIVE);
-        taskCategory.setManager(actor);
-        taskCategory = taskCategoryRepository.save(taskCategory);
+        try {
+            // Mirror into a TaskCategory row so this category becomes selectable in the
+            // Employee EOD dropdown for every employee, application-wide. Defaults match what
+            // this form collects — no productivity/billability distinction is asked of the
+            // Team Lead here.
+            TaskCategory taskCategory = new TaskCategory();
+            taskCategory.setName(name);
+            taskCategory.setIsProductive(true);
+            taskCategory.setIsBillableDefault(false);
+            taskCategory.setActive(status == ProjectCategory.Status.ACTIVE);
+            taskCategory = taskCategoryRepository.save(taskCategory);
 
-        ProjectCategory category = new ProjectCategory();
-        category.setProject(project);
-        category.setName(name);
-        category.setCode(blankToNull(req.code()));
-        category.setDescription(blankToNull(req.description()));
-        category.setColor(blankToNull(req.color()));
-        category.setStatus(status);
-        category.setCreatedBy(actor);
-        category.setTaskCategoryId(taskCategory.getId());
-        OffsetDateTime now = OffsetDateTime.now();
-        category.setCreatedAt(now);
-        category.setUpdatedAt(now);
+            ProjectCategory category = new ProjectCategory();
+            category.setProject(project);
+            category.setName(name);
+            category.setCode(blankToNull(req.code()));
+            category.setDescription(blankToNull(req.description()));
+            category.setColor(blankToNull(req.color()));
+            category.setStatus(status);
+            category.setCreatedBy(actor);
+            category.setTaskCategoryId(taskCategory.getId());
+            OffsetDateTime now = OffsetDateTime.now();
+            category.setCreatedAt(now);
+            category.setUpdatedAt(now);
 
-        return ProjectCategoryDto.from(categoryRepository.save(category));
+            return ProjectCategoryDto.from(categoryRepository.save(category));
+        } catch (DataIntegrityViolationException e) {
+            // Two Team Leads submitted the same normalized name at nearly the same time and
+            // both passed the pre-check above; the DB's unique index rejected the loser. Never
+            // surface the raw constraint-violation error to the client.
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Category '" + name + "' already exists.");
+        }
     }
 
     /**
@@ -166,10 +183,13 @@ public class TeamLeadProjectService {
         ProjectCategory category = requireOwnedCategory(id, actor.getId());
 
         String name = req.name().trim();
+        // Global check (excluding this row itself) — renaming "Testing" to "Development" must
+        // be rejected exactly like creating a new "Development" would be, whichever Team Lead
+        // owns the existing one.
         if (!name.equalsIgnoreCase(category.getName())
-                && categoryRepository.existsByCreatedByIdAndNameIgnoreCaseAndIdNot(actor.getId(), name, id)) {
+                && categoryRepository.existsByNormalizedNameAndIdNot(name, id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "A category with this name already exists");
+                    "Category '" + name + "' already exists.");
         }
 
         ProjectCategory.Status status = resolveStatus(req.status());
@@ -179,18 +199,23 @@ public class TeamLeadProjectService {
         category.setStatus(status);
         category.setUpdatedAt(OffsetDateTime.now());
 
-        // Keep the mirrored TaskCategory in sync so the Employee EOD dropdown reflects the
-        // rename/status change for this Team Lead's team without touching any eod_task rows
-        // that already reference it.
-        if (category.getTaskCategoryId() != null) {
-            taskCategoryRepository.findById(category.getTaskCategoryId()).ifPresent(tc -> {
-                tc.setName(name);
-                tc.setActive(status == ProjectCategory.Status.ACTIVE);
-                taskCategoryRepository.save(tc);
-            });
-        }
+        try {
+            // Keep the mirrored TaskCategory in sync so the Employee EOD dropdown reflects the
+            // rename/status change everywhere, without touching any eod_task rows that already
+            // reference it.
+            if (category.getTaskCategoryId() != null) {
+                taskCategoryRepository.findById(category.getTaskCategoryId()).ifPresent(tc -> {
+                    tc.setName(name);
+                    tc.setActive(status == ProjectCategory.Status.ACTIVE);
+                    taskCategoryRepository.save(tc);
+                });
+            }
 
-        return ProjectCategoryDto.from(categoryRepository.save(category));
+            return ProjectCategoryDto.from(categoryRepository.save(category));
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Category '" + name + "' already exists.");
+        }
     }
 
     /**
