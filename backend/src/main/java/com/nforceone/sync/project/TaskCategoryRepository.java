@@ -12,6 +12,12 @@ public interface TaskCategoryRepository extends JpaRepository<TaskCategory, Long
     List<TaskCategory> findByIsProductiveAndActiveTrue(Boolean isProductive);
     Optional<TaskCategory> findByName(String name);
 
+    // Scalar id-only projection — unlike findByName, this never selects the rest of the row, so
+    // it can't be tripped up by TaskCategory.manager_id being absent from this environment's
+    // task_category table (see ProjectDashboardService.leaveCategoryId for why that matters).
+    @Query("SELECT c.id FROM TaskCategory c WHERE c.name = :name")
+    Optional<Long> findIdByName(@Param("name") String name);
+
     // Global categories (manager IS NULL) plus any team-scoped category owned by a manager in
     // `managerIds` — the caller's own id (categories they created as a Team Lead) and/or their
     // own manager's id (their Team Lead's categories). Enforced here, not just in the frontend,

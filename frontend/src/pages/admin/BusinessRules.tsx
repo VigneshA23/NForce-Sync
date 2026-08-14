@@ -609,7 +609,7 @@ export default function BusinessRules() {
                 type="number"
                 min={1}
                 max={720}
-                step={5}
+                step={1}
                 value={reminderDraft}
                 onChange={(e) => setReminderDraft(e.target.value)}
                 style={{ ...inputStyle, paddingRight: 40 }}

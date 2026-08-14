@@ -37,6 +37,12 @@ export interface DashboardSummaryCardsDto {
   plannedUtilizationPct: number;
   actualUtilizationPct: number;
   missingEodCount: number;
+  /** vs-previous-period deltas (percentage points); null when there's no previous-period data. */
+  overallUtilizationDeltaPct: number | null;
+  actualUtilizationDeltaPct: number | null;
+  billableUtilizationDeltaPct: number | null;
+  nonBillableUtilizationDeltaPct: number | null;
+  activeProjectsDelta: number | null;
 }
 
 export interface ProjectUtilizationRowDto {
@@ -46,6 +52,16 @@ export interface ProjectUtilizationRowDto {
   actualHours: number;
   variance: number;
   utilizationPct: number;
+  billablePct: number;
+  /** Previous-period utilizationPct for this project; null if no prior-period activity. */
+  previousUtilizationPct: number | null;
+}
+
+export interface UtilizationTrendPointDto {
+  date: string;
+  overallPct: number;
+  billablePct: number;
+  nonBillablePct: number;
 }
 
 export interface ResourceUtilizationRowDto {
@@ -95,6 +111,7 @@ export interface ProjectDashboardSummaryDto {
   plannedVsActual: PlannedVsActualDto;
   missingEod: MissingEodRowDto[];
   taskCategoryBreakdown: TaskCategoryUtilizationRowDto[];
+  utilizationTrend: UtilizationTrendPointDto[];
 }
 
 export interface ProjectDashboardFilterParams {

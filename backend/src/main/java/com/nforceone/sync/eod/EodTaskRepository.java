@@ -1,7 +1,9 @@
 package com.nforceone.sync.eod;
 
 import com.nforceone.sync.eod.dto.CategoryHoursRow;
+import com.nforceone.sync.eod.dto.DateBillableHoursRow;
 import com.nforceone.sync.eod.dto.EmployeeProjectHoursRow;
+import com.nforceone.sync.eod.dto.ProjectBillableHoursRow;
 import com.nforceone.sync.eod.dto.ProjectHoursRow;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -87,4 +89,33 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
                                               @Param("employeeIds") List<Long> employeeIds,
                                               @Param("from") LocalDate from,
                                               @Param("to") LocalDate to);
+
+    // Daily overall/billable/non-billable trend series for the Projects Utilization page's trend
+    // chart and KPI sparklines — one query, grouped by day, rather than looping per-day queries.
+    @Query("SELECT new com.nforceone.sync.eod.dto.DateBillableHoursRow(" +
+           "t.eodEntry.entryDate, t.isBillable, SUM(t.hours)) " +
+           "FROM EodTask t " +
+           "WHERE t.project.id IN :projectIds " +
+           "AND t.eodEntry.employee.id IN :employeeIds " +
+           "AND t.eodEntry.status = com.nforceone.sync.eod.EodEntry.Status.APPROVED " +
+           "AND t.eodEntry.entryDate BETWEEN :from AND :to " +
+           "GROUP BY t.eodEntry.entryDate, t.isBillable")
+    List<DateBillableHoursRow> sumHoursByDateAndBillable(@Param("projectIds") List<Long> projectIds,
+                                                          @Param("employeeIds") List<Long> employeeIds,
+                                                          @Param("from") LocalDate from,
+                                                          @Param("to") LocalDate to);
+
+    // Per-project billable split for the Project Utilization Overview table's Billable % column.
+    @Query("SELECT new com.nforceone.sync.eod.dto.ProjectBillableHoursRow(" +
+           "t.project.id, t.isBillable, SUM(t.hours)) " +
+           "FROM EodTask t " +
+           "WHERE t.project.id IN :projectIds " +
+           "AND t.eodEntry.employee.id IN :employeeIds " +
+           "AND t.eodEntry.status = com.nforceone.sync.eod.EodEntry.Status.APPROVED " +
+           "AND t.eodEntry.entryDate BETWEEN :from AND :to " +
+           "GROUP BY t.project.id, t.isBillable")
+    List<ProjectBillableHoursRow> sumHoursByProjectAndBillable(@Param("projectIds") List<Long> projectIds,
+                                                                @Param("employeeIds") List<Long> employeeIds,
+                                                                @Param("from") LocalDate from,
+                                                                @Param("to") LocalDate to);
 }
