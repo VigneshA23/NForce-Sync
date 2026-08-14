@@ -1046,6 +1046,7 @@ export default function ProjectsUtilization() {
           sub={`${billableSplit.billableHours.toFixed(0)}h billable`}
           accent="var(--info)"
           delta={cards.billableUtilizationDeltaPct}
+          deltaSuffix="%"
           sparkline={billableSparkline}
         />
         <KpiTile
@@ -1055,6 +1056,7 @@ export default function ProjectsUtilization() {
           sub={`${billableSplit.nonBillableHours.toFixed(0)}h non-billable`}
           accent="var(--warn)"
           delta={cards.nonBillableUtilizationDeltaPct}
+          deltaSuffix="%"
           goodDirection="down"
           sparkline={nonBillableSparkline}
         />
