@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -26,34 +27,32 @@ public class BusinessRuleController {
         return businessRuleService.getConfig();
     }
 
-    @PutMapping("/working-hours")
-    public BusinessRuleConfigDto updateWorkingHours(@Valid @RequestBody UpdateWorkingHoursRequest request) {
-        return businessRuleService.updateWorkingHours(request.hoursPerDay(), actingEmail());
-    }
+    // One endpoint per CARD, not per field. business_rule_config is a single row and every update
+    // rewrites all of it, so several single-field requests fired by one Save button raced each
+    // other and the last commit reverted the rest.
 
-    @PutMapping("/weekend-rule")
-    public BusinessRuleConfigDto updateWeekendRule(@Valid @RequestBody UpdateWeekendRuleRequest request) {
-        return businessRuleService.updateWeekendRule(request.weekendRule(), actingEmail());
+    @PutMapping("/time-attendance")
+    public BusinessRuleConfigDto updateTimeAttendance(@Valid @RequestBody UpdateTimeAttendanceRequest request) {
+        BusinessRuleConfig.WeekendRule rule;
+        try {
+            rule = BusinessRuleConfig.WeekendRule.valueOf(request.weekendRule());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Invalid weekend rule: " + request.weekendRule());
+        }
+        return businessRuleService.updateTimeAttendance(request.hoursPerDay(), rule, actingEmail());
     }
 
     // PUT /eod-cutoff removed: the EOD deadline is now per shift (shift_definition.eod_cutoff_hours,
     // set through the shift endpoints below) rather than one global time-of-day.
 
-    @PutMapping("/reminder-lead-time")
-    public BusinessRuleConfigDto updateReminderLeadTime(@Valid @RequestBody UpdateReminderLeadTimeRequest request) {
-        return businessRuleService.updateReminderLeadTime(request.leadMinutes(), actingEmail());
-    }
-
-    @PutMapping("/escalation-sla")
-    public BusinessRuleConfigDto updateEscalationSla(@Valid @RequestBody UpdateEscalationSlaRequest request) {
-        return businessRuleService.updateEscalationSla(request.slaHours(), actingEmail());
-    }
-
-    @PutMapping("/account-lockout")
-    public BusinessRuleConfigDto updateAccountLockout(@Valid @RequestBody UpdateAccountLockoutRequest request) {
-        return businessRuleService.updateAccountLockout(
-                request.attemptThreshold(),
-                request.durationMinutes(),
+    @PutMapping("/notifications")
+    public BusinessRuleConfigDto updateNotifications(@Valid @RequestBody UpdateNotificationsRequest request) {
+        return businessRuleService.updateNotifications(
+                request.reminderLeadMinutes(),
+                request.escalationSlaHours(),
+                request.lockoutAttemptThreshold(),
+                request.lockoutDurationMinutes(),
                 actingEmail());
     }
 
