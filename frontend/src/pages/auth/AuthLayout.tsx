@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion';
+import { Users, ClipboardList, ShieldCheck } from 'lucide-react';
 import { BrandMark } from '../../components/BrandMark';
 
 interface StreakDef {
@@ -81,9 +82,9 @@ function SpeedStreaks() {
 }
 
 const STATS = [
-  { value: '8',    label: 'Roles' },
-  { value: '<2s',  label: 'Dashboard load' },
-  { value: '100%', label: 'Auditable' },
+  { Icon: Users,         value: '8',    label: 'Role levels' },
+  { Icon: ClipboardList, value: 'EOD',  label: 'Daily cycle' },
+  { Icon: ShieldCheck,   value: '100%', label: 'Audit coverage' },
 ] as const;
 
 interface AuthLayoutProps {
@@ -190,34 +191,46 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
             style={{
               position: 'relative',
               display: 'flex',
-              gap: 36,
-              paddingTop: leftHeadline ? 0 : 80,
+              borderTop: '1px solid rgba(255,255,255,.07)',
+              paddingTop: 24,
             }}
           >
-            {STATS.map((s) => (
-              <div key={s.label}>
+            {STATS.map(({ Icon, value, label }, i) => (
+              <div
+                key={label}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                  paddingLeft: i === 0 ? 0 : 24,
+                  marginLeft: i === 0 ? 0 : 24,
+                  borderLeft: i === 0 ? 'none' : '1px solid var(--line)',
+                }}
+              >
+                <Icon size={13} aria-hidden="true" style={{ color: 'var(--txt-dim)' }} />
                 <div
                   style={{
                     fontFamily: '"JetBrains Mono", monospace',
                     fontVariantNumeric: 'tabular-nums',
-                    fontSize: 28,
+                    fontSize: 24,
                     fontWeight: 600,
                     color: 'var(--txt)',
-                    letterSpacing: '-0.02em',
+                    letterSpacing: '-0.01em',
+                    lineHeight: 1,
                   }}
                 >
-                  {s.value}
+                  {value}
                 </div>
                 <div
                   style={{
-                    fontSize: 11,
+                    fontSize: 10,
                     letterSpacing: '0.10em',
                     textTransform: 'uppercase',
                     color: 'var(--txt-dim)',
-                    marginTop: 4,
                   }}
                 >
-                  {s.label}
+                  {label}
                 </div>
               </div>
             ))}
