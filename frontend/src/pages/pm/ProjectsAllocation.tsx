@@ -338,6 +338,14 @@ const EMPTY_PROJECT_FORM: ProjectFormState = {
   status: 'ACTIVE', startDate: todayISO(), endDate: '', pmId: '', projectManagerId: '',
 };
 
+/** Inline validation message shown directly under the field it belongs to. */
+function FieldError({ msg }: { msg?: string }) {
+  if (!msg) return null;
+  return (
+    <p role="alert" style={{ fontSize: 11, margin: '5px 0 0', color: 'var(--risk)' }}>{msg}</p>
+  );
+}
+
 function ProjectModal({ open, onClose, editing }: {
   open: boolean; onClose: () => void; editing: ProjectFullDto | null;
 }) {
@@ -356,6 +364,9 @@ function ProjectModal({ open, onClose, editing }: {
   });
   const [form, setForm] = useState<ProjectFormState>(EMPTY_PROJECT_FORM);
   const [error, setError] = useState<string | null>(null);
+  // Per-field messages stay hidden until the first submit, so an untouched form isn't covered in
+  // red before the user has done anything. After that they update live as fields are filled in.
+  const [showErrors, setShowErrors] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -371,6 +382,7 @@ function ProjectModal({ open, onClose, editing }: {
       pmId: editing.pmId != null ? String(editing.pmId) : '',
       projectManagerId: editing.projectManagerId != null ? String(editing.projectManagerId) : '',
     } : EMPTY_PROJECT_FORM);
+    setShowErrors(false);
   }, [open, editing]);
 
   const isPending = createMutation.isPending || updateMutation.isPending;
@@ -408,20 +420,30 @@ function ProjectModal({ open, onClose, editing }: {
   const badDateOrder = form.endDate !== '' && form.endDate <= form.startDate;
   // A completed project has to record when it finished. Status only appears when editing.
   const endDateRequired = editing != null && form.status === 'COMPLETED';
-  const canSubmit = form.name.trim() !== ''
-    && form.code.trim() !== ''
-    && form.projectTypeId !== ''
-    && form.billingModelId !== ''
-    && form.startDate !== ''
-    && (!showClient || form.client.trim() !== '')
-    && (!endDateRequired || form.endDate !== '')
-    && form.pmId !== ''
-    && form.projectManagerId !== ''
-    && !badDateOrder;
+  // One message per mandatory field, derived from the current form so they clear as soon as the
+  // field is filled. Also the single source of truth for whether the form can be submitted.
+  const fieldErrors: Partial<Record<keyof ProjectFormState, string>> = {};
+  if (form.code.trim() === '')       fieldErrors.code = 'Code is required.';
+  if (form.name.trim() === '')       fieldErrors.name = 'Name is required.';
+  if (form.projectTypeId === '')     fieldErrors.projectTypeId = 'Select a project type.';
+  if (showClient && form.client.trim() === '') fieldErrors.client = 'Client name is required for this project type.';
+  if (form.billingModelId === '')    fieldErrors.billingModelId = 'Select a billing model.';
+  if (form.pmId === '')              fieldErrors.pmId = 'Select a team lead.';
+  if (form.projectManagerId === '')  fieldErrors.projectManagerId = 'Select a project manager.';
+  if (form.startDate === '')         fieldErrors.startDate = 'Start date is required.';
+  if (badDateOrder)                  fieldErrors.endDate = 'End Date must be after Start Date.';
+  else if (endDateRequired && form.endDate === '') fieldErrors.endDate = 'Required when status is Completed.';
+
+  const canSubmit = Object.keys(fieldErrors).length === 0;
+  // Shown only after a submit attempt, except the date-order clash, which contradicts a value the
+  // user can already see and so is worth flagging the moment it happens.
+  const errorFor = (field: keyof ProjectFormState) =>
+    (showErrors || (field === 'endDate' && badDateOrder)) ? fieldErrors[field] : undefined;
 
   function handleClose() {
     setForm(EMPTY_PROJECT_FORM);
     setError(null);
+    setShowErrors(false);
     onClose();
   }
 
@@ -438,7 +460,12 @@ function ProjectModal({ open, onClose, editing }: {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      // Reveal the messages rather than failing silently — the button used to be disabled, so a
+      // click on an incomplete form gave no feedback at all about what was missing.
+      setShowErrors(true);
+      return;
+    }
     setError(null);
     try {
       if (editing) {
@@ -489,11 +516,13 @@ function ProjectModal({ open, onClose, editing }: {
             <label style={labelStyle}>Code *</label>
             <input style={inputStyle} value={form.code} autoFocus
               onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} />
+            <FieldError msg={errorFor('code')} />
           </div>
           <div>
             <label style={labelStyle}>Name *</label>
             <input style={inputStyle} value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+            <FieldError msg={errorFor('name')} />
           </div>
         </div>
         {/* Project Type leads, because whether Client Name is shown depends on it. */}
@@ -512,12 +541,14 @@ function ProjectModal({ open, onClose, editing }: {
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
+            <FieldError msg={errorFor('projectTypeId')} />
           </div>
           {showClient && (
             <div>
               <label style={labelStyle}>Client Name *</label>
               <input style={inputStyle} value={form.client} placeholder="e.g. Meridian Bank"
                 onChange={e => setForm(f => ({ ...f, client: e.target.value }))} />
+              <FieldError msg={errorFor('client')} />
             </div>
           )}
         </div>
@@ -538,6 +569,7 @@ function ProjectModal({ open, onClose, editing }: {
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </select>
+            <FieldError msg={errorFor('billingModelId')} />
           </div>
           {editing && (
             <div>
@@ -569,6 +601,7 @@ function ProjectModal({ open, onClose, editing }: {
                 <option key={l.id} value={l.id}>{l.fullName} ({l.employeeCode})</option>
               ))}
             </select>
+            <FieldError msg={errorFor('pmId')} />
           </div>
           <div>
             <label style={labelStyle}>Project Manager *</label>
@@ -584,6 +617,7 @@ function ProjectModal({ open, onClose, editing }: {
                 <option key={m.id} value={m.id}>{m.fullName} ({m.employeeCode})</option>
               ))}
             </select>
+            <FieldError msg={errorFor('projectManagerId')} />
           </div>
         </div>
         <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
@@ -591,6 +625,7 @@ function ProjectModal({ open, onClose, editing }: {
             <label style={labelStyle}>Start Date *</label>
             <input type="date" lang="en-GB" style={inputStyle} value={form.startDate}
               onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
+            <FieldError msg={errorFor('startDate')} />
           </div>
           <div>
             {/* Optional in general, but mandatory once the status is Completed. */}
@@ -601,19 +636,15 @@ function ProjectModal({ open, onClose, editing }: {
             </label>
             <input type="date" lang="en-GB" style={inputStyle} value={form.endDate} min={dayAfterISO(form.startDate)}
               onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
-            {(badDateOrder || (endDateRequired && form.endDate === '')) && (
-              <p style={{ fontSize: 11, margin: '5px 0 0', color: 'var(--risk)' }}>
-                {badDateOrder
-                  ? 'End Date must be after Start Date.'
-                  : 'Required when status is Completed.'}
-              </p>
-            )}
+            <FieldError msg={errorFor('endDate')} />
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
+          {/* Deliberately NOT disabled on an incomplete form: a disabled button swallows the click
+              and explains nothing. Submitting reveals the per-field messages instead. */}
           <button
             type="submit"
-            disabled={isPending || !canSubmit}
+            disabled={isPending}
             style={{
               padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
               color: '#fff', fontSize: 13, fontWeight: 600,
