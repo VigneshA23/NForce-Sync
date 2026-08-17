@@ -503,7 +503,7 @@ function ProjectModal({ open, onClose, editing }: {
             <label style={labelStyle}>Project Type *</label>
             <select style={inputStyle} value={form.projectTypeId}
               onChange={e => handleProjectTypeChange(e.target.value)}>
-              <option value="">Select type…</option>
+              <option value="">Select Project Type…</option>
               {/* Inactive types are hidden, but keep this project's own so editing can't clear it. */}
               {currentProjectTypeMissing && (
                 <option value={String(editing!.projectTypeId)}>{editing!.projectType} (inactive)</option>
@@ -529,7 +529,7 @@ function ProjectModal({ open, onClose, editing }: {
               onChange={e => setForm(f => ({ ...f, billingModelId: e.target.value }))}>
               {/* Placeholder rather than a blank "no model" choice — mandatory since V53, but it
                   must not default to whichever model happens to sort first. */}
-              <option value="">Select billing model…</option>
+              <option value="">Select Billing Model…</option>
               {/* An inactive model is hidden, but keep the project's own so editing can't clear it. */}
               {currentBillingModelMissing && (
                 <option value={String(editing!.billingModelId)}>{editing!.billingModel} (inactive)</option>
