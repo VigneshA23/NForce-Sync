@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { RefreshCw, AlertTriangle, Search, X } from 'lucide-react';
+import { RefreshCw, AlertTriangle, Search, X, ChevronUp, ChevronDown } from 'lucide-react';
 import type { ProjectFullDto } from '../../api/projects';
 
 // ── Shared "My Projects" building blocks ─────────────────────────────────────────
@@ -138,12 +138,11 @@ export function SearchBox({ value, onChange, placeholder, ariaLabel }: {
 // dropdown on the PM's Projects & Allocation → Projects tab (pages/pm/ProjectsAllocation.tsx):
 // no separate "Status" label beside it, a placeholder option standing in for "no filter", and
 // the same inputStyle (border/radius/background/padding) so it reads as the same control.
-export function StatusFilterSelect({ value, onChange, options, ariaLabel, placeholder = 'Filter by Status' }: {
+export function StatusFilterSelect({ value, onChange, options, ariaLabel }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   ariaLabel: string;
-  placeholder?: string;
 }) {
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>

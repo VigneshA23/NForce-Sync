@@ -670,7 +670,7 @@ function ProjectModal({ open, onClose, editing }: {
               </p>
             )}
           </div>
-        </div>
+        </form>
         {dateFormatInvalid && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6,
@@ -703,7 +703,6 @@ function ProjectModal({ open, onClose, editing }: {
             Cancel
           </button>
         </div>
-      </form>
     </Modal>
   );
 }

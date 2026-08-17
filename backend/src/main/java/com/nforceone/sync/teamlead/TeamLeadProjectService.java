@@ -100,15 +100,20 @@ public class TeamLeadProjectService {
      * {@code onDate}, deduplicated. Backs both the "Team Size" column on the My Projects list
      * and the "Assigned Employees" list in the project details popup, so the two always agree.
      */
-    private List<EmployeeRefDto> activeAssignedEmployees(Long projectId, LocalDate onDate) {
-        return allocationRepository.findByProjectIdWithRefs(projectId)
-                .stream()
-                .filter(a -> isActiveOn(a, onDate))
-                .filter(a -> project.getPm() == null || !a.getEmployee().getId().equals(project.getPm().getId()))
-                .map(a -> EmployeeRefDto.from(a.getEmployee()))
-                .distinct()
-                .toList();
-    }
+   private List<EmployeeRefDto> activeAssignedEmployees(Long projectId, LocalDate onDate) {
+    Project project = projectRepository.findById(projectId)
+            .orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Project not found"));
+
+    return allocationRepository.findByProjectIdWithRefs(projectId)
+            .stream()
+            .filter(a -> isActiveOn(a, onDate))
+            .filter(a -> project.getPm() == null
+                    || !a.getEmployee().getId().equals(project.getPm().getId()))
+            .map(a -> EmployeeRefDto.from(a.getEmployee()))
+            .distinct()
+            .toList();
+}
 
     private boolean isActiveOn(Allocation a, LocalDate onDate) {
         return !a.getEffectiveFrom().isAfter(onDate)
