@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * Account Lockout — temporarily blocks sign-in for one account after too many consecutive failures.
@@ -57,13 +58,19 @@ public class AccountLockoutService {
     /**
      * Records one failed sign-in and applies the lock once the threshold is reached.
      *
-     * @return attempts remaining before the lock, or 0 if this failure just triggered it. Unknown
-     *         emails report the full allowance so the response cannot be used to probe for accounts.
+     * <p>There is nothing to count for an email with no account, so the result is empty rather than
+     * a fabricated allowance — a countdown toward a lockout that can never happen is noise for
+     * someone who simply mistyped their address. (This does let a caller distinguish a real account
+     * from an unknown one; that trade-off is already accepted here, since the lockout response
+     * itself only ever applies to accounts that exist.)
+     *
+     * @return attempts remaining before the lock, 0 if this failure just triggered it, or empty when
+     *         the email has no account.
      */
-    public int recordFailure(String email) {
+    public OptionalInt recordFailure(String email) {
         int threshold = threshold();
         Optional<AppUser> found = findUser(email);
-        if (found.isEmpty()) return threshold;
+        if (found.isEmpty()) return OptionalInt.empty();
 
         AppUser user = found.get();
         int attempts = user.getFailedLoginAttempts() + 1;
@@ -74,12 +81,12 @@ public class AccountLockoutService {
             user.setFailedLoginAttempts(0);
             user.setLockedUntil(OffsetDateTime.now().plusMinutes(durationMinutes()));
             userRepository.save(user);
-            return 0;
+            return OptionalInt.of(0);
         }
 
         user.setFailedLoginAttempts(attempts);
         userRepository.save(user);
-        return threshold - attempts;
+        return OptionalInt.of(threshold - attempts);
     }
 
     /** Clears lockout state after a successful sign-in. */

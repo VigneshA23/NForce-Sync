@@ -119,6 +119,7 @@ function WorkspaceSearch() {
         <div
           role="listbox"
           aria-label="Search results"
+          className="nf-r-popover"
           style={{
             position: 'absolute',
             top: 'calc(100% + 8px)',
@@ -773,6 +774,7 @@ export function Shell() {
               {profileOpen && (
                 <div
                   role="menu"
+                  className="nf-r-popover"
                   style={{
                     position: 'absolute',
                     top: 'calc(100% + 8px)',
@@ -929,6 +931,7 @@ export function Shell() {
 
         {/* Page content — only this area themes */}
         <main
+          className="shell-main"
           style={{
             flex: 1,
             padding: '28px 28px',

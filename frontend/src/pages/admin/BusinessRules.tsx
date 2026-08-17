@@ -905,7 +905,8 @@ function ShiftTable({ data, isPending, isError, onEdit, onToggle, isTogglePendin
       )}
       {isError && <div style={{ padding: '24px 20px', textAlign: 'center', fontSize: 13, color: 'var(--risk)' }}>Failed to load shifts.</div>}
       {data && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="nf-r-scroll">
+        <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '720px' } as React.CSSProperties}>
           <thead>
             <tr>
               <th style={thStyle}>Name</th>
@@ -951,6 +952,7 @@ function ShiftTable({ data, isPending, isError, onEdit, onToggle, isTogglePendin
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

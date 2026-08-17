@@ -230,6 +230,11 @@ function FilterBar({
 
 const ROSTER_PAGE_SIZE = 9;
 
+// Detail-pane entry table — header row and body rows must share one template
+// or the columns desync.
+const ENTRY_TABLE_COLUMNS = '100px 1.1fr 1.4fr 62px 74px';
+const ENTRY_TABLE_MIN_WIDTH = 520;
+
 function RosterFlow({
   employees, isLoading, onExport, exportingKey,
 }: {
@@ -265,8 +270,10 @@ function RosterFlow({
     return [...selected.entries].sort((a, b) => sign * a.date.localeCompare(b.date));
   }, [selected, dateSort]);
 
+  // The minmax floors sum to 776px and cannot shrink; .nf-r-stack replaces the
+  // template entirely below 1024px, which is what removes the floor.
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(340px,0.85fr) minmax(420px,1.3fr)', gap: 16, alignItems: 'start' }}>
+    <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(340px,0.85fr) minmax(420px,1.3fr)', gap: 16, alignItems: 'start' }}>
       <Card style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', borderBottom: '1px solid var(--line)', background: 'var(--raised)' }}>
           <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--txt)' }}>Employees</span>
@@ -397,7 +404,11 @@ function RosterFlow({
               ))}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '100px 1.1fr 1.4fr 62px 74px', padding: '8px 16px', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--txt-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--line)' }}>
+            {/* Header and the scrollable body below share one horizontal scroll
+                region, so the columns stay aligned while swiping. */}
+            <div className="nf-r-scroll">
+            <div className="nf-r-scroll-inner" style={{ '--nf-r-min': ENTRY_TABLE_MIN_WIDTH + 'px' } as React.CSSProperties}>
+            <div style={{ display: 'grid', gridTemplateColumns: ENTRY_TABLE_COLUMNS, padding: '8px 16px', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--txt-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--line)' }}>
               <div
                 onClick={() => setDateSort(s => s === 'asc' ? 'desc' : 'asc')}
                 style={{ display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer', userSelect: 'none' }}
@@ -411,7 +422,7 @@ function RosterFlow({
               {sortedEntries.length === 0 ? (
                 <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>No EOD entries match the current filters for this employee.</div>
               ) : sortedEntries.map((e, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '100px 1.1fr 1.4fr 62px 74px', padding: '7px 16px', fontSize: 12, borderBottom: '1px solid var(--line)' }}>
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: ENTRY_TABLE_COLUMNS, padding: '7px 16px', fontSize: 12, borderBottom: '1px solid var(--line)' }}>
                   <div style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{i === 0 || sortedEntries[i - 1].date !== e.date ? formatDate(e.date) : ''}</div>
                   <div style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{e.projectCode ?? '—'}</div>
                   <div style={{ color: 'var(--txt-mut)' }}>{e.categoryName ?? '—'}</div>
@@ -419,6 +430,8 @@ function RosterFlow({
                   <div style={{ textAlign: 'center', fontSize: 10.5, fontWeight: 700, color: e.billable ? 'var(--ok)' : 'var(--txt-dim)' }}>{e.billable ? 'BILLABLE' : 'INTERNAL'}</div>
                 </div>
               ))}
+            </div>
+            </div>
             </div>
           </>
         )}
@@ -430,6 +443,10 @@ function RosterFlow({
 // ── whole-team grouped flow ──────────────────────────────────────────────────────
 
 const TEAM_PAGE_SIZE = 12;
+
+// Header row and body rows must share one template or the columns desync.
+const TEAM_ENTRY_COLUMNS = '1.4fr 100px 1.1fr 1.3fr 60px 72px';
+const TEAM_ENTRY_MIN_WIDTH = 640;
 
 function TeamFlow({
   employees, isLoading, onExport, exportingKey,
@@ -475,14 +492,17 @@ function TeamFlow({
       ) : pageRows.length === 0 ? (
         <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>No EOD entries match these filters. Widen the date range or clear a filter.</div>
       ) : (
-        <div style={{ maxHeight: 560, overflowY: 'auto' }}>
+        // Scrolls vertically through employees and horizontally through the entry
+        // columns; the minWidth on each group keeps that employee's summary row
+        // and its expanded entry rows on the same horizontal track.
+        <div className="nf-r-scroll" style={{ maxHeight: 560, overflowY: 'auto' }}>
           {pageRows.map(r => {
             const open = isOpen(r.employeeId);
             const entriesAsc = [...r.entries].sort((a, b) => a.date.localeCompare(b.date));
             const dates = entriesAsc.map(e => e.date);
             const span = dates.length ? `${formatDate(dates[0])} → ${formatDate(dates[dates.length - 1])}` : '—';
             return (
-              <div key={r.employeeId} style={{ borderBottom: '1px solid var(--line)' }}>
+              <div key={r.employeeId} className="nf-r-scroll-inner" style={{ borderBottom: '1px solid var(--line)', '--nf-r-min': TEAM_ENTRY_MIN_WIDTH + 'px' } as React.CSSProperties}>
                 <div
                   onClick={() => toggle(r.employeeId)}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', cursor: 'pointer' }}
@@ -514,7 +534,7 @@ function TeamFlow({
                 </div>
                 {open && entriesAsc.map((e, i) => (
                   <div key={i} style={{
-                    display: 'grid', gridTemplateColumns: '1.4fr 100px 1.1fr 1.3fr 60px 72px',
+                    display: 'grid', gridTemplateColumns: TEAM_ENTRY_COLUMNS,
                     padding: '5px 16px 5px 52px', fontSize: 11.5, color: 'var(--txt-mut)',
                   }}>
                     <span>{r.designationName ?? '—'}</span>

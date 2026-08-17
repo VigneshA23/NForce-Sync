@@ -13,6 +13,12 @@ import type { DateRange } from '../../api/teamLead';
 import { todayISO as localTodayISO, toLocalISODate } from '../../lib/date';
 import { readStoredDateFilter, resolveBlockersDateFilter, writeStoredDateFilter } from '../../lib/pmBlockersDateFilter';
 
+// ── Table layout ───────────────────────────────────────────────────────────────
+// Header row and body rows must share one template or the columns desync.
+const BLOCKER_TABLE_COLUMNS = '32px 2fr 1.1fr 1.1fr 1fr 0.8fr 0.9fr';
+// Under the 1074px desktop content width, so this never scrolls on desktop.
+const BLOCKER_TABLE_MIN_WIDTH = 920;
+
 // ── date helpers (mirrors pages/lead/Blockers.tsx's page-local formatting) ─────────
 
 function fmtShortDate(iso: string): string {
@@ -92,7 +98,7 @@ function DateFilterButton({ mode, range, onChange }: {
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div style={{
+          <div className="nf-r-popover" style={{
             position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 260,
             background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
             boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
@@ -216,7 +222,7 @@ function BlockerRow({ b, index, selected, onClick }: {
     <div
       onClick={onClick}
       style={{
-        display: 'grid', gridTemplateColumns: '32px 2fr 1.1fr 1.1fr 1fr 0.8fr 0.9fr', gap: 12,
+        display: 'grid', gridTemplateColumns: BLOCKER_TABLE_COLUMNS, gap: 12,
         padding: '14px 20px', cursor: 'pointer', alignItems: 'center',
         borderBottom: '1px solid var(--line)',
         background: selected ? 'color-mix(in srgb, var(--info) 8%, transparent)' : 'transparent',
@@ -295,7 +301,7 @@ function DetailPanel({ b, onClose }: { b: PmBlockerDto; onClose: () => void }) {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <InfoField icon={<Users size={14} aria-hidden="true" />} label="Team">
             {b.teamName}
           </InfoField>
@@ -489,7 +495,7 @@ export default function PmBlockers() {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: selectedBlocker ? '1.7fr 1fr' : '1fr', gap: 16, alignItems: 'start' }}>
+    <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: selectedBlocker ? '1.7fr 1fr' : '1fr', gap: 16, alignItems: 'start' }}>
       <div>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
@@ -607,8 +613,12 @@ export default function PmBlockers() {
 
         {/* Table */}
         <Card style={{ padding: 0, overflow: 'hidden' }}>
+          {/* Header and rows share one scroll region so columns stay aligned
+              while swiping; the pager below sits outside it. */}
+          <div className="nf-r-scroll">
+          <div className="nf-r-scroll-inner" style={{ '--nf-r-min': BLOCKER_TABLE_MIN_WIDTH + 'px' } as React.CSSProperties}>
           <div style={{
-            display: 'grid', gridTemplateColumns: '32px 2fr 1.1fr 1.1fr 1fr 0.8fr 0.9fr', gap: 12,
+            display: 'grid', gridTemplateColumns: BLOCKER_TABLE_COLUMNS, gap: 12,
             padding: '10px 20px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)',
             fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
           }}>
@@ -633,6 +643,8 @@ export default function PmBlockers() {
               />
             ))
           )}
+          </div>
+          </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: '1px solid var(--line)' }}>
             <span style={{ fontSize: 12, color: 'var(--txt-dim)' }}>

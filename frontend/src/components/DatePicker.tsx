@@ -256,7 +256,7 @@ export function DatePicker({
         </button>
       </div>
       {open && (
-        <div style={{
+        <div className="nf-r-popover" style={{
           position: 'absolute', top: '100%', left: 0, marginTop: 4, width: 260,
           background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8,
           boxShadow: '0 8px 24px rgba(0,0,0,.3)', zIndex: 100, padding: 12,

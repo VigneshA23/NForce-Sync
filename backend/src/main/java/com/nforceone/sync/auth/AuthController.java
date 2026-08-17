@@ -18,8 +18,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -67,18 +69,21 @@ public class AuthController {
             return ResponseEntity.ok(
                     new LoginResponse(token, UserDto.from(user), user.isMustChangePassword()));
         } catch (BadCredentialsException e) {
-            int attemptsRemaining = accountLockoutService.recordFailure(email);
-            if (attemptsRemaining == 0) {
+            OptionalInt attemptsRemaining = accountLockoutService.recordFailure(email);
+            if (attemptsRemaining.isPresent() && attemptsRemaining.getAsInt() == 0) {
                 // This failure tripped the lock — report the full window straight away rather than
                 // making the user submit once more to discover they are locked out.
                 return lockedResponse((long) accountLockoutService.durationMinutes() * 60);
             }
-            // Same message for wrong password, unknown email, and inactive account —
-            // never reveal which case it was (user enumeration prevention). attemptsRemaining is
-            // safe to include: unknown emails report the full allowance every time.
-            return ResponseEntity.status(401)
-                    .body(Map.of("error", "Invalid email or password",
-                                 "attemptsRemaining", attemptsRemaining));
+
+            // Same message for wrong password, unknown email, and inactive account.
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("error", "Invalid email or password");
+            // Only sent when there is a real account counting down to a lockout. Omitted for an
+            // unknown email, where the client would otherwise show a countdown toward a lockout
+            // that can never happen.
+            attemptsRemaining.ifPresent(remaining -> body.put("attemptsRemaining", remaining));
+            return ResponseEntity.status(401).body(body);
         }
     }
 

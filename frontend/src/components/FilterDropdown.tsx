@@ -37,7 +37,7 @@ export function FilterDropdown({ label, options, selected, onToggle, onClear, ge
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div style={{
+          <div className="nf-r-popover" style={{
             position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, minWidth: 210,
             background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 10,
             boxShadow: '0 12px 28px rgba(0,0,0,0.35)', maxHeight: 260, overflowY: 'auto',
@@ -107,7 +107,7 @@ export function SortDropdown<T extends string>({ label, options, value, onChange
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div style={{
+          <div className="nf-r-popover" style={{
             position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, minWidth: 180,
             background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 10,
             boxShadow: '0 12px 28px rgba(0,0,0,0.35)', maxHeight: 260, overflowY: 'auto',

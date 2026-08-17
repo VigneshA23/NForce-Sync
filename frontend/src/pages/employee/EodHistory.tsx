@@ -13,6 +13,14 @@ import {
   isRangeValid, todayIsoLocal,
 } from '../../lib/strictDate';
 
+// ── Table layout ───────────────────────────────────────────────────────────────
+// The header row and the body rows must always use the SAME template, or the
+// columns desync. One const, referenced twice, makes that impossible to break.
+const HISTORY_TABLE_COLUMNS = '1.3fr 0.8fr 1.5fr 70px 1fr 1fr 32px';
+// Below this the table scrolls sideways instead of squeezing. Kept under the
+// 1074px desktop content width so it never scrolls at an approved desktop size.
+const HISTORY_TABLE_MIN_WIDTH = 840;
+
 // ── Status helpers ─────────────────────────────────────────────────────────────
 
 const STATUS_META: Record<string, { color: string; label: string; Icon: React.FC<{ size: number }> }> = {
@@ -271,7 +279,7 @@ export default function EodHistory() {
       </div>
 
       {/* Toolbar — native select, matching the working filter pattern in admin/AuditLog.tsx */}
-      <div style={{
+      <div className="nf-r-toolbar" style={{
         display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap',
         padding: '14px 16px', background: 'var(--panel)',
         border: '1px solid var(--line)', borderRadius: 10,
@@ -419,9 +427,13 @@ export default function EodHistory() {
           background: 'var(--panel)', border: '1px solid var(--line)',
           borderRadius: 8, overflow: 'hidden',
         }}>
+          {/* Header and rows share one scroll region so the columns stay aligned
+              while swiping; pagination sits outside it and never scrolls. */}
+          <div className="nf-r-scroll">
+          <div className="nf-r-scroll-inner" style={{ '--nf-r-min': HISTORY_TABLE_MIN_WIDTH + 'px' } as React.CSSProperties}>
           {/* Table header */}
           <div style={{
-            display: 'grid', gridTemplateColumns: '1.3fr 0.8fr 1.5fr 70px 1fr 1fr 32px',
+            display: 'grid', gridTemplateColumns: HISTORY_TABLE_COLUMNS,
             padding: '8px 16px', borderBottom: '1px solid var(--line)',
             gap: 12,
           }}>
@@ -441,7 +453,7 @@ export default function EodHistory() {
               tabIndex={0}
               onKeyDown={e => e.key === 'Enter' && handleView(entry)}
               style={{
-                display: 'grid', gridTemplateColumns: '1.3fr 0.8fr 1.5fr 70px 1fr 1fr 32px',
+                display: 'grid', gridTemplateColumns: HISTORY_TABLE_COLUMNS,
                 padding: '12px 16px', gap: 12, alignItems: 'center',
                 borderBottom: i < paged.length - 1 ? '1px solid var(--line)' : 'none',
                 cursor: 'pointer',
@@ -478,6 +490,8 @@ export default function EodHistory() {
               </div>
             </div>
           ))}
+          </div>
+          </div>
 
           {/* Pagination */}
           {pageCount > 1 && (

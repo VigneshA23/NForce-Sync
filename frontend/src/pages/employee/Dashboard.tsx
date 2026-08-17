@@ -209,12 +209,24 @@ function CalendarHeatmap({
     return dow === 0 ? 6 : dow - 1;
   })();
 
-  const gridWidth = CELL_PX * 7 + CELL_GAP * 6;
+  // Cell size drives the nav bar, the day headers, the month grid and the
+  // legend alike. Exposing it as a CSS variable lets a media query shrink the
+  // calendar on phones (7 × 52px + gaps = 394px overflows a 375px screen)
+  // while keeping all four in lockstep. The JS constant remains the desktop
+  // value and is never recomputed.
+  const gridWidth = 'var(--nf-cal-width)';
   const prevDisabled = monthOffset >= maxOffset;
   const nextDisabled = monthOffset === 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    <div
+      className="nf-cal"
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        '--nf-cal-cell': `${CELL_PX}px`,
+        '--nf-cal-width': `calc(var(--nf-cal-cell) * 7 + ${CELL_GAP * 6}px)`,
+      } as React.CSSProperties}
+    >
       {/* Navigation */}
       <div style={{ display: 'flex', alignItems: 'center', width: gridWidth, marginBottom: 16 }}>
         <button onClick={onPrev} disabled={prevDisabled} style={navBtnStyle(prevDisabled)}>
@@ -234,7 +246,7 @@ function CalendarHeatmap({
 
       {/* Day-of-week headers */}
       <div style={{
-        display: 'grid', gridTemplateColumns: `repeat(7, ${CELL_PX}px)`,
+        display: 'grid', gridTemplateColumns: 'repeat(7, var(--nf-cal-cell))',
         gap: CELL_GAP, marginBottom: CELL_GAP, width: gridWidth,
       }}>
         {DAY_HEADERS.map(d => (
@@ -249,12 +261,12 @@ function CalendarHeatmap({
 
       {/* Month grid */}
       <div style={{
-        display: 'grid', gridTemplateColumns: `repeat(7, ${CELL_PX}px)`,
+        display: 'grid', gridTemplateColumns: 'repeat(7, var(--nf-cal-cell))',
         gap: CELL_GAP, width: gridWidth,
       }}>
         {/* Leading empty cells for weekday offset */}
         {Array.from({ length: leadingEmpties }).map((_, i) => (
-          <div key={`pad-${i}`} style={{ width: CELL_PX, height: CELL_PX }} />
+          <div key={`pad-${i}`} style={{ width: 'var(--nf-cal-cell)', height: 'var(--nf-cal-cell)' }} />
         ))}
 
         {/* Day cells */}
@@ -267,7 +279,7 @@ function CalendarHeatmap({
               key={day.date}
               title={calendarTooltip(day)}
               style={{
-                width: CELL_PX, height: CELL_PX,
+                width: 'var(--nf-cal-cell)', height: 'var(--nf-cal-cell)',
                 borderRadius: 7,
                 background: cellTint(day),
                 border: `1.5px solid ${cellBorderColor(day, isToday)}`,
@@ -880,7 +892,7 @@ function RecentActivity({ entries }: { entries: RecentEntry[] }) {
           const dateLabel = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
           const utilAccent = utilColor(entry.utilizationPct ?? null);
           return (
-            <div key={entry.id} style={{
+            <div key={entry.id} className="nf-r-pairs" style={{
               padding: '10px 16px', borderTop: '1px solid var(--line)',
               display: 'grid', gridTemplateColumns: '150px 1fr auto auto',
               gap: 12, alignItems: 'center',
@@ -997,7 +1009,7 @@ function LoadingSkeleton() {
       </div>
       <Skel h={48} />
       <div style={{ height: 16 }} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 20 }}>
         {[0, 1, 2, 3].map(i => (
           <div key={i} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
             <Skel h={36} w={36} /><div style={{ marginTop: 12 }} />
@@ -1006,10 +1018,12 @@ function LoadingSkeleton() {
           </div>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, marginBottom: 16 }}>
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, marginBottom: 16 }}>
         <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
           <Skel h={32} w={200} />
-          <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(7, 44px)', gap: 5 }}>
+          {/* Loading placeholder for the calendar — reflows with the same rule
+              as the real grid so the skeleton can't overflow where it won't. */}
+          <div className="nf-cal-skel" style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(7, 44px)', gap: 5 }}>
             {Array.from({ length: 35 }).map((_, i) => <Skel key={i} h={44} />)}
           </div>
         </div>
@@ -1150,7 +1164,7 @@ export default function Dashboard() {
       )}
 
       {/* KPI tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 20 }}>
         <KpiTile
           icon={<Clock size={18} />}
           label="This week approved"
@@ -1183,7 +1197,7 @@ export default function Dashboard() {
       </div>
 
       {/* Calendar card + Right panel */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, marginBottom: 16 }}>
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, marginBottom: 16 }}>
         {/* Single card: calendar left + stats right */}
         <Card>
           {/* Card header */}
@@ -1235,13 +1249,13 @@ export default function Dashboard() {
       </div>
 
       {/* Assigned projects + Holidays */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <AssignedProjectsPanel projects={projects ?? []} />
         <HolidaysPanel holidays={holidays ?? []} year={holidayYear} />
       </div>
 
       {/* Weekly / Monthly utilization */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <UtilPeriodCard
           title="Weekly Utilization"
           avgUtilPct={weekUtil?.currentPeriod.avgUtilPct ?? null}

@@ -13,6 +13,12 @@ import { todayISO as localTodayISO, toLocalISODate } from '../../lib/date';
 // Mirrors pages/lead/Blockers.tsx's list + side-panel layout, trimmed to the fields
 // BlockedTask carries (this is always "my own" blockers — no employeeName/avatar/replyCount).
 
+// ── Table layout ───────────────────────────────────────────────────────────────
+// Header row and body rows must share one template or the columns desync.
+const BLOCKER_TABLE_COLUMNS = '2.2fr 1fr 1.2fr 1fr';
+// Under the 1074px desktop content width, so this never scrolls on desktop.
+const BLOCKER_TABLE_MIN_WIDTH = 640;
+
 // ── date helpers (page-local, same convention as lead/Blockers.tsx) ────────────────
 
 function fmtShortDate(iso: string): string {
@@ -58,7 +64,7 @@ function DateFilterButton({ mode, range, onChange }: {
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div style={{
+          <div className="nf-r-popover" style={{
             position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 260,
             background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
             boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
@@ -144,7 +150,7 @@ function SingleSelectDropdown({ label, value, options, onChange }: {
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div style={{
+          <div className="nf-r-popover" style={{
             position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, minWidth: 180,
             background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 6,
             boxShadow: '0 12px 28px rgba(0,0,0,0.35)', maxHeight: 260, overflowY: 'auto',
@@ -243,7 +249,7 @@ function BlockerRow({ b, selected, onClick }: {
     <div
       onClick={onClick}
       style={{
-        display: 'grid', gridTemplateColumns: '2.2fr 1fr 1.2fr 1fr', gap: 12,
+        display: 'grid', gridTemplateColumns: BLOCKER_TABLE_COLUMNS, gap: 12,
         padding: '14px 20px', cursor: 'pointer', alignItems: 'center',
         borderBottom: '1px solid var(--line)',
         background: selected ? 'color-mix(in srgb, var(--risk) 8%, transparent)' : 'transparent',
@@ -305,7 +311,7 @@ function DetailPanel({ b, onClose }: { b: BlockedTask; onClose: () => void }) {
           {b.blockerReason ?? 'No detail provided.'}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <InfoField icon={<Folder size={14} aria-hidden="true" />} label="Project">
             {b.projectName}
           </InfoField>
@@ -432,7 +438,7 @@ export default function MyBlockers() {
     return (
       <div>
         <div style={{ marginBottom: 24 }}><Skel h={24} w={160} /><div style={{ marginTop: 8 }}><Skel h={14} w={280} /></div></div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
           {[0, 1, 2].map(i => <Card key={i}><Skel h={60} /></Card>)}
         </div>
         <Card style={{ padding: 20 }}><Skel h={320} /></Card>
@@ -460,7 +466,7 @@ export default function MyBlockers() {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: selectedBlocker ? '1.7fr 1fr' : '1fr', gap: 16, alignItems: 'start' }}>
+    <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: selectedBlocker ? '1.7fr 1fr' : '1fr', gap: 16, alignItems: 'start' }}>
       <div>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
@@ -476,7 +482,7 @@ export default function MyBlockers() {
         </div>
 
         {/* KPI row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
           <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={total} caption="In the selected range" accent="var(--warn)" />
           <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={needsResponse} caption="No reply from Team Lead" accent="var(--risk)" />
           <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Team Lead Replied" value={acknowledgedCount} caption="Awaiting your follow-up" accent="var(--info)" />
@@ -501,8 +507,12 @@ export default function MyBlockers() {
 
         {/* Table */}
         <Card style={{ padding: 0, overflow: 'hidden' }}>
+          {/* Header and rows share one scroll region so columns stay aligned
+              while swiping; the pager below sits outside it. */}
+          <div className="nf-r-scroll">
+          <div className="nf-r-scroll-inner" style={{ '--nf-r-min': BLOCKER_TABLE_MIN_WIDTH + 'px' } as React.CSSProperties}>
           <div style={{
-            display: 'grid', gridTemplateColumns: '2.2fr 1fr 1.2fr 1fr', gap: 12,
+            display: 'grid', gridTemplateColumns: BLOCKER_TABLE_COLUMNS, gap: 12,
             padding: '10px 20px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)',
             fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
           }}>
@@ -529,6 +539,8 @@ export default function MyBlockers() {
               />
             ))
           )}
+          </div>
+          </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: '1px solid var(--line)' }}>
             <span style={{ fontSize: 12, color: 'var(--txt-dim)' }}>

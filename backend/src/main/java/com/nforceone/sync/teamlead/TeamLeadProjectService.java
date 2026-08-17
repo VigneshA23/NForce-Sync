@@ -71,14 +71,12 @@ public class TeamLeadProjectService {
     }
 
     public List<ProjectFullDto> listMyProjects(String actingEmail, LocalDate onDate) {
-        AppUser actor = resolveActor(actingEmail);
-        return projectRepository.findByPmIdOrderByNameAsc(actor.getId())
-                .stream()
-                .map(p -> ProjectFullDto.from(p,
-                        (int) allocationRepository.countActiveDistinctByProjectIdAndEmployeeRole(
-                                p.getId(), AppUser.Role.EMPLOYEE, onDate)))
-                .toList();
-    }
+    AppUser actor = resolveActor(actingEmail);
+    return projectRepository.findByPmIdOrderByNameAsc(actor.getId())
+            .stream()
+            .map(p -> ProjectFullDto.from(p, activeAssignedEmployees(p.getId(), onDate).size()))
+            .toList();
+}
 
     /**
      * Project details plus its currently assigned employees, for the project details popup.
@@ -94,15 +92,22 @@ public class TeamLeadProjectService {
         AppUser actor = resolveActor(actingEmail);
         Project project = requireProjectAssignedToTeamLead(projectId, actor.getId());
 
-        List<EmployeeRefDto> employees = allocationRepository.findByProjectIdWithRefs(projectId)
+        return ProjectDetailDto.from(project, activeAssignedEmployees(projectId, onDate));
+    }
+
+    /**
+     * Everyone (any role) with an allocation on this project whose effective window covers
+     * {@code onDate}, deduplicated. Backs both the "Team Size" column on the My Projects list
+     * and the "Assigned Employees" list in the project details popup, so the two always agree.
+     */
+    private List<EmployeeRefDto> activeAssignedEmployees(Long projectId, LocalDate onDate) {
+        return allocationRepository.findByProjectIdWithRefs(projectId)
                 .stream()
                 .filter(a -> isActiveOn(a, onDate))
                 .filter(a -> project.getPm() == null || !a.getEmployee().getId().equals(project.getPm().getId()))
                 .map(a -> EmployeeRefDto.from(a.getEmployee()))
                 .distinct()
                 .toList();
-
-        return ProjectDetailDto.from(project, employees);
     }
 
     private boolean isActiveOn(Allocation a, LocalDate onDate) {

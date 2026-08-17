@@ -167,7 +167,7 @@ function Toolbar({ count, noun, onRefetch, isRefreshing, onAdd, addLabel, filter
       padding: '14px 20px', borderBottom: '1px solid var(--line)',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
     }}>
-      <div style={{
+      <div className="nf-r-toolbar" style={{
         display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
         fontSize: 13, fontWeight: 600, color: 'var(--txt)',
       }}>
@@ -339,6 +339,14 @@ const EMPTY_PROJECT_FORM: ProjectFormState = {
   status: 'ACTIVE', startDate: todayISO(), endDate: '', pmId: '', projectManagerId: '',
 };
 
+/** Inline validation message shown directly under the field it belongs to. */
+function FieldError({ msg }: { msg?: string }) {
+  if (!msg) return null;
+  return (
+    <p role="alert" style={{ fontSize: 11, margin: '5px 0 0', color: 'var(--risk)' }}>{msg}</p>
+  );
+}
+
 function ProjectModal({ open, onClose, editing }: {
   open: boolean; onClose: () => void; editing: ProjectFullDto | null;
 }) {
@@ -361,6 +369,9 @@ function ProjectModal({ open, onClose, editing }: {
   // date — see StrictDateInput. A field left in this state never updates form.startDate/endDate.
   const [startDateInvalid, setStartDateInvalid] = useState(false);
   const [endDateInvalid, setEndDateInvalid] = useState(false);
+  // Per-field messages stay hidden until the first submit, so an untouched form isn't covered in
+  // red before the user has done anything. After that they update live as fields are filled in.
+  const [showErrors, setShowErrors] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -378,6 +389,7 @@ function ProjectModal({ open, onClose, editing }: {
     } : EMPTY_PROJECT_FORM);
     setStartDateInvalid(false);
     setEndDateInvalid(false);
+    setShowErrors(false);
   }, [open, editing]);
 
   const isPending = createMutation.isPending || updateMutation.isPending;
@@ -416,23 +428,39 @@ function ProjectModal({ open, onClose, editing }: {
   const dateFormatInvalid = startDateInvalid || endDateInvalid;
   // A completed project has to record when it finished. Status only appears when editing.
   const endDateRequired = editing != null && form.status === 'COMPLETED';
-  const canSubmit = form.name.trim() !== ''
-    && form.code.trim() !== ''
-    && form.projectTypeId !== ''
-    && form.billingModelId !== ''
-    && form.startDate !== ''
-    && (!showClient || form.client.trim() !== '')
-    && (!endDateRequired || form.endDate !== '')
-    && form.pmId !== ''
-    && form.projectManagerId !== ''
-    && !badDateOrder
-    && !dateFormatInvalid;
+
+  // One message per mandatory field, derived from the current form so they clear as soon as the
+  // field is filled. Also the single source of truth for whether the form can be submitted.
+  const fieldErrors: Partial<Record<keyof ProjectFormState, string>> = {};
+  if (form.code.trim() === '')       fieldErrors.code = 'Code is required.';
+  if (form.name.trim() === '')       fieldErrors.name = 'Name is required.';
+  if (form.projectTypeId === '')     fieldErrors.projectTypeId = 'Select a project type.';
+  if (showClient && form.client.trim() === '') fieldErrors.client = 'Client name is required for this project type.';
+  if (form.billingModelId === '')    fieldErrors.billingModelId = 'Select a billing model.';
+  if (form.pmId === '')              fieldErrors.pmId = 'Select a team lead.';
+  if (form.projectManagerId === '')  fieldErrors.projectManagerId = 'Select a project manager.';
+  if (form.startDate === '')         fieldErrors.startDate = 'Start date is required.';
+  if (badDateOrder)                  fieldErrors.endDate = 'End Date must be after Start Date.';
+  else if (endDateRequired && form.endDate === '') fieldErrors.endDate = 'Required when status is Completed.';
+
+  // Preserve strict date validation from Branch08-17.
+  if (dateFormatInvalid) {
+    fieldErrors.startDate = 'Enter a valid date in DD-MM-YYYY format.';
+  }
+
+  const canSubmit = Object.keys(fieldErrors).length === 0;
+
+  // Shown only after a submit attempt, except the date-order clash, which contradicts a value the
+  // user can already see and so is worth flagging the moment it happens.
+  const errorFor = (field: keyof ProjectFormState) =>
+    (showErrors || (field === 'endDate' && badDateOrder)) ? fieldErrors[field] : undefined;
 
   function handleClose() {
     setForm(EMPTY_PROJECT_FORM);
     setError(null);
     setStartDateInvalid(false);
     setEndDateInvalid(false);
+    setShowErrors(false);
     onClose();
   }
 
@@ -449,7 +477,12 @@ function ProjectModal({ open, onClose, editing }: {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      // Reveal the messages rather than failing silently — the button used to be disabled, so a
+      // click on an incomplete form gave no feedback at all about what was missing.
+      setShowErrors(true);
+      return;
+    }
     setError(null);
     try {
       if (editing) {
@@ -494,17 +527,19 @@ function ProjectModal({ open, onClose, editing }: {
     <Modal open={open} title={editing ? 'Edit Project' : 'New Project'} onClose={handleClose} width={480}>
       <form onSubmit={handleSubmit} noValidate>
         {error && <ErrorBanner message={error} />}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           {/* Editable on both create and edit; the server keeps it unique across projects. */}
           <div>
             <label style={labelStyle}>Code *</label>
             <input style={inputStyle} value={form.code} autoFocus
               onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} />
+            <FieldError msg={errorFor('code')} />
           </div>
           <div>
             <label style={labelStyle}>Name *</label>
             <input style={inputStyle} value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+            <FieldError msg={errorFor('name')} />
           </div>
         </div>
         {/* Project Type leads, because whether Client Name is shown depends on it. */}
@@ -514,7 +549,7 @@ function ProjectModal({ open, onClose, editing }: {
             <label style={labelStyle}>Project Type *</label>
             <select style={inputStyle} value={form.projectTypeId}
               onChange={e => handleProjectTypeChange(e.target.value)}>
-              <option value="">Select type…</option>
+              <option value="">Select Project Type…</option>
               {/* Inactive types are hidden, but keep this project's own so editing can't clear it. */}
               {currentProjectTypeMissing && (
                 <option value={String(editing!.projectTypeId)}>{editing!.projectType} (inactive)</option>
@@ -523,12 +558,14 @@ function ProjectModal({ open, onClose, editing }: {
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
+            <FieldError msg={errorFor('projectTypeId')} />
           </div>
           {showClient && (
             <div>
               <label style={labelStyle}>Client Name *</label>
               <input style={inputStyle} value={form.client} placeholder="e.g. Meridian Bank"
                 onChange={e => setForm(f => ({ ...f, client: e.target.value }))} />
+              <FieldError msg={errorFor('client')} />
             </div>
           )}
         </div>
@@ -540,7 +577,7 @@ function ProjectModal({ open, onClose, editing }: {
               onChange={e => setForm(f => ({ ...f, billingModelId: e.target.value }))}>
               {/* Placeholder rather than a blank "no model" choice — mandatory since V53, but it
                   must not default to whichever model happens to sort first. */}
-              <option value="">Select billing model…</option>
+              <option value="">Select Billing Model…</option>
               {/* An inactive model is hidden, but keep the project's own so editing can't clear it. */}
               {currentBillingModelMissing && (
                 <option value={String(editing!.billingModelId)}>{editing!.billingModel} (inactive)</option>
@@ -549,6 +586,7 @@ function ProjectModal({ open, onClose, editing }: {
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </select>
+            <FieldError msg={errorFor('billingModelId')} />
           </div>
           {editing && (
             <div>
@@ -567,7 +605,7 @@ function ProjectModal({ open, onClose, editing }: {
         {/* Two distinct roles: the Team Lead decides this project's EOD entries, while the Project
             Manager oversees it — that is what puts the project in their Approvals queue, Project
             Dashboard and reports. Both are required. */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
             <label style={labelStyle}>Team Lead *</label>
             <select style={inputStyle} value={form.pmId}
@@ -580,6 +618,7 @@ function ProjectModal({ open, onClose, editing }: {
                 <option key={l.id} value={l.id}>{l.fullName} ({l.employeeCode})</option>
               ))}
             </select>
+            <FieldError msg={errorFor('pmId')} />
           </div>
           <div>
             <label style={labelStyle}>Project Manager *</label>
@@ -595,9 +634,10 @@ function ProjectModal({ open, onClose, editing }: {
                 <option key={m.id} value={m.id}>{m.fullName} ({m.employeeCode})</option>
               ))}
             </select>
+            <FieldError msg={errorFor('projectManagerId')} />
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 8 }}>
+        <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
           <div>
             <label style={labelStyle}>Start Date *</label>
             <StrictDateInput
@@ -606,8 +646,8 @@ function ProjectModal({ open, onClose, editing }: {
               onChange={iso => setForm(f => ({ ...f, startDate: iso }))}
               onInvalidChange={setStartDateInvalid}
             />
+            <FieldError msg={errorFor('startDate')} />
           </div>
-          <div>
             {/* Optional in general, but mandatory once the status is Completed. */}
             <label style={labelStyle}>
               End Date{endDateRequired
@@ -621,6 +661,7 @@ function ProjectModal({ open, onClose, editing }: {
               onChange={iso => setForm(f => ({ ...f, endDate: iso }))}
               onInvalidChange={setEndDateInvalid}
             />
+            <FieldError msg={errorFor('endDate')} />
             {(badDateOrder || (endDateRequired && form.endDate === '')) && (
               <p style={{ fontSize: 11, margin: '5px 0 0', color: 'var(--risk)' }}>
                 {badDateOrder
@@ -642,9 +683,11 @@ function ProjectModal({ open, onClose, editing }: {
           </div>
         )}
         <div style={{ display: 'flex', gap: 10 }}>
+          {/* Deliberately NOT disabled on an incomplete form: a disabled button swallows the click
+              and explains nothing. Submitting reveals the per-field messages instead. */}
           <button
             type="submit"
-            disabled={isPending || !canSubmit}
+            disabled={isPending}
             style={{
               padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
               color: '#fff', fontSize: 13, fontWeight: 600,
@@ -801,7 +844,12 @@ function ProjectsTab() {
       )}
 
       {data && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="nf-r-scroll">
+        {/* minWidth stays under the 1074px desktop content width (1366 − 236
+            sidebar − 56 gutter) so this never scrolls on an approved desktop
+            size; below that the 10 columns swipe sideways instead of
+            squeezing. */}
+        <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '980px' } as React.CSSProperties}>
           <thead>
             <tr>
               <th style={thStyle}>Code</th>
@@ -859,6 +907,7 @@ function ProjectsTab() {
             )}
           </tbody>
         </table>
+        </div>
       )}
 
       <ProjectModal open={modalOpen} onClose={() => setModalOpen(false)} editing={editing} />
@@ -973,8 +1022,7 @@ function AllocationModal({ open, onClose, projects }: {
             ))}
           </select>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 8 }}>
+        <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
             <label style={labelStyle}>Effective From *</label>
             <StrictDateInput
@@ -1147,7 +1195,7 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
           {error && <ErrorBanner message={error} />}
 
           {/* Employee and project are fixed — reassigning either is a different allocation. */}
-          <div style={{
+          <div className="nf-r-stack-sm" style={{
             display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14,
             padding: '10px 14px', borderRadius: 7,
             background: 'var(--raised)', border: '1px solid var(--line)',
@@ -1169,7 +1217,7 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 8 }}>
+          <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
             <div>
               <label style={labelStyle}>Effective From *</label>
               <StrictDateInput
@@ -1444,7 +1492,8 @@ function AllocationTab() {
       )}
 
       {data && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="nf-r-scroll">
+        <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '780px' } as React.CSSProperties}>
           <thead>
             <tr>
               <SortableTh label="Employee" dir={sort?.key === 'employee' ? sort.dir : null}
@@ -1485,6 +1534,7 @@ function AllocationTab() {
             )}
           </tbody>
         </table>
+        </div>
       )}
 
       <AllocationModal open={modalOpen} onClose={() => setModalOpen(false)} projects={projects ?? []} />

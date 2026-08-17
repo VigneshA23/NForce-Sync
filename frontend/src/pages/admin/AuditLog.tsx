@@ -113,7 +113,7 @@ function AuditRow({ entry }: { entry: AuditLogDto }) {
       {expanded && hasDetail && (
         <tr>
           <td colSpan={5} style={{ padding: '12px 16px', background: 'var(--raised)', borderBottom: '1px solid var(--line)' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <JsonDiff label="Before" raw={entry.beforeValue} />
               <JsonDiff label="After"  raw={entry.afterValue} />
             </div>

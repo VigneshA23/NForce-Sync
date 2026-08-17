@@ -111,6 +111,7 @@ function InactiveUsersTile({ count, names = [] }: { count: number; names?: strin
       {hover && (
         <div
           role="tooltip"
+          className="nf-r-popover"
           style={{
             position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50,
             minWidth: 200, maxWidth: 280,
@@ -185,7 +186,7 @@ export default function AdminDashboard() {
             </Card>
           ))}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <Card><Skel h={200} /></Card>
           <Card><Skel h={200} /></Card>
         </div>
@@ -227,7 +228,7 @@ export default function AdminDashboard() {
         <KpiCard icon={<Activity size={18} />} label="Audit Events (24h)" value={stats.auditEventsLast24h} accent="var(--info)" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 24 }}>
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 24 }}>
         {/* Users by role */}
         <Card>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 18 }}>Users by Role</div>

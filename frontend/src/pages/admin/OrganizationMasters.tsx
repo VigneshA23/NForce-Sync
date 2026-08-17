@@ -426,7 +426,8 @@ function OrgTable<T extends { id: number; active: boolean }>({
       )}
 
       {data && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="nf-r-scroll">
+        <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '620px' } as React.CSSProperties}>
           <thead>
             <tr>
               <th style={thStyle}>Name / Title</th>
@@ -529,6 +530,7 @@ function OrgTable<T extends { id: number; active: boolean }>({
             )}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

@@ -200,7 +200,7 @@ function DateSelector({ dateISO, onChange }: { dateISO: string; onChange: (iso: 
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div style={{
+          <div className="nf-r-popover" style={{
             position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 220,
             background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
             boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
@@ -261,6 +261,12 @@ function SelectDropdown<T extends string>({ value, options, onChange }: {
 }
 
 // ── member row (left panel) ─────────────────────────────────────────────────────
+// Header row and body rows must share one template or the columns desync.
+const MEMBER_TABLE_COLUMNS = '1fr 160px 110px 120px 20px';
+// The four fixed columns plus gaps already need 466px; this leaves the name
+// column room to stay readable. Well under the desktop content width.
+const MEMBER_TABLE_MIN_WIDTH = 640;
+
 
 function MemberRow({ member, selected, onSelect, onHover }: { member: MergedMember; selected: boolean; onSelect: () => void; onHover?: () => void }) {
   const color = STATUS_CFG[member.status].color;
@@ -269,7 +275,7 @@ function MemberRow({ member, selected, onSelect, onHover }: { member: MergedMemb
       onClick={onSelect}
       onMouseEnter={onHover}
       style={{
-        display: 'grid', gridTemplateColumns: '1fr 160px 110px 120px 20px', gap: 14,
+        display: 'grid', gridTemplateColumns: MEMBER_TABLE_COLUMNS, gap: 14,
         alignItems: 'center', padding: '12px 16px', cursor: 'pointer',
         background: selected ? 'color-mix(in srgb, var(--brand) 8%, transparent)' : undefined,
         borderLeft: selected ? '3px solid var(--brand)' : '3px solid transparent',
@@ -521,7 +527,7 @@ function DetailPanel({ member, dateISO }: { member: MergedMember; dateISO: strin
       </div>
 
       {/* Info grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', rowGap: 16, columnGap: 16 }}>
+      <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', rowGap: 16, columnGap: 16 }}>
         <InfoRow icon={FolderKanban} label="Current Project" value={member.project} color="var(--brand)" />
         <InfoRow icon={CalendarDays} label="Working Days" value={isPending ? '—' : detailFailed ? 'Error' : `${detail?.workingDays ?? 0}d`} color="var(--ok)" />
         <InfoRow
@@ -709,7 +715,7 @@ export default function TeamUtilization() {
       </div>
 
       {/* Filter bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px', marginBottom: 16 }}>
+      <div className="nf-r-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px', marginBottom: 16 }}>
         <div style={{ width: 220, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 8, padding: '7px 12px' }}>
           <Search size={13} style={{ color: 'var(--txt-dim)' }} aria-hidden="true" />
           <input
@@ -800,10 +806,14 @@ export default function TeamUtilization() {
       )}
 
       {/* Two-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
         {/* Left: Team Members list */}
         <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px 110px 120px 20px', gap: 14, alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+          {/* Header and rows share one scroll region so columns stay aligned
+              while swiping; the footer below sits outside it. */}
+          <div className="nf-r-scroll">
+          <div className="nf-r-scroll-inner" style={{ '--nf-r-min': MEMBER_TABLE_MIN_WIDTH + 'px' } as React.CSSProperties}>
+          <div style={{ display: 'grid', gridTemplateColumns: MEMBER_TABLE_COLUMNS, gap: 14, alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>Team Members ({visible.length})</span>
             <span style={{ fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Utilization</span>
             <span style={{ fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Approved / Available</span>
@@ -827,6 +837,8 @@ export default function TeamUtilization() {
               />
             ))
           )}
+          </div>
+          </div>
 
           <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--txt-dim)' }}>
             <span>

@@ -31,6 +31,13 @@ const WORK_LOCATIONS = ['Office', 'Remote', 'Client Site', 'Field'];
 /** Category name, renamed from 'Leave / Holiday' in V35 — Holiday is a day type now. */
 const LEAVE = 'Leave';
 
+/**
+ * Cap on every free-text field on this form (description, blocker reason, next-day plan,
+ * remarks). Mirrored by @Size(max = 300) on SaveEodRequest/SaveEodTaskRequest, so the API
+ * rejects an over-long value even if it bypasses this input.
+ */
+const MAX_TEXT_LEN = 300;
+
 const DAY_TYPES = [
   { value: 'WORKING_DAY', label: 'Working day' },
   { value: 'LEAVE',       label: 'Leave' },
@@ -223,6 +230,32 @@ function Sel(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
 function Txt(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea {...props} style={{ ...inputStyle, resize: 'vertical', minHeight: 70, lineHeight: 1.5, ...props.style }} />
+  );
+}
+
+/**
+ * Live "n/300 characters used" hint under a capped textarea. Without it, maxLength silently
+ * stops accepting input and the field just appears to freeze — this makes the reason visible,
+ * and turns amber once the cap is actually reached.
+ *
+ * aria-live="polite" so screen readers hear the remaining count as it changes, rather than only
+ * discovering the limit by hitting it.
+ */
+function CharCount({ value, max = MAX_TEXT_LEN }: { value: string; max?: number }) {
+  const used = value.length;
+  const atLimit = used >= max;
+  return (
+    <div
+      aria-live="polite"
+      style={{
+        fontSize: 11,
+        color: atLimit ? 'var(--warn)' : 'var(--txt-dim)',
+        textAlign: 'right',
+        marginTop: 4,
+      }}
+    >
+      {used}/{max} characters used
+    </div>
   );
 }
 
@@ -744,7 +777,7 @@ export default function SubmitEOD() {
       {!loadingEntry && (
         <>
           {/* Meta row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginTop: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginTop: 24 }}>
             <div>
               <Label>Entry date</Label>
               {isDateLocked ? (
@@ -782,7 +815,7 @@ export default function SubmitEOD() {
                   onChange={e => setWorkLocation(e.target.value)}
                   disabled={workLocDisabled}
                 >
-                  <option value="">Work location</option>
+                  <option value="">Work Location</option>
                   {WORK_LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
                 </Sel>
               )}
@@ -1013,7 +1046,10 @@ export default function SubmitEOD() {
             <Label>Next-day plan <Req /></Label>
             {isReadOnly
               ? <div style={{ ...inputStyle, opacity: 0.7, minHeight: 60, lineHeight: 1.5 }}>{nextDayPlan || '—'}</div>
-              : <Txt value={nextDayPlan} onChange={e => setNextDayPlan(e.target.value)} placeholder="What are you planning to work on tomorrow?" rows={3} />}
+              : <>
+                  <Txt value={nextDayPlan} onChange={e => setNextDayPlan(e.target.value)} placeholder="What are you planning to work on tomorrow?" rows={3} maxLength={MAX_TEXT_LEN} />
+                  <CharCount value={nextDayPlan} />
+                </>}
           </div>
 
           {/* Remarks */}
@@ -1021,7 +1057,10 @@ export default function SubmitEOD() {
             <Label>Remarks</Label>
             {isReadOnly
               ? <div style={{ ...inputStyle, opacity: 0.7, minHeight: 50, lineHeight: 1.5 }}>{remarks || '—'}</div>
-              : <Txt value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Any blockers, dependencies, or context for your manager?" rows={2} />}
+              : <>
+                  <Txt value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Any blockers, dependencies, or context for your manager?" rows={2} maxLength={MAX_TEXT_LEN} />
+                  <CharCount value={remarks} />
+                </>}
           </div>
 
           {/* Action buttons */}
@@ -1134,7 +1173,7 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
         <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, color: 'var(--txt-dim)', flexShrink: 0 }}>
           #{index + 1}
         </span>
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr 80px auto auto', gap: 8, alignItems: 'end' }}>
+        <div className="nf-eod-task-grid" style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr 80px auto auto', gap: 8, alignItems: 'end' }}>
           {/* Project */}
           <div>
             <Label>Project</Label>
@@ -1240,7 +1279,10 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
         <Label>Description</Label>
         {isReadOnly
           ? <div style={{ ...inputStyle, opacity: 0.7, lineHeight: 1.5 }}>{task.description || '—'}</div>
-          : <Txt value={task.description} onChange={e => onUpdate({ description: e.target.value })} rows={2} placeholder="What did you work on?" style={{ minHeight: 54 }} />}
+          : <>
+              <Txt value={task.description} onChange={e => onUpdate({ description: e.target.value })} rows={2} placeholder="What did you work on?" maxLength={MAX_TEXT_LEN} style={{ minHeight: 54 }} />
+              <CharCount value={task.description} />
+            </>}
       </div>
 
       {/* Blocker reason — only for BLOCKED status */}
@@ -1252,13 +1294,17 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
           </Label>
           {isReadOnly
             ? <div style={{ ...inputStyle, opacity: 0.7, lineHeight: 1.5, borderColor: 'rgba(228,55,61,.3)' }}>{task.blockerReason || '—'}</div>
-            : <Txt
-                value={task.blockerReason}
-                onChange={e => onUpdate({ blockerReason: e.target.value })}
-                rows={2}
-                placeholder="Describe what is blocking you and what support you need"
-                style={{ minHeight: 54, borderColor: 'rgba(228,55,61,.35)' }}
-              />}
+            : <>
+                <Txt
+                  value={task.blockerReason}
+                  onChange={e => onUpdate({ blockerReason: e.target.value })}
+                  rows={2}
+                  placeholder="Describe what is blocking you and what support you need"
+                  maxLength={MAX_TEXT_LEN}
+                  style={{ minHeight: 54, borderColor: 'rgba(228,55,61,.35)' }}
+                />
+                <CharCount value={task.blockerReason} />
+              </>}
         </div>
       )}
     </div>

@@ -353,6 +353,10 @@ function GapsModal({ row, onClose, filters }: {
 
 const PAGE_SIZE = 10;
 
+// Header row and body rows must share one template or the columns desync.
+const MISSING_TABLE_COLUMNS = '1.6fr 1fr 1fr 1fr 90px 160px';
+const MISSING_TABLE_MIN_WIDTH = 900;
+
 export default function MissingEodReport() {
   const [filters, setFilters] = useState<Filters>(defaultFilters());
   const [page, setPage] = useState(0);
@@ -428,7 +432,11 @@ export default function MissingEodReport() {
         </Card>
       ) : (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 90px 160px', padding: '10px 16px', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--txt-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--line)', background: 'var(--raised)' }}>
+          {/* Header and rows share one scroll region so columns stay aligned
+              while swiping; the pager below sits outside it. */}
+          <div className="nf-r-scroll">
+          <div className="nf-r-scroll-inner" style={{ '--nf-r-min': MISSING_TABLE_MIN_WIDTH + 'px' } as React.CSSProperties}>
+          <div style={{ display: 'grid', gridTemplateColumns: MISSING_TABLE_COLUMNS, padding: '10px 16px', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--txt-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--line)', background: 'var(--raised)' }}>
             <div>Employee</div><div>Project</div><div>Team Lead</div><div>Missing</div><div>Status</div><div />
           </div>
           {isLoading ? (
@@ -437,7 +445,7 @@ export default function MissingEodReport() {
             <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>No missing EOD entries match these filters.</div>
           ) : (
             pageRows.map(row => (
-              <div key={row.employeeId} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 90px 160px', padding: '10px 16px', alignItems: 'center', borderBottom: '1px solid var(--line)', fontSize: 12.5 }}>
+              <div key={row.employeeId} style={{ display: 'grid', gridTemplateColumns: MISSING_TABLE_COLUMNS, padding: '10px 16px', alignItems: 'center', borderBottom: '1px solid var(--line)', fontSize: 12.5 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                   <div style={{
                     width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
@@ -475,6 +483,8 @@ export default function MissingEodReport() {
               </div>
             ))
           )}
+          </div>
+          </div>
           {employees.length > PAGE_SIZE && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
               <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} style={{ background: 'none', border: 'none', color: page === 0 ? 'var(--txt-dim)' : 'var(--brand-bright)', cursor: page === 0 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>

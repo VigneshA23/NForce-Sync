@@ -92,7 +92,7 @@ export default function Locked() {
               Wait for the timer, or reset your password to regain access now.
             </>
           ) : (
-            <>The lockout has lifted. You can try signing in again.</>
+            <>You've been unlocked - you can sign in now.</>
           )}
         </p>
 
