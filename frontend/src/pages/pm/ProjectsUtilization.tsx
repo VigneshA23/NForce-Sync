@@ -925,7 +925,7 @@ function CalendarRangePopover({ from, to, onApply }: { from: string; to: string;
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div style={{
+          <div className="nf-r-popover" style={{
             position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 240,
             background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
             boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
@@ -972,7 +972,7 @@ function LoadingSkeleton() {
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20, marginBottom: 16 }}>
         <Skel h={14} w={160} /><div style={{ marginTop: 14 }} /><Skel h={220} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 16, marginBottom: 16 }}>
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 16, marginBottom: 16 }}>
         <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
           <Skel h={14} w={140} /><div style={{ marginTop: 14 }} />
           {[0, 1, 2, 3].map(i => <div key={i} style={{ marginBottom: 10 }}><Skel h={36} /></div>)}

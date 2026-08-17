@@ -777,7 +777,7 @@ export default function SubmitEOD() {
       {!loadingEntry && (
         <>
           {/* Meta row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginTop: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginTop: 24 }}>
             <div>
               <Label>Entry date</Label>
               {isDateLocked ? (
@@ -1173,7 +1173,7 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
         <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, color: 'var(--txt-dim)', flexShrink: 0 }}>
           #{index + 1}
         </span>
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr 80px auto auto', gap: 8, alignItems: 'end' }}>
+        <div className="nf-eod-task-grid" style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr 80px auto auto', gap: 8, alignItems: 'end' }}>
           {/* Project */}
           <div>
             <Label>Project</Label>

@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { KpiCard } from '../../components/KpiCard';
 import { todayISO } from '../../lib/date';
+import { useIsPhone } from '../../lib/useMediaQuery';
 import {
   useProjectDashboardFilters, useProjectDashboardSummary,
   type MissingEodRowDto, type ProjectUtilizationRowDto, type ResourceUtilizationRowDto,
@@ -654,6 +655,8 @@ function MissingEodTable({ rows }: { rows: MissingEodRowDto[] }) {
 // ── main page ──────────────────────────────────────────────────────────────────
 
 export default function ProjectDashboard() {
+  // Recharts measures axis width in JS, so this one can't be done in CSS.
+  const isPhone = useIsPhone();
   const [filters, setFilters] = useState<Filters>({
     from: firstDayOfMonthISO(),
     to: todayISO(),
@@ -680,7 +683,7 @@ export default function ProjectDashboard() {
           <div style={{ marginTop: 8 }}><Skel h={14} w={300} /></div>
         </div>
         <Card style={{ padding: 16, marginBottom: 20 }}><Skel h={38} /></Card>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginBottom: 20 }}>
+        <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16, marginBottom: 20 }}>
           {[0, 1, 2, 3, 4].map(i => <Card key={i} style={{ padding: 18 }}><Skel h={28} w={60} /><div style={{ marginTop: 8 }}><Skel h={12} w={80} /></div></Card>)}
         </div>
         <Card style={{ padding: 20 }}><Skel h={240} /></Card>
@@ -758,7 +761,7 @@ export default function ProjectDashboard() {
       </div>
 
       {/* Charts row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 16, marginBottom: 20 }}>
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 16, marginBottom: 20 }}>
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <SectionHeader title="Billable vs Non-Billable" subtitle="Share of approved hours logged in range" />
           <div style={{ padding: '20px 16px', height: 200 }}>
@@ -812,7 +815,9 @@ export default function ProjectDashboard() {
               <BarChart data={categoryChartData} layout="vertical" margin={{ left: 20, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} unit="h" />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: 'var(--txt-mut)' }} width={140} />
+                {/* 140px of category labels leaves only ~160px for the bars on a
+                    phone, so give the labels less and the data more down there. */}
+                <YAxis type="category" dataKey="name" tick={{ fontSize: isPhone ? 10 : 12, fill: 'var(--txt-mut)' }} width={isPhone ? 84 : 140} />
                 <Tooltip contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }} formatter={((v: number) => [`${v.toFixed(1)}h`, 'Hours']) as never} />
                 <Bar dataKey="hours" fill="var(--info)" radius={[0, 4, 4, 0]} isAnimationActive={false} />
               </BarChart>

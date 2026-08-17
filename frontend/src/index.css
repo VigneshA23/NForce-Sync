@@ -304,6 +304,203 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   border-radius: 4px;
 }
 
+/* ═══ Responsive adaptation — tablet & mobile ═══════════════════════
+ *
+ * The desktop design is the source of truth and is expressed entirely in
+ * inline style={{}} objects (see CLAUDE.md). Those objects are NEVER edited
+ * for responsiveness. Instead a page adds a semantic className next to the
+ * existing inline style, and the override lives here inside a @media query.
+ *
+ * Two consequences worth knowing before editing this section:
+ *
+ *  1. Every rule below sits inside `@media (max-width: …)`. At 1366px and
+ *     above this whole block emits nothing, so the approved desktop layout
+ *     is untouched by construction — not by careful review.
+ *  2. The overrides need `!important`. A stylesheet !important declaration
+ *     is the only thing that beats a non-important inline style, and every
+ *     property being overridden here is set inline.
+ *
+ * The one deliberate exception is `.nf-r-scroll` — see its comment.
+ *
+ * Breakpoint ladder (reuses the values already in this file; don't invent
+ * new ones): 1024 tablet-landscape · 900 shell/sidebar · 768 tablet-portrait
+ * · 640 phone-landscape · 560 KPI reflow · 480 small phone.
+ */
+
+/* ─── Page padding — reclaim the 56px the desktop gutter costs ──── */
+@media (max-width: 768px) {
+  .shell-main { padding: 18px 16px !important; }
+}
+@media (max-width: 480px) {
+  .shell-main { padding: 14px 12px !important; }
+}
+
+/* ─── Collapse multi-column layouts ─────────────────────────────── */
+/* Two-pane splits (content + right rail). */
+@media (max-width: 1024px) {
+  .nf-r-stack { grid-template-columns: 1fr !important; }
+}
+/* Paired form fields — later, so a modal form that is both keeps 2-up
+   on tablet and only stacks on phones. */
+@media (max-width: 768px) {
+  .nf-r-stack-sm { grid-template-columns: 1fr !important; }
+}
+/* Label/value field pairs laid out in an uneven template (e.g. '1fr 1fr 70px
+   110px'), which can't be converted to auto-fit without changing the desktop
+   column proportions. Re-pair them on phones instead of stacking one per row. */
+@media (max-width: 640px) {
+  .nf-r-pairs { grid-template-columns: repeat(2, 1fr) !important; }
+}
+@media (max-width: 380px) {
+  .nf-r-pairs { grid-template-columns: 1fr !important; }
+}
+
+/* KPI tile rows. Pairs from tablet-landscape down: the rows hold 3–5 tiles,
+   and 2-up never strands a lone tile on its own row the way 3-up does with 4.
+   The inline template is also converted to auto-fit (see Phase 2 in the
+   plan), which handles the 1024–1366 laptop band on its own. */
+@media (max-width: 1024px) {
+  .nf-r-kpis { grid-template-columns: repeat(2, 1fr) !important; }
+}
+@media (max-width: 380px) {
+  .nf-r-kpis { grid-template-columns: 1fr !important; }
+}
+
+/* ─── Calendar heatmap ──────────────────────────────────────────── */
+/* One variable drives the cells, the nav bar, the day headers and the legend,
+   so they shrink together and can't drift apart. 52px × 7 + gaps = 394px,
+   which overflows a 375px phone before card and page padding. */
+@media (max-width: 560px) {
+  .nf-cal { --nf-cal-cell: 40px; }
+}
+@media (max-width: 400px) {
+  .nf-cal { --nf-cal-cell: 36px; }
+}
+@media (max-width: 560px) {
+  .nf-cal-skel { grid-template-columns: repeat(7, 1fr) !important; }
+}
+
+/* ─── EOD task-entry row ────────────────────────────────────────── */
+/* Five controls on one line (Project · Category · Hours · Status · remove).
+   At 390px each 1fr gets ~60px and the "{code} — {name}" option text is
+   unreadable — and this is the app's primary daily workflow, so it gets a
+   real reflow rather than a squeeze: Project takes the full width, then
+   Category+Hours pair up, then Status+remove. Children are targeted by
+   position so no per-field classNames are needed. */
+@media (max-width: 640px) {
+  .nf-eod-task-grid { grid-template-columns: 1fr 1fr !important; }
+  .nf-eod-task-grid > *:nth-child(1) { grid-column: 1 / -1; }
+}
+
+/* ─── Dense tables & grid rows — swipe sideways ─────────────────── */
+/* THE EXCEPTION: this one declaration is not inside a media query, because
+   the wrapper must scroll at every width below the table's own min-width —
+   including the 1024–1366 laptop band, where a media query capped at 1024
+   would leave the page itself scrolling instead.
+   It is still desktop-safe: the element is a NEW wrapper div that exists
+   nowhere in the current DOM, and at desktop widths its content never
+   exceeds it, so `auto` renders no scrollbar and changes no metrics.
+   Caveat when applying it: `overflow-x: auto` establishes a scroll
+   container, so an absolutely-positioned popover inside a row gets clipped.
+   Rows with action menus need the menu portaled first (see the portal in
+   admin/UserManagement.tsx) or must not use this class. */
+.nf-r-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* The floor that makes the wrapper above actually scroll, carried per-site as
+   an inline `--nf-r-min` so each table can state its own natural width.
+   It is applied ONLY below 1024px, and that scoping is load-bearing: several
+   of these tables sit in the left pane of a master/detail split, which at
+   1366px is ~670px wide — narrower than the table's natural width. Applying
+   the floor at every width would make those panes scroll horizontally on an
+   approved desktop size, where today they simply squeeze. Above 1024px no
+   floor exists, nothing overflows, and `overflow-x: auto` renders nothing. */
+@media (max-width: 1024px) {
+  .nf-r-scroll-inner { min-width: var(--nf-r-min); }
+}
+
+/* ─── Toolbars & filter rows ────────────────────────────────────── */
+@media (max-width: 900px) {
+  .nf-r-toolbar { flex-wrap: wrap !important; }
+}
+/* Below phone-landscape, fixed-width filter controls go full width rather
+   than overflowing — several carry `width: 220, flexShrink: 0` inline. */
+@media (max-width: 640px) {
+  .nf-r-toolbar > * {
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: 1 1 100% !important;
+  }
+  /* Several controls carry `width: 220` inline on the input/select itself,
+     one level below the flex child, so widening the child alone isn't enough.
+     The [tabindex="-1"] exclusion matters: the date fields overlay a 24px
+     invisible <input type="date"> on the right edge to open the native picker
+     (see EodHistory). Stretching THAT to 100% would put a transparent picker
+     over the whole text field and swallow typing. */
+  .nf-r-toolbar input:not([tabindex="-1"]),
+  .nf-r-toolbar select:not([tabindex="-1"]) {
+    width: 100% !important;
+  }
+}
+
+/* ─── Touch targets ─────────────────────────────────────────────── */
+/* 40px is the comfortable floor for a finger. Scoped to phone widths so no
+   desktop control changes height. Excludes icon-only buttons inside dense
+   rows, which opt out with .nf-r-compact. */
+@media (max-width: 640px) {
+  button:not(.nf-r-compact),
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    min-height: 40px;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* ─── Donut + legend rows ───────────────────────────────────────── */
+/* The donut carries `flexShrink: 0` at 130px, so in a narrow card it pushes
+   its legend sibling out rather than shrinking. Stack them instead. */
+@media (max-width: 640px) {
+  .nf-r-donut-row {
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 16px !important;
+  }
+}
+
+/* ─── Popovers & dropdowns — never leave the viewport ───────────── */
+@media (max-width: 640px) {
+  .nf-r-popover {
+    max-width: calc(100vw - 24px) !important;
+    width: auto !important;
+  }
+}
+
+/* ─── Toasts ────────────────────────────────────────────────────── */
+/* The stack is `position: fixed; right: 1rem; width: 100%` capped at 380px.
+   Below 380 + 2rem the width wins and the box starts off the left edge, so
+   subtract the gutters instead. The toasts themselves carry minWidth: 260,
+   which still fits the narrowest supported phone. */
+@media (max-width: 420px) {
+  .nf-r-toasts { width: calc(100vw - 2rem) !important; }
+  .nf-r-toasts > * { min-width: 0 !important; }
+}
+
+/* ─── Horizontal-overflow safety net ────────────────────────────── */
+/* Last line of defence: one overflowing child would otherwise scroll the
+   whole page. `clip`, NOT `hidden` — `hidden` establishes a scroll
+   container and would break the sticky topbar in Shell.tsx. */
+@media (max-width: 1024px) {
+  body { overflow-x: clip; }
+}
+
 /* ─── Reduced motion ───────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *,

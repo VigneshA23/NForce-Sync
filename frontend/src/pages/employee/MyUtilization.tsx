@@ -489,7 +489,7 @@ function LoadingSkeleton() {
           </div>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, marginBottom: 16 }}>
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, marginBottom: 16 }}>
         <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
           <Skel h={14} w={120} /><div style={{ marginTop: 14 }} /><Skel h={180} />
         </div>
@@ -499,7 +499,7 @@ function LoadingSkeleton() {
           {[0,1,2,3].map(i => <div key={i} style={{ marginBottom: 8 }}><Skel h={14} /></div>)}
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
           <Skel h={14} w={120} /><div style={{ marginTop: 14 }} /><Skel h={130} />
         </div>

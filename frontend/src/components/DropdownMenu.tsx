@@ -74,6 +74,7 @@ export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', op
       {open && (
         <div
           role="menu"
+          className="nf-r-popover"
           style={{
             position: 'absolute', top: 'calc(100% + 4px)', [align]: 0,
             minWidth: 176, zIndex: 30, background: 'var(--panel)',

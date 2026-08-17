@@ -681,7 +681,7 @@ export default function PlannedVsActual() {
 function PageSkeleton() {
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16, marginBottom: 20 }}>
         {[0, 1, 2, 3].map(i => <Card key={i} style={{ padding: 18 }}><Skel h={28} w={70} /><div style={{ marginTop: 8 }}><Skel h={12} w={90} /></div></Card>)}
       </div>
       <Card style={{ padding: 20, marginBottom: 20 }}><Skel h={220} /></Card>

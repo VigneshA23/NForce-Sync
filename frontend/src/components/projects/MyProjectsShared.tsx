@@ -199,6 +199,7 @@ export function StatusFilterDropdown({ value, onChange, options, ariaLabel }: {
           <div
             role="listbox"
             aria-label={ariaLabel}
+            className="nf-r-popover"
             style={{
               position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, minWidth: 150,
               background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 6,
@@ -355,7 +356,8 @@ export function ProjectsPanel({
       )}
 
       {!isPending && !isError && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="nf-r-scroll">
+        <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '760px' } as React.CSSProperties}>
           <thead>
             <tr>
               <th style={thStyle}>Project</th>
@@ -424,6 +426,7 @@ export function ProjectsPanel({
             )}
           </tbody>
         </table>
+        </div>
       )}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

@@ -108,11 +108,11 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
         gridTemplateColumns: '55fr 45fr',
         minHeight: '100dvh',
       }}
-      className="max-[900px]:block"
+      className="nf-auth-grid"
     >
       {/* ── LEFT PANEL ─────────────────────────────────── */}
       <div
-        className="max-[900px]:hidden"
+        className="nf-auth-left"
         style={{
           position: 'relative',
           overflow: 'hidden',
@@ -242,7 +242,7 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
       >
         {/* Mobile brand strip — only visible <900px */}
         <div
-          className="hidden max-[900px]:flex"
+          className="nf-auth-brandstrip"
           style={{
             position: 'absolute',
             top: 0,
@@ -270,7 +270,7 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
         </div>
 
         <div
-          className="max-[900px]:mt-20"
+          className="nf-auth-form"
           style={{
             width: '100%',
             maxWidth: 440,
@@ -279,6 +279,30 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
           {children}
         </div>
       </div>
+
+      {/*
+        These rules replace Tailwind arbitrary variants (max-[900px]:block /
+        :hidden) that were silently inert: a utility class loses to an inline
+        style for the same property, and `display` is set inline on both the
+        grid and the left panel. The result was that phones kept the 55/45
+        split and rendered the marketing panel squeezed into 55% of a 390px
+        screen. Overriding from a stylesheet with !important is what actually
+        wins against the inline style.
+
+        Every rule that changes layout lives inside the media query, so the
+        desktop split is untouched. The one base rule below only restates what
+        Tailwind's `hidden` was already doing to the mobile brand strip, so the
+        desktop rendering is identical either way.
+      */}
+      <style>{`
+        .nf-auth-brandstrip { display: none; }
+        @media (max-width: 900px) {
+          .nf-auth-grid      { grid-template-columns: 1fr !important; }
+          .nf-auth-left      { display: none !important; }
+          .nf-auth-brandstrip { display: flex; }
+          .nf-auth-form      { margin-top: 80px; }
+        }
+      `}</style>
     </div>
   );
 }

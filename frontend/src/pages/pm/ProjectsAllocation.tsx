@@ -166,7 +166,7 @@ function Toolbar({ count, noun, onRefetch, isRefreshing, onAdd, addLabel, filter
       padding: '14px 20px', borderBottom: '1px solid var(--line)',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
     }}>
-      <div style={{
+      <div className="nf-r-toolbar" style={{
         display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
         fontSize: 13, fontWeight: 600, color: 'var(--txt)',
       }}>
@@ -483,7 +483,7 @@ function ProjectModal({ open, onClose, editing }: {
     <Modal open={open} title={editing ? 'Edit Project' : 'New Project'} onClose={handleClose} width={480}>
       <form onSubmit={handleSubmit} noValidate>
         {error && <ErrorBanner message={error} />}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           {/* Editable on both create and edit; the server keeps it unique across projects. */}
           <div>
             <label style={labelStyle}>Code *</label>
@@ -556,7 +556,7 @@ function ProjectModal({ open, onClose, editing }: {
         {/* Two distinct roles: the Team Lead decides this project's EOD entries, while the Project
             Manager oversees it — that is what puts the project in their Approvals queue, Project
             Dashboard and reports. Both are required. */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
             <label style={labelStyle}>Team Lead *</label>
             <select style={inputStyle} value={form.pmId}
@@ -586,7 +586,7 @@ function ProjectModal({ open, onClose, editing }: {
             </select>
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+        <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
           <div>
             <label style={labelStyle}>Start Date *</label>
             <input type="date" lang="en-GB" style={inputStyle} value={form.startDate}
@@ -770,7 +770,12 @@ function ProjectsTab() {
       )}
 
       {data && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="nf-r-scroll">
+        {/* minWidth stays under the 1074px desktop content width (1366 − 236
+            sidebar − 56 gutter) so this never scrolls on an approved desktop
+            size; below that the 10 columns swipe sideways instead of
+            squeezing. */}
+        <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '980px' } as React.CSSProperties}>
           <thead>
             <tr>
               <th style={thStyle}>Code</th>
@@ -828,6 +833,7 @@ function ProjectsTab() {
             )}
           </tbody>
         </table>
+        </div>
       )}
 
       <ProjectModal open={modalOpen} onClose={() => setModalOpen(false)} editing={editing} />
@@ -937,7 +943,7 @@ function AllocationModal({ open, onClose, projects }: {
           </select>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
             <label style={labelStyle}>Effective From *</label>
             <input type="date" lang="en-GB" style={inputStyle} value={effectiveFrom}
@@ -1083,7 +1089,7 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
           {error && <ErrorBanner message={error} />}
 
           {/* Employee and project are fixed — reassigning either is a different allocation. */}
-          <div style={{
+          <div className="nf-r-stack-sm" style={{
             display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14,
             padding: '10px 14px', borderRadius: 7,
             background: 'var(--raised)', border: '1px solid var(--line)',
@@ -1105,7 +1111,7 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+          <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
             <div>
               <label style={labelStyle}>Effective From *</label>
               <input type="date" lang="en-GB" style={inputStyle} value={effectiveFrom} autoFocus
@@ -1359,7 +1365,8 @@ function AllocationTab() {
       )}
 
       {data && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="nf-r-scroll">
+        <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '780px' } as React.CSSProperties}>
           <thead>
             <tr>
               <SortableTh label="Employee" dir={sort?.key === 'employee' ? sort.dir : null}
@@ -1400,6 +1407,7 @@ function AllocationTab() {
             )}
           </tbody>
         </table>
+        </div>
       )}
 
       <AllocationModal open={modalOpen} onClose={() => setModalOpen(false)} projects={projects ?? []} />

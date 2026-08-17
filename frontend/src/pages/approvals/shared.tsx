@@ -382,7 +382,7 @@ export function SubmissionDetailModal({
             const rowBusy = patchBillable.isPending && patchBillable.variables?.taskId === t.id;
             return (
               <div key={t.id} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '12px 14px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 70px 110px', gap: 10, marginBottom: 8 }}>
+                <div className="nf-r-pairs" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 70px 110px', gap: 10, marginBottom: 8 }}>
                   <div><FieldLabel>Project</FieldLabel><div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)' }}>{t.projectCode ?? '—'}</div></div>
                   <div><FieldLabel>Category</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.categoryName ?? '—'}</div></div>
                   <div><FieldLabel>Hours</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.hours != null ? `${hrs(Number(t.hours))}h` : '—'}</div></div>

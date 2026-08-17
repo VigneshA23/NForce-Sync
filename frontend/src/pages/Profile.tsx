@@ -282,7 +282,7 @@ export default function Profile() {
       </div>
 
       {/* 2-column: Personal + Employment */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
         {/* Personal Information */}
         <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '20px 24px' }}>
@@ -307,7 +307,7 @@ export default function Profile() {
               </div>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <ReadField label="Phone" value={profile.phone} />
               <ReadField label="Date of Birth" value={profile.dateOfBirth} />
               <ReadField label="Gender" value={profile.gender} />
@@ -322,7 +322,7 @@ export default function Profile() {
         {/* Employment — HR managed */}
         <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '20px 24px' }}>
           <SectionHeader title="Employment" badge="HR Managed" />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <ReadField label="Employee Code" value={profile.employeeCode} />
             <ReadField label="Department" value={profile.departmentName} />
             <ReadField label="Designation" value={profile.designationName} />
@@ -348,12 +348,12 @@ export default function Profile() {
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '20px 24px' }}>
         <SectionHeader title="Emergency Contact" />
         {editing ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <EditField label="Contact Name" value={field('emergencyContactName')} onChange={set('emergencyContactName')} placeholder="Full name" />
             <EditField label="Contact Phone" value={field('emergencyContactPhone')} onChange={set('emergencyContactPhone')} placeholder="+91 99999 99999" />
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <ReadField label="Contact Name" value={profile.emergencyContactName} />
             <ReadField label="Contact Phone" value={profile.emergencyContactPhone} />
           </div>

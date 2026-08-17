@@ -230,7 +230,7 @@ function MemberRow({ member, isLast, expanded, onToggle, onOpenApproval }: {
         tabIndex={clickable ? 0 : undefined}
         onKeyDown={clickable ? (e) => { if (e.key === 'Enter') handleClick(); } : undefined}
         style={{
-          display: 'grid', gridTemplateColumns: '1.8fr 1.4fr 110px', gap: 12, alignItems: 'center',
+          display: 'grid', gridTemplateColumns: ROSTER_TABLE_COLUMNS, gap: 12, alignItems: 'center',
           padding: '12px 20px', cursor: clickable ? 'pointer' : 'default',
         }}
       >
@@ -410,7 +410,7 @@ function StatusDistributionDonut({ summary }: { summary: TeamLeadSummaryDto }) {
   const data = segments.filter(s => s.count > 0).map(s => ({ name: s.label, value: s.count, color: s.color }));
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+    <div className="nf-r-donut-row" style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
       <div style={{ width: 130, height: 130, flexShrink: 0, position: 'relative' }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -471,7 +471,7 @@ function UtilizationOverviewRing({ summary }: { summary: TeamLeadSummaryDto }) {
   ];
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+    <div className="nf-r-donut-row" style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
       <div style={{ width: 130, height: 130, flexShrink: 0, position: 'relative' }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -537,6 +537,11 @@ function QuickActionTile({ icon: Icon, accent, title, subtitle, onClick, disable
 
 const ROSTER_COLLAPSED_COUNT = 6;
 const BLOCKERS_COLLAPSED_COUNT = 2;
+
+// Roster table — header row and body rows must share one template or the
+// columns desync. Min width stays under the desktop content width.
+const ROSTER_TABLE_COLUMNS = '1.8fr 1.4fr 110px';
+const ROSTER_TABLE_MIN_WIDTH = 520;
 
 function agoLabel(ms: number): string {
   const mins = Math.max(0, Math.round(ms / 60_000));
@@ -662,7 +667,7 @@ export default function TeamDashboard() {
           <Skel h={24} w={220} />
           <div style={{ marginTop: 8 }}><Skel h={14} w={280} /></div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 16 }}>
+        <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
           {[0, 1, 2, 3, 4].map(i => (
             <Card key={i} style={{ padding: '1rem' }}>
               <Skel h={30} w={30} />
@@ -752,7 +757,7 @@ export default function TeamDashboard() {
             {pickerOpen && (
               <>
                 <div onClick={() => setPickerOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-                <div style={{
+                <div className="nf-r-popover" style={{
                   position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 260,
                   background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
                   boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
@@ -830,7 +835,7 @@ export default function TeamDashboard() {
       </div>
 
       {/* KPI row — 5 cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 16 }}>
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
         <KpiCard
           icon={Gauge} accent="var(--warn)" label="Team Utilization" value={avgUtilLabel}
           deltaIcon={utilDelta !== null && utilDelta < 0 ? ArrowDown : ArrowUp}
@@ -871,7 +876,7 @@ export default function TeamDashboard() {
       </div>
 
       {/* Mid section: Team Status table + right stack */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 16, marginBottom: 16, alignItems: 'start' }}>
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 16, marginBottom: 16, alignItems: 'start' }}>
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Team Status</div>
@@ -882,7 +887,11 @@ export default function TeamDashboard() {
               View Utilization <ChevronRight size={12} aria-hidden="true" />
             </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1.4fr 110px', gap: 12, padding: '8px 20px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          {/* Header and rows share one scroll region so columns stay aligned
+              while swiping; the "view all" footer sits outside it. */}
+          <div className="nf-r-scroll">
+          <div className="nf-r-scroll-inner" style={{ '--nf-r-min': ROSTER_TABLE_MIN_WIDTH + 'px' } as React.CSSProperties}>
+          <div style={{ display: 'grid', gridTemplateColumns: ROSTER_TABLE_COLUMNS, gap: 12, padding: '8px 20px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             <span>Employees</span>
             <span>Project</span>
             <span style={{ textAlign: 'right' }}>Status</span>
@@ -901,6 +910,8 @@ export default function TeamDashboard() {
               />
             ))
           )}
+          </div>
+          </div>
           {sortedMembers.length > ROSTER_COLLAPSED_COUNT && (
             <div style={{ padding: '12px 20px', textAlign: 'center', borderTop: '1px solid var(--line)' }}>
               <button
@@ -967,7 +978,7 @@ export default function TeamDashboard() {
       </div>
 
       {/* Bottom row: 3 panels */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
         <Card style={{ padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>Status Distribution</div>
@@ -991,7 +1002,7 @@ export default function TeamDashboard() {
 
         <Card style={{ padding: 20 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)', marginBottom: 14 }}>Quick Actions</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <QuickActionTile
               icon={ClipboardList} accent="var(--brand)" title="Review Approvals"
               subtitle={`${summary.pendingApprovalCount} pending`}

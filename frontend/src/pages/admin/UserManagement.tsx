@@ -87,7 +87,11 @@ const overlayStyle: React.CSSProperties = {
 };
 const modalStyle: React.CSSProperties = {
   background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12,
-  width: '94vw', maxWidth: 560, maxHeight: '92vh', overflowY: 'auto',
+  // dvh, not vh: on iOS Safari `vh` is measured against the *largest* viewport
+  // (toolbars retracted), so 92vh is taller than what's actually on screen while
+  // the toolbars are showing, and the bottom of the dialog — including its
+  // action buttons — is clipped off. dvh tracks the live viewport.
+  width: '94vw', maxWidth: 560, maxHeight: '92dvh', overflowY: 'auto',
   boxShadow: '0 24px 64px rgba(0,0,0,.55)',
 };
 
@@ -471,7 +475,7 @@ function AddModal({
     <div style={overlayStyle}>
       <div style={{ ...modalStyle, maxWidth: 580 }}>
         <ModalHeader title="Add User" onClose={onClose} />
-        <form onSubmit={handleSubmit} style={{ padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <form onSubmit={handleSubmit} className="nf-r-stack-sm" style={{ padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           {errors._general && (
             <div style={{ gridColumn: '1/-1' }}>
               <ErrorBanner message={errors._general} />
@@ -782,7 +786,7 @@ function EditModal({
   return (
     <Modal open={open} title={user ? `Edit — ${user.fullName}` : 'Edit User'} onClose={onClose} width={580}>
       {user && (
-        <form onSubmit={handleSave} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <form onSubmit={handleSave} className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           {error && <div style={{ gridColumn: '1/-1' }}><ErrorBanner message={error} /></div>}
 
           {/* Full Name — full width */}
@@ -1358,8 +1362,14 @@ function ColumnFilterHeader({
         <div
           ref={panelRef}
           style={{
-            position: 'fixed', top: coords.top, left: coords.left, zIndex: 2000,
-            minWidth: 170, maxHeight: 260, overflowY: 'auto', overscrollBehavior: 'contain',
+            // Clamped against the viewport: coords come straight from
+            // getBoundingClientRect(), so a trigger near the right edge of a
+            // narrow screen would otherwise place the panel partly offscreen.
+            position: 'fixed', top: coords.top,
+            left: Math.min(coords.left, Math.max(8, window.innerWidth - 178)),
+            zIndex: 2000,
+            minWidth: 170, maxWidth: 'calc(100vw - 16px)',
+            maxHeight: 260, overflowY: 'auto', overscrollBehavior: 'contain',
             background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 7,
             boxShadow: '0 8px 24px rgba(0,0,0,.35)',
             textTransform: 'none', letterSpacing: 'normal', fontWeight: 400,

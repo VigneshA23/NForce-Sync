@@ -55,6 +55,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <div
         aria-live="polite"
         aria-atomic="false"
+        className="nf-r-toasts"
         style={{
           position: 'fixed',
           top: '1rem',
