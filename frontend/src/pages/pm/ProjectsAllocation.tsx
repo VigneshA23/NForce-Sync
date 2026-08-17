@@ -648,6 +648,7 @@ function ProjectModal({ open, onClose, editing }: {
             />
             <FieldError msg={errorFor('startDate')} />
           </div>
+          <div>
             {/* Optional in general, but mandatory once the status is Completed. */}
             <label style={labelStyle}>
               End Date{endDateRequired
@@ -670,6 +671,7 @@ function ProjectModal({ open, onClose, editing }: {
               </p>
             )}
           </div>
+        </div>
         </form>
         {dateFormatInvalid && (
           <div style={{

@@ -112,7 +112,7 @@ export function StrictDateInput({
         aria-invalid={invalid}
         disabled={disabled}
         autoFocus={autoFocus}
-        style={{ ...BASE_STYLE, cursor: disabled ? 'not-allowed' : 'text', width: 110, paddingRight: 26, ...style }}
+        style={{ ...BASE_STYLE, cursor: disabled ? 'not-allowed' : 'text', width: 128, paddingRight: 26, ...style }}
       />
       <div style={{
         position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',

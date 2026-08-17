@@ -345,7 +345,7 @@ function CategoryPanel() {
             onChange={v => setStatusFilter(v as CategoryStatusFilter)}
             ariaLabel="Filter existing categories by status"
             options={[
-              { value: 'ALL', label: 'All' },
+              { value: 'ALL', label: 'Filter by status' },
               { value: 'ACTIVE', label: 'Active' },
               { value: 'INACTIVE', label: 'Inactive' },
             ]}
