@@ -125,7 +125,7 @@ public class AuthController {
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
 
         if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
-            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("error", "Current password is incorrect"));
         }
 
