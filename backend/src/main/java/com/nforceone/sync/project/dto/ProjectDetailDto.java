@@ -12,6 +12,8 @@ public record ProjectDetailDto(
         String name,
         String client,
         String status,
+        Long pmId,
+        String pmName,
         LocalDate startDate,
         LocalDate endDate,
         List<EmployeeRefDto> employees
@@ -23,6 +25,8 @@ public record ProjectDetailDto(
                 p.getName(),
                 p.getClient(),
                 p.getStatus().name(),
+                p.getPm() != null ? p.getPm().getId() : null,
+                p.getPm() != null ? p.getPm().getFullName() : null,
                 p.getStartDate(),
                 p.getEndDate(),
                 employees);

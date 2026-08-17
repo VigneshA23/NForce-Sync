@@ -30,6 +30,23 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
                                         @Param("role") AppUser.Role role);
 
     /**
+     * Currently active headcount for the Team Lead "My Projects" list — distinct employees (not
+     * raw allocation rows) whose EMPLOYEE-role allocation on the project is active as of {@code
+     * onDate}. Unlike {@link #countByProjectIdAndEmployeeRole} (used by the Employee/PM project
+     * lists, left as-is), this is date-scoped and DISTINCTs by employee, so a re-assigned
+     * employee (two Allocation rows on the same project) is not double-counted and a since-ended
+     * allocation is not stale-counted — keeping "Team Size" consistent with the Project Details
+     * popup's "Assigned Employees" list, which applies this same active-date scoping.
+     */
+    @Query("SELECT COUNT(DISTINCT a.employee.id) FROM Allocation a " +
+           "WHERE a.project.id = :projectId AND a.employee.role = :role " +
+           "AND a.effectiveFrom <= :onDate " +
+           "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :onDate)")
+    long countActiveDistinctByProjectIdAndEmployeeRole(@Param("projectId") Long projectId,
+                                                        @Param("role") AppUser.Role role,
+                                                        @Param("onDate") LocalDate onDate);
+
+    /**
      * Existing allocations of the same employee to the same project whose window overlaps
      * [newFrom, newTo]. Both windows are inclusive at both ends, so windows that merely touch —
      * one ends 31-07, the next starts 01-08 — do NOT overlap, which is what makes a genuine

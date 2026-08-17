@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { RefreshCw, AlertTriangle, Search, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { RefreshCw, AlertTriangle, Search, X } from 'lucide-react';
 import type { ProjectFullDto } from '../../api/projects';
 
 // ── Shared "My Projects" building blocks ─────────────────────────────────────────
@@ -134,12 +134,16 @@ export function SearchBox({ value, onChange, placeholder, ariaLabel }: {
 }
 
 // ── Status filter select (toolbar, alongside search) ────────────────────────────
-
-export function StatusFilterSelect({ value, onChange, options, ariaLabel }: {
+// Deliberately a plain native <select>, styled and worded to match the "Filter by Status"
+// dropdown on the PM's Projects & Allocation → Projects tab (pages/pm/ProjectsAllocation.tsx):
+// no separate "Status" label beside it, a placeholder option standing in for "no filter", and
+// the same inputStyle (border/radius/background/padding) so it reads as the same control.
+export function StatusFilterSelect({ value, onChange, options, ariaLabel, placeholder = 'Filter by Status' }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   ariaLabel: string;
+  placeholder?: string;
 }) {
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -241,10 +245,10 @@ export function ProjectsPanel({
    * the Employee "My Projects" page unchanged. */
   boldNameLink = false,
   compactToolbar = false,
-  // Team Lead-only: render the status filter as a single dropdown button that shows "Status"
-  // (or the selected option) inside itself, instead of a separate "Status" label beside a
-  // native <select>. Defaults keep the Employee "My Projects" page unchanged.
-  statusAsDropdown = false,
+  // Employee-only: swap the last column from allocated headcount ("Team Size") to the
+  // project's Team Lead name ("Team Lead"). Defaults keep the Team Lead "My Projects" page
+  // unchanged.
+  teamColumn = 'size',
 }: {
   projects: ProjectFullDto[];
   isPending: boolean;
@@ -256,7 +260,7 @@ export function ProjectsPanel({
   onOpenDetails: (id: number) => void;
   boldNameLink?: boolean;
   compactToolbar?: boolean;
-  statusAsDropdown?: boolean;
+  teamColumn?: 'size' | 'lead';
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>('ALL');
@@ -314,22 +318,17 @@ export function ProjectsPanel({
               ariaLabel="Search assigned projects by name, client, or code"
             />
           </div>
-          {(() => {
-            const StatusControl = statusAsDropdown ? StatusFilterDropdown : StatusFilterSelect;
-            return (
-              <StatusControl
-                value={statusFilter}
-                onChange={v => setStatusFilter(v as ProjectStatusFilter)}
-                ariaLabel="Filter assigned projects by status"
-                options={[
-                  { value: 'ALL', label: 'All' },
-                  { value: 'ACTIVE', label: 'Active' },
-                  { value: 'INACTIVE', label: 'Inactive' },
-                  { value: 'ON_HOLD', label: 'On Hold' },
-                ]}
-              />
-            );
-          })()}
+          <StatusFilterSelect
+            value={statusFilter}
+            onChange={v => setStatusFilter(v as ProjectStatusFilter)}
+            ariaLabel="Filter assigned projects by status"
+            options={[
+              { value: 'ALL', label: 'All' },
+              { value: 'ACTIVE', label: 'Active' },
+              { value: 'INACTIVE', label: 'Inactive' },
+              { value: 'ON_HOLD', label: 'On Hold' },
+            ]}
+          />
         </div>
       )}
 
@@ -365,7 +364,7 @@ export function ProjectsPanel({
               <th style={thStyle}>Status</th>
               <th style={thStyle}>Start Date</th>
               <th style={thStyle}>End Date</th>
-              <th style={thStyle}>Team Size</th>
+              <th style={thStyle}>{teamColumn === 'lead' ? 'Team Lead' : 'Team Size'}</th>
             </tr>
           </thead>
           <tbody>
@@ -420,7 +419,9 @@ export function ProjectsPanel({
                   <td style={tdStyle}><StatusBadge status={p.status} /></td>
                   <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{fmtDateDMY(p.startDate)}</td>
                   <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{p.endDate ? fmtDateDMY(p.endDate) : 'Ongoing'}</td>
-                  <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{p.allocatedHeadcount}</td>
+                  <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>
+                    {teamColumn === 'lead' ? (p.pmName ?? 'Not Assigned') : p.allocatedHeadcount}
+                  </td>
                 </tr>
               ))
             )}

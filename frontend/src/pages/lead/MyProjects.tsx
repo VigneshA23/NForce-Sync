@@ -11,7 +11,7 @@ import {
 import type { ProjectCategoryDto } from '../../api/teamLeadProjects';
 import {
   inputStyle, labelStyle, thStyle, tdStyle, detailLabelStyle, detailValueStyle,
-  StatusBadge, ErrorBanner, fmtDateDMY, SearchBox, StatusFilterDropdown, ProjectsPanel,
+  StatusBadge, ErrorBanner, fmtDateDMY, SearchBox, StatusFilterSelect, ProjectsPanel,
 } from '../../components/projects/MyProjectsShared';
 
 type CategoryStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
@@ -340,7 +340,7 @@ function CategoryPanel() {
               ariaLabel="Search existing categories by name or description"
             />
           </div>
-          <StatusFilterDropdown
+          <StatusFilterSelect
             value={statusFilter}
             onChange={v => setStatusFilter(v as CategoryStatusFilter)}
             ariaLabel="Filter existing categories by status"
@@ -614,7 +614,6 @@ export default function MyProjects() {
           onOpenDetails={setDetailsProjectId}
           boldNameLink
           compactToolbar
-          statusAsDropdown
         />
       )}
 

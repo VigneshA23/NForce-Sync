@@ -31,9 +31,9 @@ import java.util.List;
 /**
  * Backs the Team Lead "My Projects" module.
  *
- * <p>Projects: a project counts as the Team Lead's own when the Team Lead themselves — not
- * their team members — currently holds an allocation on it (see
- * {@link ProjectRepository#findAllocatedToTeamLeadOnDate}).
+ * <p>Projects: a project counts as the Team Lead's own when the Team Lead is that project's
+ * assigned Team Lead — {@code Project.pm} — not when the Team Lead merely holds a personal
+ * Allocation row on it (see {@link ProjectRepository#findByPmIdOrderByNameAsc}).
  *
  * <p>Categories: global, generic master data — every Team Lead sees and can add to the same
  * application-wide list (see V60), independent of project, team, or who created each row.
@@ -71,21 +71,26 @@ public class TeamLeadProjectService {
     }
 
     public List<ProjectFullDto> listMyProjects(String actingEmail, LocalDate onDate) {
-        AppUser actor = resolveActor(actingEmail);
-        return projectRepository.findAllocatedToTeamLeadOnDate(actor.getId(), onDate)
-                .stream()
-                .map(p -> ProjectFullDto.from(p, activeAssignedEmployees(p.getId(), onDate).size()))
-                .toList();
-    }
+    AppUser actor = resolveActor(actingEmail);
+    return projectRepository.findByPmIdOrderByNameAsc(actor.getId())
+            .stream()
+            .map(p -> ProjectFullDto.from(p, activeAssignedEmployees(p.getId(), onDate).size()))
+            .toList();
+}
 
     /**
      * Project details plus its currently assigned employees, for the project details popup.
      * Re-derives the Team Lead's own project list (via {@link #requireProjectAssignedToTeamLead})
      * so a Team Lead cannot view another Team Lead's project by supplying an arbitrary id.
+     *
+     * <p>The employee roster excludes the project's own Team Lead: {@code
+     * findByProjectIdWithRefs} returns every Allocation row on the project, which can include the
+     * Team Lead's own personal allocation — that person is already shown separately as "Team
+     * Lead" and must not also appear in "Assigned Employees".
      */
     public ProjectDetailDto getProjectDetail(String actingEmail, Long projectId, LocalDate onDate) {
         AppUser actor = resolveActor(actingEmail);
-        Project project = requireProjectAssignedToTeamLead(projectId, actor.getId(), onDate);
+        Project project = requireProjectAssignedToTeamLead(projectId, actor.getId());
 
         return ProjectDetailDto.from(project, activeAssignedEmployees(projectId, onDate));
     }
@@ -99,6 +104,7 @@ public class TeamLeadProjectService {
         return allocationRepository.findByProjectIdWithRefs(projectId)
                 .stream()
                 .filter(a -> isActiveOn(a, onDate))
+                .filter(a -> project.getPm() == null || !a.getEmployee().getId().equals(project.getPm().getId()))
                 .map(a -> EmployeeRefDto.from(a.getEmployee()))
                 .distinct()
                 .toList();
@@ -120,13 +126,13 @@ public class TeamLeadProjectService {
     }
 
     @Transactional
-    public ProjectCategoryDto createCategory(CreateProjectCategoryRequest req, String actingEmail, LocalDate onDate) {
+    public ProjectCategoryDto createCategory(CreateProjectCategoryRequest req, String actingEmail) {
         AppUser actor = resolveActor(actingEmail);
 
         // Associated Project is optional — a category does not require one. When given, it must
         // be one of this Team Lead's own projects; this is the authorization check.
         Project project = req.projectId() != null
-                ? requireProjectAssignedToTeamLead(req.projectId(), actor.getId(), onDate)
+                ? requireProjectAssignedToTeamLead(req.projectId(), actor.getId())
                 : null;
 
         String name = req.name().trim();
@@ -278,12 +284,13 @@ public class TeamLeadProjectService {
     }
 
     /**
-     * Re-derives the Team Lead's own project list rather than trusting the caller's projectId —
-     * this is the authorization boundary: a project not in that list is not one this Team Lead
-     * is personally assigned to, and either way they may not read or write its categories.
+     * Re-derives the Team Lead's own project list (by {@code Project.pm}, not by the caller's
+     * say-so) — this is the authorization boundary: a project not in that list is not one this
+     * Team Lead is the assigned Team Lead of, and either way they may not read or write its
+     * details/categories.
      */
-    private Project requireProjectAssignedToTeamLead(Long projectId, Long teamLeadId, LocalDate onDate) {
-        return projectRepository.findAllocatedToTeamLeadOnDate(teamLeadId, onDate)
+    private Project requireProjectAssignedToTeamLead(Long projectId, Long teamLeadId) {
+        return projectRepository.findByPmIdOrderByNameAsc(teamLeadId)
                 .stream()
                 .filter(p -> p.getId().equals(projectId))
                 .findFirst()
