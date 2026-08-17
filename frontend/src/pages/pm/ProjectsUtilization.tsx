@@ -311,7 +311,7 @@ function StatusPill({ pct }: { pct: number }) {
 
 function ContributorCell({ name, hours }: { name: string; hours: number }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, minWidth: 0 }}>
       <span style={{
         width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700,
@@ -357,11 +357,11 @@ function ProjectTable({ rows }: { rows: ProjectTableRow[] }) {
           textTransform: 'uppercase', letterSpacing: '0.06em',
         }}>
           <span>Project</span>
-          <span style={{ textAlign: 'right' }}>Util %</span>
-          <span style={{ textAlign: 'right' }}>Approved</span>
-          <span style={{ textAlign: 'right' }}>Billable %</span>
-          <span style={{ textAlign: 'right' }}>Employees</span>
-          <span>Top Contributor</span>
+          <span style={{ textAlign: 'center' }}>Util %</span>
+          <span style={{ textAlign: 'center' }}>Approved</span>
+          <span style={{ textAlign: 'center' }}>Billable %</span>
+          <span style={{ textAlign: 'center' }}>Employees</span>
+          <span style={{ textAlign: 'center' }}>Top Contributor</span>
           <span style={{ textAlign: 'center' }}>Status</span>
         </div>
 
@@ -375,21 +375,21 @@ function ProjectTable({ rows }: { rows: ProjectTableRow[] }) {
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {row.projectName}
             </span>
-            <span style={{ fontSize: 12, textAlign: 'right', color: utilColor(row.utilizationPct), fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, textAlign: 'center', color: utilColor(row.utilizationPct), fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
               {fmtPct(row.utilizationPct)}
             </span>
-            <span style={{ fontSize: 12, textAlign: 'right', color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, textAlign: 'center', color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
               {row.actualHours.toFixed(0)}h
             </span>
-            <span style={{ fontSize: 12, textAlign: 'right', color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, textAlign: 'center', color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
               {fmtPct(row.billablePct)}
             </span>
-            <span style={{ fontSize: 12, textAlign: 'right', color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, textAlign: 'center', color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
               {row.employees}
             </span>
             {row.topContributor
               ? <ContributorCell name={row.topContributor.name} hours={row.topContributor.hours} />
-              : <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>—</span>}
+              : <span style={{ fontSize: 11, color: 'var(--txt-dim)', textAlign: 'center' }}>—</span>}
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <StatusPill pct={row.utilizationPct} />
             </div>
@@ -507,11 +507,17 @@ function topContributors(resourceRows: ResourceUtilizationRowDto[]): Contributor
     if (existing) existing.hours += r.productiveHours;
     else map.set(r.employeeId, { employeeId: r.employeeId, employeeName: r.employeeName, hours: r.productiveHours });
   });
-  return [...map.values()].sort((a, b) => b.hours - a.hours).slice(0, 8);
+  return [...map.values()].sort((a, b) => b.hours - a.hours);
 }
 
+const CONTRIBUTOR_PAGE_SIZE = 8;
+
 function TopContributorsPanel({ resourceRows }: { resourceRows: ResourceUtilizationRowDto[] }) {
+  const [page, setPage] = useState(0);
   const contributors = topContributors(resourceRows);
+  const total = contributors.length;
+  const pages = Math.ceil(total / CONTRIBUTOR_PAGE_SIZE);
+  const slice = contributors.slice(page * CONTRIBUTOR_PAGE_SIZE, (page + 1) * CONTRIBUTOR_PAGE_SIZE);
   const totalHours = contributors.reduce((s, c) => s + c.hours, 0);
   const maxHours = Math.max(1, ...contributors.map(c => c.hours));
 
@@ -520,13 +526,14 @@ function TopContributorsPanel({ resourceRows }: { resourceRows: ResourceUtilizat
       <SectionLabel><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Award size={12} />Top Contributors</span></SectionLabel>
       {contributors.length === 0 ? <EmptyMsg>No approved hours in this range</EmptyMsg> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {contributors.map((c, i) => {
+          {slice.map((c, i) => {
+            const rank = page * CONTRIBUTOR_PAGE_SIZE + i;
             const pctOfTotal = totalHours > 0 ? (c.hours / totalHours) * 100 : 0;
             return (
               <div key={c.employeeId}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                    <span style={{ fontSize: 10, color: 'var(--txt-dim)', width: 14, flexShrink: 0 }}>{i + 1}</span>
+                    <span style={{ fontSize: 10, color: 'var(--txt-dim)', width: 14, flexShrink: 0 }}>{rank + 1}</span>
                     <span style={{
                       width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 700,
@@ -543,11 +550,30 @@ function TopContributorsPanel({ resourceRows }: { resourceRows: ResourceUtilizat
                   </span>
                 </div>
                 <div style={{ height: 6, background: 'var(--raised2)', borderRadius: 3, overflow: 'hidden', marginLeft: 22 }}>
-                  <div style={{ width: `${(c.hours / maxHours) * 100}%`, height: '100%', background: 'var(--brand)', borderRadius: 3, transition: 'width 0.4s ease' }} />
+                  <div style={{ width: `${(c.hours / maxHours) * 100}%`, height: '100%', background: 'var(--info)', borderRadius: 3, transition: 'width 0.4s ease' }} />
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+      {pages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, fontSize: 11, color: 'var(--txt-dim)' }}>
+          <span>
+            Showing {page * CONTRIBUTOR_PAGE_SIZE + 1} to {Math.min((page + 1) * CONTRIBUTOR_PAGE_SIZE, total)} of {total} contributors
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {page > 0 && (
+              <button onClick={() => setPage(p => p - 1)} style={{ padding: '4px 10px', borderRadius: 5, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', fontSize: 11, cursor: 'pointer' }}>
+                ← Prev
+              </button>
+            )}
+            {page < pages - 1 && (
+              <button onClick={() => setPage(p => p + 1)} style={{ padding: '4px 10px', borderRadius: 5, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', fontSize: 11, cursor: 'pointer' }}>
+                Next →
+              </button>
+            )}
+          </div>
         </div>
       )}
     </Card>
@@ -605,11 +631,7 @@ function buildInsights(cards: DashboardSummaryCardsDto, projectRows: ProjectUtil
 function InsightsPanel({ insights }: { insights: Insight[] }) {
   return (
     <Card>
-      <SectionLabel action={
-        <button disabled style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', fontSize: 10.5, fontWeight: 600, cursor: 'not-allowed', padding: 0, textTransform: 'none', letterSpacing: 0 }}>
-          View All Insights →
-        </button>
-      }>
+      <SectionLabel>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Lightbulb size={12} />Insights</span>
       </SectionLabel>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -645,11 +667,7 @@ function AlertsPanel({ projectRows, resourceRows }: { projectRows: ProjectUtiliz
 
   return (
     <Card>
-      <SectionLabel action={
-        <button disabled style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', fontSize: 10.5, fontWeight: 600, cursor: 'not-allowed', padding: 0, textTransform: 'none', letterSpacing: 0 }}>
-          View All Alerts →
-        </button>
-      }>
+      <SectionLabel>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={12} />Utilization Alerts</span>
       </SectionLabel>
       {alerts.length === 0 ? <EmptyMsg>No active alerts for this period</EmptyMsg> : (
@@ -709,33 +727,140 @@ function CategoryTable({ rows }: { rows: { category: string; hours: number; pctO
   }
   return (
     <div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 8 }}>
+        {slice.map((row, i) => (
+          <div key={row.category} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{
+              fontSize: 10, color: 'var(--txt-dim)', width: 14, flexShrink: 0,
+              fontFamily: '"JetBrains Mono", monospace',
+            }}>
+              {page * CATEGORY_PAGE_SIZE + i + 1}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>{row.category}</span>
+                <span style={{ fontSize: 11.5, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-mut)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                  {row.hours.toFixed(1)}h
+                  <span style={{ color: 'var(--txt-dim)', marginLeft: 4 }}>({Math.round(row.pctOfTotal)}%)</span>
+                </span>
+              </div>
+              <div style={{ height: 6, background: 'var(--raised2)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.min(100, row.pctOfTotal)}%`, height: '100%', background: 'var(--accent2)', borderRadius: 3, transition: 'width 0.4s ease' }} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6, marginLeft: 24, borderTop: '1px solid var(--line)', fontSize: 9.5, color: 'var(--txt-dim)' }}>
+        {[0, 25, 50, 75, 100].map(v => <span key={v}>{v}%</span>)}
+      </div>
       {pages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
           <span style={{ fontSize: 10.5, color: 'var(--txt-dim)' }}>Page {page + 1} of {pages}</span>
           <PageArrowButton direction="left" disabled={page === 0} onClick={() => setPage(p => p - 1)} />
           <PageArrowButton direction="right" disabled={page === pages - 1} onClick={() => setPage(p => p + 1)} />
         </div>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 6 }}>
-        {slice.map(row => (
-          <div key={row.category}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: 12, color: 'var(--txt-mut)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{row.category}</span>
-              <span style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-                {row.hours.toFixed(1)}h
-                <span style={{ color: 'var(--txt-dim)', marginLeft: 4 }}>({Math.round(row.pctOfTotal)}%)</span>
-              </span>
-            </div>
-            <div style={{ height: 5, background: 'var(--raised2)', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ width: `${Math.min(100, row.pctOfTotal)}%`, height: '100%', background: 'var(--brand)', borderRadius: 3, transition: 'width 0.4s ease' }} />
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 4, borderTop: '1px solid var(--line)', fontSize: 9.5, color: 'var(--txt-dim)' }}>
-        {[0, 25, 50, 75, 100].map(v => <span key={v}>{v}%</span>)}
-      </div>
     </div>
+  );
+}
+
+// ── category breakdown stat tile ──────────────────────────────────────────────
+
+function CategoryStatTile({ label, value, sub, accent = 'var(--txt)' }: { label: string; value: string; sub: string; accent?: string }) {
+  return (
+    <div style={{
+      padding: '10px 12px', borderRadius: 8, minWidth: 0,
+      background: 'var(--raised2)', border: '1px solid var(--line2)',
+    }}>
+      <div style={{ fontSize: 10.5, color: 'var(--txt-mut)', fontWeight: 500, marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {label}
+      </div>
+      <div style={{
+        fontFamily: '"Space Grotesk", sans-serif', fontSize: 19, fontWeight: 700,
+        color: accent, letterSpacing: '-0.01em', lineHeight: 1.15,
+        fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--txt-dim)', marginTop: 3, whiteSpace: 'nowrap' }}>{sub}</div>
+    </div>
+  );
+}
+
+const CATEGORY_DONUT_COLORS = ['var(--cat-1)', 'var(--cat-2)', 'var(--cat-3)', 'var(--cat-4)', 'var(--cat-5)'];
+
+// ── category breakdown panel (stat tiles + bars + donut) ──────────────────────
+
+function CategoryBreakdownPanel({ rows, resourceRows, cards }: {
+  rows: { category: string; hours: number; pctOfTotal: number }[];
+  resourceRows: ResourceUtilizationRowDto[];
+  cards: DashboardSummaryCardsDto;
+}) {
+  const totalAvailableHours = useMemo(() => {
+    const byEmployee = new Map<number, number>();
+    resourceRows.forEach(r => {
+      if (!byEmployee.has(r.employeeId)) byEmployee.set(r.employeeId, r.availableHours);
+    });
+    return [...byEmployee.values()].reduce((sum, h) => sum + h, 0);
+  }, [resourceRows]);
+
+  const totalApprovedHours = rows.reduce((sum, r) => sum + r.hours, 0);
+  const under60Count = resourceRows.filter(r => utilState(r.utilizationPct) === 'under').length;
+  const approvedOfAvailablePct = totalAvailableHours > 0 ? (totalApprovedHours / totalAvailableHours) * 100 : 0;
+
+  // Donut caps identity slices at 5 — a 6th+ category folds into "Other" rather than
+  // generating a new hue, so adjacent-slice color separation stays validated.
+  const topCategories = rows.slice(0, 5);
+  const otherHours = rows.slice(5).reduce((sum, r) => sum + r.hours, 0);
+  const donutSegments = [
+    ...topCategories.map((r, i) => ({ label: r.category, value: r.hours, color: CATEGORY_DONUT_COLORS[i] })),
+    ...(otherHours > 0 ? [{ label: 'Other', value: otherHours, color: 'var(--txt-dim)' }] : []),
+  ];
+  const donutTotal = donutSegments.reduce((sum, s) => sum + s.value, 0);
+
+  if (rows.length === 0) {
+    return (
+      <Card style={{ marginBottom: 16 }}>
+        <SectionLabel>Utilization by Category</SectionLabel>
+        <EmptyMsg>No category data</EmptyMsg>
+      </Card>
+    );
+  }
+
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <SectionLabel action={
+        <button disabled style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', fontSize: 10.5, fontWeight: 600, cursor: 'not-allowed', padding: 0, textTransform: 'none', letterSpacing: 0 }}>
+          View Details
+        </button>
+      }>
+        Utilization by Category
+      </SectionLabel>
+
+      <div className="pm-util-cat-row" style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr', gap: 24, alignItems: 'start' }}>
+        <CategoryTable rows={rows} />
+
+        <div className="pm-util-cat-stats" style={{
+          display: 'grid', gridTemplateColumns: 'repeat(2, minmax(120px, 1fr))', gap: 10,
+        }}>
+          <CategoryStatTile label="Total Available Hours" value={`${totalAvailableHours.toFixed(1)}h`} sub="100%" />
+          <CategoryStatTile label="Total Approved Hours" value={`${totalApprovedHours.toFixed(1)}h`} sub={`${Math.round(approvedOfAvailablePct)}% of available`} />
+          <CategoryStatTile label="Overall Utilization" value={fmtPct(cards.overallUtilizationPct)} sub="Project average" accent="var(--ok)" />
+          <CategoryStatTile label={`Under ${RULES.util.under}% (Employees)`} value={String(under60Count)} sub="Need attention" accent="var(--warn)" />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <SegmentDonut segments={donutSegments} centerValue={`${donutTotal.toFixed(1)}h`} size={130} />
+          <DonutLegend items={donutSegments.map(s => ({
+            label: s.label,
+            valueLabel: `${s.value.toFixed(1)}h`,
+            pct: donutTotal > 0 ? (s.value / donutTotal) * 100 : 0,
+            color: s.color,
+          }))} />
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -1142,10 +1267,7 @@ export default function ProjectsUtilization() {
 
       {/* Category breakdown */}
       {taskCategoryBreakdown.length > 0 && (
-        <Card style={{ marginBottom: 16 }}>
-          <SectionLabel>Utilization by Category</SectionLabel>
-          <CategoryTable rows={taskCategoryBreakdown} />
-        </Card>
+        <CategoryBreakdownPanel rows={taskCategoryBreakdown} resourceRows={resourceUtilization} cards={cards} />
       )}
 
       {/* Formula */}
@@ -1169,6 +1291,7 @@ export default function ProjectsUtilization() {
         @media (max-width: 900px) {
           .pm-util-trend-row { grid-template-columns: 1fr !important; }
           .pm-util-table-row { grid-template-columns: 1fr !important; }
+          .pm-util-cat-row { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 560px) {
           .pm-util-kpis { grid-template-columns: repeat(2, 1fr) !important; }
