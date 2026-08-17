@@ -74,8 +74,7 @@ public class TeamLeadProjectService {
         AppUser actor = resolveActor(actingEmail);
         return projectRepository.findAllocatedToTeamLeadOnDate(actor.getId(), onDate)
                 .stream()
-                .map(p -> ProjectFullDto.from(p,
-                        (int) allocationRepository.countByProjectIdAndEmployeeRole(p.getId(), AppUser.Role.EMPLOYEE)))
+                .map(p -> ProjectFullDto.from(p, activeAssignedEmployees(p.getId(), onDate).size()))
                 .toList();
     }
 
@@ -88,14 +87,21 @@ public class TeamLeadProjectService {
         AppUser actor = resolveActor(actingEmail);
         Project project = requireProjectAssignedToTeamLead(projectId, actor.getId(), onDate);
 
-        List<EmployeeRefDto> employees = allocationRepository.findByProjectIdWithRefs(projectId)
+        return ProjectDetailDto.from(project, activeAssignedEmployees(projectId, onDate));
+    }
+
+    /**
+     * Everyone (any role) with an allocation on this project whose effective window covers
+     * {@code onDate}, deduplicated. Backs both the "Team Size" column on the My Projects list
+     * and the "Assigned Employees" list in the project details popup, so the two always agree.
+     */
+    private List<EmployeeRefDto> activeAssignedEmployees(Long projectId, LocalDate onDate) {
+        return allocationRepository.findByProjectIdWithRefs(projectId)
                 .stream()
                 .filter(a -> isActiveOn(a, onDate))
                 .map(a -> EmployeeRefDto.from(a.getEmployee()))
                 .distinct()
                 .toList();
-
-        return ProjectDetailDto.from(project, employees);
     }
 
     private boolean isActiveOn(Allocation a, LocalDate onDate) {

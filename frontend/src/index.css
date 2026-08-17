@@ -36,6 +36,17 @@
   --warn:        #E0A93B;
   --risk:        #E4373D;
   --info:        #4C8DD6;
+  --accent2:     #14B8A6;
+
+  /* Categorical set for identity charts (e.g. category-breakdown donut) — kept distinct
+     from --ok/--warn/--risk so a slice color never impersonates a status. Order is the
+     CVD-safety mechanism (validated adjacent, dark surface #16181D): do not reorder
+     without re-running the palette validator. */
+  --cat-1:       #3987E5;
+  --cat-2:       #199E70;
+  --cat-3:       #D95926;
+  --cat-4:       #9085E9;
+  --cat-5:       #D55181;
 
   /* High-contrast clickable-text variant (e.g. Team Lead assigned-project links) */
   --link-strong: #FFFFFF;
@@ -83,6 +94,15 @@
   --warn:        #896010;
   --risk:        #C81A1F;
   --info:        #1A5FAA;
+  --accent2:     #0F766E;
+
+  /* Categorical set for identity charts — see dark block for rationale. Validated
+     adjacent on white surface. */
+  --cat-1:       #2A78D6;
+  --cat-2:       #1BAF7A;
+  --cat-3:       #EB6834;
+  --cat-4:       #4A3AA7;
+  --cat-5:       #E87BA4;
 
   /* High-contrast clickable-text variant (e.g. Team Lead assigned-project links) */
   --link-strong: #000000;
