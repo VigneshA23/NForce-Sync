@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion';
-import { Users, ClipboardList, ShieldCheck } from 'lucide-react';
+import { ClipboardCheck, ScrollText, CalendarOff } from 'lucide-react';
 import { BrandMark } from '../../components/BrandMark';
 
 interface StreakDef {
@@ -81,10 +81,10 @@ function SpeedStreaks() {
   );
 }
 
-const STATS = [
-  { Icon: Users,         value: '8',    label: 'Role levels' },
-  { Icon: ClipboardList, value: 'EOD',  label: 'Daily cycle' },
-  { Icon: ShieldCheck,   value: '100%', label: 'Audit coverage' },
+const CAPABILITIES = [
+  { Icon: ClipboardCheck, label: 'Role-based approvals' },
+  { Icon: ScrollText,     label: 'Full audit trail' },
+  { Icon: CalendarOff,    label: 'Weekend-aware utilization' },
 ] as const;
 
 interface AuthLayoutProps {
@@ -185,53 +185,42 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
           </div>
         )}
 
-        {/* Stats row */}
+        {/* Capability tags */}
         {showStats ? (
           <div
             style={{
               position: 'relative',
               display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              rowGap: 10,
               borderTop: '1px solid rgba(255,255,255,.07)',
-              paddingTop: 24,
+              paddingTop: 20,
             }}
           >
-            {STATS.map(({ Icon, value, label }, i) => (
+            {CAPABILITIES.map(({ Icon, label }, i) => (
               <div
                 key={label}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 6,
-                  paddingLeft: i === 0 ? 0 : 24,
-                  marginLeft: i === 0 ? 0 : 24,
-                  borderLeft: i === 0 ? 'none' : '1px solid var(--line)',
-                }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
               >
-                <Icon size={13} aria-hidden="true" style={{ color: 'var(--txt-dim)' }} />
-                <div
-                  style={{
-                    fontFamily: '"JetBrains Mono", monospace',
-                    fontVariantNumeric: 'tabular-nums',
-                    fontSize: 24,
-                    fontWeight: 600,
-                    color: 'var(--txt)',
-                    letterSpacing: '-0.01em',
-                    lineHeight: 1,
-                  }}
-                >
-                  {value}
-                </div>
-                <div
-                  style={{
-                    fontSize: 10,
-                    letterSpacing: '0.10em',
-                    textTransform: 'uppercase',
-                    color: 'var(--txt-dim)',
-                  }}
-                >
+                {i > 0 && (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      color: 'var(--line2)',
+                      fontSize: 14,
+                      lineHeight: 1,
+                      margin: '0 12px',
+                      userSelect: 'none',
+                    }}
+                  >
+                    ·
+                  </span>
+                )}
+                <Icon size={12} aria-hidden="true" style={{ color: 'var(--txt-dim)', flexShrink: 0 }} />
+                <span style={{ fontSize: 12, color: 'var(--txt-dim)', lineHeight: 1 }}>
                   {label}
-                </div>
+                </span>
               </div>
             ))}
           </div>
