@@ -54,7 +54,7 @@ public class TeamLeadProjectController {
     @PostMapping("/categories")
     @ResponseStatus(HttpStatus.CREATED)
     public ProjectCategoryDto createCategory(@Valid @RequestBody CreateProjectCategoryRequest request) {
-        return teamLeadProjectService.createCategory(request, actingEmail(), LocalDate.now());
+        return teamLeadProjectService.createCategory(request, actingEmail());
     }
 
     @PutMapping("/categories/{id}")

@@ -13,6 +13,7 @@ import com.nforceone.sync.org.DesignationRepository;
 import com.nforceone.sync.project.Allocation;
 import com.nforceone.sync.project.AllocationRepository;
 import com.nforceone.sync.project.Project;
+import com.nforceone.sync.project.ProjectRepository;
 import com.nforceone.sync.projectdashboard.dto.ProjectOptionDto;
 import com.nforceone.sync.reports.dto.EodByEmployeeEntryDto;
 import com.nforceone.sync.reports.dto.EodByEmployeeReportDto;
@@ -47,37 +48,41 @@ public class TeamEodByEmployeeReportService {
     private final EodEntryRepository eodEntryRepository;
     private final DesignationRepository designationRepository;
     private final ShiftDefinitionRepository shiftRepository;
+    private final ProjectRepository projectRepository;
 
     public TeamEodByEmployeeReportService(AppUserRepository appUserRepository,
                                            AllocationRepository allocationRepository,
                                            EodEntryRepository eodEntryRepository,
                                            DesignationRepository designationRepository,
-                                           ShiftDefinitionRepository shiftRepository) {
+                                           ShiftDefinitionRepository shiftRepository,
+                                           ProjectRepository projectRepository) {
         this.appUserRepository = appUserRepository;
         this.allocationRepository = allocationRepository;
         this.eodEntryRepository = eodEntryRepository;
         this.designationRepository = designationRepository;
         this.shiftRepository = shiftRepository;
+        this.projectRepository = projectRepository;
     }
 
     public TeamReportFiltersDto getFilters(String actingEmail) {
         AppUser lead = requireManager(actingEmail);
-        List<AppUser> teamMembers = getTeamMembers(lead);
-        if (teamMembers.isEmpty()) {
-            return new TeamReportFiltersDto(List.of(), List.of());
-        }
-        List<Long> employeeIds = teamMembers.stream().map(AppUser::getId).toList();
-        List<Allocation> allocations = allocationRepository.findByEmployeeIdIn(employeeIds);
 
-        List<ProjectOptionDto> projects = allocations.stream()
-                .map(Allocation::getProject)
-                .collect(Collectors.toMap(Project::getId, p -> p, (a, b) -> a))
-                .values().stream()
-                .sorted(Comparator.comparing(Project::getName))
+        // Project options: the projects actually assigned to this Team Lead — Project.pm, the
+        // same source of truth as "My Projects" (TeamLeadProjectService.listMyProjects) — NOT
+        // derived from the team's own allocations, which reflects which projects the lead's
+        // direct reports happen to work on rather than which projects this lead is the Team
+        // Lead of. Those are two different relationships and can legitimately diverge.
+        List<ProjectOptionDto> projects = projectRepository.findByPmIdOrderByNameAsc(lead.getId())
+                .stream()
                 .map(p -> new ProjectOptionDto(p.getId(), p.getName()))
                 .toList();
 
-        List<String> clients = allocations.stream()
+        // The Client filter is unaffected by this fix — it stays scoped to what the team's own
+        // allocations reference, matching how getReport() itself derives client-eligible rows.
+        List<AppUser> teamMembers = getTeamMembers(lead);
+        List<String> clients = teamMembers.isEmpty() ? List.of() : allocationRepository
+                .findByEmployeeIdIn(teamMembers.stream().map(AppUser::getId).toList())
+                .stream()
                 .map(a -> a.getProject().getClient())
                 .filter(c -> c != null && !c.isBlank())
                 .distinct()

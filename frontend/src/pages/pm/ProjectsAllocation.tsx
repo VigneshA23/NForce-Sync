@@ -4,6 +4,7 @@ import {
   ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
+import { StrictDateInput } from '../../components/StrictDateInput';
 import { useToast } from '../../lib/toast';
 import { todayISO } from '../../lib/date';
 import { useQuery } from '@tanstack/react-query';
@@ -356,6 +357,10 @@ function ProjectModal({ open, onClose, editing }: {
   });
   const [form, setForm] = useState<ProjectFormState>(EMPTY_PROJECT_FORM);
   const [error, setError] = useState<string | null>(null);
+  // Set only while Start Date/End Date's typed text is not (yet) a valid, complete DD-MM-YYYY
+  // date — see StrictDateInput. A field left in this state never updates form.startDate/endDate.
+  const [startDateInvalid, setStartDateInvalid] = useState(false);
+  const [endDateInvalid, setEndDateInvalid] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -371,6 +376,8 @@ function ProjectModal({ open, onClose, editing }: {
       pmId: editing.pmId != null ? String(editing.pmId) : '',
       projectManagerId: editing.projectManagerId != null ? String(editing.projectManagerId) : '',
     } : EMPTY_PROJECT_FORM);
+    setStartDateInvalid(false);
+    setEndDateInvalid(false);
   }, [open, editing]);
 
   const isPending = createMutation.isPending || updateMutation.isPending;
@@ -406,6 +413,7 @@ function ProjectModal({ open, onClose, editing }: {
   const showClient = selectedProjectType?.requiresClient === true;
   // End must be strictly after start — a project cannot begin and end on the same day.
   const badDateOrder = form.endDate !== '' && form.endDate <= form.startDate;
+  const dateFormatInvalid = startDateInvalid || endDateInvalid;
   // A completed project has to record when it finished. Status only appears when editing.
   const endDateRequired = editing != null && form.status === 'COMPLETED';
   const canSubmit = form.name.trim() !== ''
@@ -417,11 +425,14 @@ function ProjectModal({ open, onClose, editing }: {
     && (!endDateRequired || form.endDate !== '')
     && form.pmId !== ''
     && form.projectManagerId !== ''
-    && !badDateOrder;
+    && !badDateOrder
+    && !dateFormatInvalid;
 
   function handleClose() {
     setForm(EMPTY_PROJECT_FORM);
     setError(null);
+    setStartDateInvalid(false);
+    setEndDateInvalid(false);
     onClose();
   }
 
@@ -586,11 +597,15 @@ function ProjectModal({ open, onClose, editing }: {
             </select>
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 8 }}>
           <div>
             <label style={labelStyle}>Start Date *</label>
-            <input type="date" lang="en-GB" style={inputStyle} value={form.startDate}
-              onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
+            <StrictDateInput
+              ariaLabel="Start Date"
+              value={form.startDate}
+              onChange={iso => setForm(f => ({ ...f, startDate: iso }))}
+              onInvalidChange={setStartDateInvalid}
+            />
           </div>
           <div>
             {/* Optional in general, but mandatory once the status is Completed. */}
@@ -599,8 +614,13 @@ function ProjectModal({ open, onClose, editing }: {
                 ? ' *'
                 : <span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}> (Optional)</span>}
             </label>
-            <input type="date" lang="en-GB" style={inputStyle} value={form.endDate} min={dayAfterISO(form.startDate)}
-              onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} />
+            <StrictDateInput
+              ariaLabel="End Date"
+              value={form.endDate}
+              min={dayAfterISO(form.startDate)}
+              onChange={iso => setForm(f => ({ ...f, endDate: iso }))}
+              onInvalidChange={setEndDateInvalid}
+            />
             {(badDateOrder || (endDateRequired && form.endDate === '')) && (
               <p style={{ fontSize: 11, margin: '5px 0 0', color: 'var(--risk)' }}>
                 {badDateOrder
@@ -610,6 +630,17 @@ function ProjectModal({ open, onClose, editing }: {
             )}
           </div>
         </div>
+        {dateFormatInvalid && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 12px', borderRadius: 6, marginBottom: 12,
+            background: 'rgba(228,55,61,.08)', border: '1px solid rgba(228,55,61,.2)',
+            fontSize: 12, color: 'var(--risk)',
+          }} role="alert">
+            <AlertTriangle size={13} aria-hidden />
+            Invalid date. Please enter a valid date in DD-MM-YYYY format.
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             type="submit"
@@ -853,8 +884,11 @@ function AllocationModal({ open, onClose, projects }: {
   const [effectiveTo, setEffectiveTo] = useState('');
   const [allocationPct, setAllocationPct] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [effectiveFromInvalid, setEffectiveFromInvalid] = useState(false);
+  const [effectiveToInvalid, setEffectiveToInvalid] = useState(false);
 
   const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
+  const dateFormatInvalid = effectiveFromInvalid || effectiveToInvalid;
   const pctNum = allocationPct === '' ? null : Number(allocationPct);
   const badPct = pctNum !== null && (!Number.isInteger(pctNum) || pctNum < 1 || pctNum > 100);
 
@@ -889,12 +923,15 @@ function AllocationModal({ open, onClose, projects }: {
     setEffectiveTo('');
     setAllocationPct('');
     setError(null);
+    setEffectiveFromInvalid(false);
+    setEffectiveToInvalid(false);
     onClose();
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!employeeId || !projectId || !effectiveFrom || badDateOrder || clash || pctNum === null || badPct) return;
+    if (!employeeId || !projectId || !effectiveFrom || badDateOrder || dateFormatInvalid
+      || clash || pctNum === null || badPct) return;
     setError(null);
     try {
       await createMutation.mutateAsync({
@@ -937,11 +974,15 @@ function AllocationModal({ open, onClose, projects }: {
           </select>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 8 }}>
           <div>
             <label style={labelStyle}>Effective From *</label>
-            <input type="date" lang="en-GB" style={inputStyle} value={effectiveFrom}
-              onChange={e => setEffectiveFrom(e.target.value)} />
+            <StrictDateInput
+              ariaLabel="Effective From"
+              value={effectiveFrom}
+              onChange={setEffectiveFrom}
+              onInvalidChange={setEffectiveFromInvalid}
+            />
           </div>
           <div>
             {/* Blank means the assignment is open-ended. */}
@@ -949,8 +990,13 @@ function AllocationModal({ open, onClose, projects }: {
               Effective To
               <span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}> (Optional)</span>
             </label>
-            <input type="date" lang="en-GB" style={inputStyle} value={effectiveTo} min={effectiveFrom || undefined}
-              onChange={e => setEffectiveTo(e.target.value)} />
+            <StrictDateInput
+              ariaLabel="Effective To"
+              value={effectiveTo}
+              min={effectiveFrom || undefined}
+              onChange={setEffectiveTo}
+              onInvalidChange={setEffectiveToInvalid}
+            />
             {badDateOrder ? (
               <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>
                 Effective To cannot be earlier than Effective From.
@@ -962,6 +1008,17 @@ function AllocationModal({ open, onClose, projects }: {
             )}
           </div>
         </div>
+        {dateFormatInvalid && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 12px', borderRadius: 6, marginBottom: 14,
+            background: 'rgba(228,55,61,.08)', border: '1px solid rgba(228,55,61,.2)',
+            fontSize: 12, color: 'var(--risk)',
+          }} role="alert">
+            <AlertTriangle size={13} aria-hidden />
+            Invalid date. Please enter a valid date in DD-MM-YYYY format.
+          </div>
+        )}
 
         <div style={{ marginBottom: 14 }}>
           <label style={labelStyle}>Allocation % *</label>
@@ -994,7 +1051,8 @@ function AllocationModal({ open, onClose, projects }: {
           <button
             type="submit"
             disabled={createMutation.isPending || !employeeId || !projectId
-              || !effectiveFrom || badDateOrder || clash != null || pctNum === null || badPct}
+              || !effectiveFrom || badDateOrder || dateFormatInvalid
+              || clash != null || pctNum === null || badPct}
             style={{
               padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
               color: '#fff', fontSize: 13, fontWeight: 600,
@@ -1023,6 +1081,8 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
   const [effectiveTo, setEffectiveTo] = useState('');
   const [allocationPct, setAllocationPct] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [effectiveFromInvalid, setEffectiveFromInvalid] = useState(false);
+  const [effectiveToInvalid, setEffectiveToInvalid] = useState(false);
 
   // Re-seed whenever a different row is opened.
   useEffect(() => {
@@ -1031,9 +1091,12 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
     setEffectiveTo(allocation.effectiveTo ?? '');
     setAllocationPct(String(allocation.allocationPct));
     setError(null);
+    setEffectiveFromInvalid(false);
+    setEffectiveToInvalid(false);
   }, [allocation]);
 
   const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
+  const dateFormatInvalid = effectiveFromInvalid || effectiveToInvalid;
   const pctNum = allocationPct === '' ? null : Number(allocationPct);
   const badPct = pctNum !== null && (!Number.isInteger(pctNum) || pctNum < 1 || pctNum > 100);
 
@@ -1058,7 +1121,8 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!allocation || !effectiveFrom || badDateOrder || clash || pctNum === null || badPct) return;
+    if (!allocation || !effectiveFrom || badDateOrder || dateFormatInvalid
+      || clash || pctNum === null || badPct) return;
     setError(null);
     try {
       await updateMutation.mutateAsync({
@@ -1105,16 +1169,26 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 8 }}>
             <div>
               <label style={labelStyle}>Effective From *</label>
-              <input type="date" lang="en-GB" style={inputStyle} value={effectiveFrom} autoFocus
-                onChange={e => setEffectiveFrom(e.target.value)} />
+              <StrictDateInput
+                ariaLabel="Effective From"
+                value={effectiveFrom}
+                autoFocus
+                onChange={setEffectiveFrom}
+                onInvalidChange={setEffectiveFromInvalid}
+              />
             </div>
             <div>
               <label style={labelStyle}>Effective To</label>
-              <input type="date" lang="en-GB" style={inputStyle} value={effectiveTo} min={effectiveFrom || undefined}
-                onChange={e => setEffectiveTo(e.target.value)} />
+              <StrictDateInput
+                ariaLabel="Effective To"
+                value={effectiveTo}
+                min={effectiveFrom || undefined}
+                onChange={setEffectiveTo}
+                onInvalidChange={setEffectiveToInvalid}
+              />
               <p style={{ fontSize: 11, color: badDateOrder ? 'var(--risk)' : 'var(--txt-dim)', margin: '5px 0 0' }}>
                 {badDateOrder
                   ? 'Effective To cannot be earlier than Effective From.'
@@ -1122,6 +1196,17 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
               </p>
             </div>
           </div>
+          {dateFormatInvalid && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 12px', borderRadius: 6, marginBottom: 14,
+              background: 'rgba(228,55,61,.08)', border: '1px solid rgba(228,55,61,.2)',
+              fontSize: 12, color: 'var(--risk)',
+            }} role="alert">
+              <AlertTriangle size={13} aria-hidden />
+              Invalid date. Please enter a valid date in DD-MM-YYYY format.
+            </div>
+          )}
 
           <div style={{ marginBottom: 14 }}>
             <label style={labelStyle}>Allocation % *</label>
@@ -1150,8 +1235,8 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="submit"
-              disabled={updateMutation.isPending || !effectiveFrom || badDateOrder || clash != null
-                || pctNum === null || badPct}
+              disabled={updateMutation.isPending || !effectiveFrom || badDateOrder || dateFormatInvalid
+                || clash != null || pctNum === null || badPct}
               style={{
                 padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
                 color: '#fff', fontSize: 13, fontWeight: 600,

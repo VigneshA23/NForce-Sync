@@ -14,6 +14,7 @@ import {
   useTeamMemberStatuses, useTeamLeadSummary, useTeamMemberDetail, prefetchTeamMemberDetail,
   type MemberEodStatusDto,
 } from '../../api/teamLead';
+import { useMyLeadProjects } from '../../api/teamLeadProjects';
 import { RingGauge } from '../../components/RingGauge';
 
 // ── status derivation ───────────────────────────────────────────────────────────
@@ -564,6 +565,11 @@ export default function TeamUtilization() {
   const { data: statuses, isPending: statusesLoading, isError, refetch } = useTeamMemberStatuses(range);
   const { data: teamUtil, isPending: utilLoading } = useTeamUtil(user?.id, dateISO);
   const { data: summary } = useTeamLeadSummary(range);
+  // Same source of truth as "My Projects" (TeamLeadProjectService.listMyProjects, scoped by
+  // Project.pm to the logged-in Team Lead) — the Project filter must offer every project
+  // actually assigned to this Team Lead, not just whatever project names happen to appear on
+  // a team member's EOD entry for the single selected date (see allProjects below).
+  const { data: leadProjects } = useMyLeadProjects();
 
   const isPending = statusesLoading || utilLoading;
   const workingDay = summary?.workingDay ?? true;
@@ -587,10 +593,15 @@ export default function TeamUtilization() {
     });
   }, [statuses, teamUtil, workingDay]);
 
-  const allProjects = useMemo(
-    () => [...new Set(members.flatMap(m => m.projectNames))].sort(),
-    [members],
-  );
+  // Union of the Team Lead's actually-assigned projects (so every project they own is always
+  // selectable, even before anyone logs an EOD against it today) with whatever project names
+  // already appear on today's member statuses (kept so a project name can never disappear from
+  // the filter merely because this list came from a different source moment-to-moment).
+  const allProjects = useMemo(() => {
+    const assigned = (leadProjects ?? []).map(p => p.name);
+    const fromStatuses = members.flatMap(m => m.projectNames);
+    return [...new Set([...assigned, ...fromStatuses])].sort();
+  }, [leadProjects, members]);
 
   const visible = useMemo(() => {
     let list = members;

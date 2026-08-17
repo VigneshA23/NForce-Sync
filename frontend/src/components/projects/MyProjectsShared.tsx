@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { RefreshCw, AlertTriangle, Search, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { RefreshCw, AlertTriangle, Search, X } from 'lucide-react';
 import type { ProjectFullDto } from '../../api/projects';
 
 // ── Shared "My Projects" building blocks ─────────────────────────────────────────
@@ -134,100 +134,29 @@ export function SearchBox({ value, onChange, placeholder, ariaLabel }: {
 }
 
 // ── Status filter select (toolbar, alongside search) ────────────────────────────
-
-export function StatusFilterSelect({ value, onChange, options, ariaLabel }: {
+// Deliberately a plain native <select>, styled and worded to match the "Filter by Status"
+// dropdown on the PM's Projects & Allocation → Projects tab (pages/pm/ProjectsAllocation.tsx):
+// no separate "Status" label beside it, a placeholder option standing in for "no filter", and
+// the same inputStyle (border/radius/background/padding) so it reads as the same control.
+export function StatusFilterSelect({ value, onChange, options, ariaLabel, placeholder = 'Filter by Status' }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   ariaLabel: string;
+  placeholder?: string;
 }) {
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-      <label style={{ fontSize: 12, fontWeight: 550, color: 'var(--txt-mut)', whiteSpace: 'nowrap' }}>
-        Status
-      </label>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        aria-label={ariaLabel}
-        style={{ ...inputStyle, width: 'auto', minWidth: 130, fontWeight: 400 }}
-      >
-        {options.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-// ── Status filter dropdown — same value/onChange contract as StatusFilterSelect above, but
-// shows "Status" inside the trigger itself (no separate label) instead of beside a <select>.
-// Closes on selecting an option or clicking anywhere outside, via the same full-screen overlay
-// trick used by SortDropdown/FilterDropdown in components/FilterDropdown.tsx, so it matches
-// the rest of the app's dropdown look/feel and interaction rather than inventing a new one.
-export function StatusFilterDropdown({ value, onChange, options, ariaLabel }: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-  ariaLabel: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const current = options.find(o => o.value === value);
-  // The "no filter applied" option (e.g. 'ALL') shows the "Status" placeholder in the trigger,
-  // exactly like the unselected state — selecting any other option swaps it for that label.
-  const showPlaceholder = !current || value === 'ALL';
-
-  return (
-    <div style={{ position: 'relative', flexShrink: 0 }}>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={ariaLabel}
-        style={{
-          ...inputStyle, width: 'auto', minWidth: 130, fontWeight: 500,
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-        }}
-      >
-        <span>{showPlaceholder ? 'Status' : current.label}</span>
-        {open ? <ChevronUp size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
-      </button>
-      {open && (
-        <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div
-            role="listbox"
-            aria-label={ariaLabel}
-            style={{
-              position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, minWidth: 150,
-              background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 6,
-              boxShadow: '0 12px 28px rgba(0,0,0,.35)', maxHeight: 260, overflowY: 'auto',
-            }}
-          >
-            {options.map(o => (
-              <button
-                key={o.value}
-                type="button"
-                role="option"
-                aria-selected={o.value === value}
-                onClick={() => { onChange(o.value); setOpen(false); }}
-                style={{
-                  display: 'block', width: '100%', textAlign: 'left', font: 'inherit',
-                  background: o.value === value ? 'var(--raised2)' : 'transparent',
-                  border: 'none', borderRadius: 6, padding: '7px 10px', margin: '1px 0',
-                  fontSize: 12.5, color: 'var(--txt)', cursor: 'pointer',
-                }}
-                onMouseEnter={e => { if (o.value !== value) e.currentTarget.style.background = 'var(--raised)'; }}
-                onMouseLeave={e => { if (o.value !== value) e.currentTarget.style.background = 'transparent'; }}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      aria-label={ariaLabel}
+      style={{ ...inputStyle, width: 170, flexShrink: 0, fontWeight: 400 }}
+    >
+      <option value="ALL">{placeholder}</option>
+      {options.filter(o => o.value !== 'ALL').map(o => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
   );
 }
 
@@ -240,10 +169,10 @@ export function ProjectsPanel({
    * the Employee "My Projects" page unchanged. */
   boldNameLink = false,
   compactToolbar = false,
-  // Team Lead-only: render the status filter as a single dropdown button that shows "Status"
-  // (or the selected option) inside itself, instead of a separate "Status" label beside a
-  // native <select>. Defaults keep the Employee "My Projects" page unchanged.
-  statusAsDropdown = false,
+  // Employee-only: swap the last column from allocated headcount ("Team Size") to the
+  // project's Team Lead name ("Team Lead"). Defaults keep the Team Lead "My Projects" page
+  // unchanged.
+  teamColumn = 'size',
 }: {
   projects: ProjectFullDto[];
   isPending: boolean;
@@ -255,7 +184,7 @@ export function ProjectsPanel({
   onOpenDetails: (id: number) => void;
   boldNameLink?: boolean;
   compactToolbar?: boolean;
-  statusAsDropdown?: boolean;
+  teamColumn?: 'size' | 'lead';
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>('ALL');
@@ -313,22 +242,17 @@ export function ProjectsPanel({
               ariaLabel="Search assigned projects by name, client, or code"
             />
           </div>
-          {(() => {
-            const StatusControl = statusAsDropdown ? StatusFilterDropdown : StatusFilterSelect;
-            return (
-              <StatusControl
-                value={statusFilter}
-                onChange={v => setStatusFilter(v as ProjectStatusFilter)}
-                ariaLabel="Filter assigned projects by status"
-                options={[
-                  { value: 'ALL', label: 'All' },
-                  { value: 'ACTIVE', label: 'Active' },
-                  { value: 'INACTIVE', label: 'Inactive' },
-                  { value: 'ON_HOLD', label: 'On Hold' },
-                ]}
-              />
-            );
-          })()}
+          <StatusFilterSelect
+            value={statusFilter}
+            onChange={v => setStatusFilter(v as ProjectStatusFilter)}
+            ariaLabel="Filter assigned projects by status"
+            options={[
+              { value: 'ALL', label: 'All' },
+              { value: 'ACTIVE', label: 'Active' },
+              { value: 'INACTIVE', label: 'Inactive' },
+              { value: 'ON_HOLD', label: 'On Hold' },
+            ]}
+          />
         </div>
       )}
 
@@ -363,7 +287,7 @@ export function ProjectsPanel({
               <th style={thStyle}>Status</th>
               <th style={thStyle}>Start Date</th>
               <th style={thStyle}>End Date</th>
-              <th style={thStyle}>Team Size</th>
+              <th style={thStyle}>{teamColumn === 'lead' ? 'Team Lead' : 'Team Size'}</th>
             </tr>
           </thead>
           <tbody>
@@ -418,7 +342,9 @@ export function ProjectsPanel({
                   <td style={tdStyle}><StatusBadge status={p.status} /></td>
                   <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{fmtDateDMY(p.startDate)}</td>
                   <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{p.endDate ? fmtDateDMY(p.endDate) : 'Ongoing'}</td>
-                  <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{p.allocatedHeadcount}</td>
+                  <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>
+                    {teamColumn === 'lead' ? (p.pmName ?? 'Not Assigned') : p.allocatedHeadcount}
+                  </td>
                 </tr>
               ))
             )}

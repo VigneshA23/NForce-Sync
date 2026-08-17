@@ -69,12 +69,10 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
            "GROUP BY p.billingModel.id")
     List<Object[]> countCurrentEmployeesByBillingModel(@Param("today") LocalDate today);
 
-    // "My Projects" for a Team Lead: the Team Lead's OWN allocation rows — not their team's.
-    // A Team Lead is an AppUser like any other and can hold Allocation rows directly (e.g. they
-    // are personally staffed on a client engagement), so this is the same shape as
-    // findAllocatedToEmployeeOnDate but without the ACTIVE-project restriction (My Projects
-    // should still show a Team Lead's own project even if it is on hold or completed) and with
-    // pm JOIN FETCHed to avoid N+1 when mapping to ProjectFullDto.
+    // "My Projects" for an Employee (and, historically, mis-used for the Team Lead's own list
+    // too): the given AppUser's OWN allocation rows — i.e. projects they are personally staffed
+    // on. Still correct for that purpose; it is NOT who a project's assigned Team Lead is, so it
+    // must not be used to scope the Team Lead "My Projects" list (see findByPmIdOrderByNameAsc).
     @Query("SELECT DISTINCT a.project FROM Allocation a LEFT JOIN FETCH a.project.pm " +
            "WHERE a.employee.id = :teamLeadId " +
            "AND a.effectiveFrom <= :onDate " +
@@ -82,4 +80,13 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
            "ORDER BY a.project.name ASC")
     List<Project> findAllocatedToTeamLeadOnDate(@Param("teamLeadId") Long teamLeadId,
                                                 @Param("onDate") LocalDate onDate);
+
+    /**
+     * Projects actually assigned to this Team Lead — keyed on {@code Project.pm} (the {@code
+     * pm_id} column), which is the real Team Lead-of-project relationship, regardless of whether
+     * that Team Lead also happens to hold a personal Allocation row on the project. This is the
+     * source of truth for the Team Lead "My Projects" list.
+     */
+    @Query("SELECT p FROM Project p LEFT JOIN FETCH p.pm WHERE p.pm.id = :teamLeadId ORDER BY p.name ASC")
+    List<Project> findByPmIdOrderByNameAsc(@Param("teamLeadId") Long teamLeadId);
 }
