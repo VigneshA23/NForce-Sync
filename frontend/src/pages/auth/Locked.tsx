@@ -150,7 +150,9 @@ export default function Locked() {
               e.currentTarget.style.borderColor = 'var(--line2)';
             }}
           >
-            {stillLocked ? `Retry in ${formatCountdown(remaining)}` : 'Retry sign in'}
+            {/* No countdown here — the large timer above already shows it. The disabled state is
+                what communicates "not yet"; repeating the digits just duplicated them. */}
+            Retry sign in
           </button>
         </div>
 
