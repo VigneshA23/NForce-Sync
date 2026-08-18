@@ -42,6 +42,13 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class EodByEmployeeReportService {
 
+    /**
+     * Sentinel for the report's "W/O Client" option — projects that genuinely have no client,
+     * i.e. internal work. A blank/absent client already means "no filter", so it cannot express
+     * this. Mirrored as NO_CLIENT in the report screen.
+     */
+    static final String NO_CLIENT = "__NONE__";
+
     private final AppUserRepository appUserRepository;
     private final ProjectRepository projectRepository;
     private final AllocationRepository allocationRepository;
@@ -79,7 +86,12 @@ public class EodByEmployeeReportService {
                             "Project is not in your portfolio"));
             projects = List.of(match);
         }
-        if (client != null && !client.isBlank()) {
+        if (NO_CLIENT.equals(client)) {
+            // "W/O Client": internal work, where the project type never captures a client name.
+            projects = projects.stream()
+                    .filter(p -> p.getClient() == null || p.getClient().isBlank())
+                    .toList();
+        } else if (client != null && !client.isBlank()) {
             projects = projects.stream().filter(p -> client.equals(p.getClient())).toList();
         }
 

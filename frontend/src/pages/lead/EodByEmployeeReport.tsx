@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Download, RefreshCw, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
-import { formatDate } from '../../lib/date';
+import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
 import { useTeamReportFilters, useTeamEodByEmployeeReport, exportTeamEodByEmployee } from '../../api/teamReports';
 import type { EodByEmployeeRowDto, ExportFormat } from '../../api/reports';
@@ -20,16 +20,6 @@ function initials(name: string): string {
 
 function hrs(v: number): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
-}
-
-function firstDayOfMonthISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-}
-
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 const STATUS_CFG: Record<string, { label: string; color: string }> = {
@@ -92,9 +82,12 @@ interface Filters {
   employeeQuery: string;
 }
 
+// Dates start blank on purpose: the report covers whatever range the user asks for, and
+// pre-filling month-to-date silently decided that for them. The report simply waits until both
+// ends are chosen.
 function defaultFilters(): Filters {
   return {
-    from: firstDayOfMonthISO(), to: todayISO(),
+    from: '', to: '',
     projectId: undefined, status: '', billable: '', employeeQuery: '',
   };
 }
@@ -117,16 +110,25 @@ function FilterBar({
     onChange({ ...filters, [key]: value });
   }
 
+  // Neither end may be in the future — an EOD report only covers days that have happened.
+  // From is additionally bounded by To; To is itself capped at today, so this is the earlier one.
+  const today = todayISO();
+  const maxFrom = filters.to !== '' ? filters.to : today;
+
   return (
     <Card style={{ padding: '14px 16px', marginBottom: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>From</FieldLabel>
-          <DatePicker value={filters.from} onChange={v => set('from', v)} max={filters.to} inputStyle={inputStyle()} />
+          {/* Capped at today: an EOD report only ever covers days that have already happened.
+              Still bounded by To as well, so From can never overshoot the other end. */}
+          <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>To</FieldLabel>
-          <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} inputStyle={inputStyle()} />
+          {/* Capped at today for the same reason as From — there are no EODs for days
+              that have not happened yet. */}
+          <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Project</FieldLabel>
@@ -269,7 +271,9 @@ function RosterFlow({
           }}>
             <span style={{ fontSize: 12.5, color: 'var(--txt)' }}>{checked.size} selected</span>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setChecked(new Set())} style={{ background: 'none', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt-mut)', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: '5px 10px' }}>Clear</button>
+              <button onClick={() => setChecked(new Set())} style={{ background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: '5px 10px' }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--txt-mut)')}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--line2)')}>Clear</button>
               <button
                 onClick={() => onExport('selected', [...checked])}
                 disabled={exportingKey === 'selected'}
@@ -554,6 +558,9 @@ export default function LeadEodByEmployeeReport() {
   const [exportingKey, setExportingKey] = useState<string | null>(null);
   const { show } = useToast();
 
+  // Both ends are required by the endpoint, so nothing is requested until both are picked.
+  const hasRange = filters.from !== '' && filters.to !== '';
+
   const { data, isLoading, isError, refetch } = useTeamEodByEmployeeReport({
     from: filters.from,
     to: filters.to,
@@ -561,7 +568,7 @@ export default function LeadEodByEmployeeReport() {
     status: filters.status || undefined,
     billable: filters.billable || undefined,
     employeeQuery: filters.employeeQuery || undefined,
-  });
+  }, hasRange);
 
   const employees = useMemo(() => data?.employees ?? [], [data]);
 
@@ -614,7 +621,13 @@ export default function LeadEodByEmployeeReport() {
         onDownloadAll={() => runExport('all')} downloadingAll={exportingKey === 'all'}
       />
 
-      {isError ? (
+      {!hasRange ? (
+        <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
+            Choose a From Date and a To Date to run the report.
+          </div>
+        </Card>
+      ) : isError ? (
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load the EOD report.</div>
           <button onClick={() => refetch()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 13, cursor: 'pointer' }}>

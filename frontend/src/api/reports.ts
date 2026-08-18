@@ -54,12 +54,15 @@ export interface EodByEmployeeExportParams extends EodByEmployeeFilterParams {
 
 // ── hooks ───────────────────────────────────────────────────────────────────────
 
-export function useEodByEmployeeReport(filters: EodByEmployeeFilterParams) {
+// `enabled` lets the page hold the request back until a date range has actually been chosen —
+// the filters start blank, and from/to are required by the endpoint.
+export function useEodByEmployeeReport(filters: EodByEmployeeFilterParams, enabled = true) {
   return useQuery({
     queryKey: ['reports', 'eod-by-employee', filters],
     queryFn: () =>
       api.get<EodByEmployeeReportDto>('/reports/eod-by-employee', { params: filters }).then(r => r.data),
     placeholderData: prev => prev,
+    enabled,
   });
 }
 
@@ -96,7 +99,9 @@ function downloadBlob(blob: Blob, filename: string): void {
 
 export interface MissingEodDayDto {
   date: string;
-  status: 'SUBMITTED' | 'MISSED' | 'HOLIDAY' | 'WEEKEND' | 'LEAVE';
+  /** PENDING = a working day whose EOD deadline (shift end + cutoff) has not passed yet, so it is
+   *  not a gap and cannot be reminded about. */
+  status: 'SUBMITTED' | 'MISSED' | 'PENDING' | 'HOLIDAY' | 'WEEKEND' | 'LEAVE';
 }
 
 export interface MissingEodRowDto {
@@ -127,12 +132,13 @@ export interface MissingEodFilterParams {
   employeeQuery?: string;
 }
 
-export function useMissingEodReport(filters: MissingEodFilterParams) {
+export function useMissingEodReport(filters: MissingEodFilterParams, enabled = true) {
   return useQuery({
     queryKey: ['reports', 'missing-eod', filters],
     queryFn: () =>
       api.get<MissingEodReportDto>('/reports/missing-eod', { params: filters }).then(r => r.data),
     placeholderData: prev => prev,
+    enabled,
   });
 }
 

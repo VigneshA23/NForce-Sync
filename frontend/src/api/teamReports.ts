@@ -33,12 +33,15 @@ export function useTeamReportFilters() {
 
 // ── EOD by employee ─────────────────────────────────────────────────────────────
 
-export function useTeamEodByEmployeeReport(filters: EodByEmployeeFilterParams) {
+// `enabled` lets the page hold the request back until a date range has actually been chosen —
+// the filters start blank, and from/to are required by the endpoint.
+export function useTeamEodByEmployeeReport(filters: EodByEmployeeFilterParams, enabled = true) {
   return useQuery({
     queryKey: ['team-reports', 'eod-by-employee', filters],
     queryFn: () =>
       api.get<EodByEmployeeReportDto>('/team-reports/eod-by-employee', { params: filters }).then(r => r.data),
     placeholderData: prev => prev,
+    enabled,
   });
 }
 
@@ -79,12 +82,13 @@ export interface TeamMissingEodFilterParams {
   employeeQuery?: string;
 }
 
-export function useTeamMissingEodReport(filters: TeamMissingEodFilterParams) {
+export function useTeamMissingEodReport(filters: TeamMissingEodFilterParams, enabled = true) {
   return useQuery({
     queryKey: ['team-reports', 'missing-eod', filters],
     queryFn: () =>
       api.get<MissingEodReportDto>('/team-reports/missing-eod', { params: filters }).then(r => r.data),
     placeholderData: prev => prev,
+    enabled,
   });
 }
 

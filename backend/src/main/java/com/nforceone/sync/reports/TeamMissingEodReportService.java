@@ -6,6 +6,9 @@ import com.nforceone.sync.businessrules.BusinessRuleConfig;
 import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.businessrules.Holiday;
 import com.nforceone.sync.businessrules.HolidayRepository;
+import com.nforceone.sync.businessrules.ShiftDefinition;
+import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
+import com.nforceone.sync.businessrules.ShiftSchedule;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
@@ -27,6 +30,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -56,6 +60,7 @@ public class TeamMissingEodReportService {
     private final BusinessRuleConfigRepository configRepository;
     private final DesignationRepository designationRepository;
     private final NotificationService notificationService;
+    private final ShiftDefinitionRepository shiftRepository;
 
     public TeamMissingEodReportService(AppUserRepository appUserRepository,
                                         AllocationRepository allocationRepository,
@@ -63,7 +68,8 @@ public class TeamMissingEodReportService {
                                         HolidayRepository holidayRepository,
                                         BusinessRuleConfigRepository configRepository,
                                         DesignationRepository designationRepository,
-                                        NotificationService notificationService) {
+                                        NotificationService notificationService,
+                                        ShiftDefinitionRepository shiftRepository) {
         this.appUserRepository = appUserRepository;
         this.allocationRepository = allocationRepository;
         this.eodEntryRepository = eodEntryRepository;
@@ -71,6 +77,18 @@ public class TeamMissingEodReportService {
         this.configRepository = configRepository;
         this.notificationService = notificationService;
         this.designationRepository = designationRepository;
+        this.shiftRepository = shiftRepository;
+    }
+
+    /**
+     * Whether {@code date}'s EOD is actually overdue for this employee — see the identical helper
+     * in MissingEodReportService. A working day with no entry is not a gap until its deadline
+     * (shift end + configured cutoff hours) has passed, so today is not remindable until then.
+     */
+    private boolean isPastDue(LocalDate date, ShiftDefinition shift, LocalDateTime now) {
+        LocalDateTime cutoffAt = shift == null ? null : ShiftSchedule.cutoffAt(shift, date);
+        if (cutoffAt == null) return date.isBefore(now.toLocalDate());
+        return now.isAfter(cutoffAt);
     }
 
     public MissingEodReportDto getReport(String actingEmail, LocalDate from, LocalDate to,
@@ -142,8 +160,14 @@ public class TeamMissingEodReportService {
         Map<Long, Designation> designationsById = new HashMap<>();
         int totalMissingDays = 0;
 
+        LocalDateTime now = LocalDateTime.now();
+        Map<Long, ShiftDefinition> shiftsById = new HashMap<>();
+
         for (Long empId : filteredEmployeeIds) {
             AppUser emp = employeesById.get(empId);
+            ShiftDefinition shift = emp.getShiftId() == null ? null
+                    : shiftsById.computeIfAbsent(emp.getShiftId(),
+                            id -> shiftRepository.findById(id).orElse(null));
             List<MissingEodDayDto> days = new ArrayList<>();
             int missingCount = 0;
             int totalWorkingDays = 0;
@@ -160,8 +184,15 @@ public class TeamMissingEodReportService {
                     if (entry != null && isLeaveOnlyEntry(entry)) {
                         status = "LEAVE";
                     } else if (isMissing(entry)) {
-                        status = "MISSED";
-                        missingCount++;
+                        // Only overdue days are gaps. PENDING keeps today visible on the calendar
+                        // without counting it as missed or making it remindable — every reminder
+                        // path derives its dates from the MISSED days alone.
+                        if (isPastDue(d, shift, now)) {
+                            status = "MISSED";
+                            missingCount++;
+                        } else {
+                            status = "PENDING";
+                        }
                     } else {
                         status = "SUBMITTED";
                     }

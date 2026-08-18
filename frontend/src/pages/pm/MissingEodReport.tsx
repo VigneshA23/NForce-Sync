@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Bell, ChevronLeft, ChevronRight, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
 import { Modal } from '../../components/Modal';
-import { formatDate } from '../../lib/date';
+import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
 import { useProjectDashboardFilters } from '../../api/projectDashboard';
 import {
@@ -16,16 +16,6 @@ function initials(name: string): string {
   return name.split(' ').map(p => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
 }
 
-function firstDayOfMonthISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-}
-
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 function extractError(err: unknown): string {
   const e = err as { response?: { data?: { error?: string; message?: string } } };
   return e?.response?.data?.error ?? e?.response?.data?.message ?? 'Something went wrong';
@@ -34,8 +24,12 @@ function extractError(err: unknown): string {
 const DAY_STATUS_CFG: Record<MissingEodDayDto['status'], { color: string; label: string }> = {
   SUBMITTED: { color: 'var(--ok)', label: 'Submitted' },
   MISSED: { color: 'var(--risk)', label: 'Missed' },
+  // Deadline has not passed yet — shown for context, but never counted or remindable.
+  PENDING: { color: 'var(--txt-dim)', label: 'Not due yet' },
   HOLIDAY: { color: 'var(--info)', label: 'Holiday' },
-  WEEKEND: { color: 'var(--txt-dim)', label: 'Weekend' },
+  // Violet rather than a grey: PENDING already owns the muted grey, and two identical
+  // greys in the calendar and its legend were indistinguishable.
+  WEEKEND: { color: 'var(--cat-4)', label: 'Weekend' },
   LEAVE: { color: 'var(--warn)', label: 'Leave' },
 };
 
@@ -98,7 +92,8 @@ interface Filters {
 }
 
 function defaultFilters(): Filters {
-  return { from: firstDayOfMonthISO(), to: todayISO(), projectId: undefined, teamManagerId: undefined, employeeQuery: '' };
+  // Blank by design — the user picks the range; see the note in the report component.
+  return { from: '', to: '', projectId: undefined, teamManagerId: undefined, employeeQuery: '' };
 }
 
 function FilterBar({ filters, onChange, onReset }: {
@@ -112,16 +107,25 @@ function FilterBar({ filters, onChange, onReset }: {
     onChange({ ...filters, [key]: value });
   }
 
+  // Neither end may be in the future — an EOD report only covers days that have happened.
+  // From is additionally bounded by To; To is itself capped at today, so this is the earlier one.
+  const today = todayISO();
+  const maxFrom = filters.to !== '' ? filters.to : today;
+
   return (
     <Card style={{ padding: '14px 16px', marginBottom: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>From</FieldLabel>
-          <DatePicker value={filters.from} onChange={v => set('from', v)} max={filters.to} inputStyle={inputStyle()} />
+          {/* Capped at today: an EOD report only ever covers days that have already happened.
+              Still bounded by To as well, so From can never overshoot the other end. */}
+          <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>To</FieldLabel>
-          <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} inputStyle={inputStyle()} />
+          {/* Capped at today for the same reason as From — there are no EODs for days
+              that have not happened yet. */}
+          <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Project</FieldLabel>
@@ -306,7 +310,9 @@ function GapsModal({ row, onClose, filters }: {
           {selected.size > 0 && (
             <button
               onClick={() => setSelected(new Set())}
-              style={{ background: 'none', border: '1px solid var(--line2)', borderRadius: 8, color: 'var(--txt-mut)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '8px 12px' }}
+              style={{ background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 8, color: 'var(--txt)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '8px 12px' }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--txt-mut)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--line2)')}
             >
               Clear
             </button>
@@ -364,13 +370,16 @@ export default function MissingEodReport() {
   const [confirmRemindAll, setConfirmRemindAll] = useState(false);
   const [confirmRemindRow, setConfirmRemindRow] = useState<MissingEodRowDto | null>(null);
 
+  // Both ends are required by the endpoint, so nothing is requested until both are picked.
+  const hasRange = filters.from !== '' && filters.to !== '';
+
   const { data, isLoading, isError, refetch } = useMissingEodReport({
     from: filters.from,
     to: filters.to,
     projectId: filters.projectId,
     teamManagerId: filters.teamManagerId,
     employeeQuery: filters.employeeQuery || undefined,
-  });
+  }, hasRange);
 
   const remindOne = useRemindEmployee();
   const remindAll = useRemindAll();
@@ -423,7 +432,13 @@ export default function MissingEodReport() {
 
       <FilterBar filters={filters} onChange={setFilters} onReset={() => setFilters(defaultFilters())} />
 
-      {isError ? (
+      {!hasRange ? (
+        <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
+            Choose a From Date and a To Date to run the report.
+          </div>
+        </Card>
+      ) : isError ? (
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load the missing-EOD report.</div>
           <button onClick={() => refetch()} style={{ padding: '8px 16px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 13, cursor: 'pointer' }}>
