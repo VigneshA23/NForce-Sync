@@ -54,7 +54,8 @@ function PasswordInput({ id, label, value, onChange, autoComplete }: {
           aria-label={show ? 'Hide password' : 'Show password'}
           style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', display: 'flex', alignItems: 'center' }}
         >
-          {show ? <EyeOff size={15} /> : <Eye size={15} />}
+          {/* Open eye = visible, slashed = hidden — the icon shows state, not the action. */}
+          {show ? <Eye size={15} /> : <EyeOff size={15} />}
         </button>
       </div>
     </div>

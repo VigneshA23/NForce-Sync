@@ -180,7 +180,8 @@ export default function ForceChangePassword() {
                 onClick={() => setShowCurrent((v) => !v)}
                 style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', padding: 4, display: 'flex' }}
               >
-                {showCurrent ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
+                {/* Open eye = visible, slashed = hidden — the icon shows state, not the action. */}
+                {showCurrent ? <Eye size={14} aria-hidden="true" /> : <EyeOff size={14} aria-hidden="true" />}
               </button>
             </div>
           </div>
@@ -206,7 +207,7 @@ export default function ForceChangePassword() {
                 onClick={() => setShowNew((v) => !v)}
                 style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', padding: 4, display: 'flex' }}
               >
-                {showNew ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
+                {showNew ? <Eye size={14} aria-hidden="true" /> : <EyeOff size={14} aria-hidden="true" />}
               </button>
             </div>
           </div>
@@ -232,7 +233,7 @@ export default function ForceChangePassword() {
                 onClick={() => setShowConfirm((v) => !v)}
                 style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', padding: 4, display: 'flex' }}
               >
-                {showConfirm ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
+                {showConfirm ? <Eye size={14} aria-hidden="true" /> : <EyeOff size={14} aria-hidden="true" />}
               </button>
             </div>
           </div>

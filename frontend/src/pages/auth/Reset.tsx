@@ -286,7 +286,8 @@ function ToggleEye({ show, onToggle }: { show: boolean; onToggle: () => void }) 
         borderRadius: 4,
       }}
     >
-      {show ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
+      {/* Open eye = visible, slashed = hidden — the icon shows state, not the action. */}
+      {show ? <Eye size={15} aria-hidden="true" /> : <EyeOff size={15} aria-hidden="true" />}
     </button>
   );
 }

@@ -315,9 +315,11 @@ export default function Login() {
                     borderRadius: 4,
                   }}
                 >
+                  {/* Icon reflects the field's current state: open eye = password visible,
+                      slashed eye = hidden. (aria-label above names the action instead.) */}
                   {showPass
-                    ? <EyeOff size={15} aria-hidden="true" />
-                    : <Eye size={15} aria-hidden="true" />
+                    ? <Eye size={15} aria-hidden="true" />
+                    : <EyeOff size={15} aria-hidden="true" />
                   }
                 </button>
               </div>
