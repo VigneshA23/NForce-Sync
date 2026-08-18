@@ -905,7 +905,7 @@ export default function SubmitEOD() {
                     <div style={{ maxWidth: 240, marginBottom: 14 }}>
                       <Label>{ADJ_TYPES.find(t => t.value === adjType)?.durationLabel}</Label>
                       <Sel value={adjMinutes} onChange={e => { setAdjMinutes(e.target.value); setErrors([]); }}>
-                        <option value="">— Select —</option>
+                        <option value="">Select Time</option>
                         {ADJ_MINUTE_OPTIONS.map(m => (
                           <option key={m} value={m}>{minutesLabel(m)}</option>
                         ))}

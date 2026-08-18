@@ -63,6 +63,18 @@ function inputStyle(): React.CSSProperties {
   };
 }
 
+/**
+ * Control styling for a filter <select>. A <select> has no placeholder colour of its own — its
+ * first option renders in full-strength text, so "Select Project…" read like a chosen value next
+ * to the DatePicker's genuinely greyed "Select date". Grey the control while it is still unset.
+ */
+function selectStyle(value: string): React.CSSProperties {
+  return { ...inputStyle(), color: value === '' ? 'var(--txt-dim)' : 'var(--txt)' };
+}
+
+/** Real options stay full-strength even while the control itself is greyed. */
+const OPTION_STYLE: React.CSSProperties = { color: 'var(--txt)' };
+
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
     <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--txt-dim)', textTransform: 'uppercase' }}>
@@ -240,17 +252,21 @@ function FilterBar({
   const today = todayISO();
   const maxFrom = filters.to !== '' ? filters.to : today;
 
+  // Exporting without a range would fall back to the server's default window (month-to-date),
+  // silently downloading a period nobody asked for. Same gate the on-screen report uses.
+  const hasRange = filters.from !== '' && filters.to !== '';
+
   return (
     <Card style={{ padding: '14px 16px', marginBottom: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>From</FieldLabel>
+          <FieldLabel>From *</FieldLabel>
           {/* Capped at today: an EOD report only ever covers days that have already happened.
               Still bounded by To as well, so From can never overshoot the other end. */}
           <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>To</FieldLabel>
+          <FieldLabel>To *</FieldLabel>
           {/* Capped at today for the same reason as From — there are no EODs for days
               that have not happened yet. */}
           <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} />
@@ -259,47 +275,47 @@ function FilterBar({
             you have chosen), with the "All …" catch-all still available underneath. */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Project</FieldLabel>
-          <select style={inputStyle()} value={filters.projectId} onChange={e => set('projectId', e.target.value)}>
+          <select style={selectStyle(filters.projectId)} value={filters.projectId} onChange={e => set('projectId', e.target.value)}>
             <option value="" disabled>Select Project…</option>
-            <option value={ALL}>All projects</option>
-            {(filterOptions?.projects ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            <option style={OPTION_STYLE} value={ALL}>All projects</option>
+            {(filterOptions?.projects ?? []).map(p => <option style={OPTION_STYLE} key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Client</FieldLabel>
-          <select style={inputStyle()} value={filters.client} onChange={e => set('client', e.target.value)}>
+          <select style={selectStyle(filters.client)} value={filters.client} onChange={e => set('client', e.target.value)}>
             <option value="" disabled>Select Client…</option>
-            <option value={ALL}>All clients</option>
+            <option style={OPTION_STYLE} value={ALL}>All clients</option>
             {/* Internal work has no client by design — this is the only way to isolate it. */}
-            <option value={NO_CLIENT}>W/O Client</option>
-            {(filterOptions?.clients ?? []).map(c => <option key={c} value={c}>{c}</option>)}
+            <option style={OPTION_STYLE} value={NO_CLIENT}>W/O Client</option>
+            {(filterOptions?.clients ?? []).map(c => <option style={OPTION_STYLE} key={c} value={c}>{c}</option>)}
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Team Lead</FieldLabel>
-          <select style={inputStyle()} value={filters.teamManagerId} onChange={e => set('teamManagerId', e.target.value)}>
+          <select style={selectStyle(filters.teamManagerId)} value={filters.teamManagerId} onChange={e => set('teamManagerId', e.target.value)}>
             <option value="" disabled>Select Team Lead…</option>
-            <option value={ALL}>All team leads</option>
-            {(filterOptions?.teams ?? []).map(t => <option key={t.managerId} value={t.managerId}>{t.managerName}</option>)}
+            <option style={OPTION_STYLE} value={ALL}>All team leads</option>
+            {(filterOptions?.teams ?? []).map(t => <option style={OPTION_STYLE} key={t.managerId} value={t.managerId}>{t.managerName}</option>)}
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>EOD Status</FieldLabel>
-          <select style={inputStyle()} value={filters.status} onChange={e => set('status', e.target.value)}>
+          <select style={selectStyle(filters.status)} value={filters.status} onChange={e => set('status', e.target.value)}>
             <option value="" disabled>Select EOD Status…</option>
-            <option value={ALL}>All statuses</option>
-            <option value="SUBMITTED">Submitted</option>
-            <option value="LATE">Late</option>
-            <option value="MISSING">Missing</option>
+            <option style={OPTION_STYLE} value={ALL}>All statuses</option>
+            <option style={OPTION_STYLE} value="SUBMITTED">Submitted</option>
+            <option style={OPTION_STYLE} value="LATE">Late</option>
+            <option style={OPTION_STYLE} value="MISSING">Missing</option>
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Billable or Internal</FieldLabel>
-          <select style={inputStyle()} value={filters.billable} onChange={e => set('billable', e.target.value)}>
+          <select style={selectStyle(filters.billable)} value={filters.billable} onChange={e => set('billable', e.target.value)}>
             <option value="" disabled>Select Billable or Internal…</option>
-            <option value={ALL}>All work</option>
-            <option value="BILLABLE">Billable only</option>
-            <option value="INTERNAL">Internal only</option>
+            <option style={OPTION_STYLE} value={ALL}>All work</option>
+            <option style={OPTION_STYLE} value="BILLABLE">Billable only</option>
+            <option style={OPTION_STYLE} value="INTERNAL">Internal only</option>
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -335,11 +351,15 @@ function FilterBar({
         </div>
         <button
           onClick={onDownloadAll}
-          disabled={downloadingAll}
+          disabled={downloadingAll || !hasRange}
+          title={hasRange ? undefined : 'Choose a From Date and a To Date first'}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: 'var(--brand)', border: '1px solid var(--brand)', borderRadius: 8, color: '#fff',
-            fontSize: 12, fontWeight: 600, cursor: downloadingAll ? 'not-allowed' : 'pointer', padding: '7px 12px',
+            background: hasRange ? 'var(--brand)' : 'var(--raised2)',
+            border: hasRange ? '1px solid var(--brand)' : '1px solid var(--line2)',
+            borderRadius: 8, color: hasRange ? '#fff' : 'var(--txt-dim)',
+            fontSize: 12, fontWeight: 600,
+            cursor: downloadingAll || !hasRange ? 'not-allowed' : 'pointer', padding: '7px 12px',
             opacity: downloadingAll ? 0.6 : 1,
           }}
         >
@@ -739,6 +759,9 @@ export default function EodByEmployeeReport() {
   }
 
   async function runExport(key: string, employeeIds?: number[]) {
+    // Belt and braces: the button is disabled without a range, but the export endpoint falls
+    // back to a default window if from/to are blank, so never let a call through without one.
+    if (!hasRange) return;
     setExportingKey(key);
     try {
       await exportEodByEmployee({

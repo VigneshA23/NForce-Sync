@@ -28,10 +28,12 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @Transactional
@@ -73,6 +75,7 @@ public class EodService {
     private final ApprovalActionRepository actionRepository;
     private final BusinessRuleConfigRepository configRepository;
     private final ShiftDefinitionRepository shiftRepository;
+    private final com.nforceone.sync.businessrules.HolidayRepository holidayRepository;
 
     public EodService(EodEntryRepository entryRepository,
                       EodTaskRepository taskRepository,
@@ -81,7 +84,8 @@ public class EodService {
                       TaskCategoryRepository categoryRepository,
                       ApprovalActionRepository actionRepository,
                       BusinessRuleConfigRepository configRepository,
-                      ShiftDefinitionRepository shiftRepository) {
+                      ShiftDefinitionRepository shiftRepository,
+                      com.nforceone.sync.businessrules.HolidayRepository holidayRepository) {
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
         this.userRepository    = userRepository;
@@ -90,6 +94,7 @@ public class EodService {
         this.actionRepository  = actionRepository;
         this.configRepository  = configRepository;
         this.shiftRepository   = shiftRepository;
+        this.holidayRepository = holidayRepository;
     }
 
     public EodEntryDto saveDraft(SaveEodRequest request, String actingEmail) {
@@ -196,6 +201,19 @@ public class EodService {
     @Transactional(readOnly = true)
     public List<EodEntryDto> listEntries(Long employeeId, LocalDate from, LocalDate to,
                                           String actingEmail) {
+        return listEntries(employeeId, from, to, false, actingEmail);
+    }
+
+    /**
+     * @param includeMissing also return a synthetic MISSED row for each overdue working day with no
+     *                       entry. Opt-in because a missing day has no {@code eod_entry} row at all
+     *                       — nothing writes {@code Status.MISSED} — so these rows carry a null id
+     *                       and would confuse callers that expect real records (SubmitEOD loads a
+     *                       single day through here to populate its form).
+     */
+    @Transactional(readOnly = true)
+    public List<EodEntryDto> listEntries(Long employeeId, LocalDate from, LocalDate to,
+                                          boolean includeMissing, String actingEmail) {
         AppUser actor = requireUserByEmail(actingEmail);
         Long targetId = resolveTargetEmployee(actor, employeeId);
 
@@ -210,7 +228,94 @@ public class EodService {
             entries = entryRepository.findByEmployeeIdOrderByEntryDateDesc(targetId);
         }
 
-        return mapWithBatchedComments(entries);
+        List<EodEntryDto> dtos = mapWithBatchedComments(entries);
+        if (!includeMissing) return dtos;
+
+        AppUser employee = requireUserById(targetId);
+        List<EodEntryDto> merged = new java.util.ArrayList<>(dtos);
+        merged.addAll(buildMissingDays(employee, entries, from, to));
+        // Newest first, matching the repository ordering the real rows already arrive in.
+        merged.sort(java.util.Comparator.comparing(EodEntryDto::entryDate).reversed());
+        return merged;
+    }
+
+    /** How far back missing days are generated when the caller gives no explicit range. */
+    private static final int MISSING_LOOKBACK_DAYS = 180;
+
+    /**
+     * A synthetic MISSED row per overdue working day with no entry.
+     *
+     * <p>Same rule the Missing EOD reports apply: skip weekends and holidays, and only count a day
+     * once its deadline (shift end + cutoff hours) has passed — so today is never reported as a gap
+     * before the employee has had their chance to file it.
+     *
+     * <p>Window: the caller's range when given, otherwise from the employee's joining date (or
+     * their earliest entry, whichever is later) capped at {@link #MISSING_LOOKBACK_DAYS}, so an old
+     * account cannot generate an unbounded list.
+     */
+    private List<EodEntryDto> buildMissingDays(AppUser employee, List<EodEntry> entries,
+                                               LocalDate from, LocalDate to) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDate today = now.toLocalDate();
+
+        LocalDate windowEnd = to != null ? to : today;
+        if (windowEnd.isAfter(today)) windowEnd = today;
+
+        LocalDate windowStart;
+        if (from != null) {
+            windowStart = from;
+        } else {
+            LocalDate earliestEntry = entries.stream()
+                    .map(EodEntry::getEntryDate)
+                    .min(LocalDate::compareTo)
+                    .orElse(today);
+            LocalDate joined = employee.getJoiningDate();
+            windowStart = joined != null && joined.isAfter(earliestEntry) ? joined : earliestEntry;
+            LocalDate floor = windowEnd.minusDays(MISSING_LOOKBACK_DAYS);
+            if (windowStart.isBefore(floor)) windowStart = floor;
+        }
+        if (windowStart.isAfter(windowEnd)) return List.of();
+
+        Set<LocalDate> filled = entries.stream().map(EodEntry::getEntryDate)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<LocalDate> holidays = holidayRepository
+                .findByHolidayDateBetween(windowStart, windowEnd).stream()
+                .map(com.nforceone.sync.businessrules.Holiday::getHolidayDate)
+                .collect(java.util.stream.Collectors.toSet());
+        ShiftDefinition shift = employee.getShiftId() == null ? null
+                : shiftRepository.findById(employee.getShiftId()).orElse(null);
+
+        List<EodEntryDto> missing = new java.util.ArrayList<>();
+        for (LocalDate d = windowStart; !d.isAfter(windowEnd); d = d.plusDays(1)) {
+            if (filled.contains(d)) continue;
+            if (isWeekend(d) || holidays.contains(d)) continue;
+            if (!isPastDue(d, shift, now)) continue;
+            missing.add(missingDayDto(employee, d));
+        }
+        return missing;
+    }
+
+    /** Weekend rule mirrors UtilizationService/the reports: Saturday and Sunday are non-working. */
+    private boolean isWeekend(LocalDate d) {
+        return d.getDayOfWeek() == java.time.DayOfWeek.SATURDAY
+            || d.getDayOfWeek() == java.time.DayOfWeek.SUNDAY;
+    }
+
+    /** Identical to the helper in the Missing EOD report services — see the note there. */
+    private boolean isPastDue(LocalDate date, ShiftDefinition shift, LocalDateTime now) {
+        LocalDateTime cutoffAt = shift == null ? null : ShiftSchedule.cutoffAt(shift, date);
+        if (cutoffAt == null) return date.isBefore(now.toLocalDate());
+        return now.isAfter(cutoffAt);
+    }
+
+    /** Placeholder row: a null id marks it as synthetic — there is nothing to open or edit. */
+    private EodEntryDto missingDayDto(AppUser employee, LocalDate date) {
+        return new EodEntryDto(
+                null, employee.getId(), employee.getFullName(), employee.getEmployeeCode(),
+                date, EodEntry.Status.MISSED.name(), EodEntry.DayType.WORKING_DAY.name(),
+                null, null, false, null, null, null, null,
+                null, null, null, List.of(),
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -584,6 +689,13 @@ public class EodService {
         return userRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
+    }
+
+    /** Used when synthesizing missing days, which need the target's shift and joining date. */
+    private AppUser requireUserById(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Employee not found"));
     }
 
     private EodEntry requireEntryById(Long id) {

@@ -7,6 +7,7 @@ import { useToast } from '../../lib/toast';
 import { useProjectDashboardFilters } from '../../api/projectDashboard';
 import {
   useMissingEodReport, useRemindAll, useRemindEmployee,
+  type MissingEodFilterParams,
   type MissingEodDayDto, type MissingEodRowDto,
 } from '../../api/reports';
 
@@ -73,6 +74,18 @@ function inputStyle(): React.CSSProperties {
   };
 }
 
+/**
+ * Control styling for a filter <select>. A <select> has no placeholder colour of its own — its
+ * first option renders in full-strength text, so "Select Project…" read like a chosen value next
+ * to the DatePicker's genuinely greyed "Select date". Grey the control while it is still unset.
+ */
+function selectStyle(value: string): React.CSSProperties {
+  return { ...inputStyle(), color: value === '' ? 'var(--txt-dim)' : 'var(--txt)' };
+}
+
+/** Real options stay full-strength even while the control itself is greyed. */
+const OPTION_STYLE: React.CSSProperties = { color: 'var(--txt)' };
+
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
     <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--txt-dim)', textTransform: 'uppercase' }}>
@@ -83,17 +96,27 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 
 // ── filters ────────────────────────────────────────────────────────────────────
 
+// Same three-state model as the EOD by Employee report, so both tabs behave identically: '' is
+// the untouched placeholder, ALL is an explicit "don't restrict", anything else is a real id.
+// '' and ALL filter the same — the distinction only drives what the control displays at rest.
+const ALL_OPTION = 'ALL';
+
+/** '' (untouched) and ALL both mean "no restriction" on the wire. */
+function filterId(v: string): number | undefined {
+  return v === '' || v === ALL_OPTION ? undefined : Number(v);
+}
+
 interface Filters {
   from: string;
   to: string;
-  projectId: number | undefined;
-  teamManagerId: number | undefined;
+  projectId: string;
+  teamManagerId: string;
   employeeQuery: string;
 }
 
 function defaultFilters(): Filters {
   // Blank by design — the user picks the range; see the note in the report component.
-  return { from: '', to: '', projectId: undefined, teamManagerId: undefined, employeeQuery: '' };
+  return { from: '', to: '', projectId: '', teamManagerId: '', employeeQuery: '' };
 }
 
 function FilterBar({ filters, onChange, onReset }: {
@@ -116,29 +139,31 @@ function FilterBar({ filters, onChange, onReset }: {
     <Card style={{ padding: '14px 16px', marginBottom: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>From</FieldLabel>
+          <FieldLabel>From *</FieldLabel>
           {/* Capped at today: an EOD report only ever covers days that have already happened.
               Still bounded by To as well, so From can never overshoot the other end. */}
           <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>To</FieldLabel>
+          <FieldLabel>To *</FieldLabel>
           {/* Capped at today for the same reason as From — there are no EODs for days
               that have not happened yet. */}
           <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Project</FieldLabel>
-          <select style={inputStyle()} value={filters.projectId ?? ''} onChange={e => set('projectId', e.target.value ? Number(e.target.value) : undefined)}>
-            <option value="">All projects</option>
-            {(filterOptions?.projects ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          <select style={selectStyle(filters.projectId)} value={filters.projectId} onChange={e => set('projectId', e.target.value)}>
+            <option value="" disabled>Select Project…</option>
+            <option style={OPTION_STYLE} value={ALL_OPTION}>All projects</option>
+            {(filterOptions?.projects ?? []).map(p => <option style={OPTION_STYLE} key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Team Lead</FieldLabel>
-          <select style={inputStyle()} value={filters.teamManagerId ?? ''} onChange={e => set('teamManagerId', e.target.value ? Number(e.target.value) : undefined)}>
-            <option value="">All team leads</option>
-            {(filterOptions?.teams ?? []).map(t => <option key={t.managerId} value={t.managerId}>{t.managerName}</option>)}
+          <select style={selectStyle(filters.teamManagerId)} value={filters.teamManagerId} onChange={e => set('teamManagerId', e.target.value)}>
+            <option value="" disabled>Select Team Lead…</option>
+            <option style={OPTION_STYLE} value={ALL_OPTION}>All team leads</option>
+            {(filterOptions?.teams ?? []).map(t => <option style={OPTION_STYLE} key={t.managerId} value={t.managerId}>{t.managerName}</option>)}
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -261,7 +286,7 @@ function GapsCalendar({ days, selected, onToggle }: {
 function GapsModal({ row, onClose, filters }: {
   row: MissingEodRowDto | null;
   onClose: () => void;
-  filters: Filters;
+  filters: MissingEodFilterParams;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -273,7 +298,9 @@ function GapsModal({ row, onClose, filters }: {
   if (!row) return null;
   const emp = row;
   const missingDates = emp.days.filter(d => d.status === 'MISSED').map(d => d.date);
-  const targetDates = selected.size > 0 ? [...selected].sort() : missingDates;
+  const targetDates = [...selected].sort();
+  // Sending requires an explicit choice of days — see the note on the Send reminder button.
+  const canSend = selected.size > 0;
 
   function toggle(date: string) {
     const next = new Set(selected);
@@ -282,9 +309,11 @@ function GapsModal({ row, onClose, filters }: {
   }
 
   async function confirmSendReminder() {
+    if (selected.size === 0) return;
     try {
-      const dates = selected.size > 0 ? [...selected] : undefined;
-      const res = await remind.mutateAsync({ employeeId: emp.employeeId, filters, dates });
+      // Always explicit. Omitting dates makes the endpoint remind about every missing day, which
+      // is exactly the accidental blast this dialog must not be able to trigger.
+      const res = await remind.mutateAsync({ employeeId: emp.employeeId, filters, dates: [...selected] });
       show(`Reminder sent for ${res.remindedDays} missing day${res.remindedDays !== 1 ? 's' : ''}.`, 'success');
       setConfirmOpen(false);
       onClose();
@@ -297,7 +326,7 @@ function GapsModal({ row, onClose, filters }: {
     <>
       <Modal open title={`${emp.employeeName} — missing EOD gaps`} onClose={onClose} width={420}>
         <div style={{ marginBottom: 12, fontSize: 12.5, color: 'var(--txt-mut)' }}>
-          {emp.missingCount} missing of {emp.totalWorkingDays} working days ({emp.missingPct.toFixed(0)}%). Click a red day to select it, or leave none selected to remind about all of them.
+          {emp.missingCount} missing of {emp.totalWorkingDays} working days ({emp.missingPct.toFixed(0)}%). Click a red day to select it, or use Select all missing — a reminder is only sent for the days you pick.
         </div>
         <GapsCalendar days={emp.days} selected={selected} onToggle={toggle} />
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
@@ -318,14 +347,21 @@ function GapsModal({ row, onClose, filters }: {
             </button>
           )}
           <div style={{ flex: 1 }} />
+          {/* Disabled until days are picked. Sending with nothing selected used to fall back to
+              "every missing day", so a single click could blast a reminder for the whole range. */}
           <button
             onClick={() => setConfirmOpen(true)}
+            disabled={!canSend}
+            title={canSend ? undefined : 'Select at least one missing day first'}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--brand)', border: '1px solid var(--brand)',
-              borderRadius: 8, color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: '8px 14px',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: canSend ? 'var(--brand)' : 'var(--raised2)',
+              border: `1px solid ${canSend ? 'var(--brand)' : 'var(--line2)'}`,
+              borderRadius: 8, color: canSend ? '#fff' : 'var(--txt-dim)',
+              fontSize: 12.5, fontWeight: 600, cursor: canSend ? 'pointer' : 'not-allowed', padding: '8px 14px',
             }}
           >
-            <Bell size={13} aria-hidden="true" /> {selected.size > 0 ? `Send reminder (${selected.size})` : 'Send reminder'}
+            <Bell size={13} aria-hidden="true" /> {canSend ? `Send reminder (${selected.size})` : 'Send reminder'}
           </button>
         </div>
       </Modal>
@@ -373,13 +409,17 @@ export default function MissingEodReport() {
   // Both ends are required by the endpoint, so nothing is requested until both are picked.
   const hasRange = filters.from !== '' && filters.to !== '';
 
-  const { data, isLoading, isError, refetch } = useMissingEodReport({
+  // The UI keeps ids as strings for its three-state dropdowns; the API wants numbers. Convert
+  // once here so the report query and every remind call are guaranteed to use the same scope.
+  const queryFilters = {
     from: filters.from,
     to: filters.to,
-    projectId: filters.projectId,
-    teamManagerId: filters.teamManagerId,
+    projectId: filterId(filters.projectId),
+    teamManagerId: filterId(filters.teamManagerId),
     employeeQuery: filters.employeeQuery || undefined,
-  }, hasRange);
+  };
+
+  const { data, isLoading, isError, refetch } = useMissingEodReport(queryFilters, hasRange);
 
   const remindOne = useRemindEmployee();
   const remindAll = useRemindAll();
@@ -396,7 +436,7 @@ export default function MissingEodReport() {
     const row = confirmRemindRow;
     setConfirmRemindRow(null);
     try {
-      const res = await remindOne.mutateAsync({ employeeId: row.employeeId, filters });
+      const res = await remindOne.mutateAsync({ employeeId: row.employeeId, filters: queryFilters });
       show(`Reminder sent for ${res.remindedDays} missing day${res.remindedDays !== 1 ? 's' : ''}.`, 'success');
     } catch (err) {
       show(extractError(err), 'error');
@@ -406,7 +446,7 @@ export default function MissingEodReport() {
   async function confirmedRemindAll() {
     setConfirmRemindAll(false);
     try {
-      const res = await remindAll.mutateAsync(filters);
+      const res = await remindAll.mutateAsync(queryFilters);
       show(`Reminded ${res.remindedCount} employee${res.remindedCount !== 1 ? 's' : ''}.`, 'success');
     } catch (err) {
       show(extractError(err), 'error');
@@ -514,7 +554,7 @@ export default function MissingEodReport() {
         </Card>
       )}
 
-      <GapsModal row={gapsFor} onClose={() => setGapsFor(null)} filters={filters} />
+      <GapsModal row={gapsFor} onClose={() => setGapsFor(null)} filters={queryFilters} />
 
       <Modal
         open={confirmRemindRow != null}

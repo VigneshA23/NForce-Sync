@@ -527,6 +527,22 @@ function ProjectModal({ open, onClose, editing }: {
     <Modal open={open} title={editing ? 'Edit Project' : 'New Project'} onClose={handleClose} width={480}>
       <form onSubmit={handleSubmit} noValidate>
         {error && <ErrorBanner message={error} />}
+        {/* Summary of what is blocking the save. The per-field messages below say exactly what to
+            fix; this makes the rejected submit obvious without hunting down the form. */}
+        {showErrors && !canSubmit && (
+          <div role="alert" style={{
+            display: 'flex', alignItems: 'flex-start', gap: 8,
+            padding: '9px 12px', borderRadius: 7, marginBottom: 14,
+            background: 'color-mix(in srgb, var(--risk) 12%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--risk) 30%, transparent)',
+            fontSize: 12, color: 'var(--risk)', fontWeight: 600,
+          }}>
+            <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
+            {Object.keys(fieldErrors).length === 1
+              ? 'Fix the highlighted field below to continue.'
+              : `Fix the ${Object.keys(fieldErrors).length} highlighted fields below to continue.`}
+          </div>
+        )}
         <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           {/* Editable on both create and edit; the server keeps it unique across projects. */}
           <div>

@@ -42,7 +42,45 @@ public class EmailService {
         sendAsync(toEmail, subject, html);
     }
 
-    private void sendAsync(String to, String subject, String html) {
+    /**
+     * Blocking variant for the self-service reset, where the temp password exists nowhere else.
+     *
+     * <p>The caller must know whether delivery was accepted BEFORE it overwrites the stored
+     * password: a fire-and-forget send that fails (expired key, exhausted quota, Resend outage)
+     * leaves the account with a password nobody can ever learn, locking the user out with no
+     * recovery path but an admin. Returning the outcome lets the caller abandon the reset instead.
+     *
+     * @return true when Resend accepted the message (2xx)
+     */
+    public boolean sendPasswordResetEmailSync(String toEmail, String fullName, String tempPassword) {
+        String subject = "NForce Sync — your password has been reset";
+        String html = buildResetHtml(fullName, toEmail, tempPassword);
+        return sendBlocking(toEmail, subject, html);
+    }
+
+    /** Shares the request shape with {@link #sendAsync}; only the waiting differs. */
+    private boolean sendBlocking(String to, String subject, String html) {
+        try {
+            HttpResponse<String> res = httpClient.send(
+                    buildRequest(to, subject, html), HttpResponse.BodyHandlers.ofString());
+            if (res.statusCode() >= 200 && res.statusCode() < 300) {
+                log.info("Email sent to {} (subject: {})", to, subject);
+                return true;
+            }
+            log.error("Resend API error: status={} body={}", res.statusCode(), res.body());
+            return false;
+        } catch (java.io.IOException e) {
+            log.error("Failed to send email to {}: {}", to, e.getMessage());
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Interrupted sending email to {}", to);
+            return false;
+        }
+    }
+
+    /** One place where the Resend request is shaped, so blocking and async sends cannot drift. */
+    private HttpRequest buildRequest(String to, String subject, String html) {
         String body = """
                 {
                   "from": "%s",
@@ -52,15 +90,17 @@ public class EmailService {
                 }
                 """.formatted(fromAddress, to, subject, jsonString(html));
 
-        HttpRequest request = HttpRequest.newBuilder()
+        return HttpRequest.newBuilder()
                 .uri(URI.create(RESEND_URL))
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .timeout(Duration.ofSeconds(10))
                 .build();
+    }
 
-        httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+    private void sendAsync(String to, String subject, String html) {
+        httpClient.sendAsync(buildRequest(to, subject, html), HttpResponse.BodyHandlers.ofString())
                 .thenAccept(res -> {
                     if (res.statusCode() >= 200 && res.statusCode() < 300) {
                         log.info("Email sent to {} (subject: {})", to, subject);

@@ -117,7 +117,13 @@ public class TeamEodByEmployeeReportService {
                         .filter(a -> a.getProject().getId().equals(projectId))
                         .toList();
             }
-            if (client != null && !client.isBlank()) {
+            if (EodByEmployeeReportService.NO_CLIENT.equals(client)) {
+                // "W/O Client": internal work, where the project type never captures a client name.
+                allocations = allocations.stream()
+                        .filter(a -> a.getProject().getClient() == null
+                                  || a.getProject().getClient().isBlank())
+                        .toList();
+            } else if (client != null && !client.isBlank()) {
                 allocations = allocations.stream()
                         .filter(a -> client.equals(a.getProject().getClient()))
                         .toList();

@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle, Clock, XCircle, ChevronRight, AlertTriangle,
   Search, ArrowUpDown, ChevronLeft, Calendar as CalendarIcon,
 } from 'lucide-react';
 import { listEntries } from '../../api/eod';
-import type { EodEntryDto } from '../../api/eod';
+import type { EodHistoryEntryDto } from '../../api/eod';
 import { formatDate as formatDateDDMMYYYY, formatDateTime } from '../../lib/date';
 import {
   MIN_ISO_DATE, MAX_ISO_DATE, maskDateInput, parseStrictDDMMYYYY, isoToDDMMYYYY,
@@ -28,7 +28,9 @@ const STATUS_META: Record<string, { color: string; label: string; Icon: React.FC
   SUBMITTED:         { color: '#4C8DD6', label: 'Submitted',         Icon: Clock },
   APPROVED:          { color: '#2FB67C', label: 'Approved',          Icon: CheckCircle },
   REJECTED:          { color: '#E4373D', label: 'Rejected',          Icon: XCircle },
-  MISSED:            { color: '#6B7280', label: 'Missed',            Icon: AlertTriangle },
+  // Amber, not the old #6B7280 — index.css flags that grey as failing AA, and these rows only
+  // started rendering once missing days were synthesized. Distinct from Draft's grey too.
+  MISSED:            { color: '#E0A93B', label: 'Missing',           Icon: AlertTriangle },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -54,6 +56,7 @@ const STATUS_FILTERS = [
   { value: 'APPROVED',         label: 'Approved' },
   { value: 'REJECTED',         label: 'Rejected' },
   { value: 'DRAFT',            label: 'Draft' },
+  { value: 'MISSED',           label: 'Missing' },
 ];
 
 const PAGE_SIZE = 10;
@@ -83,7 +86,15 @@ type DateFilterStatus = 'none' | 'valid' | 'invalid';
 
 export default function EodHistory() {
   const navigate = useNavigate();
-  const [statusFilter, setStatusFilter] = useState('');
+  const [searchParams] = useSearchParams();
+
+  // Deep link support: the "Missing EOD reminder" notification points here with ?status=MISSED so
+  // the employee lands on exactly the gaps it told them about. Validated against the dropdown's
+  // own options, so an unknown value in the URL just falls back to the default view.
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const requested = searchParams.get('status') ?? '';
+    return STATUS_FILTERS.some(f => f.value === requested && requested !== '') ? requested : '';
+  });
   const [search, setSearch] = useState('');
   // Committed filter values (YYYY-MM-DD) — these, and only these, drive the history query.
   // They only ever change once `applyDateFilter` has confirmed both fields are individually
@@ -106,23 +117,23 @@ export default function EodHistory() {
 
   const { data: entries = [], isLoading, isError } = useQuery({
     queryKey: ['eod-history', dateFrom, dateTo],
-    queryFn:  () => listEntries(undefined, dateFrom || undefined, dateTo || undefined),
+    queryFn:  () => listEntries(undefined, dateFrom || undefined, dateTo || undefined, true),
     // Never issue a request for an invalid/incomplete range — `dateFrom`/`dateTo` are only
     // ever committed (see `applyDateFilter`) once the full pair is valid, so this just blocks
     // a stray refetch (e.g. window refocus) while the fields sit in an invalid state.
     enabled: dateFilterStatus !== 'invalid',
   });
 
-  const totalHours = (entry: EodEntryDto) =>
+  const totalHours = (entry: EodHistoryEntryDto) =>
     entry.tasks.reduce((sum, t) => sum + (Number(t.hours) || 0), 0);
 
-  const projectSummary = (entry: EodEntryDto): string => {
+  const projectSummary = (entry: EodHistoryEntryDto): string => {
     const codes = Array.from(new Set(entry.tasks.map(t => t.projectCode).filter(Boolean))) as string[];
     if (codes.length === 0) return '—';
     return codes.length === 1 ? codes[0] : `${codes[0]} +${codes.length - 1}`;
   };
 
-  const taskSummary = (entry: EodEntryDto): string => {
+  const taskSummary = (entry: EodHistoryEntryDto): string => {
     if (entry.tasks.length === 0) return entry.dayType !== 'WORKING_DAY' ? entry.dayType.replace('_', ' ') : '—';
     const labels = entry.tasks.map(t => t.categoryName || t.description || 'Task');
     return labels.length === 1 ? labels[0] : `${labels[0]} +${labels.length - 1} more`;
@@ -246,7 +257,7 @@ export default function EodHistory() {
     return `${weekday}, ${formatDateDDMMYYYY(iso)}`;
   }
 
-  function handleView(entry: EodEntryDto) {
+  function handleView(entry: EodHistoryEntryDto) {
     navigate(`/eod/submit?date=${entry.entryDate}`);
   }
 
@@ -447,7 +458,8 @@ export default function EodHistory() {
           {/* Rows */}
           {paged.map((entry, i) => (
             <div
-              key={entry.id}
+              // Synthetic MISSED rows have no id; the date is unique per employee either way.
+              key={entry.id ?? `missing-${entry.entryDate}`}
               onClick={() => handleView(entry)}
               role="button"
               tabIndex={0}

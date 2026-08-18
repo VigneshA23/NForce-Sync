@@ -277,7 +277,10 @@ public class TeamMissingEodReportService {
         String suffix = dates.size() > 5 ? " and " + (dates.size() - 5) + " more" : "";
         String message = "You have " + dates.size() + " missing EOD entr" + (dates.size() == 1 ? "y" : "ies")
                 + ": " + dateList + suffix;
-        notificationService.send(row.employeeId(), "EOD_REMINDER", "Missing EOD reminder", message, "/eod/submit");
+        // Lands on My EOD History pre-filtered to Missing: this reminder covers several days, so
+        // deep-linking one submit form would be wrong — the employee needs to see the whole list.
+        notificationService.send(row.employeeId(), "EOD_REMINDER", "Missing EOD reminder", message,
+                "/eod/history?status=MISSED");
     }
 
     private boolean isMissing(EodEntry entry) {

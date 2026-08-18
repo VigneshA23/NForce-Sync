@@ -32,6 +32,8 @@ import java.util.Map;
 @Transactional
 public class UserService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UserService.class);
+
     private static final SecureRandom RANDOM = new SecureRandom();
 
     // Mirrors frontend ROLE_LABELS (src/lib/nav.ts) so free-text search ("team lead",
@@ -267,11 +269,31 @@ public class UserService {
         return tempPassword;
     }
 
+    /**
+     * Self-service reset. The email is sent BEFORE the new password is stored, and the change is
+     * abandoned if delivery is not accepted.
+     *
+     * <p>The temp password exists nowhere else — there is no screen showing it, unlike the admin
+     * reset. Writing it first and mailing it afterwards meant a failed send (exhausted quota,
+     * expired key, Resend outage) left the account with a password nobody could ever learn, while
+     * the UI still reported success. Failing closed keeps the user's existing password working.
+     *
+     * <p>The caller's response is deliberately identical either way — revealing that the send
+     * failed would also reveal that the address is registered.
+     */
     public void forgotPassword(String email) {
         String normalized = email.toLowerCase().trim();
         userRepository.findByEmailAndDeletedAtIsNull(normalized).ifPresent(user -> {
             if (user.getStatus() == AppUser.Status.ACTIVE && user.getDeletedAt() == null) {
                 String tempPassword = generateTempPassword();
+
+                if (!emailService.sendPasswordResetEmailSync(
+                        user.getEmail(), user.getFullName(), tempPassword)) {
+                    log.error("Password reset for {} abandoned — the email could not be sent, so the "
+                            + "existing password was left in place.", user.getEmail());
+                    return;
+                }
+
                 user.setPasswordHash(passwordEncoder.encode(tempPassword));
                 user.setMustChangePassword(true);
                 // Same reasoning as the admin reset: a self-service reset must release the lockout,
@@ -279,7 +301,6 @@ public class UserService {
                 user.setFailedLoginAttempts(0);
                 user.setLockedUntil(null);
                 userRepository.save(user);
-                emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), tempPassword);
                 writeAudit("APP_USER", user.getId(), "PASSWORD_RESET_SELF", null, null, user);
             }
         });

@@ -38,8 +38,11 @@ public class EodController {
     public List<EodEntryDto> listEntries(
             @RequestParam(required = false) Long employeeId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return eodService.listEntries(employeeId, from, to, actingEmail());
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            // Opt-in: adds synthetic MISSED rows for overdue days with no entry. Off by default so
+            // callers that expect only real records (e.g. the Submit EOD form) are unaffected.
+            @RequestParam(required = false, defaultValue = "false") boolean includeMissing) {
+        return eodService.listEntries(employeeId, from, to, includeMissing, actingEmail());
     }
 
     @GetMapping("/{id}")

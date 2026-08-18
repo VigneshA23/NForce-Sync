@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Download, RefreshCw, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
 import { formatDate, todayISO } from '../../lib/date';
@@ -63,6 +63,18 @@ function inputStyle(): React.CSSProperties {
   };
 }
 
+/**
+ * Control styling for a filter <select>. A <select> has no placeholder colour of its own — its
+ * first option renders in full-strength text, so "Select Project…" read like a chosen value next
+ * to the DatePicker's genuinely greyed "Select date". Grey the control while it is still unset.
+ */
+function selectStyle(value: string): React.CSSProperties {
+  return { ...inputStyle(), color: value === '' ? 'var(--txt-dim)' : 'var(--txt)' };
+}
+
+/** Real options stay full-strength even while the control itself is greyed. */
+const OPTION_STYLE: React.CSSProperties = { color: 'var(--txt)' };
+
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
     <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--txt-dim)', textTransform: 'uppercase' }}>
@@ -73,13 +85,35 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 
 // ── filter bar ─────────────────────────────────────────────────────────────────
 
+// Kept identical to the Project Manager report so the two roles behave the same. Each dropdown
+// has three resting states, which is why ids are strings: '' is the untouched placeholder, ALL is
+// an explicit "don't restrict", anything else is a real selection. '' and ALL filter identically —
+// the distinction exists so the control can show "Select Project…" before you have chosen, and
+// "All projects" after you deliberately did.
+const ALL = 'ALL';
+
+/** Sentinel for "projects that genuinely have no client" — internal work. Mirrored in
+ *  EodByEmployeeReportService; a blank client already means "no filter", so it cannot be reused. */
+const NO_CLIENT = '__NONE__';
+
 interface Filters {
   from: string;
   to: string;
-  projectId: number | undefined;
+  projectId: string;
+  client: string;
   status: string;
   billable: string;
   employeeQuery: string;
+}
+
+/** '' (untouched) and ALL both mean "no restriction" on the wire. */
+function filterValue(v: string): string | undefined {
+  return v === '' || v === ALL ? undefined : v;
+}
+
+function filterId(v: string): number | undefined {
+  const raw = filterValue(v);
+  return raw == null ? undefined : Number(raw);
 }
 
 // Dates start blank on purpose: the report covers whatever range the user asks for, and
@@ -88,12 +122,110 @@ interface Filters {
 function defaultFilters(): Filters {
   return {
     from: '', to: '',
-    projectId: undefined, status: '', billable: '', employeeQuery: '',
+    projectId: '', client: '', status: '', billable: '', employeeQuery: '',
   };
+}
+
+/**
+ * Employee box with a live suggestion list drawn from the rows the current filters already
+ * returned — so it can only ever offer someone the report actually contains. Picking one opens
+ * that person's EOD detail rather than just narrowing the table. Same control as the PM report.
+ */
+function EmployeeSearch({ query, onQueryChange, matches, onPick }: {
+  query: string;
+  onQueryChange: (v: string) => void;
+  matches: EodByEmployeeRowDto[];
+  onPick: (employeeId: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [open]);
+
+  const showList = open && query.trim() !== '' && matches.length > 0;
+
+  function pick(id: number) {
+    onPick(id);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={boxRef} style={{ position: 'relative' }}>
+      <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-dim)' }} aria-hidden="true" />
+      <input
+        value={query}
+        onChange={e => { onQueryChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={e => {
+          if (e.key === 'Escape') setOpen(false);
+          // Enter with exactly one match is the fast path for a fully typed name.
+          if (e.key === 'Enter' && showList && matches.length === 1) {
+            e.preventDefault();
+            pick(matches[0].employeeId);
+          }
+        }}
+        placeholder="Name or ID"
+        role="combobox"
+        aria-expanded={showList}
+        aria-autocomplete="list"
+        style={{ ...inputStyle(), paddingLeft: 28 }}
+      />
+      {showList && (
+        <div
+          role="listbox"
+          style={{
+            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 40,
+            maxHeight: 208, overflowY: 'auto',
+            background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,.35)',
+          }}
+        >
+          {matches.slice(0, 8).map(m => (
+            <button
+              key={m.employeeId}
+              type="button"
+              role="option"
+              aria-selected={false}
+              onClick={() => pick(m.employeeId)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                background: 'none', border: 'none', cursor: 'pointer', padding: '8px 10px',
+                color: 'var(--txt)', fontSize: 12.5,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--raised2)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            >
+              <span style={{
+                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                background: 'var(--raised2)', color: 'var(--txt-mut)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 700,
+              }}>
+                {initials(m.employeeName)}
+              </span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {m.employeeName}
+              </span>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+                {m.employeeCode}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function FilterBar({
   filters, onChange, onReset, summary, format, onFormatChange, onDownloadAll, downloadingAll,
+  employeeMatches, onPickEmployee,
 }: {
   filters: Filters;
   onChange: (next: Filters) => void;
@@ -103,6 +235,9 @@ function FilterBar({
   onFormatChange: (f: ExportFormat) => void;
   onDownloadAll: () => void;
   downloadingAll: boolean;
+  /** Rows the current filters returned, already narrowed by the typed query. */
+  employeeMatches: EodByEmployeeRowDto[];
+  onPickEmployee: (employeeId: number) => void;
 }) {
   const { data: filterOptions } = useTeamReportFilters();
 
@@ -115,56 +250,72 @@ function FilterBar({
   const today = todayISO();
   const maxFrom = filters.to !== '' ? filters.to : today;
 
+  // Exporting without a range would fall back to the server's default window (month-to-date),
+  // silently downloading a period nobody asked for. Same gate the on-screen report uses.
+  const hasRange = filters.from !== '' && filters.to !== '';
+
   return (
     <Card style={{ padding: '14px 16px', marginBottom: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>From</FieldLabel>
+          <FieldLabel>From *</FieldLabel>
           {/* Capped at today: an EOD report only ever covers days that have already happened.
               Still bounded by To as well, so From can never overshoot the other end. */}
           <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>To</FieldLabel>
+          <FieldLabel>To *</FieldLabel>
           {/* Capped at today for the same reason as From — there are no EODs for days
               that have not happened yet. */}
           <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} />
         </label>
+        {/* Each select opens on a masked placeholder (disabled, so it cannot be re-picked once
+            you have chosen), with the "All …" catch-all still available underneath. */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Project</FieldLabel>
-          <select style={inputStyle()} value={filters.projectId ?? ''} onChange={e => set('projectId', e.target.value ? Number(e.target.value) : undefined)}>
-            <option value="">All projects</option>
-            {(filterOptions?.projects ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          <select style={selectStyle(filters.projectId)} value={filters.projectId} onChange={e => set('projectId', e.target.value)}>
+            <option value="" disabled>Select Project…</option>
+            <option style={OPTION_STYLE} value={ALL}>All projects</option>
+            {(filterOptions?.projects ?? []).map(p => <option style={OPTION_STYLE} key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <FieldLabel>Client</FieldLabel>
+          <select style={selectStyle(filters.client)} value={filters.client} onChange={e => set('client', e.target.value)}>
+            <option value="" disabled>Select Client…</option>
+            <option style={OPTION_STYLE} value={ALL}>All clients</option>
+            {/* Internal work has no client by design — this is the only way to isolate it. */}
+            <option style={OPTION_STYLE} value={NO_CLIENT}>W/O Client</option>
+            {(filterOptions?.clients ?? []).map(c => <option style={OPTION_STYLE} key={c} value={c}>{c}</option>)}
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>EOD Status</FieldLabel>
-          <select style={inputStyle()} value={filters.status} onChange={e => set('status', e.target.value)}>
-            <option value="">All statuses</option>
-            <option value="SUBMITTED">Submitted</option>
-            <option value="LATE">Late</option>
-            <option value="MISSING">Missing</option>
+          <select style={selectStyle(filters.status)} value={filters.status} onChange={e => set('status', e.target.value)}>
+            <option value="" disabled>Select EOD Status…</option>
+            <option style={OPTION_STYLE} value={ALL}>All statuses</option>
+            <option style={OPTION_STYLE} value="SUBMITTED">Submitted</option>
+            <option style={OPTION_STYLE} value="LATE">Late</option>
+            <option style={OPTION_STYLE} value="MISSING">Missing</option>
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Billable or Internal</FieldLabel>
-          <select style={inputStyle()} value={filters.billable} onChange={e => set('billable', e.target.value)}>
-            <option value="">All work</option>
-            <option value="BILLABLE">Billable only</option>
-            <option value="INTERNAL">Internal only</option>
+          <select style={selectStyle(filters.billable)} value={filters.billable} onChange={e => set('billable', e.target.value)}>
+            <option value="" disabled>Select Billable or Internal…</option>
+            <option style={OPTION_STYLE} value={ALL}>All work</option>
+            <option style={OPTION_STYLE} value="BILLABLE">Billable only</option>
+            <option style={OPTION_STYLE} value="INTERNAL">Internal only</option>
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Employee</FieldLabel>
-          <div style={{ position: 'relative' }}>
-            <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-dim)' }} aria-hidden="true" />
-            <input
-              value={filters.employeeQuery}
-              onChange={e => set('employeeQuery', e.target.value)}
-              placeholder="Name or ID"
-              style={{ ...inputStyle(), paddingLeft: 28 }}
-            />
-          </div>
+          <EmployeeSearch
+            query={filters.employeeQuery}
+            onQueryChange={v => set('employeeQuery', v)}
+            matches={employeeMatches}
+            onPick={onPickEmployee}
+          />
         </label>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
@@ -190,11 +341,15 @@ function FilterBar({
         </div>
         <button
           onClick={onDownloadAll}
-          disabled={downloadingAll}
+          disabled={downloadingAll || !hasRange}
+          title={hasRange ? undefined : 'Choose a From Date and a To Date first'}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: 'var(--brand)', border: '1px solid var(--brand)', borderRadius: 8, color: '#fff',
-            fontSize: 12, fontWeight: 600, cursor: downloadingAll ? 'not-allowed' : 'pointer', padding: '7px 12px',
+            background: hasRange ? 'var(--brand)' : 'var(--raised2)',
+            border: hasRange ? '1px solid var(--brand)' : '1px solid var(--line2)',
+            borderRadius: 8, color: hasRange ? '#fff' : 'var(--txt-dim)',
+            fontSize: 12, fontWeight: 600,
+            cursor: downloadingAll || !hasRange ? 'not-allowed' : 'pointer', padding: '7px 12px',
             opacity: downloadingAll ? 0.6 : 1,
           }}
         >
@@ -221,14 +376,16 @@ const ENTRY_TABLE_COLUMNS = '100px 1.1fr 1.4fr 62px 74px';
 const ENTRY_TABLE_MIN_WIDTH = 520;
 
 function RosterFlow({
-  employees, isLoading, onExport, exportingKey,
+  employees, isLoading, onExport, exportingKey, selectedId, setSelectedId,
 }: {
   employees: EodByEmployeeRowDto[];
   isLoading: boolean;
   onExport: (key: string, employeeIds?: number[]) => void;
   exportingKey: string | null;
+  // Owned by the page so the Employee search box can open someone's detail directly.
+  selectedId: number | null;
+  setSelectedId: (id: number | null) => void;
 }) {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [page, setPage] = useState(0);
   const [dateSort, setDateSort] = useState<'asc' | 'desc'>('desc');
   const [checked, setChecked] = useState<Set<number>>(new Set());
@@ -564,24 +721,46 @@ export default function LeadEodByEmployeeReport() {
   const { data, isLoading, isError, refetch } = useTeamEodByEmployeeReport({
     from: filters.from,
     to: filters.to,
-    projectId: filters.projectId,
-    status: filters.status || undefined,
-    billable: filters.billable || undefined,
-    employeeQuery: filters.employeeQuery || undefined,
+    projectId: filterId(filters.projectId),
+    client: filterValue(filters.client),
+    status: filterValue(filters.status),
+    billable: filterValue(filters.billable),
+    employeeQuery: filterValue(filters.employeeQuery),
   }, hasRange);
 
   const employees = useMemo(() => data?.employees ?? [], [data]);
 
+  // Suggestions for the Employee box: the rows these filters already returned, matched on name
+  // or code. Client-side because the list is small and it keeps the dropdown instant.
+  const employeeMatches = useMemo(() => {
+    const q = filters.employeeQuery.trim().toLowerCase();
+    if (q === '') return [];
+    return employees.filter(e =>
+      e.employeeName.toLowerCase().includes(q) || e.employeeCode.toLowerCase().includes(q));
+  }, [employees, filters.employeeQuery]);
+
+  // Selection lives here so the search box can drive the detail pane, not just the roster list.
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  function pickEmployee(employeeId: number) {
+    setFlow('roster');           // the detail pane only exists in the roster flow
+    setSelectedId(employeeId);
+  }
+
   async function runExport(key: string, employeeIds?: number[]) {
+    // Belt and braces: the button is disabled without a range, but the export endpoint falls
+    // back to a default window if from/to are blank, so never let a call through without one.
+    if (!hasRange) return;
     setExportingKey(key);
     try {
       await exportTeamEodByEmployee({
         from: filters.from,
         to: filters.to,
-        projectId: filters.projectId,
-        status: filters.status || undefined,
-        billable: filters.billable || undefined,
-        employeeQuery: filters.employeeQuery || undefined,
+        projectId: filterId(filters.projectId),
+        client: filterValue(filters.client),
+        status: filterValue(filters.status),
+        billable: filterValue(filters.billable),
+        employeeQuery: filterValue(filters.employeeQuery),
         employeeIds,
         format,
       });
@@ -619,6 +798,7 @@ export default function LeadEodByEmployeeReport() {
         filters={filters} onChange={setFilters} onReset={() => setFilters(defaultFilters())} summary={data}
         format={format} onFormatChange={setFormat}
         onDownloadAll={() => runExport('all')} downloadingAll={exportingKey === 'all'}
+        employeeMatches={employeeMatches} onPickEmployee={pickEmployee}
       />
 
       {!hasRange ? (
@@ -635,7 +815,10 @@ export default function LeadEodByEmployeeReport() {
           </button>
         </Card>
       ) : flow === 'roster' ? (
-        <RosterFlow employees={employees} isLoading={isLoading} onExport={runExport} exportingKey={exportingKey} />
+        <RosterFlow
+          employees={employees} isLoading={isLoading} onExport={runExport} exportingKey={exportingKey}
+          selectedId={selectedId} setSelectedId={setSelectedId}
+        />
       ) : (
         <TeamFlow employees={employees} isLoading={isLoading} onExport={runExport} exportingKey={exportingKey} />
       )}

@@ -84,13 +84,27 @@ export async function submitEntry(id: number): Promise<EodEntryDto> {
   return res.data;
 }
 
+/**
+ * A row as returned when `includeMissing` is on: the id is nullable, because a synthesized MISSED
+ * day has no eod_entry record behind it. Deliberately a separate type — every other caller reads
+ * only real records, and should not have to defend against a null id it can never receive.
+ */
+export type EodHistoryEntryDto = Omit<EodEntryDto, 'id'> & { id: number | null };
+
+/**
+ * @param includeMissing also return a synthetic MISSED row per overdue working day with no entry.
+ *   Those rows have `id: null` — a missing day has no record behind it — so only ask for them
+ *   where that is handled (the history list, which reads the result as EodHistoryEntryDto).
+ *   Off by default.
+ */
 export async function listEntries(
   employeeId?: number,
   from?: string,
   to?: string,
+  includeMissing?: boolean,
 ): Promise<EodEntryDto[]> {
   const res = await api.get<EodEntryDto[]>('/eod', {
-    params: { employeeId, from, to },
+    params: { employeeId, from, to, includeMissing: includeMissing || undefined },
   });
   return res.data;
 }
