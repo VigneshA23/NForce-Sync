@@ -417,12 +417,10 @@ export default function SubmitEOD() {
 
   const isHoliday  = dayType === 'HOLIDAY';
   const isLeaveDay = dayType === 'LEAVE';
-  /** At least one row is real work rather than leave. */
-  const hasWorkRow = tasks.some(t => t.categoryName !== LEAVE);
-  // On a leave day, Work Location only makes sense if real work actually happened.
-  // Derived rather than stored, so adding or removing a non-Leave row re-evaluates on the
-  // very next render — no effect, no refetch, no resubmit.
-  const workLocDisabled = isHoliday || (isLeaveDay && !hasWorkRow);
+  // Leave now reuses the Holiday "nothing to log" treatment: no tasks, no work location,
+  // no time adjustment. Neither day type has productive work to enter.
+  const isNonWorkDay = isHoliday || isLeaveDay;
+  const workLocDisabled = isNonWorkDay;
 
   // ── Time adjustment derived state ─────────────────────────────────────────
   const isWorkingDay  = dayType === 'WORKING_DAY';
@@ -454,7 +452,7 @@ export default function SubmitEOD() {
   /** Unpaid break implied by the gap between the rostered span and the paid working day. */
   const breakMins    = Math.max(0, shiftMins - DAILY_HOURS_CAP * 60);
   const overtimeHrs  = Math.max(0, totalHours - expectedHrs);
-  const hasOvertime  = !isHoliday && overtimeHrs > 0.001;
+  const hasOvertime  = !isNonWorkDay && overtimeHrs > 0.001;
 
   /** Live impact line. Exact wording matches the approved prototype. */
   function adjBanner(): string {
@@ -524,13 +522,13 @@ export default function SubmitEOD() {
   // ── Client-side validation ────────────────────────────────────────────────
 
   function validate(): string[] {
-    // A holiday logs nothing, so every task and hours check is skipped outright rather
-    // than satisfied with empty rows.
-    if (isHoliday) return [];
+    // A holiday or a leave day logs nothing, so every task and hours check is skipped
+    // outright rather than satisfied with empty rows.
+    if (isNonWorkDay) return [];
 
     const errs: string[] = [];
 
-    // Required only when the field is actually enabled. A holiday and a full-day leave both
+    // Required only when the field is actually enabled. A holiday and leave day both
     // disable and clear it, so demanding it there would make those days unsubmittable.
     if (!workLocDisabled && !workLocation) {
       errs.push('Work location is required.');
@@ -541,11 +539,14 @@ export default function SubmitEOD() {
     }
 
     if (tasks.length === 0) {
-      errs.push('At least one task row is required for a working/leave day.');
+      errs.push('At least one task row is required for a working day.');
       return errs;
     }
     tasks.forEach((t, i) => {
       const n = i + 1;
+      // A task row can still carry the "Leave" category on an otherwise Working day
+      // (e.g. a few hours of leave taken during a working day) — unrelated to the
+      // Day Type dropdown, so this per-row handling is unchanged.
       const leaveRow = t.categoryName === LEAVE;
       if (!t.taskCategoryId) errs.push(`Task ${n}: category is required.`);
       // Leave is not project work, so a project is required only on real work rows.
@@ -564,9 +565,7 @@ export default function SubmitEOD() {
     });
     // Exceeding the day's EXPECTED hours is overtime, surfaced to the manager on submit, never a
     // reason to block. These are different: they bound what is plausible for a day.
-    // Minimum applies to a working day only — on a leave day the hours are optional, since the
-    // absence itself is the record. The maximum still applies to every day type.
-    if (!isLeaveDay && totalHours < MIN_HOURS_PER_DAY - 0.001) {
+    if (totalHours < MIN_HOURS_PER_DAY - 0.001) {
       errs.push(`Total hours (${totalHours.toFixed(1)}) must be at least ${MIN_HOURS_PER_DAY} for a single day.`);
     }
     if (totalHours > MAX_HOURS_PER_DAY + 0.001) {
@@ -615,8 +614,8 @@ export default function SubmitEOD() {
       workLocation: workLocDisabled ? null : (workLocation || null),
       nextDayPlan:  nextDayPlan  || null,
       remarks:      remarks      || null,
-      // A holiday carries no rows at all; the server discards any it receives anyway.
-      tasks: isHoliday ? [] : tasks.map(t => ({
+      // A holiday or leave day carries no rows at all; the server discards any it receives anyway.
+      tasks: isNonWorkDay ? [] : tasks.map(t => ({
         projectId:      t.projectId,
         taskCategoryId: t.taskCategoryId,
         description:    t.description || null,
@@ -954,10 +953,10 @@ export default function SubmitEOD() {
             </>
           )}
 
-          {/* Holiday — nothing to log, so the whole Tasks section is replaced by this.
-              Reuses the same banner shape and the existing --ok role as the approved
+          {/* Holiday and Leave — nothing to log, so the whole Tasks section is replaced by
+              this. Reuses the same banner shape and the existing --ok role as the approved
               banner above; no new colors. */}
-          {isHoliday && (
+          {isNonWorkDay && (
             <div style={{
               display: 'flex', gap: 10, alignItems: 'flex-start',
               padding: '12px 16px', borderRadius: 8, marginTop: 28,
@@ -969,14 +968,16 @@ export default function SubmitEOD() {
                   No tasks required
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5 }}>
-                  This is a company holiday. Hours and project fields are skipped.
+                  {isHoliday
+                    ? 'This is a company holiday. Hours and project fields are skipped.'
+                    : 'You are on leave. Hours and project fields are skipped.'}
                 </div>
               </div>
             </div>
           )}
 
           {/* Tasks section */}
-          {!isHoliday && (
+          {!isNonWorkDay && (
           <div style={{ marginTop: 28 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-mut)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
