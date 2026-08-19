@@ -5,16 +5,18 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * Monthly time-adjustment allowances — how many times per calendar month each type may be
- * used. 0 disables a type outright, which is a legitimate configuration.
+ * The monthly time-adjustment budget: one pool of minutes shared across late arrival,
+ * intervening time-off and early leave. 0 disables time adjustments outright, which is a
+ * legitimate configuration.
+ *
+ * Replaced three per-type use-counts in V62 — counted separately they permitted up to three
+ * full 120-minute adjustments a month against a policy meant to grant two hours in total.
+ *
+ * Capped at 24 hours: the budget is spent within single shifts, so anything beyond a day is a
+ * typo rather than a policy.
  */
 public record UpdateAllowancesRequest(
-        @NotNull @Min(value = 0, message = "Late arrival allowance cannot be negative")
-        @Max(value = 31, message = "Late arrival allowance cannot exceed 31 per month") Integer lateArrivalAllowance,
-
-        @NotNull @Min(value = 0, message = "Early leave allowance cannot be negative")
-        @Max(value = 31, message = "Early leave allowance cannot exceed 31 per month") Integer earlyLeaveAllowance,
-
-        @NotNull @Min(value = 0, message = "Intervening time-off allowance cannot be negative")
-        @Max(value = 31, message = "Intervening time-off allowance cannot exceed 31 per month") Integer interveningAllowance
+        @NotNull @Min(value = 0, message = "Monthly time adjustment budget cannot be negative")
+        @Max(value = 1440, message = "Monthly time adjustment budget cannot exceed 1440 minutes (24 hours)")
+        Integer monthlyAdjustmentMinutes
 ) {}

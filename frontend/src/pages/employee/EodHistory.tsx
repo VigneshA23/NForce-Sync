@@ -8,6 +8,7 @@ import {
 import { listEntries } from '../../api/eod';
 import type { EodHistoryEntryDto } from '../../api/eod';
 import { formatDate as formatDateDDMMYYYY, formatDateTime } from '../../lib/date';
+import { timeAdjustmentLabel } from '../approvals/shared';
 import {
   MIN_ISO_DATE, MAX_ISO_DATE, maskDateInput, parseStrictDDMMYYYY, isoToDDMMYYYY,
   isRangeValid, todayIsoLocal,
@@ -491,6 +492,13 @@ export default function EodHistory() {
                 <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
                   {formatDate(entry.entryDate)}
                 </div>
+                {/* A time adjustment changes the day's expected hours, so it belongs next to the
+                    day rather than only on the approver's screen. */}
+                {timeAdjustmentLabel(entry) && (
+                  <div style={{ fontSize: 11, color: 'var(--info)', marginTop: 2 }}>
+                    {timeAdjustmentLabel(entry)}
+                  </div>
+                )}
                 {entry.reviewerComment && (
                   <div style={{ fontSize: 11, color: '#E0A93B', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
                     "{entry.reviewerComment}"

@@ -10,6 +10,9 @@ export interface EodByEmployeeEntryDto {
   categoryName: string | null;
   hours: number;
   billable: boolean;
+  /** Belongs to the DAY, so every task row of that day repeats it; the UI prints it once. */
+  timeAdjustmentType: string | null;
+  timeAdjustmentMinutes: number | null;
 }
 
 export interface EodByEmployeeRowDto {

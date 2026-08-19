@@ -16,9 +16,8 @@ public record BusinessRuleConfigDto(
         BigDecimal overloadedThresholdPct,
         BigDecimal atRiskMissingPct,
         BigDecimal blockerAgeAlertHours,
-        Integer lateArrivalAllowance,
-        Integer earlyLeaveAllowance,
-        Integer interveningAllowance
+        /** Shared monthly pool of minutes across all three adjustment types (V62). */
+        Integer monthlyAdjustmentMinutes
 ) {
     public static BusinessRuleConfigDto from(BusinessRuleConfig c) {
         return new BusinessRuleConfigDto(
@@ -32,9 +31,7 @@ public record BusinessRuleConfigDto(
                 c.getOverloadedThresholdPct(),
                 c.getAtRiskMissingPct(),
                 c.getBlockerAgeAlertHours(),
-                c.getLateArrivalAllowance(),
-                c.getEarlyLeaveAllowance(),
-                c.getInterveningAllowance()
+                c.getMonthlyAdjustmentMinutes()
         );
     }
 }

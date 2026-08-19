@@ -176,7 +176,10 @@ public class EodByEmployeeReportService {
                             entry.getId(), entry.getEntryDate(),
                             task.getProject() != null ? task.getProject().getCode() : null,
                             task.getTaskCategory() != null ? task.getTaskCategory().getName() : null,
-                            hours, taskBillable));
+                            hours, taskBillable,
+                            entry.getTimeAdjustmentType() != null
+                                    ? entry.getTimeAdjustmentType().name() : null,
+                            entry.getTimeAdjustmentMinutes()));
                 }
             }
 

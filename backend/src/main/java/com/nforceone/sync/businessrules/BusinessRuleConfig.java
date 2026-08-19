@@ -66,17 +66,13 @@ public class BusinessRuleConfig {
     @Column(name = "blocker_age_alert_hours", nullable = false)
     private BigDecimal blockerAgeAlertHours;
 
-    // Time adjustment allowances — uses permitted per calendar month, per type. Global:
-    // one value each, no per-role or per-department override. Separate from the per-use
-    // duration limit (30-120 minutes), which lives in EodService.
-    @Column(name = "late_arrival_allowance", nullable = false)
-    private Integer lateArrivalAllowance;
-
-    @Column(name = "early_leave_allowance", nullable = false)
-    private Integer earlyLeaveAllowance;
-
-    @Column(name = "intervening_allowance", nullable = false)
-    private Integer interveningAllowance;
+    // One monthly pool of minutes, SHARED across late arrival, intervening time-off and early
+    // leave. Replaced three per-type counts in V62: counted separately, one use of each could
+    // reach the 120-minute per-use cap and total 6 hours against a 2-hour policy. Global —
+    // no per-role or per-department override. Separate from the per-use duration limit
+    // (30-120 minutes), which lives in EodService.
+    @Column(name = "monthly_adjustment_minutes", nullable = false)
+    private Integer monthlyAdjustmentMinutes;
 
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;

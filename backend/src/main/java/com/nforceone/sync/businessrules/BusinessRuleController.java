@@ -59,9 +59,7 @@ public class BusinessRuleController {
     @PutMapping("/allowances")
     public BusinessRuleConfigDto updateAllowances(@Valid @RequestBody UpdateAllowancesRequest request) {
         return businessRuleService.updateAllowances(
-                request.lateArrivalAllowance(),
-                request.earlyLeaveAllowance(),
-                request.interveningAllowance(),
+                request.monthlyAdjustmentMinutes(),
                 actingEmail());
     }
 

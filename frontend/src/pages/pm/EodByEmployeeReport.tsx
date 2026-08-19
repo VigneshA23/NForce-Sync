@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Download, RefreshCw, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
 import { FilterSelect } from '../../components/FilterSelect';
+import { TimeAdjustmentBadge } from '../../components/TimeAdjustmentBadge';
 import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
 import { useProjectDashboardFilters } from '../../api/projectDashboard';
@@ -594,8 +595,17 @@ function RosterFlow({
               {sortedEntries.length === 0 ? (
                 <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>No EOD entries match the current filters for this employee.</div>
               ) : sortedEntries.map((e, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: ENTRY_TABLE_COLUMNS, padding: '7px 16px', fontSize: 12, borderBottom: '1px solid var(--line)' }}>
-                  <div style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{i === 0 || sortedEntries[i - 1].date !== e.date ? formatDate(e.date) : ''}</div>
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: ENTRY_TABLE_COLUMNS, padding: '7px 16px', fontSize: 12, borderBottom: '1px solid var(--line)', alignItems: 'start' }}>
+                  {/* The adjustment is per-DAY, so it rides the same "first row of this date" test
+                      the date itself uses — printed once, blank on the day's later task rows. */}
+                  <div style={{ color: 'var(--txt)' }}>
+                    {i === 0 || sortedEntries[i - 1].date !== e.date ? (
+                      <>
+                        <div style={{ fontFamily: '"JetBrains Mono", monospace' }}>{formatDate(e.date)}</div>
+                        <TimeAdjustmentBadge entry={e} />
+                      </>
+                    ) : ''}
+                  </div>
                   <div style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{e.projectCode ?? '—'}</div>
                   <div style={{ color: 'var(--txt-mut)' }}>{e.categoryName ?? '—'}</div>
                   <div style={{ textAlign: 'right', fontFamily: '"JetBrains Mono", monospace', fontWeight: 700, color: 'var(--txt)' }}>{hrs(e.hours)}</div>
@@ -708,9 +718,18 @@ function TeamFlow({
                   <div key={i} style={{
                     display: 'grid', gridTemplateColumns: TEAM_ENTRY_COLUMNS,
                     padding: '5px 16px 5px 52px', fontSize: 11.5, color: 'var(--txt-mut)',
+                    alignItems: 'start',
                   }}>
                     <span>{r.designationName ?? '—'}</span>
-                    <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{i === 0 || entriesAsc[i - 1].date !== e.date ? formatDate(e.date) : ''}</span>
+                    {/* Same per-day rule as the detail pane above. */}
+                    <span>
+                      {i === 0 || entriesAsc[i - 1].date !== e.date ? (
+                        <>
+                          <span style={{ fontFamily: '"JetBrains Mono", monospace', display: 'block' }}>{formatDate(e.date)}</span>
+                          <TimeAdjustmentBadge entry={e} />
+                        </>
+                      ) : ''}
+                    </span>
                     <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{e.projectCode ?? '—'}</span>
                     <span>{e.categoryName ?? '—'}</span>
                     <span style={{ textAlign: 'right', fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{hrs(e.hours)}</span>

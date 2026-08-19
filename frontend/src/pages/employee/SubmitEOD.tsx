@@ -431,16 +431,16 @@ export default function SubmitEOD() {
   const adjMins       = parseInt(adjMinutes, 10) || 0;
   const adjActive     = canRequestAdj && adjEnabled && adjType != null && adjMins > 0;
 
-  /** Used vs allowance per type, straight from the backend counts. */
-  const adjUsage: Record<string, { used: number; allowance: number }> = {
-    LATE_ARRIVAL: { used: adjContext?.lateArrivalUsed ?? 0, allowance: adjContext?.lateArrivalAllowance ?? 0 },
-    EARLY_LEAVE:  { used: adjContext?.earlyLeaveUsed  ?? 0, allowance: adjContext?.earlyLeaveAllowance  ?? 0 },
-    INTERVENING:  { used: adjContext?.interveningUsed ?? 0, allowance: adjContext?.interveningAllowance ?? 0 },
-  };
-  function isExhausted(type: string): boolean {
-    const u = adjUsage[type];
-    return !!u && u.used >= u.allowance;
-  }
+  /**
+   * One monthly pool of minutes shared across all three types (V62), straight from the backend.
+   * The backend already excludes drafts, rejected entries and this very day, so `remaining` is
+   * exactly what this entry may still spend.
+   */
+  const adjBudget    = adjContext?.monthlyAdjustmentMinutes ?? 0;
+  const adjUsedMins  = adjContext?.adjustmentMinutesUsed ?? 0;
+  const adjRemaining = Math.max(0, adjBudget - adjUsedMins);
+  /** No headroom left at all — every type is unavailable, not just the one already used. */
+  const adjExhausted = adjRemaining <= 0;
 
   // Reference hours for the day. Based on the PAID WORKING DAY, not the shift span: a 15:30-00:30
   // shift spans 540 minutes but only 480 are work, the other 60 being an unpaid break that
@@ -593,9 +593,13 @@ export default function SubmitEOD() {
     if (shiftMins > 0 && adjMins > shiftMins) {
       errs.push(`Time adjustment minutes (${adjMins}) cannot exceed the shift length (${shiftMins} minutes).`);
     }
-    if (isExhausted(adjType)) {
-      const u = adjUsage[adjType];
-      errs.push(`${label}: monthly limit reached (${u.used} of ${u.allowance} used).`);
+    // One shared pool, so the test is whether THIS duration still fits in what is left —
+    // mirrors EodService.validateTimeAdjustment.
+    if (adjMins > adjRemaining) {
+      errs.push(
+        `${label} of ${minutesLabel(adjMins)} exceeds your monthly time adjustment budget — `
+        + `${minutesLabel(adjRemaining)} of ${minutesLabel(adjBudget)} left this month.`,
+      );
     }
     return errs;
   }
@@ -821,6 +825,30 @@ export default function SubmitEOD() {
             </div>
           </div>
 
+          {/* Read-only recap of an adjustment already on the entry. The editable block below is
+              gated on isEditable, so without this a submitted/approved day showed no trace of the
+              adjustment at all — even though it is what reduced the expected hours. */}
+          {isReadOnly && adjType && adjMins > 0 && (
+            <div style={{
+              marginTop: 20, padding: '14px 18px', borderRadius: 8,
+              background: 'rgba(76,141,214,.08)', border: '1px solid rgba(76,141,214,.3)',
+            }}>
+              <Label>Time adjustment</Label>
+              <div style={{ fontSize: 13, color: 'var(--txt)', marginTop: 2 }}>
+                {ADJ_TYPES.find(t => t.value === adjType)?.label ?? 'Time adjustment'}
+                {' · '}
+                <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{minutesLabel(adjMins)}</span>
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 6 }}>
+                {adjBanner()}
+              </div>
+              {/* Says out loud why the day's expected hours are below the usual 8. */}
+              <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 4 }}>
+                Expected hours reduced to {expectedHrs.toFixed(2)} for this day.
+              </div>
+            </div>
+          )}
+
           {/* Time adjustment — a partial-day schedule shift on a working day. Hidden entirely
               for Leave/Holiday, and when no shift is assigned (nothing to compute from). */}
           {canRequestAdj && isEditable && (
@@ -862,53 +890,56 @@ export default function SubmitEOD() {
                     {' '}· {DAILY_HOURS_CAP} working hours
                   </div>
 
-                  {/* Mutually exclusive types. One at its monthly limit cannot be picked. */}
+                  {/* Mutually exclusive types. The budget is one shared pool, so when it is spent
+                      every type is unavailable — not just the one it was spent on. */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, marginBottom: 14 }}>
-                    {ADJ_TYPES.map(t => {
-                      const exhausted = isExhausted(t.value);
-                      const u = adjUsage[t.value];
-                      return (
-                        <label
-                          key={t.value}
-                          title={exhausted ? `Monthly limit reached (${u.used} of ${u.allowance} used)` : undefined}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 7, fontSize: 13,
-                            cursor: exhausted ? 'not-allowed' : 'pointer',
-                            opacity: exhausted ? 0.5 : 1,
-                            color: adjType === t.value ? 'var(--txt)' : 'var(--txt-mut)',
-                            fontWeight: adjType === t.value ? 600 : 400,
-                          }}
-                        >
-                          <input
-                            type="radio"
-                            name="timeAdjType"
-                            checked={adjType === t.value}
-                            disabled={exhausted}
-                            onChange={() => handleAdjTypeChange(t.value)}
-                            style={{ width: 'auto', accentColor: 'var(--info)', cursor: exhausted ? 'not-allowed' : 'pointer' }}
-                          />
-                          <span>{t.label}</span>
-                          {exhausted && (
-                            <span style={{ fontSize: 11, color: 'var(--warn)' }}>
-                              Monthly limit reached ({u.used} of {u.allowance} used)
-                            </span>
-                          )}
-                        </label>
-                      );
-                    })}
+                    {ADJ_TYPES.map(t => (
+                      <label
+                        key={t.value}
+                        title={adjExhausted ? 'Monthly time adjustment budget fully used' : undefined}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 7, fontSize: 13,
+                          cursor: adjExhausted ? 'not-allowed' : 'pointer',
+                          opacity: adjExhausted ? 0.5 : 1,
+                          color: adjType === t.value ? 'var(--txt)' : 'var(--txt-mut)',
+                          fontWeight: adjType === t.value ? 600 : 400,
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name="timeAdjType"
+                          checked={adjType === t.value}
+                          disabled={adjExhausted}
+                          onChange={() => handleAdjTypeChange(t.value)}
+                          style={{ width: 'auto', accentColor: 'var(--info)', cursor: adjExhausted ? 'not-allowed' : 'pointer' }}
+                        />
+                        <span>{t.label}</span>
+                      </label>
+                    ))}
+                    {adjExhausted && (
+                      <span style={{ fontSize: 11, color: 'var(--warn)', alignSelf: 'center' }}>
+                        Monthly budget fully used ({minutesLabel(adjUsedMins)} of {minutesLabel(adjBudget)})
+                      </span>
+                    )}
                   </div>
 
-                  {/* Duration — same fixed dropdown for all three types, 30 minutes to 2 hours.
-                      Server re-validates the range regardless. */}
+                  {/* Duration — 30 minutes to 2 hours, further capped by what is left in the pool
+                      so an unaffordable option cannot be picked at all. Server re-validates. */}
                   {adjType && (
                     <div style={{ maxWidth: 240, marginBottom: 14 }}>
                       <Label>{ADJ_TYPES.find(t => t.value === adjType)?.durationLabel}</Label>
                       <Sel value={adjMinutes} onChange={e => { setAdjMinutes(e.target.value); setErrors([]); }}>
                         <option value="">Select Time</option>
-                        {ADJ_MINUTE_OPTIONS.map(m => (
+                        {ADJ_MINUTE_OPTIONS.filter(m => m <= adjRemaining).map(m => (
                           <option key={m} value={m}>{minutesLabel(m)}</option>
                         ))}
                       </Sel>
+                      {/* The shortest adjustment is 30 minutes, so a smaller remainder buys nothing. */}
+                      {adjRemaining < MIN_ADJ_MINUTES && !adjExhausted && (
+                        <div style={{ fontSize: 11, color: 'var(--warn)', marginTop: 6 }}>
+                          Only {minutesLabel(adjRemaining)} left this month — below the {MIN_ADJ_MINUTES}-minute minimum.
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -938,14 +969,23 @@ export default function SubmitEOD() {
                       background: 'var(--raised2)', border: '1px solid var(--line2)',
                       color: 'var(--txt-mut)', display: 'flex', flexWrap: 'wrap', gap: 16,
                     }}>
-                      {ADJ_TYPES.map(t => (
-                        <span key={t.value}>
-                          {t.label} used this month:{' '}
-                          <strong style={{ color: 'var(--txt)' }}>
-                            {adjUsage[t.value].used} of {adjUsage[t.value].allowance}
-                          </strong>
-                        </span>
-                      ))}
+                      <span>
+                        Used this month:{' '}
+                        <strong style={{ color: 'var(--txt)' }}>
+                          {minutesLabel(adjUsedMins)} of {minutesLabel(adjBudget)}
+                        </strong>
+                      </span>
+                      <span>
+                        Remaining:{' '}
+                        <strong style={{ color: adjExhausted ? 'var(--warn)' : 'var(--ok)' }}>
+                          {minutesLabel(adjRemaining)}
+                        </strong>
+                      </span>
+                      {/* Says out loud that the pool is shared — the previous per-type rows
+                          implied three separate budgets. */}
+                      <span style={{ flexBasis: '100%', color: 'var(--txt-dim)' }}>
+                        Shared across late arrival, intervening time-off and leaving early.
+                      </span>
                     </div>
                   )}
                 </div>

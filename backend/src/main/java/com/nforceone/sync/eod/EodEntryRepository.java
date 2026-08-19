@@ -124,24 +124,33 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
                                           @Param("status") EodEntry.Status status);
 
     /**
-     * Time-adjustment uses of one type inside a date window, for the monthly allowance check.
+     * Time-adjustment MINUTES spent inside a date window, for the monthly budget check.
+     *
+     * Summed across every adjustment type rather than counted per type (V62): the budget is one
+     * shared pool, so two hours taken as an early log-off leaves nothing for a late arrival.
+     * COALESCE keeps this 0 rather than null when the employee has spent nothing this month.
      *
      * DRAFT is excluded: a draft is an intention, not a use, and a forgotten one silently
-     * eating a monthly slot would be undiagnosable from the UI.
+     * eating the budget would be undiagnosable from the UI.
+     *
+     * REJECTED is excluded for the same reason: the manager turned the entry back, so its
+     * adjustment was never granted. Counting it stranded the employee — the rejected entry
+     * consumed the budget that its own resubmission then failed against, with no way to edit
+     * the adjustment or clear it. The minutes are spent again once the entry is resubmitted
+     * (SUBMITTED) and, in turn, APPROVED.
      *
      * excludeId skips the entry currently being submitted, so resubmitting an entry that
-     * already counts (e.g. after a changes-request) cannot fail the check against itself.
-     * Pass null to count everything.
+     * already counts cannot fail the check against itself. Pass null to count everything.
      */
-    @Query("SELECT COUNT(e) FROM EodEntry e "
+    @Query("SELECT COALESCE(SUM(e.timeAdjustmentMinutes), 0) FROM EodEntry e "
          + "WHERE e.employee.id = :employeeId "
-         + "AND e.timeAdjustmentType = :type "
+         + "AND e.timeAdjustmentType IS NOT NULL "
          + "AND e.status <> com.nforceone.sync.eod.EodEntry.Status.DRAFT "
+         + "AND e.status <> com.nforceone.sync.eod.EodEntry.Status.REJECTED "
          + "AND e.entryDate BETWEEN :from AND :to "
          + "AND (:excludeId IS NULL OR e.id <> :excludeId)")
-    long countAdjustmentsInPeriod(@Param("employeeId") Long employeeId,
-                                  @Param("type") EodEntry.TimeAdjustmentType type,
-                                  @Param("from") LocalDate from,
-                                  @Param("to") LocalDate to,
-                                  @Param("excludeId") Long excludeId);
+    long sumAdjustmentMinutesInPeriod(@Param("employeeId") Long employeeId,
+                                      @Param("from") LocalDate from,
+                                      @Param("to") LocalDate to,
+                                      @Param("excludeId") Long excludeId);
 }

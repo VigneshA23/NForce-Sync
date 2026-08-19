@@ -453,12 +453,12 @@ public class EodService {
                 : shiftRepository.findById(employee.getShiftId()).orElse(null);
     }
 
-    private int allowanceFor(BusinessRuleConfig config, EodEntry.TimeAdjustmentType type) {
-        return switch (type) {
-            case LATE_ARRIVAL -> config.getLateArrivalAllowance();
-            case EARLY_LEAVE  -> config.getEarlyLeaveAllowance();
-            case INTERVENING  -> config.getInterveningAllowance();
-        };
+    /** Renders a minute count the way the form does, so messages read "1h 30m" not "90". */
+    private static String durationLabel(long minutes) {
+        if (minutes < 60) return minutes + "m";
+        long h = minutes / 60;
+        long m = minutes % 60;
+        return m == 0 ? h + "h" : h + "h " + m + "m";
     }
 
     private static String label(EodEntry.TimeAdjustmentType type) {
@@ -470,15 +470,15 @@ public class EodService {
     }
 
     /**
-     * Monthly uses already recorded for a type, excluding drafts and the entry being submitted.
-     * The calendar-month window is derived from the entry date, so the allowance resets on its
-     * own with no reset job.
+     * Adjustment minutes already spent this month across ALL types, excluding the entry being
+     * submitted and any entry still with the employee to edit (DRAFT or REJECTED) — neither is
+     * a granted use. The calendar-month window is derived from the entry date, so the budget
+     * resets on its own with no reset job.
      */
-    private long usedThisMonth(Long employeeId, EodEntry.TimeAdjustmentType type,
-                               LocalDate anyDateInMonth, Long excludeEntryId) {
+    private long minutesUsedThisMonth(Long employeeId, LocalDate anyDateInMonth, Long excludeEntryId) {
         LocalDate from = anyDateInMonth.withDayOfMonth(1);
         LocalDate to   = anyDateInMonth.withDayOfMonth(anyDateInMonth.lengthOfMonth());
-        return entryRepository.countAdjustmentsInPeriod(employeeId, type, from, to, excludeEntryId);
+        return entryRepository.sumAdjustmentMinutesInPeriod(employeeId, from, to, excludeEntryId);
     }
 
     /** No-op when the entry carries no adjustment. */
@@ -520,11 +520,16 @@ public class EodService {
         }
 
         BusinessRuleConfig config = configRepository.findById(BUSINESS_RULE_CONFIG_ID).orElse(null);
-        int allowance = config != null ? allowanceFor(config, type) : FALLBACK_ADJUSTMENT_ALLOWANCE;
-        long used = usedThisMonth(employee.getId(), type, entry.getEntryDate(), entry.getId());
-        if (used >= allowance) {
+        int budget = config != null ? config.getMonthlyAdjustmentMinutes() : FALLBACK_ADJUSTMENT_ALLOWANCE;
+        long used = minutesUsedThisMonth(employee.getId(), entry.getEntryDate(), entry.getId());
+        // One shared pool across all three types, so the check is against what this request would
+        // bring the month's total to — not against a per-type count.
+        if (used + minutes > budget) {
+            long remaining = Math.max(0, budget - used);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    label(type) + ": monthly limit reached (" + used + " of " + allowance + " used).");
+                    label(type) + " of " + durationLabel(minutes) + " exceeds your monthly time adjustment"
+                            + " budget — " + durationLabel(remaining) + " of "
+                            + durationLabel(budget) + " left this month.");
         }
     }
 
@@ -571,18 +576,22 @@ public class EodService {
         BusinessRuleConfig config = configRepository.findById(BUSINESS_RULE_CONFIG_ID).orElse(null);
         LocalDate month = date != null ? date : LocalDate.now();
 
+        // Exclude the day being edited, mirroring what validateTimeAdjustment does on submit. Without
+        // this the form would count an already-submitted adjustment against its own resubmission and
+        // report less headroom than the server would actually allow.
+        Long editedEntryId = entryRepository
+                .findByEmployeeIdAndEntryDate(employee.getId(), month)
+                .map(EodEntry::getId)
+                .orElse(null);
+
         return new TimeAdjustmentContextDto(
                 true,
                 shift.getName(),
                 shift.getStartTime(),
                 shift.getEndTime(),
                 ShiftSchedule.durationMinutes(shift),
-                config != null ? config.getLateArrivalAllowance() : FALLBACK_ADJUSTMENT_ALLOWANCE,
-                config != null ? config.getEarlyLeaveAllowance()  : FALLBACK_ADJUSTMENT_ALLOWANCE,
-                config != null ? config.getInterveningAllowance() : FALLBACK_ADJUSTMENT_ALLOWANCE,
-                usedThisMonth(employee.getId(), EodEntry.TimeAdjustmentType.LATE_ARRIVAL, month, null),
-                usedThisMonth(employee.getId(), EodEntry.TimeAdjustmentType.EARLY_LEAVE,  month, null),
-                usedThisMonth(employee.getId(), EodEntry.TimeAdjustmentType.INTERVENING,  month, null)
+                config != null ? config.getMonthlyAdjustmentMinutes() : FALLBACK_ADJUSTMENT_ALLOWANCE,
+                minutesUsedThisMonth(employee.getId(), month, editedEntryId)
         );
     }
 

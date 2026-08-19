@@ -115,23 +115,16 @@ public class BusinessRuleService {
     // updateEodCutoff removed — the EOD deadline moved onto the shift as an hours-after-end offset
     // (see ShiftSchedule). createShift/updateShift below carry it now.
 
-    /** All three monthly time-adjustment allowances, saved as one rule with one audit row. */
-    public BusinessRuleConfigDto updateAllowances(Integer lateArrival, Integer earlyLeave,
-                                                  Integer intervening, String actingEmail) {
+    /** The shared monthly time-adjustment budget, in minutes (V62). */
+    public BusinessRuleConfigDto updateAllowances(Integer monthlyAdjustmentMinutes, String actingEmail) {
         BusinessRuleConfig config = requireConfig();
         AppUser actor = requireActorByEmail(actingEmail);
         Map<String, Object> before = Map.of(
-                "Late Arrival Allowance",  config.getLateArrivalAllowance(),
-                "Early Leave Allowance",   config.getEarlyLeaveAllowance(),
-                "Intervening Allowance",   config.getInterveningAllowance());
-        config.setLateArrivalAllowance(lateArrival);
-        config.setEarlyLeaveAllowance(earlyLeave);
-        config.setInterveningAllowance(intervening);
+                "Monthly Time Adjustment Budget (minutes)", config.getMonthlyAdjustmentMinutes());
+        config.setMonthlyAdjustmentMinutes(monthlyAdjustmentMinutes);
         touch(config, actor);
         Map<String, Object> after = Map.of(
-                "Late Arrival Allowance",  config.getLateArrivalAllowance(),
-                "Early Leave Allowance",   config.getEarlyLeaveAllowance(),
-                "Intervening Allowance",   config.getInterveningAllowance());
+                "Monthly Time Adjustment Budget (minutes)", config.getMonthlyAdjustmentMinutes());
         writeAudit(CONFIG_ID, "UPDATE", before, after, actor);
         return BusinessRuleConfigDto.from(config);
     }

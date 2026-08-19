@@ -84,8 +84,16 @@ export function daySummary(entry: EodEntryDto): string | null {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-/** One of late-arrival / early-leave / mid-shift-gap — the schema stores at most one per day. */
-export function timeAdjustmentLabel(entry: EodEntryDto): string | null {
+/**
+ * One of late-arrival / early-leave / mid-shift-gap — the schema stores at most one per day.
+ *
+ * Takes the two fields structurally rather than a whole EodEntryDto, so the report DTOs (which
+ * carry the same pair on a much smaller row) produce this wording from here instead of growing
+ * their own copy of it.
+ */
+export function timeAdjustmentLabel(
+  entry: { timeAdjustmentType: string | null; timeAdjustmentMinutes: number | null },
+): string | null {
   const { timeAdjustmentType: type, timeAdjustmentMinutes: mins } = entry;
   if (!type || mins == null || mins <= 0) return null;
   const dur = formatDurationMinutes(mins);
