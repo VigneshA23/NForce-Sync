@@ -41,6 +41,15 @@ export function writeStoredDateFilter(userId: number | string, filter: StoredDat
   } catch {}
 }
 
+/** Drops the sessionStorage mirror for one user's dashboard date selection. Called on logout
+ * so a fresh login — by the same Team Lead or another one sharing this tab — always starts
+ * from the default range instead of picking up whatever was last selected before signing out. */
+export function clearStoredDateFilter(userId: number | string): void {
+  try {
+    sessionStorage.removeItem(DATE_FILTER_STORAGE_KEY_PREFIX + userId);
+  } catch {}
+}
+
 export function yesterdayISO(): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
