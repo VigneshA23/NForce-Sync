@@ -96,22 +96,35 @@ export default function EodHistory() {
     return STATUS_FILTERS.some(f => f.value === requested && requested !== '') ? requested : '';
   });
   const [search, setSearch] = useState('');
+
+  /**
+   * `?from=`/`?to=` from the same deep link, spanning exactly the days the reminder chased.
+   * Only accepted as a complete, ordered, in-range pair — a half or malformed range is ignored
+   * rather than silently filtering to something the URL did not actually ask for.
+   */
+  const linkedRange = (() => {
+    const from = searchParams.get('from') ?? '';
+    const to   = searchParams.get('to') ?? '';
+    const valid = /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to)
+      && from >= MIN_ISO_DATE && to <= MAX_ISO_DATE && isRangeValid(from, to);
+    return valid ? { from, to } : null;
+  })();
   // Committed filter values (YYYY-MM-DD) — these, and only these, drive the history query.
   // They only ever change once `applyDateFilter` has confirmed both fields are individually
   // valid AND From <= To, so an invalid or incomplete manual entry can never reach the query.
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(linkedRange?.from ?? '');
+  const [dateTo, setDateTo] = useState(linkedRange?.to ?? '');
   // Raw text as displayed/typed in the two fields (DD-MM-YYYY) — independent of the committed
   // values above so the user can freely type without every keystroke being judged.
-  const [fromText, setFromText] = useState('');
-  const [toText, setToText] = useState('');
+  const [fromText, setFromText] = useState(linkedRange ? isoToDDMMYYYY(linkedRange.from) : '');
+  const [toText, setToText] = useState(linkedRange ? isoToDDMMYYYY(linkedRange.to) : '');
   const [dateError, setDateError] = useState<string | null>(null);
   const [fromInvalid, setFromInvalid] = useState(false);
   const [toInvalid, setToInvalid] = useState(false);
   // Both empty at first, matching the unfiltered default — see `applyDateFilter` for every
   // transition. Gates the table render below: records are only ever shown for 'none' or
   // 'valid', never 'invalid', regardless of what `dateFrom`/`dateTo` last held.
-  const [dateFilterStatus, setDateFilterStatus] = useState<DateFilterStatus>('none');
+  const [dateFilterStatus, setDateFilterStatus] = useState<DateFilterStatus>(linkedRange ? 'valid' : 'none');
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
   const [page, setPage] = useState(0);
 

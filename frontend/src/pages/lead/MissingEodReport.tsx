@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Bell, ChevronLeft, ChevronRight, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
+import { FilterSelect } from '../../components/FilterSelect';
 import { Modal } from '../../components/Modal';
 import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
@@ -98,6 +99,8 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 // '' and ALL filter the same — the distinction only drives what the control displays at rest.
 const ALL_OPTION = 'ALL';
 
+
+
 /** '' (untouched) and ALL both mean "no restriction" on the wire. */
 function filterId(v: string): number | undefined {
   return v === '' || v === ALL_OPTION ? undefined : Number(v);
@@ -138,21 +141,24 @@ function FilterBar({ filters, onChange, onReset }: {
           <FieldLabel>From *</FieldLabel>
           {/* Capped at today: an EOD report only ever covers days that have already happened.
               Still bounded by To as well, so From can never overshoot the other end. */}
-          <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} />
+          <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} quickNav clearable />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>To *</FieldLabel>
           {/* Capped at today for the same reason as From — there are no EODs for days
               that have not happened yet. */}
-          <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} />
+          <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} quickNav clearable />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Project</FieldLabel>
-          <select style={selectStyle(filters.projectId)} value={filters.projectId} onChange={e => set('projectId', e.target.value)}>
+          <FilterSelect
+            value={filters.projectId} onChange={v => set('projectId', v)}
+            style={selectStyle(filters.projectId)} label="project"
+          >
             <option value="" disabled>Select Project…</option>
             <option style={OPTION_STYLE} value={ALL_OPTION}>All projects</option>
             {(filterOptions?.projects ?? []).map(p => <option style={OPTION_STYLE} key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Employee</FieldLabel>

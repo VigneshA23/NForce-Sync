@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Download, RefreshCw, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
+import { FilterSelect } from '../../components/FilterSelect';
 import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
 import { useProjectDashboardFilters } from '../../api/projectDashboard';
@@ -90,6 +91,8 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 // else is a real selection. '' and ALL filter identically — the distinction exists so the control
 // can show "Select Project…" before you have chosen, and "All projects" after you deliberately did.
 const ALL = 'ALL';
+
+
 
 /** Sentinel for "projects that genuinely have no client" — internal work. Mirrored in
  *  EodByEmployeeReportService; a blank client already means "no filter", so it cannot be reused. */
@@ -263,60 +266,75 @@ function FilterBar({
           <FieldLabel>From *</FieldLabel>
           {/* Capped at today: an EOD report only ever covers days that have already happened.
               Still bounded by To as well, so From can never overshoot the other end. */}
-          <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} />
+          <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} quickNav clearable />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>To *</FieldLabel>
           {/* Capped at today for the same reason as From — there are no EODs for days
               that have not happened yet. */}
-          <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} />
+          <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} quickNav clearable />
         </label>
         {/* Each select opens on a masked placeholder (disabled, so it cannot be re-picked once
             you have chosen), with the "All …" catch-all still available underneath. */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Project</FieldLabel>
-          <select style={selectStyle(filters.projectId)} value={filters.projectId} onChange={e => set('projectId', e.target.value)}>
+          <FilterSelect
+            value={filters.projectId} onChange={v => set('projectId', v)}
+            style={selectStyle(filters.projectId)} label="project"
+          >
             <option value="" disabled>Select Project…</option>
             <option style={OPTION_STYLE} value={ALL}>All projects</option>
             {(filterOptions?.projects ?? []).map(p => <option style={OPTION_STYLE} key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Client</FieldLabel>
-          <select style={selectStyle(filters.client)} value={filters.client} onChange={e => set('client', e.target.value)}>
+          <FilterSelect
+            value={filters.client} onChange={v => set('client', v)}
+            style={selectStyle(filters.client)} label="client"
+          >
             <option value="" disabled>Select Client…</option>
             <option style={OPTION_STYLE} value={ALL}>All clients</option>
             {/* Internal work has no client by design — this is the only way to isolate it. */}
             <option style={OPTION_STYLE} value={NO_CLIENT}>W/O Client</option>
             {(filterOptions?.clients ?? []).map(c => <option style={OPTION_STYLE} key={c} value={c}>{c}</option>)}
-          </select>
+          </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Team Lead</FieldLabel>
-          <select style={selectStyle(filters.teamManagerId)} value={filters.teamManagerId} onChange={e => set('teamManagerId', e.target.value)}>
+          <FilterSelect
+            value={filters.teamManagerId} onChange={v => set('teamManagerId', v)}
+            style={selectStyle(filters.teamManagerId)} label="team lead"
+          >
             <option value="" disabled>Select Team Lead…</option>
             <option style={OPTION_STYLE} value={ALL}>All team leads</option>
             {(filterOptions?.teams ?? []).map(t => <option style={OPTION_STYLE} key={t.managerId} value={t.managerId}>{t.managerName}</option>)}
-          </select>
+          </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>EOD Status</FieldLabel>
-          <select style={selectStyle(filters.status)} value={filters.status} onChange={e => set('status', e.target.value)}>
+          <FilterSelect
+            value={filters.status} onChange={v => set('status', v)}
+            style={selectStyle(filters.status)} label="EOD status"
+          >
             <option value="" disabled>Select EOD Status…</option>
             <option style={OPTION_STYLE} value={ALL}>All statuses</option>
             <option style={OPTION_STYLE} value="SUBMITTED">Submitted</option>
             <option style={OPTION_STYLE} value="LATE">Late</option>
             <option style={OPTION_STYLE} value="MISSING">Missing</option>
-          </select>
+          </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Billable or Internal</FieldLabel>
-          <select style={selectStyle(filters.billable)} value={filters.billable} onChange={e => set('billable', e.target.value)}>
+          <FilterSelect
+            value={filters.billable} onChange={v => set('billable', v)}
+            style={selectStyle(filters.billable)} label="billable filter"
+          >
             <option value="" disabled>Select Billable or Internal…</option>
             <option style={OPTION_STYLE} value={ALL}>All work</option>
             <option style={OPTION_STYLE} value="BILLABLE">Billable only</option>
             <option style={OPTION_STYLE} value="INTERNAL">Internal only</option>
-          </select>
+          </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Employee</FieldLabel>

@@ -148,7 +148,7 @@ public class EodReminderScheduler {
             // bare rather than suffixed — "the Evening Shift cutoff", not "Evening Shift shift".
             notificationService.send(member.getId(), "EOD_REMINDER",
                     "EOD submission overdue",
-                    "Your EOD for " + workDate + " is past the " + shift.getName()
+                    "Your EOD for " + com.nforceone.sync.notification.NotificationDates.format(workDate) + " is past the " + shift.getName()
                             + " cutoff. Please submit it.",
                     "/eod/submit?date=" + workDate);
             sent++;

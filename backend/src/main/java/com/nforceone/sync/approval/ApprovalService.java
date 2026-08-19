@@ -180,7 +180,7 @@ public class ApprovalService {
         writeAudit(entry, "EOD_REJECTED", actor, now);
         notificationService.send(entry.getEmployee().getId(), "EOD_REJECTED",
                 "EOD entry rejected",
-                "Your EOD entry for " + entry.getEntryDate() + " was rejected."
+                "Your EOD entry for " + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + " was rejected."
                         + (comment != null && !comment.isBlank() ? " Comment: " + comment : ""),
                 "/eod/submit?date=" + entry.getEntryDate());
         return EodEntryDto.from(entry);
@@ -314,7 +314,7 @@ public class ApprovalService {
         utilizationService.recomputeForEntry(entry.getId());
         notificationService.send(entry.getEmployee().getId(), "EOD_APPROVED",
                 "EOD entry approved",
-                "Your EOD entry for " + entry.getEntryDate() + " has been approved.",
+                "Your EOD entry for " + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + " has been approved.",
                 "/eod/history");
         return EodEntryDto.from(entry);
     }

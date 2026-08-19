@@ -54,9 +54,14 @@ app:
   jwt:
     # CHANGE IN PRODUCTION — move to environment variable JWT_SECRET, min 32 chars for HS256
     secret: "nforce-sync-dev-only-secret-key-change-this-in-prod-env-var-32chars+"
+  # Fallback only — used when a request carries no recognisable Origin (e.g. the scheduled EOD
+  # reminder job). Live requests get the origin they came from, via AppBaseUrlResolver.
   base-url: http://localhost:5173
   cors:
-    allowed-origins: ${FRONTEND_URL:http://localhost:5173}
+    # Comma-separated. Doubles as the allow-list for links in emails: a password reset requested
+    # from the deployed site links back to that site, one from local dev links to localhost.
+    # Override per environment with FRONTEND_URL.
+    allowed-origins: ${FRONTEND_URL:http://localhost:5173,https://nforce-sync-git-dev-nforce-one.vercel.app}
 
 resend:
   api-key: ${RESEND_API_KEY:}

@@ -539,8 +539,8 @@ function ProjectModal({ open, onClose, editing }: {
           }}>
             <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
             {Object.keys(fieldErrors).length === 1
-              ? 'Fix the highlighted field below to continue.'
-              : `Fix the ${Object.keys(fieldErrors).length} highlighted fields below to continue.`}
+              ? 'Please fill in the required field below.'
+              : `Please fill in the ${Object.keys(fieldErrors).length} required fields below.`}
           </div>
         )}
         <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
@@ -688,7 +688,6 @@ function ProjectModal({ open, onClose, editing }: {
             )}
           </div>
         </div>
-        </form>
         {dateFormatInvalid && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6,
@@ -721,6 +720,7 @@ function ProjectModal({ open, onClose, editing }: {
             Cancel
           </button>
         </div>
+      </form>
     </Modal>
   );
 }
