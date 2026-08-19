@@ -68,10 +68,15 @@ export function daySummary(entry: EodEntryDto): string | null {
   const overtime = entry.isOvertime && entry.overtimeHours != null ? Number(entry.overtimeHours) : 0;
 
   const parts: string[] = [];
-  if (entry.dayType === 'LEAVE' && leaveHours > 0) {
-    parts.push(worked > 0
-      ? `Half-day leave ${hrs(leaveHours)}h`
-      : `Full-day leave ${hrs(leaveHours)}h`);
+  if (entry.dayType === 'LEAVE') {
+    // A task-less full-day Leave has no rows to sum hours from — leaveHours is 0 in that case,
+    // same as a normal working day with none, so this can't gate on leaveHours > 0 the way the
+    // Holiday branch above gates on nothing at all. Falls back to a plain "Full-day leave" label.
+    if (worked > 0) {
+      parts.push(`Half-day leave ${hrs(leaveHours)}h`);
+    } else {
+      parts.push(leaveHours > 0 ? `Full-day leave ${hrs(leaveHours)}h` : 'Full-day leave');
+    }
   }
 
   if (overtime > 0) {

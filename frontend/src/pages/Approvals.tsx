@@ -91,13 +91,16 @@ function EntryRow({
             <span>{entry.tasks.length} task{entry.tasks.length !== 1 ? 's' : ''} · {projects.length} project{projects.length !== 1 ? 's' : ''}</span>
           </div>
 
-          {entry.tasks.length > 0 && (
+          {/* A task-less full-day Leave still needs to be openable — this box is the only way to
+              reach the Approve/Reject modal for a single entry. Holiday's task-less rendering
+              (nothing shown, not clickable) is left exactly as it was. */}
+          {(entry.tasks.length > 0 || entry.dayType === 'LEAVE') && (
             <div
               onClick={onOpenDetails}
               title="View submission details"
               style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)', cursor: 'pointer' }}
             >
-              {entry.tasks.map(t => (
+              {entry.tasks.length > 0 ? entry.tasks.map(t => (
                 <div key={t.id} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '4px 11px',
@@ -109,7 +112,11 @@ function EntryRow({
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.isBillable ? 'var(--ok)' : 'transparent', border: t.isBillable ? 'none' : '1.5px solid var(--txt-dim)', flexShrink: 0 }} title={t.isBillable ? 'Billable' : 'Non-billable'} />
                   <span style={{ color: 'var(--txt)', fontWeight: 700, minWidth: 36, textAlign: 'right', flexShrink: 0 }}>{t.hours != null ? `${hrs(Number(t.hours))}h` : '—'}</span>
                 </div>
-              ))}
+              )) : (
+                <div style={{ padding: '4px 11px', fontSize: 11, color: 'var(--txt-dim)' }}>
+                  Full-day leave — no tasks
+                </div>
+              )}
             </div>
           )}
 

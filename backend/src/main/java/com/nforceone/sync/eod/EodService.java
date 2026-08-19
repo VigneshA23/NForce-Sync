@@ -361,13 +361,15 @@ public class EodService {
     }
 
     /**
-     * Task and hours validation for a day that actually logs work — WORKING_DAY or LEAVE.
-     * Never called for HOLIDAY.
+     * Task and hours validation for WORKING_DAY and LEAVE (never called for HOLIDAY). Task rows
+     * are mandatory only for WORKING_DAY; LEAVE may submit with none.
      */
     private void validateLoggedDay(EodEntry entry) {
-        if (entry.getTasks().isEmpty()) {
+        // A full-day leave has nothing to log by definition — the UI hides the Tasks section
+        // and submits an empty list — so only a WORKING_DAY is required to carry a task row.
+        if (entry.getDayType() == EodEntry.DayType.WORKING_DAY && entry.getTasks().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "At least one task row is required for a working/leave day.");
+                    "At least one task row is required for a working day.");
         }
 
         // Work location is required whenever the day actually involves work. A full-day leave has
