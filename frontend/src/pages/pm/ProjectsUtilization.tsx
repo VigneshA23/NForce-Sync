@@ -830,11 +830,7 @@ function CategoryBreakdownPanel({ rows, resourceRows, cards }: {
 
   return (
     <Card style={{ marginBottom: 16 }}>
-      <SectionLabel action={
-        <button disabled style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', fontSize: 10.5, fontWeight: 600, cursor: 'not-allowed', padding: 0, textTransform: 'none', letterSpacing: 0 }}>
-          View Details
-        </button>
-      }>
+      <SectionLabel>
         Utilization by Category
       </SectionLabel>
 
