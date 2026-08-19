@@ -53,6 +53,38 @@ const WORK_MODES = [
   { value: 'REMOTE', label: 'Remote' },
 ];
 
+/**
+ * Letters and spaces only — digits and punctuation are dropped as they are typed or pasted.
+ *
+ * `\p{L}` rather than `A-Za-z` so accented and non-Latin names ("Zoë", "Müller") are not mangled
+ * into something their owner would not recognise; it is the digits and symbols that are being
+ * excluded here, not non-English alphabets.
+ *
+ * Note this also rejects the apostrophe and hyphen that "O'Neil" and "Mary-Jane" need — a
+ * deliberate call, per the rule that the field takes no special character but space.
+ */
+function sanitizeName(value: string): string {
+  return value.replace(/[^\p{L} ]/gu, '');
+}
+
+/**
+ * Capitalises each word of a name as it is typed, so an entry made in lower case is still stored
+ * the way a name is written.
+ *
+ * Only the character after a space is touched, which matters twice over: internal capitals survive
+ * ("McDonald" stays "McDonald" rather than becoming "Mcdonald"), and the string length never
+ * changes — so rewriting the value mid-edit cannot move the caret. Space is the only separator
+ * because sanitizeName has already removed every other one.
+ */
+function capitalizeName(value: string): string {
+  return value.replace(/(^|\s)(\p{Ll})/gu, (_m, sep: string, ch: string) => sep + ch.toUpperCase());
+}
+
+/** What the two name fields run on every keystroke and paste. */
+function formatNameInput(value: string): string {
+  return capitalizeName(sanitizeName(value));
+}
+
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
 const inputStyle: React.CSSProperties = {
@@ -489,7 +521,7 @@ function AddModal({
                 style={inputStyle}
                 value={form.fullName}
                 placeholder="Enter name"
-                onChange={e => set('fullName', e.target.value)}
+                onChange={e => set('fullName', formatNameInput(e.target.value))}
                 onKeyDown={focusNextOnEnter}
                 onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
                 onBlur={e => Object.assign(e.target.style, inputStyle)}
@@ -796,7 +828,7 @@ function EditModal({
                 id={fnId}
                 style={inputStyle}
                 value={form.fullName}
-                onChange={e => set('fullName', e.target.value)}
+                onChange={e => set('fullName', formatNameInput(e.target.value))}
                 onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
                 onBlur={e => Object.assign(e.target.style, inputStyle)}
                 autoFocus

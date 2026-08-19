@@ -11,6 +11,12 @@ import java.time.LocalDate;
 public record CreateUserRequest(
 
         @NotBlank(message = "Full name is required")
+        // Letters and spaces only. \p{L} keeps accented and non-Latin names valid — it is digits
+        // and symbols being excluded, not non-English alphabets. Enforced here as well as in the
+        // Add/Edit User forms, which filter the input as it is typed: the form cannot be the only
+        // guard, since any other caller reaches this endpoint directly.
+        @Pattern(regexp = "^[\\p{L} ]+$",
+                 message = "Full name may contain only letters and spaces")
         String fullName,
 
         @NotBlank(message = "Email is required")

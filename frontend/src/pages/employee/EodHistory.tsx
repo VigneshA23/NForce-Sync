@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle, Clock, XCircle, ChevronRight, AlertTriangle,
-  Search, ArrowUpDown, ChevronLeft, Calendar as CalendarIcon,
+  Search, ArrowUp, ArrowDown, ChevronLeft, Calendar as CalendarIcon,
 } from 'lucide-react';
 import { listEntries } from '../../api/eod';
 import type { EodHistoryEntryDto } from '../../api/eod';
@@ -299,7 +299,7 @@ export default function EodHistory() {
           My EOD History
         </h1>
         <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--txt-mut)' }}>
-          All your end-of-day reports, newest first.
+          All your end-of-day reports, {sortDir === 'desc' ? 'newest' : 'oldest'} first.
         </p>
       </div>
 
@@ -389,17 +389,8 @@ export default function EodHistory() {
             />
           </div>
         </div>
-        <button
-          onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
-          title="Toggle sort order"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '7px 10px', background: 'var(--shell)', border: '1px solid var(--line2)',
-            borderRadius: 6, color: 'var(--txt-mut)', fontSize: 12, cursor: 'pointer',
-          }}
-        >
-          <ArrowUpDown size={12} /> {sortDir === 'desc' ? 'Newest first' : 'Oldest first'}
-        </button>
+        {/* Sorting lives on the Date column header instead of a filter-bar control — the arrow
+            there shows which direction is active, which a separate button could not. */}
         <span style={{ marginLeft: 'auto', fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-dim)' }}>
           {dateFilterStatus === 'invalid'
             ? '0 entries'
@@ -462,11 +453,38 @@ export default function EodHistory() {
             padding: '8px 16px', borderBottom: '1px solid var(--line)',
             gap: 12,
           }}>
-            {['Date', 'Project', 'Task Summary', 'Hours', 'Status', 'Submitted at', ''].map((h, i) => (
-              <div key={i} style={{ fontSize: 10, fontWeight: 600, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                {h}
-              </div>
-            ))}
+            {['Date', 'Project', 'Task Summary', 'Hours', 'Status', 'Submitted at', ''].map((h, i) => {
+              const headerStyle: React.CSSProperties = {
+                fontSize: 10, fontWeight: 600, color: 'var(--txt-dim)',
+                textTransform: 'uppercase', letterSpacing: '0.08em',
+              };
+              if (h !== 'Date') return <div key={i} style={headerStyle}>{h}</div>;
+              // Ascending = oldest first (January → today); descending = today → January.
+              const asc = sortDir === 'asc';
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  // Back to page 1, as the other filters do: reversing the order while deep in
+                  // the pages would otherwise land the reader on an unrelated slice.
+                  onClick={() => { setSortDir(d => d === 'desc' ? 'asc' : 'desc'); setPage(0); }}
+                  aria-label={`Sort by date, ${asc ? 'oldest' : 'newest'} first — click to reverse`}
+                  title={asc ? 'Oldest first — click for newest first' : 'Newest first — click for oldest first'}
+                  style={{
+                    ...headerStyle, display: 'flex', alignItems: 'center', gap: 4,
+                    background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                    // fontFamily only — the `font` shorthand would reset the size and weight
+                    // inherited from headerStyle above and this header would stop matching the rest.
+                    fontFamily: 'inherit', textAlign: 'left',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--txt)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--txt-dim)')}
+                >
+                  {h}
+                  {asc ? <ArrowUp size={11} aria-hidden="true" /> : <ArrowDown size={11} aria-hidden="true" />}
+                </button>
+              );
+            })}
           </div>
 
           {/* Rows */}
