@@ -16,7 +16,9 @@ export type DateMode = 'today' | 'yesterday' | 'range';
 // string entirely (e.g. clicking the "Team Dashboard" sidebar link, which points at the bare
 // path) — the URL stays the source of truth whenever it has the params, this is only the
 // fallback so a plain nav-away-and-back doesn't silently reset to "Today".
-export const DATE_FILTER_STORAGE_KEY = 'nfsync_team_dashboard_date';
+// Scoped per logged-in user id so one Team Lead's custom range can't leak into another
+// Team Lead's session in the same browser tab (sessionStorage otherwise survives logout/login).
+const DATE_FILTER_STORAGE_KEY_PREFIX = 'nfsync_team_dashboard_date_';
 
 export interface StoredDateFilter {
   mode: DateMode;
@@ -24,18 +26,18 @@ export interface StoredDateFilter {
   to?: string;
 }
 
-export function readStoredDateFilter(): StoredDateFilter | null {
+export function readStoredDateFilter(userId: number | string): StoredDateFilter | null {
   try {
-    const raw = sessionStorage.getItem(DATE_FILTER_STORAGE_KEY);
+    const raw = sessionStorage.getItem(DATE_FILTER_STORAGE_KEY_PREFIX + userId);
     return raw ? (JSON.parse(raw) as StoredDateFilter) : null;
   } catch {
     return null;
   }
 }
 
-export function writeStoredDateFilter(filter: StoredDateFilter): void {
+export function writeStoredDateFilter(userId: number | string, filter: StoredDateFilter): void {
   try {
-    sessionStorage.setItem(DATE_FILTER_STORAGE_KEY, JSON.stringify(filter));
+    sessionStorage.setItem(DATE_FILTER_STORAGE_KEY_PREFIX + userId, JSON.stringify(filter));
   } catch {}
 }
 
@@ -54,9 +56,9 @@ export interface ResolvedDateFilter {
 /** Pure resolution of mode/range from a URLSearchParams — falls back to the sessionStorage
  * mirror only when the URL carries no `mode` param at all (matches TeamDashboard's own
  * mount-sync effect, which writes the fallback straight back into the URL). */
-export function resolveTeamDashboardDateFilter(searchParams: URLSearchParams): ResolvedDateFilter {
+export function resolveTeamDashboardDateFilter(searchParams: URLSearchParams, userId: number | string): ResolvedDateFilter {
   const todayISO = localTodayISO();
-  const stored = searchParams.get('mode') ? null : readStoredDateFilter();
+  const stored = searchParams.get('mode') ? null : readStoredDateFilter(userId);
   const modeParam = searchParams.get('mode') ?? stored?.mode ?? null;
   const fromParam = searchParams.get('from') ?? stored?.from ?? null;
   const toParam = searchParams.get('to') ?? stored?.to ?? null;
