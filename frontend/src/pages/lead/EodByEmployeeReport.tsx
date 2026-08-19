@@ -668,8 +668,6 @@ function TeamFlow({
           {pageRows.map(r => {
             const open = isOpen(r.employeeId);
             const entriesAsc = [...r.entries].sort((a, b) => a.date.localeCompare(b.date));
-            const dates = entriesAsc.map(e => e.date);
-            const span = dates.length ? `${formatDate(dates[0])} → ${formatDate(dates[dates.length - 1])}` : '—';
             return (
               <div key={r.employeeId} className="nf-r-scroll-inner" style={{ borderBottom: '1px solid var(--line)', '--nf-r-min': TEAM_ENTRY_MIN_WIDTH + 'px' } as React.CSSProperties}>
                 <div
@@ -685,8 +683,21 @@ function TeamFlow({
                     {initials(r.employeeName)}
                   </div>
                   <span style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--txt)', minWidth: 140 }}>{r.employeeName}</span>
-                  <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>{span}</span>
-                  <span style={{ fontSize: 11, color: 'var(--txt-mut)' }}>{r.projectCodes.length > 1 ? `${r.projectCodes.length} projects` : (r.projectCodes[0] ?? '—')}</span>
+                  {/* The codes themselves, not a "2 projects" count — the count told you there was
+                      something to know without telling you what it was, and this column already
+                      printed the code whenever there happened to be exactly one. Long lists
+                      ellipsize; the full set stays available on hover. */}
+                  <span
+                    title={r.projectCodes.length > 0
+                      ? `Assigned to ${r.projectCodes.join(', ')}`
+                      : 'No project assignments in this range'}
+                    style={{
+                      fontSize: 11, color: 'var(--txt-mut)', maxWidth: 220,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {r.projectCodes.length > 0 ? r.projectCodes.join(', ') : '—'}
+                  </span>
                   <div style={{ flex: 1 }} />
                   <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{r.entryCount} {r.entryCount === 1 ? 'entry' : 'entries'}</span>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace' }}>{hrs(r.totalHours)}</span>
