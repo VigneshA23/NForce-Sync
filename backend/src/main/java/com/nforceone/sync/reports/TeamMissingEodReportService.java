@@ -275,12 +275,15 @@ public class TeamMissingEodReportService {
         String suffix = dates.size() > 5 ? " and " + (dates.size() - 5) + " more" : "";
         String message = "You have " + dates.size() + " missing EOD entr" + (dates.size() == 1 ? "y" : "ies")
                 + ": " + dateList + suffix;
-        // Lands on My EOD History pre-filtered to Missing AND narrowed to the span this reminder
-        // covers, so the list shows exactly the days being chased — not every gap on record.
-        // Deep-linking one submit form would be wrong here: a reminder covers several days.
+        // Lands on My EOD History showing EXACTLY the days this reminder chased, listed in
+        // `dates` — the count in the message and the count in the list must always agree.
+        // A status filter cannot express that: isMissing() also chases REJECTED and DRAFT days,
+        // and a plain from/to range would pull in the APPROVED/SUBMITTED days sitting between
+        // the gaps. Deep-linking one submit form would be wrong here: a reminder covers several days.
         LocalDate first = dates.stream().min(LocalDate::compareTo).orElseThrow();
         LocalDate last  = dates.stream().max(LocalDate::compareTo).orElseThrow();
-        String link = "/eod/history?status=MISSED&from=" + first + "&to=" + last;
+        String dateParam = dates.stream().sorted().map(LocalDate::toString).collect(Collectors.joining(","));
+        String link = "/eod/history?from=" + first + "&to=" + last + "&dates=" + dateParam;
         notificationService.send(row.employeeId(), "EOD_REMINDER", "Missing EOD reminder", message, link);
     }
 

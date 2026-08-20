@@ -177,13 +177,18 @@ public class TeamReportsController {
         return (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
 
+    /**
+     * Same convention as the PM's report (see ReportsController#filenameBase): one human-readable
+     * "{who}-{from}-to-{to}" base for every format, so the Excel, PDF and CSV of one download
+     * differ only by extension.
+     */
     private String filenameBase(EodByEmployeeReportDto report, List<Long> employeeIds,
                                  LocalDate from, LocalDate to) {
         if (employeeIds != null && employeeIds.size() == 1 && report.employees().size() == 1) {
             String empName = sanitizeForFilename(report.employees().get(0).employeeName());
             return empName + "-" + formatOrdinalDate(from) + "-to-" + formatOrdinalDate(to);
         }
-        return "team-eod_" + from + "_" + to;
+        return "team-eod-" + formatOrdinalDate(from) + "-to-" + formatOrdinalDate(to);
     }
 
     private String formatOrdinalDate(LocalDate date) {

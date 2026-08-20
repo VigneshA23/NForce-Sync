@@ -89,9 +89,10 @@ export default function EodHistory() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // Deep link support: the "Missing EOD reminder" notification points here with ?status=MISSED so
-  // the employee lands on exactly the gaps it told them about. Validated against the dropdown's
-  // own options, so an unknown value in the URL just falls back to the default view.
+  // Deep link support: the "Missing EOD reminder" notification points here with ?from=/?to=/?dates=
+  // and no status, since the days it chases can be Rejected or Draft as well as Missing. A status is
+  // still honoured if present, validated against the dropdown's own options, so an unknown value
+  // in the URL just falls back to the default (All) view.
   const [statusFilter, setStatusFilter] = useState(() => {
     const requested = searchParams.get('status') ?? '';
     return STATUS_FILTERS.some(f => f.value === requested && requested !== '') ? requested : '';
@@ -110,6 +111,24 @@ export default function EodHistory() {
       && from >= MIN_ISO_DATE && to <= MAX_ISO_DATE && isRangeValid(from, to);
     return valid ? { from, to } : null;
   })();
+
+  /**
+   * `?dates=` from the same deep link: the exact days the reminder chased, comma-separated ISO.
+   * The reminder's own definition of "missing" spans MISSED, REJECTED and DRAFT days, so neither
+   * a status filter nor the plain from/to range can reproduce that set — the range would also
+   * sweep in the Approved/Submitted days sitting between the gaps. Pinning to this list is what
+   * keeps "4 missing EOD entries" in the notification and 4 rows in the table in agreement.
+   * Cleared the moment the reader touches Search, Status, the date range or the banner below, so
+   * it narrows the first view only and never becomes an invisible filter they cannot get out of.
+   */
+  const [linkedDates, setLinkedDates] = useState<string[] | null>(() => {
+    const raw = searchParams.get('dates');
+    if (!raw) return null;
+    const valid = raw.split(',')
+      .map(d => d.trim())
+      .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= MIN_ISO_DATE && d <= MAX_ISO_DATE);
+    return valid.length > 0 ? Array.from(new Set(valid)) : null;
+  });
   // Committed filter values (YYYY-MM-DD) — these, and only these, drive the history query.
   // They only ever change once `applyDateFilter` has confirmed both fields are individually
   // valid AND From <= To, so an invalid or incomplete manual entry can never reach the query.
@@ -154,7 +173,11 @@ export default function EodHistory() {
   };
 
   const filtered = useMemo(() => {
-    let rows = statusFilter ? entries.filter(e => e.status === statusFilter) : entries;
+    // Deep-linked day list first: it restricts WHICH days are on the table at all, rather than
+    // acting as one more filter competing with Status/Search.
+    const pinned = linkedDates;
+    let rows = pinned ? entries.filter(e => pinned.includes(e.entryDate)) : entries;
+    if (statusFilter) rows = rows.filter(e => e.status === statusFilter);
     const q = search.trim().toLowerCase();
     if (q) {
       rows = rows.filter(e => {
@@ -171,14 +194,16 @@ export default function EodHistory() {
       sortDir === 'desc' ? b.entryDate.localeCompare(a.entryDate) : a.entryDate.localeCompare(b.entryDate)
     );
     return sorted;
-  }, [entries, statusFilter, search, sortDir]);
+  }, [entries, linkedDates, statusFilter, search, sortDir]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageSafe = Math.min(page, pageCount - 1);
   const paged = filtered.slice(pageSafe * PAGE_SIZE, (pageSafe + 1) * PAGE_SIZE);
 
+  // Used by Search and Status, the two filters the reader drives directly: both also release the
+  // deep link's pinned day list, so a reminder's narrowed view is never a filter they are stuck in.
   function resetPage<T>(setter: (v: T) => void) {
-    return (v: T) => { setter(v); setPage(0); };
+    return (v: T) => { setter(v); setLinkedDates(null); setPage(0); };
   }
 
   // The single validation/commit path for BOTH manual typing (via onBlur/Enter) and the
@@ -202,6 +227,8 @@ export default function EodHistory() {
       setDateFilterStatus('none');
       setDateFrom('');
       setDateTo('');
+      // Emptying the range is a deliberate "show me everything" — release the pinned day list too.
+      setLinkedDates(null);
       setPage(0);
       return;
     }
@@ -243,6 +270,9 @@ export default function EodHistory() {
 
     setDateError(null);
     setDateFilterStatus('valid');
+    // Only a genuine change of range releases the pinned day list: this runs on every blur of the
+    // date fields, so merely tabbing through them must not silently widen what the reader sees.
+    if (fromIso !== dateFrom || toIso !== dateTo) setLinkedDates(null);
     setDateFrom(fromIso ?? '');
     setDateTo(toIso ?? '');
     setPage(0);
@@ -280,6 +310,7 @@ export default function EodHistory() {
     setDateFrom(''); setDateTo(''); setFromText(''); setToText('');
     setFromInvalid(false); setToInvalid(false); setDateError(null);
     setDateFilterStatus('none');
+    setLinkedDates(null);
     setPage(0);
   }
 
@@ -398,6 +429,32 @@ export default function EodHistory() {
         </span>
       </div>
 
+      {/* Says out loud that the list is pinned to a reminder's days, and offers the way out —
+          without this the narrowed view looks like the full range simply had fewer entries. */}
+      {linkedDates && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+          padding: '8px 12px', borderRadius: 6, marginBottom: 16, marginTop: -6,
+          background: 'rgba(224,169,59,.08)', border: '1px solid rgba(224,169,59,.25)',
+          fontSize: 12.5, color: 'var(--txt-mut)',
+        }}>
+          <AlertTriangle size={13} style={{ color: '#E0A93B', flexShrink: 0 }} aria-hidden />
+          <span>
+            Showing the {linkedDates.length} {linkedDates.length === 1 ? 'day' : 'days'} from your EOD reminder.
+          </span>
+          <button
+            type="button"
+            onClick={() => { setLinkedDates(null); setPage(0); }}
+            style={{
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+              font: 'inherit', color: 'var(--txt)', textDecoration: 'underline',
+            }}
+          >
+            Show all days in this range
+          </button>
+        </div>
+      )}
+
       {dateError && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,
@@ -435,7 +492,7 @@ export default function EodHistory() {
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState
-          hasFilter={!!statusFilter || !!search || !!dateFrom || !!dateTo}
+          hasFilter={!!statusFilter || !!search || !!dateFrom || !!dateTo || !!linkedDates}
           onClear={clearAllFilters}
         />
       ) : (
