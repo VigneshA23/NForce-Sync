@@ -13,10 +13,9 @@ export interface BusinessRuleConfigDto {
   /** Account Lockout: consecutive failed sign-ins that lock an account, and for how long. */
   lockoutAttemptThreshold: number;
   lockoutDurationMinutes: number;
-  /** Time-adjustment uses permitted per calendar month, per type. Global — no overrides. */
-  lateArrivalAllowance: number;
-  earlyLeaveAllowance: number;
-  interveningAllowance: number;
+  /** Monthly time-adjustment budget in minutes, shared across all three types. Global — no
+   *  overrides. Replaced three per-type use-counts in V62. */
+  monthlyAdjustmentMinutes: number;
 }
 
 export interface ShiftDefinitionDto {
@@ -77,9 +76,7 @@ export async function updateNotifications(payload: NotificationsPayload): Promis
 }
 
 export interface AllowancesPayload {
-  lateArrivalAllowance: number;
-  earlyLeaveAllowance: number;
-  interveningAllowance: number;
+  monthlyAdjustmentMinutes: number;
 }
 
 export async function updateAllowances(payload: AllowancesPayload): Promise<BusinessRuleConfigDto> {

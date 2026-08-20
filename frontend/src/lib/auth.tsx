@@ -3,6 +3,7 @@ import axios from 'axios';
 import type { Role } from './types';
 import { getMe, toRole } from '../api/auth';
 import type { ServerUser } from '../api/auth';
+import { clearStoredDateFilter } from './teamDashboardDateFilter';
 
 const SESSION_KEY = 'nfsync_session';
 
@@ -101,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // force-change-password gate in JwtFilter. Keep the session so a refresh on that
         // screen doesn't bounce the user back to /login. Only clear on 401 / bad token.
         if (axios.isAxiosError(err) && err.response?.status === 403) return;
+        if (initSession.current?.user) clearStoredDateFilter(initSession.current.user.id);
         saveSession(null);
         setUser(null);
         setToken(null);
@@ -114,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   function logout() {
+    if (user) clearStoredDateFilter(user.id);
     saveSession(null);
     setToken(null);
     setUser(null);

@@ -258,8 +258,11 @@ export default function BusinessRules() {
   const notificationsUpdate = findLastUpdate(auditEntries, (name) =>
     name === 'EOD Cutoff Time' || name === 'Reminder Lead Time' || name === 'Escalation SLA'
     || name === 'Lockout Attempt Threshold' || name === 'Lockout Duration Minutes');
+  // The three per-type allowance names are intentionally still matched: those rules no longer
+  // exist, but historical audit rows carry them and this caption should keep surfacing them.
   const allowancesUpdate = findLastUpdate(auditEntries, (name) =>
-    name === 'Late Arrival Allowance' || name === 'Early Leave Allowance'
+    name === 'Monthly Time Adjustment Budget (minutes)'
+    || name === 'Late Arrival Allowance' || name === 'Early Leave Allowance'
     || name === 'Intervening Allowance');
   const shiftsUpdate = findLastUpdate(auditEntries, (name) =>
     name != null && shiftNames.has(name));
@@ -350,51 +353,37 @@ export default function BusinessRules() {
   // Drafts stay null until the admin actually types, and the rendered value falls back to the
   // fetched config. That avoids an effect purely to copy server data into state — the sibling
   // rules above do use that idiom, but it needs no sync here.
-  const [lateArrivalEdit, setLateArrivalEdit] = useState<string | null>(null);
-  const [earlyLeaveEdit,  setEarlyLeaveEdit]  = useState<string | null>(null);
-  const [interveningEdit, setInterveningEdit] = useState<string | null>(null);
+  const [budgetEdit, setBudgetEdit] = useState<string | null>(null);
   const [allowancesError, setAllowancesError] = useState<string | null>(null);
 
-  const lateArrivalDraft = lateArrivalEdit
-    ?? (configQuery.data ? String(configQuery.data.lateArrivalAllowance) : '');
-  const earlyLeaveDraft  = earlyLeaveEdit
-    ?? (configQuery.data ? String(configQuery.data.earlyLeaveAllowance) : '');
-  const interveningDraft = interveningEdit
-    ?? (configQuery.data ? String(configQuery.data.interveningAllowance) : '');
-  const setLateArrivalDraft = setLateArrivalEdit;
-  const setEarlyLeaveDraft  = setEarlyLeaveEdit;
-  const setInterveningDraft = setInterveningEdit;
+  const budgetDraft = budgetEdit
+    ?? (configQuery.data ? String(configQuery.data.monthlyAdjustmentMinutes) : '');
 
   const allowancesMutation = useMutation({
     mutationFn: updateAllowances,
     onSuccess: () => {
       invalidateConfig();
-      toast.showToast('success', 'Time adjustment allowances updated');
+      toast.showToast('success', 'Monthly time adjustment budget updated');
       setAllowancesError(null);
-      // Drop the local edits so the inputs read back from the freshly saved config.
-      setLateArrivalEdit(null); setEarlyLeaveEdit(null); setInterveningEdit(null);
+      // Drop the local edit so the input reads back from the freshly saved config.
+      setBudgetEdit(null);
     },
     onError: (err) => {
-      const msg = extractApiError(err, 'Failed to update time adjustment allowances.');
+      const msg = extractApiError(err, 'Failed to update the monthly time adjustment budget.');
       setAllowancesError(msg);
       toast.showToast('error', msg);
     },
   });
 
   function saveAllowances() {
-    const values = {
-      lateArrivalAllowance: Number(lateArrivalDraft),
-      earlyLeaveAllowance:  Number(earlyLeaveDraft),
-      interveningAllowance: Number(interveningDraft),
-    };
-    // 0 is valid — it disables a type outright.
-    const invalid = Object.values(values).some(v => !Number.isInteger(v) || v < 0 || v > 31);
-    if (invalid) {
-      setAllowancesError('Enter a whole number between 0 and 31 for each allowance.');
+    const minutes = Number(budgetDraft);
+    // 0 is valid — it disables time adjustments outright. 1440 mirrors the server's @Max.
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
+      setAllowancesError('Enter a whole number of minutes between 0 and 1440 (24 hours).');
       return;
     }
     setAllowancesError(null);
-    allowancesMutation.mutate(values);
+    allowancesMutation.mutate({ monthlyAdjustmentMinutes: minutes });
   }
 
   // ── Grouped-card save handlers ──────────────────────────────────────────────
@@ -684,60 +673,43 @@ export default function BusinessRules() {
         </button>
       </RuleCard>
 
-      {/* Time adjustment allowances — how MANY times per month each type may be used.
-          The per-use duration limit (30–120 min) is a fixed policy enforced in EodService. */}
+      {/* One monthly pool of minutes shared across all three types (V62). The per-use duration
+          limit (30–120 min) is a separate fixed policy enforced in EodService. */}
       <RuleCard
-        title="Time Adjustment Allowances"
-        description="How many times per calendar month an employee may request each type of time adjustment. Applies to everyone — there are no per-role or per-department overrides."
+        title="Time Adjustment Budget"
+        description="Total time per calendar month an employee may take as a late arrival, mid-shift break or early log-off — one shared pool, so spending it all on one type leaves nothing for the others. Applies to everyone; there are no per-role or per-department overrides."
         icon={<Clock3 size={16} aria-hidden="true" />}
         accent="var(--info)"
         footer={<LastUpdatedCaption info={allowancesUpdate} />}
       >
-        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 16 }}>
-          <div style={{ minWidth: 160 }}>
-            <label style={labelStyle} htmlFor="late-arrival-allowance">Late arrival</label>
-            <UnitField unit="/mo">
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 16, alignItems: 'flex-end' }}>
+          <div style={{ minWidth: 200 }}>
+            <label style={labelStyle} htmlFor="monthly-adjustment-minutes">Monthly budget</label>
+            <UnitField unit="min">
               <input
-                id="late-arrival-allowance"
+                id="monthly-adjustment-minutes"
                 type="number"
                 min={0}
-                max={31}
-                step={1}
-                value={lateArrivalDraft}
-                onChange={(e) => setLateArrivalDraft(e.target.value)}
-                style={{ ...inputStyle, paddingRight: 44 }}
+                max={1440}
+                step={15}
+                value={budgetDraft}
+                onChange={(e) => setBudgetEdit(e.target.value)}
+                style={{ ...inputStyle, paddingRight: 52 }}
               />
             </UnitField>
           </div>
-          <div style={{ minWidth: 160 }}>
-            <label style={labelStyle} htmlFor="intervening-allowance">Intervening time-off</label>
-            <UnitField unit="/mo">
-              <input
-                id="intervening-allowance"
-                type="number"
-                min={0}
-                max={31}
-                step={1}
-                value={interveningDraft}
-                onChange={(e) => setInterveningDraft(e.target.value)}
-                style={{ ...inputStyle, paddingRight: 44 }}
-              />
-            </UnitField>
-          </div>
-          <div style={{ minWidth: 160 }}>
-            <label style={labelStyle} htmlFor="early-leave-allowance">Leaving early</label>
-            <UnitField unit="/mo">
-              <input
-                id="early-leave-allowance"
-                type="number"
-                min={0}
-                max={31}
-                step={1}
-                value={earlyLeaveDraft}
-                onChange={(e) => setEarlyLeaveDraft(e.target.value)}
-                style={{ ...inputStyle, paddingRight: 44 }}
-              />
-            </UnitField>
+          {/* Minutes are what the rule is stored and enforced in, but "120" reads as a number
+              before it reads as two hours — so echo it back in hours. */}
+          <div style={{ fontSize: 12, color: 'var(--txt-dim)', paddingBottom: 10 }}>
+            {(() => {
+              const m = Number(budgetDraft);
+              if (!Number.isFinite(m) || m < 0) return null;
+              if (m === 0) return 'Time adjustments are disabled.';
+              const h = Math.floor(m / 60);
+              const rem = m % 60;
+              const pretty = h === 0 ? `${rem}m` : rem === 0 ? `${h}h` : `${h}h ${rem}m`;
+              return `= ${pretty} per employee, per calendar month.`;
+            })()}
           </div>
         </div>
         <FieldError msg={allowancesError ?? undefined} />

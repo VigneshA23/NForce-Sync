@@ -144,7 +144,7 @@ export function DatePicker({
   placeholder?: string;
   /** Opt-in month/year dropdowns in the header, alongside the prev/next arrows. Off by default so existing call sites are unaffected. */
   quickNav?: boolean;
-  /** Opt-in "X" to reset the field back to empty. Off by default — several call sites (EOD entry date, report/dashboard filters) always need a real date and aren't safe to clear. */
+  /** Opt-in "X" to reset the field back to empty. Off by default — some call sites (e.g. EOD entry date) always need a real date and aren't safe to clear. */
   clearable?: boolean;
 }) {
   const [open, setOpen] = useState(false);

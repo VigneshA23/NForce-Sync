@@ -18,16 +18,16 @@ public record TimeAdjustmentContextDto(
         /** Handles overnight shifts (e.g. 15:30-00:30 = 540, not -900). */
         int       shiftDurationMinutes,
 
-        int lateArrivalAllowance,
-        int earlyLeaveAllowance,
-        int interveningAllowance,
+        /** One monthly pool of minutes shared across all three adjustment types (V62). */
+        int monthlyAdjustmentMinutes,
 
-        /** Uses already recorded this calendar month, excluding drafts. */
-        long lateArrivalUsed,
-        long earlyLeaveUsed,
-        long interveningUsed
+        /**
+         * Minutes already spent this calendar month, excluding drafts, rejected entries and the
+         * day being edited — so the form can show what is genuinely left to spend.
+         */
+        long adjustmentMinutesUsed
 ) {
     public static TimeAdjustmentContextDto unassigned() {
-        return new TimeAdjustmentContextDto(false, null, null, null, 0, 0, 0, 0, 0, 0, 0);
+        return new TimeAdjustmentContextDto(false, null, null, null, 0, 0, 0);
     }
 }

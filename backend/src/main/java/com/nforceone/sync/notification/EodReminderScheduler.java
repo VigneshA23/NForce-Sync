@@ -10,6 +10,7 @@ import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
 import com.nforceone.sync.businessrules.ShiftSchedule;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
+import com.nforceone.sync.project.AllocationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -36,6 +37,11 @@ import java.util.Set;
  * <p>Reminders were manual before this (a PM/TL clicking "Remind" in a missing-EOD report) and
  * still are — this only adds the automatic pass. It reuses the same {@code EOD_REMINDER} type and
  * {@code /eod/submit} link so both look identical in the notification list.
+ *
+ * <p>Who gets reminded is the intersection of three tests: the role actually submits EODs
+ * (EMPLOYEE or MANAGER), the person is on the shift whose cutoff just passed, and they hold a
+ * project allocation covering that work date. Shift membership alone had been reminding every role
+ * on the shift — a PM, and even a read-only Leadership viewer — to submit "your EOD".
  */
 @Component
 public class EodReminderScheduler {
@@ -62,6 +68,14 @@ public class EodReminderScheduler {
     private static final Set<EodEntry.Status> STILL_OWED = Set.of(
             EodEntry.Status.DRAFT, EodEntry.Status.REJECTED, EodEntry.Status.MISSED);
 
+    /**
+     * The only roles that submit an EOD. Everyone else — PM, DM, HR, FINANCE, LEADERSHIP,
+     * SUPERADMIN — reviews or reports on EODs rather than filing one, so telling them "your EOD is
+     * overdue" was always wrong, even when they held a shift and a project allocation.
+     */
+    private static final Set<AppUser.Role> SUBMITS_EOD = Set.of(
+            AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER);
+
     private final ShiftDefinitionRepository shiftRepository;
     private final AppUserRepository userRepository;
     private final EodEntryRepository entryRepository;
@@ -69,6 +83,7 @@ public class EodReminderScheduler {
     private final HolidayRepository holidayRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationService notificationService;
+    private final AllocationRepository allocationRepository;
 
     public EodReminderScheduler(ShiftDefinitionRepository shiftRepository,
                                 AppUserRepository userRepository,
@@ -76,7 +91,8 @@ public class EodReminderScheduler {
                                 BusinessRuleConfigRepository configRepository,
                                 HolidayRepository holidayRepository,
                                 NotificationRepository notificationRepository,
-                                NotificationService notificationService) {
+                                NotificationService notificationService,
+                                AllocationRepository allocationRepository) {
         this.shiftRepository = shiftRepository;
         this.userRepository = userRepository;
         this.entryRepository = entryRepository;
@@ -84,6 +100,7 @@ public class EodReminderScheduler {
         this.holidayRepository = holidayRepository;
         this.notificationRepository = notificationRepository;
         this.notificationService = notificationService;
+        this.allocationRepository = allocationRepository;
     }
 
     /**
@@ -129,12 +146,27 @@ public class EodReminderScheduler {
     }
 
     private int remindShift(ShiftDefinition shift, LocalDate workDate, LocalDateTime cutoffAt) {
+        // Holding a shift is not the same as owing an EOD. Shift membership alone reminded every
+        // active account on the shift regardless of role — PMs, HR, even a read-only Leadership
+        // viewer — to submit "your EOD". Only employees and team leads file one.
         List<AppUser> members = userRepository.findByShiftIdAndStatusAndDeletedAtIsNull(
-                shift.getId(), AppUser.Status.ACTIVE);
+                        shift.getId(), AppUser.Status.ACTIVE).stream()
+                .filter(u -> SUBMITS_EOD.contains(u.getRole()))
+                .toList();
+        if (members.isEmpty()) return 0;
+
+        // And of those, only the ones actually staffed on something that day. Project allocation is
+        // the test the Missing EOD report already uses to decide who owes an EOD, so both features
+        // agree rather than each carrying its own definition.
+        Set<Long> allocated = allocationRepository.findEmployeeIdsAllocatedOn(
+                members.stream().map(AppUser::getId).toList(), workDate);
+        if (allocated.isEmpty()) return 0;
+
         OffsetDateTime cutoffInstant = cutoffAt.atZone(ZoneId.systemDefault()).toOffsetDateTime();
         int sent = 0;
 
         for (AppUser member : members) {
+            if (!allocated.contains(member.getId())) continue;
             if (!owesEod(member.getId(), workDate)) continue;
 
             // Idempotency: anything of this type already delivered since the cutoff — including a
@@ -148,7 +180,7 @@ public class EodReminderScheduler {
             // bare rather than suffixed — "the Evening Shift cutoff", not "Evening Shift shift".
             notificationService.send(member.getId(), "EOD_REMINDER",
                     "EOD submission overdue",
-                    "Your EOD for " + workDate + " is past the " + shift.getName()
+                    "Your EOD for " + com.nforceone.sync.notification.NotificationDates.format(workDate) + " is past the " + shift.getName()
                             + " cutoff. Please submit it.",
                     "/eod/submit?date=" + workDate);
             sent++;

@@ -23,8 +23,13 @@ public class EmailService {
     @Value("${resend.from}")
     private String fromAddress;
 
-    @Value("${app.base-url:http://localhost:5173}")
-    private String baseUrl;
+    // Resolved per request rather than injected: an emailed link must point at whichever front
+    // end the user is actually on (local dev or the deployed site), not one fixed environment.
+    private final AppBaseUrlResolver baseUrlResolver;
+
+    public EmailService(AppBaseUrlResolver baseUrlResolver) {
+        this.baseUrlResolver = baseUrlResolver;
+    }
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
@@ -153,7 +158,7 @@ public class EmailService {
                   </table>
                 </body>
                 </html>
-                """.formatted(fullName, email, tempPassword, baseUrl);
+                """.formatted(fullName, email, tempPassword, baseUrlResolver.resolve());
     }
 
     private String buildResetHtml(String fullName, String email, String tempPassword) {
@@ -194,7 +199,7 @@ public class EmailService {
                   </table>
                 </body>
                 </html>
-                """.formatted(fullName, email, tempPassword, baseUrl);
+                """.formatted(fullName, email, tempPassword, baseUrlResolver.resolve());
     }
 
     private String jsonString(String raw) {

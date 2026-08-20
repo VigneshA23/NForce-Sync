@@ -68,10 +68,15 @@ export function daySummary(entry: EodEntryDto): string | null {
   const overtime = entry.isOvertime && entry.overtimeHours != null ? Number(entry.overtimeHours) : 0;
 
   const parts: string[] = [];
-  if (entry.dayType === 'LEAVE' && leaveHours > 0) {
-    parts.push(worked > 0
-      ? `Half-day leave ${hrs(leaveHours)}h`
-      : `Full-day leave ${hrs(leaveHours)}h`);
+  if (entry.dayType === 'LEAVE') {
+    // A task-less full-day Leave has no rows to sum hours from — leaveHours is 0 in that case,
+    // same as a normal working day with none, so this can't gate on leaveHours > 0 the way the
+    // Holiday branch above gates on nothing at all. Falls back to a plain "Full-day leave" label.
+    if (worked > 0) {
+      parts.push(`Half-day leave ${hrs(leaveHours)}h`);
+    } else {
+      parts.push(leaveHours > 0 ? `Full-day leave ${hrs(leaveHours)}h` : 'Full-day leave');
+    }
   }
 
   if (overtime > 0) {
@@ -84,8 +89,16 @@ export function daySummary(entry: EodEntryDto): string | null {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-/** One of late-arrival / early-leave / mid-shift-gap — the schema stores at most one per day. */
-export function timeAdjustmentLabel(entry: EodEntryDto): string | null {
+/**
+ * One of late-arrival / early-leave / mid-shift-gap — the schema stores at most one per day.
+ *
+ * Takes the two fields structurally rather than a whole EodEntryDto, so the report DTOs (which
+ * carry the same pair on a much smaller row) produce this wording from here instead of growing
+ * their own copy of it.
+ */
+export function timeAdjustmentLabel(
+  entry: { timeAdjustmentType: string | null; timeAdjustmentMinutes: number | null },
+): string | null {
   const { timeAdjustmentType: type, timeAdjustmentMinutes: mins } = entry;
   if (!type || mins == null || mins <= 0) return null;
   const dur = formatDurationMinutes(mins);

@@ -11,6 +11,7 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts';
 import { todayISO as localTodayISO } from '../../lib/date';
+import { useAuth } from '../../lib/auth';
 import { getEntry } from '../../api/eod';
 import { usePendingApprovalsCount } from '../../api/approvals';
 import { readStoredDateFilter, resolveTeamDashboardDateFilter, writeStoredDateFilter } from '../../lib/teamDashboardDateFilter';
@@ -553,17 +554,19 @@ function agoLabel(ms: number): string {
 export default function TeamDashboard() {
   const navigate = useNavigate();
   const todayISO = localTodayISO();
+  const { user } = useAuth();
+  const userId = user!.id;
 
   // Selected date/range lives in the URL (?mode=today|yesterday|range&from=&to=) so it survives
   // navigation within the session, is shareable/bookmarkable, and only ever changes on an
   // explicit user action — never as a side effect of remounting this page.
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const { mode, range, isToday } = resolveTeamDashboardDateFilter(searchParams);
+  const { mode, range, isToday } = resolveTeamDashboardDateFilter(searchParams, userId);
 
   useEffect(() => {
     if (searchParams.get('mode')) return;
-    const saved = readStoredDateFilter();
+    const saved = readStoredDateFilter(userId);
     if (!saved) return;
     const next = new URLSearchParams(searchParams);
     next.set('mode', saved.mode);
@@ -589,7 +592,7 @@ export default function TeamDashboard() {
     next.delete('from');
     next.delete('to');
     setSearchParams(next, { replace: true });
-    writeStoredDateFilter({ mode: kind });
+    writeStoredDateFilter(userId, { mode: kind });
     setPickerOpen(false);
   }
 
@@ -600,7 +603,7 @@ export default function TeamDashboard() {
     next.set('from', draftFrom);
     next.set('to', draftTo);
     setSearchParams(next, { replace: true });
-    writeStoredDateFilter({ mode: 'range', from: draftFrom, to: draftTo });
+    writeStoredDateFilter(userId, { mode: 'range', from: draftFrom, to: draftTo });
     setPickerOpen(false);
   }
 

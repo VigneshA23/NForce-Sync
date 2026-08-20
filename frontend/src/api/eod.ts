@@ -109,7 +109,7 @@ export async function listEntries(
   return res.data;
 }
 
-/** Shift timings, monthly allowances and current usage for the logged-in employee. */
+/** Shift timings, the monthly minute budget and current usage for the logged-in employee. */
 export interface TimeAdjustmentContextDto {
   shiftAssigned: boolean;
   shiftName: string | null;
@@ -117,12 +117,10 @@ export interface TimeAdjustmentContextDto {
   shiftStart: string | null;
   shiftEnd: string | null;
   shiftDurationMinutes: number;
-  lateArrivalAllowance: number;
-  earlyLeaveAllowance: number;
-  interveningAllowance: number;
-  lateArrivalUsed: number;
-  earlyLeaveUsed: number;
-  interveningUsed: number;
+  /** One pool of minutes shared across late arrival, mid-shift break and early log-off. */
+  monthlyAdjustmentMinutes: number;
+  /** Minutes spent this month, excluding drafts, rejected entries and the day being edited. */
+  adjustmentMinutesUsed: number;
 }
 
 export async function getTimeAdjustmentContext(date: string): Promise<TimeAdjustmentContextDto> {

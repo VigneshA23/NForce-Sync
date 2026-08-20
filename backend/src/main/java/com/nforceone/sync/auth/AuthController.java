@@ -52,6 +52,16 @@ public class AuthController {
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
         String email = request.email() == null ? null : request.email().trim().toLowerCase();
 
+        // Deactivated accounts are reported plainly and never touch the lockout counters — a
+        // super-admin already made the "you're out" decision, so counting attempts here (or
+        // hiding it behind the generic bad-credentials message) would only confuse the user.
+        Optional<AppUser> existing = email == null || email.isBlank()
+                ? Optional.empty()
+                : appUserRepository.findByEmailAndDeletedAtIsNull(email);
+        if (existing.isPresent() && existing.get().getStatus() == AppUser.Status.INACTIVE) {
+            return deactivatedResponse();
+        }
+
         // Locked accounts never reach the authentication manager — a correct password must not
         // unlock early, otherwise the lock is only a speed bump for a credential-stuffing run.
         Optional<Long> lockedFor = accountLockoutService.lockedSecondsRemaining(email);
@@ -76,7 +86,7 @@ public class AuthController {
                 return lockedResponse((long) accountLockoutService.durationMinutes() * 60);
             }
 
-            // Same message for wrong password, unknown email, and inactive account.
+            // Same message for wrong password and unknown email.
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("error", "Invalid email or password");
             // Only sent when there is a real account counting down to a lockout. Omitted for an
@@ -97,6 +107,13 @@ public class AuthController {
                 .header("Retry-After", String.valueOf(retryAfterSeconds))
                 .body(Map.of("error", "Account temporarily locked",
                              "retryAfterSeconds", retryAfterSeconds));
+    }
+
+    /** 403 Forbidden — the account exists but has been deactivated by a super admin. */
+    private ResponseEntity<Map<String, Object>> deactivatedResponse() {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error",
+                        "Your account has been deactivated. Please reach out to your Super Admin."));
     }
 
     @PostMapping("/forgot-password")

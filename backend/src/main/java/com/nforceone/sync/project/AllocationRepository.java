@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 public interface AllocationRepository extends JpaRepository<Allocation, Long> {
     List<Allocation> findByEmployeeId(Long employeeId);
@@ -101,4 +102,18 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
     List<Allocation> findActiveInRangeForEmployees(@Param("employeeIds") List<Long> employeeIds,
                                                     @Param("from") LocalDate from,
                                                     @Param("to") LocalDate to);
+
+    /**
+     * Which of these employees were assigned to any project on {@code date} — the EOD cutoff
+     * reminder's test for "owes an EOD at all".
+     *
+     * Ids only, with no JOIN FETCH: the scheduler runs every 15 minutes over every shift member
+     * and needs a membership test, not the allocation rows themselves.
+     */
+    @Query("SELECT DISTINCT a.employee.id FROM Allocation a "
+         + "WHERE a.employee.id IN :employeeIds "
+         + "AND a.effectiveFrom <= :date "
+         + "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :date)")
+    Set<Long> findEmployeeIdsAllocatedOn(@Param("employeeIds") List<Long> employeeIds,
+                                         @Param("date") LocalDate date);
 }

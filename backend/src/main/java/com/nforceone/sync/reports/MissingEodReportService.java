@@ -32,12 +32,10 @@ import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -292,15 +290,18 @@ public class MissingEodReportService {
 
     private void sendReminder(MissingEodRowDto row, List<LocalDate> dates) {
         String dateList = dates.stream().limit(5)
-                .map(d -> d.getMonth().getDisplayName(TextStyle.SHORT, Locale.ENGLISH) + " " + d.getDayOfMonth())
+                .map(com.nforceone.sync.notification.NotificationDates::format)
                 .collect(Collectors.joining(", "));
         String suffix = dates.size() > 5 ? " and " + (dates.size() - 5) + " more" : "";
         String message = "You have " + dates.size() + " missing EOD entr" + (dates.size() == 1 ? "y" : "ies")
                 + ": " + dateList + suffix;
-        // Lands on My EOD History pre-filtered to Missing: this reminder covers several days, so
-        // deep-linking one submit form would be wrong — the employee needs to see the whole list.
-        notificationService.send(row.employeeId(), "EOD_REMINDER", "Missing EOD reminder", message,
-                "/eod/history?status=MISSED");
+        // Lands on My EOD History pre-filtered to Missing AND narrowed to the span this reminder
+        // covers, so the list shows exactly the days being chased — not every gap on record.
+        // Deep-linking one submit form would be wrong here: a reminder covers several days.
+        LocalDate first = dates.stream().min(LocalDate::compareTo).orElseThrow();
+        LocalDate last  = dates.stream().max(LocalDate::compareTo).orElseThrow();
+        String link = "/eod/history?status=MISSED&from=" + first + "&to=" + last;
+        notificationService.send(row.employeeId(), "EOD_REMINDER", "Missing EOD reminder", message, link);
     }
 
     private boolean isMissing(EodEntry entry) {

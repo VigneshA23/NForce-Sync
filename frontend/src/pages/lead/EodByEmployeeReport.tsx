@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Download, RefreshCw, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
+import { FilterSelect } from '../../components/FilterSelect';
+import { TimeAdjustmentBadge } from '../../components/TimeAdjustmentBadge';
 import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
 import { useTeamReportFilters, useTeamEodByEmployeeReport, exportTeamEodByEmployee } from '../../api/teamReports';
@@ -91,6 +93,8 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 // the distinction exists so the control can show "Select Project…" before you have chosen, and
 // "All projects" after you deliberately did.
 const ALL = 'ALL';
+
+
 
 /** Sentinel for "projects that genuinely have no client" — internal work. Mirrored in
  *  EodByEmployeeReportService; a blank client already means "no filter", so it cannot be reused. */
@@ -261,52 +265,64 @@ function FilterBar({
           <FieldLabel>From *</FieldLabel>
           {/* Capped at today: an EOD report only ever covers days that have already happened.
               Still bounded by To as well, so From can never overshoot the other end. */}
-          <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} />
+          <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} quickNav clearable />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>To *</FieldLabel>
           {/* Capped at today for the same reason as From — there are no EODs for days
               that have not happened yet. */}
-          <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} />
+          <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} quickNav clearable />
         </label>
         {/* Each select opens on a masked placeholder (disabled, so it cannot be re-picked once
             you have chosen), with the "All …" catch-all still available underneath. */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Project</FieldLabel>
-          <select style={selectStyle(filters.projectId)} value={filters.projectId} onChange={e => set('projectId', e.target.value)}>
+          <FilterSelect
+            value={filters.projectId} onChange={v => set('projectId', v)}
+            style={selectStyle(filters.projectId)} label="project"
+          >
             <option value="" disabled>Select Project…</option>
             <option style={OPTION_STYLE} value={ALL}>All projects</option>
             {(filterOptions?.projects ?? []).map(p => <option style={OPTION_STYLE} key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Client</FieldLabel>
-          <select style={selectStyle(filters.client)} value={filters.client} onChange={e => set('client', e.target.value)}>
+          <FilterSelect
+            value={filters.client} onChange={v => set('client', v)}
+            style={selectStyle(filters.client)} label="client"
+          >
             <option value="" disabled>Select Client…</option>
             <option style={OPTION_STYLE} value={ALL}>All clients</option>
             {/* Internal work has no client by design — this is the only way to isolate it. */}
             <option style={OPTION_STYLE} value={NO_CLIENT}>W/O Client</option>
             {(filterOptions?.clients ?? []).map(c => <option style={OPTION_STYLE} key={c} value={c}>{c}</option>)}
-          </select>
+          </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>EOD Status</FieldLabel>
-          <select style={selectStyle(filters.status)} value={filters.status} onChange={e => set('status', e.target.value)}>
+          <FilterSelect
+            value={filters.status} onChange={v => set('status', v)}
+            style={selectStyle(filters.status)} label="EOD status"
+          >
             <option value="" disabled>Select EOD Status…</option>
             <option style={OPTION_STYLE} value={ALL}>All statuses</option>
             <option style={OPTION_STYLE} value="SUBMITTED">Submitted</option>
             <option style={OPTION_STYLE} value="LATE">Late</option>
             <option style={OPTION_STYLE} value="MISSING">Missing</option>
-          </select>
+          </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Billable or Internal</FieldLabel>
-          <select style={selectStyle(filters.billable)} value={filters.billable} onChange={e => set('billable', e.target.value)}>
+          <FilterSelect
+            value={filters.billable} onChange={v => set('billable', v)}
+            style={selectStyle(filters.billable)} label="billable filter"
+          >
             <option value="" disabled>Select Billable or Internal…</option>
             <option style={OPTION_STYLE} value={ALL}>All work</option>
             <option style={OPTION_STYLE} value="BILLABLE">Billable only</option>
             <option style={OPTION_STYLE} value="INTERNAL">Internal only</option>
-          </select>
+          </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Employee</FieldLabel>
@@ -566,8 +582,17 @@ function RosterFlow({
               {sortedEntries.length === 0 ? (
                 <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>No EOD entries match the current filters for this employee.</div>
               ) : sortedEntries.map((e, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: ENTRY_TABLE_COLUMNS, padding: '7px 16px', fontSize: 12, borderBottom: '1px solid var(--line)' }}>
-                  <div style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{i === 0 || sortedEntries[i - 1].date !== e.date ? formatDate(e.date) : ''}</div>
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: ENTRY_TABLE_COLUMNS, padding: '7px 16px', fontSize: 12, borderBottom: '1px solid var(--line)', alignItems: 'start' }}>
+                  {/* The adjustment is per-DAY, so it rides the same "first row of this date" test
+                      the date itself uses — printed once, blank on the day's later task rows. */}
+                  <div style={{ color: 'var(--txt)' }}>
+                    {i === 0 || sortedEntries[i - 1].date !== e.date ? (
+                      <>
+                        <div style={{ fontFamily: '"JetBrains Mono", monospace' }}>{formatDate(e.date)}</div>
+                        <TimeAdjustmentBadge entry={e} />
+                      </>
+                    ) : ''}
+                  </div>
                   <div style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{e.projectCode ?? '—'}</div>
                   <div style={{ color: 'var(--txt-mut)' }}>{e.categoryName ?? '—'}</div>
                   <div style={{ textAlign: 'right', fontFamily: '"JetBrains Mono", monospace', fontWeight: 700, color: 'var(--txt)' }}>{hrs(e.hours)}</div>
@@ -643,8 +668,6 @@ function TeamFlow({
           {pageRows.map(r => {
             const open = isOpen(r.employeeId);
             const entriesAsc = [...r.entries].sort((a, b) => a.date.localeCompare(b.date));
-            const dates = entriesAsc.map(e => e.date);
-            const span = dates.length ? `${formatDate(dates[0])} → ${formatDate(dates[dates.length - 1])}` : '—';
             return (
               <div key={r.employeeId} className="nf-r-scroll-inner" style={{ borderBottom: '1px solid var(--line)', '--nf-r-min': TEAM_ENTRY_MIN_WIDTH + 'px' } as React.CSSProperties}>
                 <div
@@ -660,8 +683,21 @@ function TeamFlow({
                     {initials(r.employeeName)}
                   </div>
                   <span style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--txt)', minWidth: 140 }}>{r.employeeName}</span>
-                  <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>{span}</span>
-                  <span style={{ fontSize: 11, color: 'var(--txt-mut)' }}>{r.projectCodes.length > 1 ? `${r.projectCodes.length} projects` : (r.projectCodes[0] ?? '—')}</span>
+                  {/* The codes themselves, not a "2 projects" count — the count told you there was
+                      something to know without telling you what it was, and this column already
+                      printed the code whenever there happened to be exactly one. Long lists
+                      ellipsize; the full set stays available on hover. */}
+                  <span
+                    title={r.projectCodes.length > 0
+                      ? `Assigned to ${r.projectCodes.join(', ')}`
+                      : 'No project assignments in this range'}
+                    style={{
+                      fontSize: 11, color: 'var(--txt-mut)', maxWidth: 220,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {r.projectCodes.length > 0 ? r.projectCodes.join(', ') : '—'}
+                  </span>
                   <div style={{ flex: 1 }} />
                   <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{r.entryCount} {r.entryCount === 1 ? 'entry' : 'entries'}</span>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace' }}>{hrs(r.totalHours)}</span>
@@ -680,9 +716,18 @@ function TeamFlow({
                   <div key={i} style={{
                     display: 'grid', gridTemplateColumns: TEAM_ENTRY_COLUMNS,
                     padding: '5px 16px 5px 52px', fontSize: 11.5, color: 'var(--txt-mut)',
+                    alignItems: 'start',
                   }}>
                     <span>{r.designationName ?? '—'}</span>
-                    <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{i === 0 || entriesAsc[i - 1].date !== e.date ? formatDate(e.date) : ''}</span>
+                    {/* Same per-day rule as the detail pane above. */}
+                    <span>
+                      {i === 0 || entriesAsc[i - 1].date !== e.date ? (
+                        <>
+                          <span style={{ fontFamily: '"JetBrains Mono", monospace', display: 'block' }}>{formatDate(e.date)}</span>
+                          <TimeAdjustmentBadge entry={e} />
+                        </>
+                      ) : ''}
+                    </span>
                     <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{e.projectCode ?? '—'}</span>
                     <span>{e.categoryName ?? '—'}</span>
                     <span style={{ textAlign: 'right', fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{hrs(e.hours)}</span>
