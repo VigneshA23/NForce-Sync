@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react';
 import {
-  ChevronDown, ChevronRight, Check, X, CheckCheck, RefreshCw,
+  ChevronDown, ChevronRight, X, CheckCheck, RefreshCw,
   Search, AlertTriangle,
 } from 'lucide-react';
 import {
   usePendingApprovals, useDecidedApprovals,
-  useApprove, useReject, useBatchApprove,
+  useApprove, useReject,
 } from '../../api/approvals';
-import { Modal } from '../../components/Modal';
 import { FilterDropdown, toggleFilterVal } from '../../components/FilterDropdown';
 import { useToast } from '../../lib/toast';
 import type { EodEntryDto } from '../../api/eod';
@@ -49,13 +48,10 @@ function teamLeadOf(entry: EodEntryDto): string {
 // ── entry row ─────────────────────────────────────────────────────────────────
 
 function EntryRow({
-  entry, actionable, checked, onToggleCheck,
+  entry,
   expanded, onToggleExpand, onOpenDetails,
 }: {
   entry: EodEntryDto;
-  actionable: boolean;
-  checked: boolean;
-  onToggleCheck: () => void;
   expanded: boolean;
   onToggleExpand: () => void;
   onOpenDetails: () => void;
@@ -83,11 +79,6 @@ function EntryRow({
   return (
     <div style={{ borderBottom: '1px solid var(--line)', background: entry.escalated ? 'linear-gradient(90deg, color-mix(in srgb, var(--warn) 7%, transparent), transparent 45%)' : undefined }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding }}>
-        {actionable && (
-          <div style={{ marginTop: 2 }}>
-            <input type="checkbox" checked={checked} onChange={onToggleCheck} style={{ width: 15, height: 15, accentColor: 'var(--brand-bright)', cursor: 'pointer' }} />
-          </div>
-        )}
         <div style={{
           width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
@@ -192,7 +183,6 @@ export default function ApprovalsPM() {
   const { data: pending, isPending: pendingLoading, isError: pendingError, refetch } = usePendingApprovals();
   const { data: approved, isPending: approvedLoading } = useDecidedApprovals('APPROVED');
   const { data: rejected, isPending: rejectedLoading } = useDecidedApprovals('REJECTED');
-  const batchApprove = useBatchApprove();
   const reject = useReject();
   const { show } = useToast();
 
@@ -203,10 +193,7 @@ export default function ApprovalsPM() {
   const [employeeFilter, setEmployeeFilter] = useState<Set<string>>(new Set());
   const [projectFilter, setProjectFilter] = useState<Set<string>>(new Set());
   const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set());
-  const [selected, setSelected] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [rejectTarget, setRejectTarget] = useState<'bulk' | number | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
   const [detailsEntryId, setDetailsEntryId] = useState<number | null>(null);
 
   const modalApprove = useApprove();
@@ -255,8 +242,6 @@ export default function ApprovalsPM() {
     return sorted;
   }, [baseList, tlFilter, employeeFilter, projectFilter, categoryFilter, search, sort]);
 
-  const actionable = tab === 'pending' || tab === 'escalated';
-
   const detailsEntry = baseList.find(e => e.id === detailsEntryId) ?? null;
 
   async function handleDetailApprove(entryId: number) {
@@ -269,8 +254,8 @@ export default function ApprovalsPM() {
     }
   }
 
-  // Rejected in place from the detail modal, which supplies the reason — no separate dialog. The
-  // bulk path below still uses one, since it spans entries and has no single entry to sit under.
+  // Rejected in place from the detail modal, which supplies the reason — no separate dialog.
+  // Every decision is made on one opened entry, so there is no cross-entry path needing its own.
   async function handleDetailReject(entryId: number, reason: string) {
     if (!reason) return;
     try {
@@ -296,12 +281,6 @@ export default function ApprovalsPM() {
     setCategoryFilter(new Set());
   }
 
-  function toggleCheck(id: number) {
-    const next = new Set(selected);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setSelected(next);
-  }
-
   function toggleExpand(id: number) {
     const next = new Set(expanded);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -310,41 +289,6 @@ export default function ApprovalsPM() {
 
   function switchTab(t: Tab) {
     setTab(t);
-    setSelected(new Set());
-  }
-
-  async function approveIds(ids: number[]) {
-    if (ids.length === 0) return;
-    try {
-      const result = await batchApprove.mutateAsync(ids);
-      // The backend silently skips entries not fully billable-decided (or no longer SUBMITTED),
-      // so the response can be shorter than the request — report what actually happened.
-      const approvedCount = result.length;
-      const skipped = ids.length - approvedCount;
-      show(
-        `${approvedCount} entr${approvedCount !== 1 ? 'ies' : 'y'} approved.`
-          + (skipped > 0 ? ` ${skipped} skipped (billable not yet decided).` : ' Utilization recomputed.'),
-        'success',
-      );
-      setSelected(new Set());
-    } catch (err) {
-      show(extractError(err), 'error');
-    }
-  }
-
-  async function confirmRejectSubmit() {
-    const reason = rejectReason.trim();
-    if (!reason) return;
-    const ids = rejectTarget === 'bulk' ? [...selected] : rejectTarget != null ? [rejectTarget] : [];
-    if (ids.length === 0) return;
-    const results = await Promise.allSettled(ids.map(id => reject.mutateAsync({ entryId: id, comment: reason })));
-    const failed = results.filter(r => r.status === 'rejected').length;
-    const succeeded = ids.length - failed;
-    if (failed === 0) show(`${succeeded} entr${succeeded !== 1 ? 'ies' : 'y'} rejected.`, 'success');
-    else show(`${succeeded} of ${ids.length} rejected, ${failed} failed — please retry the rest.`, 'error');
-    setSelected(new Set());
-    setRejectTarget(null);
-    setRejectReason('');
   }
 
   if (pendingError) {
@@ -461,22 +405,6 @@ export default function ApprovalsPM() {
         </select>
       </div>
 
-      {/* Bulk bar */}
-      {actionable && selected.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-          background: 'var(--raised)', border: '1px solid rgba(177,17,22,.4)', borderRadius: 12,
-          padding: '10px 16px', marginBottom: 14, position: 'sticky', top: 10, zIndex: 15,
-        }}>
-          <span style={{ fontSize: 13, color: 'var(--txt)' }}>{selected.size} selected</span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Btn onClick={() => setSelected(new Set())}>Clear</Btn>
-            <Btn variant="danger" onClick={() => { setRejectTarget('bulk'); setRejectReason(''); }}><X size={12} aria-hidden="true" /> Reject selected</Btn>
-            <Btn variant="success" onClick={() => approveIds([...selected])} disabled={batchApprove.isPending}><Check size={12} aria-hidden="true" /> Approve selected</Btn>
-          </div>
-        </div>
-      )}
-
       {/* List */}
       {isLoading ? (
         <Card>
@@ -512,9 +440,6 @@ export default function ApprovalsPM() {
             <EntryRow
               key={entry.id}
               entry={entry}
-              actionable={actionable}
-              checked={selected.has(entry.id)}
-              onToggleCheck={() => toggleCheck(entry.id)}
               expanded={expanded.has(entry.id)}
               onToggleExpand={() => toggleExpand(entry.id)}
               onOpenDetails={() => setDetailsEntryId(entry.id)}
@@ -522,30 +447,6 @@ export default function ApprovalsPM() {
           ))}
         </Card>
       )}
-
-      {/* Reject modal */}
-      <Modal
-        open={rejectTarget != null}
-        title="Reject entry"
-        onClose={() => setRejectTarget(null)}
-        footer={
-          <>
-            <Btn onClick={() => setRejectTarget(null)}>Cancel</Btn>
-            <Btn variant="danger" onClick={confirmRejectSubmit} disabled={!rejectReason.trim() || reject.isPending}>
-              {reject.isPending ? 'Rejecting…' : 'Confirm reject'}
-            </Btn>
-          </>
-        }
-      >
-        <p style={{ margin: '0 0 12px', color: 'var(--txt-mut)', fontSize: 12.5 }}>This reason is shared with the employee.</p>
-        <textarea
-          rows={4}
-          value={rejectReason}
-          onChange={e => setRejectReason(e.target.value)}
-          placeholder="e.g. Missing task description for the overtime hours logged"
-          style={{ width: '100%', resize: 'vertical', padding: 10, background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 8, color: 'var(--txt)', fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }}
-        />
-      </Modal>
 
       <SubmissionDetailModal
         entry={detailsEntry}

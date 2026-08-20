@@ -265,13 +265,18 @@ function CreatableSelect<T extends CreatableItem>({
   return (
     <div style={{ position: 'relative' }}>
       <div style={{ position: 'relative' }}>
+        {/* While open this is a SEARCH box, and it starts empty so the whole list is offered.
+            It used to be seeded with the current value on focus, which fed straight into
+            `filtered` — so opening a field that already had a value showed only that one option
+            plus "— Clear —", and the full list was reachable only by clearing first. The current
+            value stays visible as the placeholder, and its row is highlighted in the list. */}
         <input
           style={{ ...inputStyle, paddingRight: 32 }}
-          placeholder={placeholder}
+          placeholder={open && currentName ? currentName : placeholder}
           value={open ? query : currentName}
-          onFocus={() => { setOpen(true); setQuery(currentName); }}
+          onFocus={() => { setOpen(true); setQuery(''); }}
           onChange={e => { setQuery(e.target.value); setOpen(true); if (!e.target.value) onChange(null); }}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onBlur={() => setTimeout(() => { setOpen(false); setQuery(''); }, 150)}
         />
         <ChevronDown size={14} style={{
           position: 'absolute', right: 10, top: '50%',
@@ -322,6 +327,129 @@ function CreatableSelect<T extends CreatableItem>({
           >
             — Clear —
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Fixed-list dropdown drawn by the app rather than by the OS.
+ *
+ * These fields used native `<select>`s, whose popup Windows renders itself — so the selected row
+ * showed the OS blue bar while the CreatableSelect fields beside them showed the brand red tint,
+ * and the same modal highlighted "what you picked" two different ways. No CSS reconciles that:
+ * `option:checked` is ignored by Chrome on Windows (see FilterSelect's note on the OS-drawn menu).
+ * Painting the list ourselves is the only way to make every dropdown in the modal agree.
+ *
+ * Deliberately NOT merged with CreatableSelect: that one is a text box that filters and can mint
+ * new records, this one is a closed list of fixed choices. Sharing the markup would mean one
+ * component with a "can you type?" switch running through every branch.
+ */
+function PlainSelect({
+  id, value, options, onChange, emptyLabel,
+}: {
+  id?: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+  /** Adds a leading row mapping to '' — replaces the old `<option value="">— None —</option>`. */
+  emptyLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  const rows = emptyLabel != null ? [{ value: '', label: emptyLabel }, ...options] : options;
+  const selectedIndex = rows.findIndex(r => r.value === value);
+  const currentLabel = selectedIndex >= 0 ? rows[selectedIndex].label : '';
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [open]);
+
+  function openList() {
+    setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
+    setOpen(true);
+  }
+
+  function choose(next: string) {
+    onChange(next);
+    setOpen(false);
+  }
+
+  // Keyboard parity with the native control it replaces: open on Enter/Space/↓, move with the
+  // arrows, commit with Enter, abandon with Escape. Without this the field would be reachable by
+  // Tab but impossible to actually operate without a mouse.
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (!open) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); openList(); }
+      return;
+    }
+    if (e.key === 'Escape' || e.key === 'Tab') { setOpen(false); return; }
+    if (e.key === 'ArrowDown')    { e.preventDefault(); setActiveIndex(i => Math.min(i + 1, rows.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0)); }
+    else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (rows[activeIndex]) choose(rows[activeIndex].value);
+    }
+  }
+
+  return (
+    <div ref={boxRef} style={{ position: 'relative' }}>
+      {/* type="button" matters — this sits inside the modal's <form>, and a bare button submits it. */}
+      <button
+        id={id}
+        type="button"
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => (open ? setOpen(false) : openList())}
+        onKeyDown={onKeyDown}
+        style={{ ...inputStyle, cursor: 'pointer', textAlign: 'left', paddingRight: 32 }}
+      >
+        {currentLabel}
+      </button>
+      <ChevronDown size={14} style={{
+        position: 'absolute', right: 10, top: '50%',
+        transform: 'translateY(-50%)', color: 'var(--txt-dim)', pointerEvents: 'none',
+      }} />
+      {open && (
+        <div
+          role="listbox"
+          style={{
+            position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
+            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 7,
+            boxShadow: '0 8px 24px rgba(0,0,0,.3)', zIndex: 100, maxHeight: 200, overflowY: 'auto',
+          }}
+        >
+          {rows.map((r, idx) => {
+            const isSelected = r.value === value;
+            // Same red tint CreatableSelect uses for the current value — the whole point of this
+            // component. The keyboard-active row borrows the plain hover shade so the two states
+            // stay tellable apart.
+            const background = isSelected ? 'rgba(176,17,22,.12)' : idx === activeIndex ? 'var(--raised)' : 'transparent';
+            return (
+              <div
+                key={r.value || '__none__'}
+                role="option"
+                aria-selected={isSelected}
+                onMouseDown={() => choose(r.value)}
+                onMouseEnter={() => setActiveIndex(idx)}
+                style={{
+                  padding: '9px 14px', fontSize: 13, cursor: 'pointer', background,
+                  color: isSelected ? 'var(--brand-bright)' : r.value === '' ? 'var(--txt-dim)' : 'var(--txt)',
+                }}
+              >
+                {r.label}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -838,36 +966,30 @@ function EditModal({
 
           {/* Role */}
           <Field label="Role">
-            <select
+            <PlainSelect
               id={roleId}
-              style={{ ...inputStyle, cursor: 'pointer' }}
               value={form.role}
-              onChange={e => set('role', e.target.value)}
-            >
-              {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-            </select>
+              options={ROLE_OPTIONS}
+              onChange={v => set('role', v)}
+            />
           </Field>
 
           {/* Employment Type */}
           <Field label="Employment Type">
-            <select
-              style={{ ...inputStyle, cursor: 'pointer' }}
+            <PlainSelect
               value={form.employmentType ?? 'FULL_TIME'}
-              onChange={e => set('employmentType', e.target.value)}
-            >
-              {EMPLOYMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
+              options={EMPLOYMENT_TYPES}
+              onChange={v => set('employmentType', v)}
+            />
           </Field>
 
           {/* Work Mode */}
           <Field label="Work Mode">
-            <select
-              style={{ ...inputStyle, cursor: 'pointer' }}
+            <PlainSelect
               value={form.workMode ?? 'ONSITE'}
-              onChange={e => set('workMode', e.target.value)}
-            >
-              {WORK_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-            </select>
+              options={WORK_MODES}
+              onChange={v => set('workMode', v)}
+            />
           </Field>
 
           {/* Department — creatable */}
@@ -900,14 +1022,12 @@ function EditModal({
 
           {/* Shift — plain dropdown, managed centrally in Business Rules */}
           <Field label="Shift">
-            <select
-              style={{ ...inputStyle, cursor: 'pointer' }}
-              value={form.shiftId ?? ''}
-              onChange={e => set('shiftId', e.target.value ? Number(e.target.value) : null)}
-            >
-              <option value="">— None —</option>
-              {shifts.map((s: ShiftDefinitionDto) => <option key={s.id} value={s.id}>{formatShiftLabel(s)}</option>)}
-            </select>
+            <PlainSelect
+              value={form.shiftId != null ? String(form.shiftId) : ''}
+              options={shifts.map((s: ShiftDefinitionDto) => ({ value: String(s.id), label: formatShiftLabel(s) }))}
+              onChange={v => set('shiftId', v ? Number(v) : null)}
+              emptyLabel="— None —"
+            />
           </Field>
 
           {/* Location — full width, creatable */}
@@ -929,16 +1049,12 @@ function EditModal({
           {/* Manager — full width */}
           <div style={{ gridColumn: '1/-1' }}>
             <Field label="Manager">
-              <select
-                style={{ ...inputStyle, cursor: 'pointer' }}
-                value={form.managerId ?? ''}
-                onChange={e => set('managerId', e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">— None —</option>
-                {managers.map(m => (
-                  <option key={m.id} value={m.id}>{m.fullName} ({m.email})</option>
-                ))}
-              </select>
+              <PlainSelect
+                value={form.managerId != null ? String(form.managerId) : ''}
+                options={managers.map(m => ({ value: String(m.id), label: `${m.fullName} (${m.email})` }))}
+                onChange={v => set('managerId', v ? Number(v) : null)}
+                emptyLabel="— None —"
+              />
             </Field>
           </div>
 
