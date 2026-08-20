@@ -178,9 +178,11 @@ public class ReportsController {
     }
 
     /**
-     * A single-employee download gets a human-readable "{Name}-{from}-to-{to}" filename (e.g.
-     * "Venky-1st-Aug-2026-to-6th-Aug-2026") instead of the generic name, since that's the file the
-     * PM will actually be looking at in a folder full of other downloads.
+     * One naming convention for every download, whatever the format: a human-readable
+     * "{who}-{from}-to-{to}" (e.g. "Venky-1st-Aug-2026-to-6th-Aug-2026"). A single-employee
+     * download names the person, since that's the file the PM will actually be hunting for in a
+     * folder full of other downloads; a bulk one names the report. The extension is the only
+     * thing that distinguishes the Excel, PDF and CSV of the same download from each other.
      */
     private String filenameBase(EodByEmployeeReportDto report, List<Long> employeeIds,
                                  LocalDate from, LocalDate to) {
@@ -188,7 +190,7 @@ public class ReportsController {
             String empName = sanitizeForFilename(report.employees().get(0).employeeName());
             return empName + "-" + formatOrdinalDate(from) + "-to-" + formatOrdinalDate(to);
         }
-        return "eod-by-employee_" + from + "_" + to;
+        return "eod-by-employee-" + formatOrdinalDate(from) + "-to-" + formatOrdinalDate(to);
     }
 
     private String formatOrdinalDate(LocalDate date) {

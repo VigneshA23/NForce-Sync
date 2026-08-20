@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bell, ChevronLeft, ChevronRight, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
 import { FilterSelect } from '../../components/FilterSelect';
@@ -118,10 +118,113 @@ function defaultFilters(): Filters {
   return { from: '', to: '', projectId: '', employeeQuery: '' };
 }
 
-function FilterBar({ filters, onChange, onReset }: {
+/**
+ * Employee box with a live suggestion list, mirroring the EOD by Employee tab so both report
+ * tabs search the same way. Suggestions are drawn from the rows the current filters already
+ * returned, so the list can only ever offer someone this report actually contains. Picking one
+ * completes the box with that person's name, which narrows the table to them — the row's own
+ * Remind action stays visible, which opening a detail view would have hidden.
+ */
+function EmployeeSearch({ query, onQueryChange, matches, onPick }: {
+  query: string;
+  onQueryChange: (v: string) => void;
+  matches: MissingEodRowDto[];
+  onPick: (row: MissingEodRowDto) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  // Close when the pointer goes down anywhere outside the control.
+  useEffect(() => {
+    if (!open) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [open]);
+
+  const showList = open && query.trim() !== '' && matches.length > 0;
+
+  function pick(row: MissingEodRowDto) {
+    onPick(row);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={boxRef} style={{ position: 'relative' }}>
+      <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-dim)' }} aria-hidden="true" />
+      <input
+        value={query}
+        onChange={e => { onQueryChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={e => {
+          if (e.key === 'Escape') setOpen(false);
+          // Enter with exactly one match is the fast path for a fully typed name.
+          if (e.key === 'Enter' && showList && matches.length === 1) {
+            e.preventDefault();
+            pick(matches[0]);
+          }
+        }}
+        placeholder="Name or ID"
+        role="combobox"
+        aria-expanded={showList}
+        aria-autocomplete="list"
+        style={{ ...inputStyle(), paddingLeft: 28 }}
+      />
+      {showList && (
+        <div
+          role="listbox"
+          style={{
+            position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 40,
+            maxHeight: 208, overflowY: 'auto',
+            background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,.35)',
+          }}
+        >
+          {matches.slice(0, 8).map(m => (
+            <button
+              key={m.employeeId}
+              type="button"
+              role="option"
+              aria-selected={false}
+              onClick={() => pick(m)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                background: 'none', border: 'none', cursor: 'pointer', padding: '8px 10px',
+                color: 'var(--txt)', fontSize: 12.5,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--raised2)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            >
+              <span style={{
+                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                background: 'var(--raised2)', color: 'var(--txt-mut)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 700,
+              }}>
+                {initials(m.employeeName)}
+              </span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {m.employeeName}
+              </span>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+                {m.employeeCode}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FilterBar({ filters, onChange, onReset, employeeMatches, onPickEmployee }: {
   filters: Filters;
   onChange: (next: Filters) => void;
   onReset: () => void;
+  /** Rows the current filters returned, already narrowed by the typed query. */
+  employeeMatches: MissingEodRowDto[];
+  onPickEmployee: (row: MissingEodRowDto) => void;
 }) {
   const { data: filterOptions } = useTeamReportFilters();
 
@@ -162,15 +265,12 @@ function FilterBar({ filters, onChange, onReset }: {
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Employee</FieldLabel>
-          <div style={{ position: 'relative' }}>
-            <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-dim)' }} aria-hidden="true" />
-            <input
-              value={filters.employeeQuery}
-              onChange={e => set('employeeQuery', e.target.value)}
-              placeholder="Name or ID"
-              style={{ ...inputStyle(), paddingLeft: 28 }}
-            />
-          </div>
+          <EmployeeSearch
+            query={filters.employeeQuery}
+            onQueryChange={v => set('employeeQuery', v)}
+            matches={employeeMatches}
+            onPick={onPickEmployee}
+          />
         </label>
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
@@ -415,6 +515,22 @@ export default function LeadMissingEodReport() {
   const { show } = useToast();
 
   const employees = useMemo(() => data?.employees ?? [], [data]);
+
+  // Suggestions for the Employee box: the rows these filters already returned, matched on name
+  // or code. Client-side because the list is small and it keeps the dropdown instant.
+  const employeeMatches = useMemo(() => {
+    const q = filters.employeeQuery.trim().toLowerCase();
+    if (q === '') return [];
+    return employees.filter(e =>
+      e.employeeName.toLowerCase().includes(q) || e.employeeCode.toLowerCase().includes(q));
+  }, [employees, filters.employeeQuery]);
+
+  // Completing the box with the exact name is what narrows the table: the backend matches
+  // employeeQuery against name and code, so the picked person is the one left standing.
+  function pickEmployee(row: MissingEodRowDto) {
+    setFilters(f => ({ ...f, employeeQuery: row.employeeName }));
+  }
+
   useEffect(() => { setPage(0); }, [employees.length]);
 
   const pageCount = Math.max(1, Math.ceil(employees.length / PAGE_SIZE));
@@ -459,7 +575,10 @@ export default function LeadMissingEodReport() {
         )}
       </div>
 
-      <FilterBar filters={filters} onChange={setFilters} onReset={() => setFilters(defaultFilters())} />
+      <FilterBar
+        filters={filters} onChange={setFilters} onReset={() => setFilters(defaultFilters())}
+        employeeMatches={employeeMatches} onPickEmployee={pickEmployee}
+      />
 
       {!hasRange ? (
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
