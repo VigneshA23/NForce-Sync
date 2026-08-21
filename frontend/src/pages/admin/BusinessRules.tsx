@@ -1,10 +1,10 @@
 import { useEffect, useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Bell, CalendarClock, CalendarDays, Clock, Clock3, Plus } from 'lucide-react';
+import { AlertTriangle, Bell, CalendarClock, CalendarDays, Clock, Clock3, Pencil, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
 import {
   getBusinessRuleConfig, updateTimeAttendance, updateNotifications, updateAllowances,
   listShifts, createShift, updateShift, toggleShift, deleteShift,
-  listHolidays, createHoliday, deleteHoliday,
+  listHolidays, createHoliday, updateHoliday, deleteHoliday,
 } from '../../api/businessRules';
 import type { ShiftDefinitionDto, ShiftPayload, HolidayDto, WeekendRule } from '../../api/businessRules';
 import { extractApiError, extractFieldErrors, isHttpStatus, listAuditLog } from '../../api/admin';
@@ -12,6 +12,8 @@ import type { AuditLogDto } from '../../api/admin';
 import { formatRelative } from '../../lib/auditLog';
 import { formatDate, formatTime12h } from '../../lib/date';
 import { Modal } from '../../components/Modal';
+import { DropdownMenu } from '../../components/DropdownMenu';
+import { TimeStepperInput } from '../../components/TimeStepperInput';
 import { useToast } from '../../lib/toast';
 
 // ── Shared styles (matches OrganizationMasters.tsx idiom) ──────────────────────
@@ -59,12 +61,6 @@ const secondaryButtonStyle: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 500,
   cursor: 'pointer',
-};
-
-const dangerButtonStyle: React.CSSProperties = {
-  ...secondaryButtonStyle,
-  color: 'var(--risk)',
-  borderColor: 'rgba(228,55,61,.3)',
 };
 
 function ErrorBanner({ message }: { message: string }) {
@@ -162,8 +158,14 @@ function UnitField({ unit, children }: { unit: string; children: React.ReactNode
 
 interface LastUpdateInfo { occurredAt: string; actorName: string }
 
-function LastUpdatedCaption({ info }: { info: LastUpdateInfo | null }) {
-  if (!info) return null;
+// `isReady` gates the "No changes recorded yet" text on the section's own audit query having
+// actually resolved — without it, that message would flash during the initial load, before we
+// know whether there's a real row to show instead.
+function LastUpdatedCaption({ info, isReady }: { info: LastUpdateInfo | null; isReady: boolean }) {
+  if (!isReady) return null;
+  if (!info) {
+    return <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 14 }}>No changes recorded yet.</div>;
+  }
   return (
     <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 14 }}>
       Last updated {formatRelative(info.occurredAt)} by <span style={{ color: 'var(--txt-mut)' }}>{info.actorName}</span>
@@ -171,24 +173,10 @@ function LastUpdatedCaption({ info }: { info: LastUpdateInfo | null }) {
   );
 }
 
-function auditEntryName(entry: AuditLogDto): string | undefined {
-  const raw = entry.afterValue ?? entry.beforeValue;
-  if (!raw) return undefined;
-  try {
-    const parsed = JSON.parse(raw) as { name?: unknown };
-    return typeof parsed.name === 'string' ? parsed.name : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-// `entries` is already sorted occurredAt-desc by the backend, so the first match is the latest.
-function findLastUpdate(
-  entries: AuditLogDto[] | undefined,
-  predicate: (name: string | undefined, entry: AuditLogDto) => boolean,
-): LastUpdateInfo | null {
-  if (!entries) return null;
-  const hit = entries.find((e) => predicate(auditEntryName(e), e));
+// The audit query is filtered server-side to just this section's rule name(s) and asked for a
+// single row (size: 1), so the first (and only) entry is already the latest.
+function lastUpdateFromAudit(data: { content: AuditLogDto[] } | undefined): LastUpdateInfo | null {
+  const hit = data?.content[0];
   return hit ? { occurredAt: hit.occurredAt, actorName: hit.actorName ?? 'System' } : null;
 }
 
@@ -239,35 +227,58 @@ export default function BusinessRules() {
   const shiftsQuery = useQuery({ queryKey: ['business-rules', 'shifts'], queryFn: listShifts });
   const holidaysQuery = useQuery({ queryKey: ['business-rules', 'holidays'], queryFn: listHolidays });
 
-  // Powers the "Last updated … by …" captions — same audit_log data as Recent Activity.
-  const auditQuery = useQuery({
-    queryKey: ['business-rules', 'audit'],
-    queryFn: () => listAuditLog({ entityType: 'BUSINESS_RULE', size: 100, page: 0 }),
-  });
-  const auditEntries = auditQuery.data?.content;
-  // Matched by name, not entityId — shift and holiday audit rows both use their own
-  // table's primary key as entityId, so ids collide constantly (e.g. shift #2 and
-  // holiday #2 can coexist). Names practically never collide across the two lists.
-  const shiftNames = new Set((shiftsQuery.data ?? []).map((s) => s.name));
-  const holidayNames = new Set((holidaysQuery.data ?? []).map((h) => h.name));
+  // Powers the "Last updated … by …" captions. Each section asks the audit endpoint, server-side,
+  // for just its own rule name(s) — so a section that's rarely edited can't have its one relevant
+  // row pushed out of a shared "latest 100" window by more frequent activity elsewhere.
+  const shiftNames = (shiftsQuery.data ?? []).map((s) => s.name);
+  const holidayNames = (holidaysQuery.data ?? []).map((h) => h.name);
 
-  const timeAttendanceUpdate = findLastUpdate(auditEntries, (name) =>
-    name === 'Working Hours Per Day' || name === 'Weekend Rule');
-  // 'EOD Cutoff Time' is intentionally still matched: the rule no longer exists, but historical
+  const timeAttendanceAudit = useQuery({
+    queryKey: ['business-rules', 'audit', 'time-attendance'],
+    queryFn: () => listAuditLog({
+      entityType: 'BUSINESS_RULE', entityNames: 'Working Hours Per Day,Weekend Rule', size: 1, page: 0,
+    }),
+  });
+  // 'EOD Cutoff Time' is intentionally still requested: the rule no longer exists, but historical
   // audit rows carry that name and this caption should keep surfacing them.
-  const notificationsUpdate = findLastUpdate(auditEntries, (name) =>
-    name === 'EOD Cutoff Time' || name === 'Reminder Lead Time' || name === 'Escalation SLA'
-    || name === 'Lockout Attempt Threshold' || name === 'Lockout Duration Minutes');
-  // The three per-type allowance names are intentionally still matched: those rules no longer
+  const notificationsAudit = useQuery({
+    queryKey: ['business-rules', 'audit', 'notifications'],
+    queryFn: () => listAuditLog({
+      entityType: 'BUSINESS_RULE',
+      entityNames: 'EOD Cutoff Time,Reminder Lead Time,Escalation SLA,Lockout Attempt Threshold,Lockout Duration Minutes',
+      size: 1, page: 0,
+    }),
+  });
+  // The three per-type allowance names are intentionally still requested: those rules no longer
   // exist, but historical audit rows carry them and this caption should keep surfacing them.
-  const allowancesUpdate = findLastUpdate(auditEntries, (name) =>
-    name === 'Monthly Time Adjustment Budget (minutes)'
-    || name === 'Late Arrival Allowance' || name === 'Early Leave Allowance'
-    || name === 'Intervening Allowance');
-  const shiftsUpdate = findLastUpdate(auditEntries, (name) =>
-    name != null && shiftNames.has(name));
-  const holidaysUpdate = findLastUpdate(auditEntries, (name) =>
-    name != null && holidayNames.has(name) && !shiftNames.has(name));
+  const allowancesAudit = useQuery({
+    queryKey: ['business-rules', 'audit', 'allowances'],
+    queryFn: () => listAuditLog({
+      entityType: 'BUSINESS_RULE',
+      entityNames: 'Monthly Time Adjustment Budget (minutes),Late Arrival Allowance,Early Leave Allowance,Intervening Allowance',
+      size: 1, page: 0,
+    }),
+  });
+  const shiftsAudit = useQuery({
+    queryKey: ['business-rules', 'audit', 'shifts', shiftNames],
+    queryFn: () => listAuditLog({ entityType: 'BUSINESS_RULE', entityNames: shiftNames.join(','), size: 1, page: 0 }),
+    enabled: shiftNames.length > 0,
+  });
+  const holidaysAudit = useQuery({
+    queryKey: ['business-rules', 'audit', 'holidays', holidayNames],
+    queryFn: () => listAuditLog({ entityType: 'BUSINESS_RULE', entityNames: holidayNames.join(','), size: 1, page: 0 }),
+    enabled: holidayNames.length > 0,
+  });
+
+  const timeAttendanceUpdate = lastUpdateFromAudit(timeAttendanceAudit.data);
+  const notificationsUpdate = lastUpdateFromAudit(notificationsAudit.data);
+  const allowancesUpdate = lastUpdateFromAudit(allowancesAudit.data);
+  const shiftsUpdate = lastUpdateFromAudit(shiftsAudit.data);
+  const holidaysUpdate = lastUpdateFromAudit(holidaysAudit.data);
+  // With no shifts/holidays defined yet, their audit query is disabled (nothing to filter by) —
+  // the caption is still "ready" to say "No changes recorded yet" once the parent list has loaded.
+  const shiftsAuditReady = shiftNames.length === 0 ? shiftsQuery.isSuccess : shiftsAudit.isSuccess;
+  const holidaysAuditReady = holidayNames.length === 0 ? holidaysQuery.isSuccess : holidaysAudit.isSuccess;
 
   const invalidateConfig = () => queryClient.invalidateQueries({ queryKey: ['business-rules', 'config'] });
 
@@ -291,6 +302,7 @@ export default function BusinessRules() {
     mutationFn: updateTimeAttendance,
     onSuccess: () => {
       invalidateConfig();
+      queryClient.invalidateQueries({ queryKey: ['business-rules', 'audit', 'time-attendance'] });
       toast.showToast('success', 'Time & attendance updated');
       setHoursError(null);
     },
@@ -338,6 +350,7 @@ export default function BusinessRules() {
     mutationFn: updateNotifications,
     onSuccess: () => {
       invalidateConfig();
+      queryClient.invalidateQueries({ queryKey: ['business-rules', 'audit', 'notifications'] });
       toast.showToast('success', 'Notifications & escalation updated');
       setReminderError(null); setSlaError(null); setLockoutError(null);
     },
@@ -363,6 +376,7 @@ export default function BusinessRules() {
     mutationFn: updateAllowances,
     onSuccess: () => {
       invalidateConfig();
+      queryClient.invalidateQueries({ queryKey: ['business-rules', 'audit', 'allowances'] });
       toast.showToast('success', 'Monthly time adjustment budget updated');
       setAllowancesError(null);
       // Drop the local edit so the input reads back from the freshly saved config.
@@ -442,11 +456,13 @@ export default function BusinessRules() {
   const [shiftFormError, setShiftFormError] = useState<string | null>(null);
   const [shiftFieldErrors, setShiftFieldErrors] = useState<Record<string, string>>({});
   const [deleteShiftItem, setDeleteShiftItem] = useState<ShiftDefinitionDto | null>(null);
+  const [openShiftMenuId, setOpenShiftMenuId] = useState<number | null>(null);
 
   const createShiftMutation = useMutation({
     mutationFn: createShift,
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['business-rules', 'shifts'] });
+      queryClient.invalidateQueries({ queryKey: ['business-rules', 'audit', 'shifts'] });
       toast.showToast('success', `Shift "${result.name}" added`);
       setShiftModal(null);
     },
@@ -462,6 +478,7 @@ export default function BusinessRules() {
       updateShift(id, payload),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['business-rules', 'shifts'] });
+      queryClient.invalidateQueries({ queryKey: ['business-rules', 'audit', 'shifts'] });
       toast.showToast('success', `Shift "${result.name}" updated`);
       setShiftModal(null);
     },
@@ -476,6 +493,7 @@ export default function BusinessRules() {
     mutationFn: toggleShift,
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['business-rules', 'shifts'] });
+      queryClient.invalidateQueries({ queryKey: ['business-rules', 'audit', 'shifts'] });
       toast.showToast('success', `"${result.name}" ${result.active ? 'activated' : 'deactivated'}`);
     },
     onError: (err) => toast.showToast('error', extractApiError(err, 'Failed to update shift.')),
@@ -485,6 +503,7 @@ export default function BusinessRules() {
     mutationFn: deleteShift,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['business-rules', 'shifts'] });
+      queryClient.invalidateQueries({ queryKey: ['business-rules', 'audit', 'shifts'] });
       toast.showToast('success', `Shift "${deleteShiftItem?.name}" deleted`);
       setDeleteShiftItem(null);
     },
@@ -492,17 +511,19 @@ export default function BusinessRules() {
   });
 
   // ── 3. Holiday calendar state ───────────────────────────────────────────────
-  const [holidayModalOpen, setHolidayModalOpen] = useState(false);
+  const [holidayModal, setHolidayModal] = useState<{ mode: 'create' } | { mode: 'edit'; holiday: HolidayDto } | null>(null);
   const [holidayFormError, setHolidayFormError] = useState<string | null>(null);
   const [holidayFieldErrors, setHolidayFieldErrors] = useState<Record<string, string>>({});
   const [deleteHolidayItem, setDeleteHolidayItem] = useState<HolidayDto | null>(null);
+  const [openHolidayMenuId, setOpenHolidayMenuId] = useState<number | null>(null);
 
   const createHolidayMutation = useMutation({
     mutationFn: createHoliday,
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['business-rules', 'holidays'] });
+      queryClient.invalidateQueries({ queryKey: ['business-rules', 'audit', 'holidays'] });
       toast.showToast('success', `Holiday "${result.name}" added`);
-      setHolidayModalOpen(false);
+      setHolidayModal(null);
     },
     onError: (err) => {
       if (isHttpStatus(err, 409)) { setHolidayFormError('A holiday is already defined on this date.'); return; }
@@ -511,10 +532,27 @@ export default function BusinessRules() {
     },
   });
 
+  const updateHolidayMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: { name: string; holidayDate: string } }) =>
+      updateHoliday(id, payload),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['business-rules', 'holidays'] });
+      queryClient.invalidateQueries({ queryKey: ['business-rules', 'audit', 'holidays'] });
+      toast.showToast('success', `Holiday "${result.name}" updated`);
+      setHolidayModal(null);
+    },
+    onError: (err) => {
+      if (isHttpStatus(err, 409)) { setHolidayFormError('A holiday is already defined on this date.'); return; }
+      setHolidayFieldErrors(extractFieldErrors(err));
+      setHolidayFormError(extractApiError(err, 'Failed to update holiday.'));
+    },
+  });
+
   const deleteHolidayMutation = useMutation({
     mutationFn: deleteHoliday,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['business-rules', 'holidays'] });
+      queryClient.invalidateQueries({ queryKey: ['business-rules', 'audit', 'holidays'] });
       toast.showToast('success', `Holiday "${deleteHolidayItem?.name}" removed`);
       setDeleteHolidayItem(null);
     },
@@ -543,7 +581,7 @@ export default function BusinessRules() {
         description="Standard working hours and which days count as weekend."
         icon={<Clock size={16} aria-hidden="true" />}
         accent="var(--info)"
-        footer={<LastUpdatedCaption info={timeAttendanceUpdate} />}
+        footer={<LastUpdatedCaption info={timeAttendanceUpdate} isReady={timeAttendanceAudit.isSuccess} />}
       >
         <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', marginBottom: 16 }}>
           <div style={{ maxWidth: 160 }}>
@@ -592,10 +630,10 @@ export default function BusinessRules() {
           moved to the Shift Timings card, as hours after each shift's end. */}
       <RuleCard
         title="Notifications & Escalation"
-        description="Reminder timing, how long an unapproved submission waits before escalating, and the sign-in lockout applied after repeated failed attempts. The EOD cutoff is set per shift below."
+        description="Reminder, escalation, and lockout timing for EOD submissions. EOD cutoff is set per shift below."
         icon={<Bell size={16} aria-hidden="true" />}
         accent="var(--warn)"
-        footer={<LastUpdatedCaption info={notificationsUpdate} />}
+        footer={<LastUpdatedCaption info={notificationsUpdate} isReady={notificationsAudit.isSuccess} />}
       >
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 16 }}>
           <div style={{ minWidth: 160 }}>
@@ -677,10 +715,10 @@ export default function BusinessRules() {
           limit (30–120 min) is a separate fixed policy enforced in EodService. */}
       <RuleCard
         title="Time Adjustment Budget"
-        description="Total time per calendar month an employee may take as a late arrival, mid-shift break or early log-off — one shared pool, so spending it all on one type leaves nothing for the others. Applies to everyone; there are no per-role or per-department overrides."
+        description="Shared monthly minutes for late arrivals, breaks, or early leaves. Applies to everyone — no per-role overrides."
         icon={<Clock3 size={16} aria-hidden="true" />}
         accent="var(--info)"
-        footer={<LastUpdatedCaption info={allowancesUpdate} />}
+        footer={<LastUpdatedCaption info={allowancesUpdate} isReady={allowancesAudit.isSuccess} />}
       >
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 16, alignItems: 'flex-end' }}>
           <div style={{ minWidth: 200 }}>
@@ -728,7 +766,7 @@ export default function BusinessRules() {
         description="Shift options available for assignment to employees in User Management."
         icon={<CalendarClock size={16} aria-hidden="true" />}
         accent="var(--ok)"
-        footer={<LastUpdatedCaption info={shiftsUpdate} />}
+        footer={<LastUpdatedCaption info={shiftsUpdate} isReady={shiftsAuditReady} />}
       >
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
           <button
@@ -746,6 +784,8 @@ export default function BusinessRules() {
           onToggle={(shift) => toggleShiftMutation.mutate(shift.id)}
           isTogglePending={toggleShiftMutation.isPending}
           onDelete={(shift) => setDeleteShiftItem(shift)}
+          openMenuId={openShiftMenuId}
+          onOpenMenuChange={setOpenShiftMenuId}
         />
       </RuleCard>
 
@@ -755,11 +795,11 @@ export default function BusinessRules() {
         description="Dated holiday entries excluded from working-day calculations."
         icon={<CalendarDays size={16} aria-hidden="true" />}
         accent="var(--risk)"
-        footer={<LastUpdatedCaption info={holidaysUpdate} />}
+        footer={<LastUpdatedCaption info={holidaysUpdate} isReady={holidaysAuditReady} />}
       >
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
           <button
-            onClick={() => { setHolidayFormError(null); setHolidayFieldErrors({}); setHolidayModalOpen(true); }}
+            onClick={() => { setHolidayFormError(null); setHolidayFieldErrors({}); setHolidayModal({ mode: 'create' }); }}
             style={{ display: 'flex', alignItems: 'center', gap: 6, ...primaryButtonStyle }}
           >
             <Plus size={13} aria-hidden="true" /> Add Holiday
@@ -769,7 +809,10 @@ export default function BusinessRules() {
           data={holidaysQuery.data}
           isPending={holidaysQuery.isPending}
           isError={holidaysQuery.isError}
+          onEdit={(holiday) => { setHolidayFormError(null); setHolidayFieldErrors({}); setHolidayModal({ mode: 'edit', holiday }); }}
           onDelete={(holiday) => setDeleteHolidayItem(holiday)}
+          openMenuId={openHolidayMenuId}
+          onOpenMenuChange={setOpenHolidayMenuId}
         />
       </RuleCard>
 
@@ -813,10 +856,14 @@ export default function BusinessRules() {
       />
 
       <HolidayFormModal
-        open={holidayModalOpen}
-        onClose={() => setHolidayModalOpen(false)}
-        onSubmit={(payload) => createHolidayMutation.mutate(payload)}
-        isPending={createHolidayMutation.isPending}
+        state={holidayModal}
+        onClose={() => setHolidayModal(null)}
+        onSubmit={(payload) => {
+          if (!holidayModal) return;
+          if (holidayModal.mode === 'create') createHolidayMutation.mutate(payload);
+          else updateHolidayMutation.mutate({ id: holidayModal.holiday.id, payload });
+        }}
+        isPending={createHolidayMutation.isPending || updateHolidayMutation.isPending}
         error={holidayFormError}
         fieldErrors={holidayFieldErrors}
       />
@@ -865,9 +912,11 @@ interface ShiftTableProps {
   onToggle: (shift: ShiftDefinitionDto) => void;
   isTogglePending: boolean;
   onDelete: (shift: ShiftDefinitionDto) => void;
+  openMenuId: number | null;
+  onOpenMenuChange: (id: number | null) => void;
 }
 
-function ShiftTable({ data, isPending, isError, onEdit, onToggle, isTogglePending, onDelete }: ShiftTableProps) {
+function ShiftTable({ data, isPending, isError, onEdit, onToggle, isTogglePending, onDelete, openMenuId, onOpenMenuChange }: ShiftTableProps) {
   return (
     <div style={{ background: 'var(--shell)', border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden' }}>
       {isPending && (
@@ -903,21 +952,23 @@ function ShiftTable({ data, isPending, isError, onEdit, onToggle, isTogglePendin
                 </td>
                 <td style={tdStyle}><ActiveBadge active={shift.active} /></td>
                 <td style={{ ...tdStyle, textAlign: 'right' }}>
-                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                    <button onClick={() => onEdit(shift)} style={secondaryButtonStyle}>Edit</button>
-                    <button
-                      onClick={() => onToggle(shift)}
-                      disabled={isTogglePending}
-                      style={{
-                        ...secondaryButtonStyle,
-                        color: shift.active ? 'var(--risk)' : 'var(--ok)',
-                        borderColor: shift.active ? 'rgba(228,55,61,.3)' : 'rgba(47,182,124,.3)',
-                        cursor: isTogglePending ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      {shift.active ? 'Deactivate' : 'Activate'}
-                    </button>
-                    <button onClick={() => onDelete(shift)} style={dangerButtonStyle}>Delete</button>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <DropdownMenu
+                      ariaLabel={`Actions for ${shift.name}`}
+                      open={openMenuId === shift.id}
+                      onOpenChange={(o) => onOpenMenuChange(o ? shift.id : null)}
+                      items={[
+                        { key: 'edit', label: 'Edit', icon: Pencil, onSelect: () => onEdit(shift) },
+                        {
+                          key: 'toggle',
+                          label: shift.active ? 'Deactivate' : 'Activate',
+                          icon: shift.active ? PowerOff : Power,
+                          disabled: isTogglePending,
+                          onSelect: () => onToggle(shift),
+                        },
+                        { key: 'delete', label: 'Delete', icon: Trash2, color: 'var(--risk)', onSelect: () => onDelete(shift) },
+                      ]}
+                    />
                   </div>
                 </td>
               </tr>
@@ -936,10 +987,13 @@ interface HolidayTableProps {
   data: HolidayDto[] | undefined;
   isPending: boolean;
   isError: boolean;
+  onEdit: (holiday: HolidayDto) => void;
   onDelete: (holiday: HolidayDto) => void;
+  openMenuId: number | null;
+  onOpenMenuChange: (id: number | null) => void;
 }
 
-function HolidayTable({ data, isPending, isError, onDelete }: HolidayTableProps) {
+function HolidayTable({ data, isPending, isError, onEdit, onDelete, openMenuId, onOpenMenuChange }: HolidayTableProps) {
   return (
     <div style={{ background: 'var(--shell)', border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden' }}>
       {isPending && (
@@ -970,7 +1024,17 @@ function HolidayTable({ data, isPending, isError, onDelete }: HolidayTableProps)
                 </td>
                 <td style={tdStyle}><span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>{formatDate(holiday.holidayDate)}</span></td>
                 <td style={{ ...tdStyle, textAlign: 'right' }}>
-                  <button onClick={() => onDelete(holiday)} style={dangerButtonStyle}>Delete</button>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <DropdownMenu
+                      ariaLabel={`Actions for ${holiday.name}`}
+                      open={openMenuId === holiday.id}
+                      onOpenChange={(o) => onOpenMenuChange(o ? holiday.id : null)}
+                      items={[
+                        { key: 'edit', label: 'Edit', icon: Pencil, onSelect: () => onEdit(holiday) },
+                        { key: 'delete', label: 'Delete', icon: Trash2, color: 'var(--risk)', onSelect: () => onDelete(holiday) },
+                      ]}
+                    />
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1049,13 +1113,13 @@ function ShiftFormModal({ state, onClose, onSubmit, isPending, error, fieldError
         </div>
         <div style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
           <div style={{ flex: 1 }}>
-            <label style={labelStyle} htmlFor="shift-start">Start Time *</label>
-            <input id="shift-start" type="time" lang="en-US" value={start} onChange={(e) => setStart(e.target.value)} style={inputStyle} />
+            <label style={labelStyle} id="shift-start-label">Start Time *</label>
+            <TimeStepperInput id="shift-start" label="Start time" value={start} onChange={setStart} />
             <FieldError msg={fieldErrors.startTime} />
           </div>
           <div style={{ flex: 1 }}>
-            <label style={labelStyle} htmlFor="shift-end">End Time *</label>
-            <input id="shift-end" type="time" lang="en-US" value={end} onChange={(e) => setEnd(e.target.value)} style={inputStyle} />
+            <label style={labelStyle} id="shift-end-label">End Time *</label>
+            <TimeStepperInput id="shift-end" label="End time" value={end} onChange={setEnd} />
             <FieldError msg={fieldErrors.endTime} />
           </div>
         </div>
@@ -1088,8 +1152,10 @@ function ShiftFormModal({ state, onClose, onSubmit, isPending, error, fieldError
 
 // ── Holiday add modal (uses Modal's sticky footer) ──────────────────────────
 
+type HolidayModalState = { mode: 'create' } | { mode: 'edit'; holiday: HolidayDto } | null;
+
 interface HolidayFormModalProps {
-  open: boolean;
+  state: HolidayModalState;
   onClose: () => void;
   onSubmit: (payload: { name: string; holidayDate: string }) => void;
   isPending: boolean;
@@ -1097,12 +1163,19 @@ interface HolidayFormModalProps {
   fieldErrors: Record<string, string>;
 }
 
-function HolidayFormModal({ open, onClose, onSubmit, isPending, error, fieldErrors }: HolidayFormModalProps) {
+function HolidayFormModal({ state, onClose, onSubmit, isPending, error, fieldErrors }: HolidayFormModalProps) {
   const nameId = useId();
   const [name, setName] = useState('');
   const [date, setDate] = useState('');
 
-  useEffect(() => { if (open) { setName(''); setDate(''); } }, [open]);
+  useEffect(() => {
+    if (state?.mode === 'edit') {
+      setName(state.holiday.name);
+      setDate(state.holiday.holidayDate);
+    } else if (state?.mode === 'create') {
+      setName(''); setDate('');
+    }
+  }, [state]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1112,14 +1185,14 @@ function HolidayFormModal({ open, onClose, onSubmit, isPending, error, fieldErro
 
   return (
     <Modal
-      open={open}
-      title="Add Holiday"
+      open={state != null}
+      title={state?.mode === 'edit' ? 'Edit Holiday' : 'Add Holiday'}
       onClose={onClose}
       width={420}
       footer={
         <>
           <button type="submit" form="holiday-form" disabled={isPending || !name.trim() || !date} style={{ ...primaryButtonStyle, opacity: isPending ? 0.7 : 1, cursor: isPending ? 'not-allowed' : 'pointer' }}>
-            {isPending ? 'Adding…' : 'Add'}
+            {isPending ? 'Saving…' : state?.mode === 'edit' ? 'Save' : 'Add'}
           </button>
           <button type="button" onClick={onClose} style={secondaryButtonStyle}>Cancel</button>
         </>

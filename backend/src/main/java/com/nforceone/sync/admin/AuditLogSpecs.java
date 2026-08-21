@@ -5,6 +5,7 @@ import jakarta.persistence.criteria.JoinType;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 public final class AuditLogSpecs {
 
@@ -43,5 +44,21 @@ public final class AuditLogSpecs {
     public static Specification<AuditLog> occurredBefore(OffsetDateTime to) {
         return (root, query, cb) ->
                 to == null ? null : cb.lessThanOrEqualTo(root.get("occurredAt"), to);
+    }
+
+    /**
+     * Matches audit rows whose before/after JSON carries a "name" field equal to one of the given
+     * values — the {@code {"name": ..., "value": ...}} shape written by BusinessRuleService's
+     * ruleSnapshot(). Lets a caller (e.g. one Business Rules section) ask for its own latest audit
+     * row directly, instead of paging through a shared, unfiltered list hoping its row is still
+     * within the window.
+     */
+    public static Specification<AuditLog> entityNameIn(List<String> names) {
+        return (root, query, cb) -> {
+            if (names == null || names.isEmpty()) return null;
+            var beforeName = cb.function("jsonb_extract_path_text", String.class, root.get("beforeValue"), cb.literal("name"));
+            var afterName  = cb.function("jsonb_extract_path_text", String.class, root.get("afterValue"),  cb.literal("name"));
+            return cb.or(beforeName.in(names), afterName.in(names));
+        };
     }
 }

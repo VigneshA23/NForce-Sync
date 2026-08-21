@@ -68,16 +68,15 @@ public class BusinessRuleService {
                                                       String actingEmail) {
         BusinessRuleConfig config = requireConfig();
         AppUser actor = requireActorByEmail(actingEmail);
-        Map<String, Object> before = Map.of(
-                "Working Hours Per Day", config.getWorkingHoursPerDay(),
-                "Weekend Rule",          config.getWeekendRule());
+        Object hoursBefore = config.getWorkingHoursPerDay();
+        Object weekendBefore = config.getWeekendRule();
         config.setWorkingHoursPerDay(hoursPerDay);
         config.setWeekendRule(rule);
         touch(config, actor);
-        Map<String, Object> after = Map.of(
-                "Working Hours Per Day", config.getWorkingHoursPerDay(),
-                "Weekend Rule",          config.getWeekendRule());
-        writeAudit(CONFIG_ID, "UPDATE", before, after, actor);
+        // One row per field, each shaped like ruleSnapshot(), so the "Last updated" caption on the
+        // Business Rules page can filter by a single rule name instead of a fixed multi-field shape.
+        writeAudit(CONFIG_ID, "UPDATE", ruleSnapshot("Working Hours Per Day", hoursBefore), ruleSnapshot("Working Hours Per Day", config.getWorkingHoursPerDay()), actor);
+        writeAudit(CONFIG_ID, "UPDATE", ruleSnapshot("Weekend Rule", weekendBefore), ruleSnapshot("Weekend Rule", config.getWeekendRule()), actor);
         return BusinessRuleConfigDto.from(config);
     }
 
@@ -93,22 +92,20 @@ public class BusinessRuleService {
                                                      String actingEmail) {
         BusinessRuleConfig config = requireConfig();
         AppUser actor = requireActorByEmail(actingEmail);
-        Map<String, Object> before = Map.of(
-                "Reminder Lead Time",        config.getReminderLeadMinutes(),
-                "Escalation SLA",            config.getEscalationSlaHours(),
-                "Lockout Attempt Threshold", config.getLockoutAttemptThreshold(),
-                "Lockout Duration Minutes",  config.getLockoutDurationMinutes());
+        Object reminderBefore = config.getReminderLeadMinutes();
+        Object slaBefore = config.getEscalationSlaHours();
+        Object lockoutThresholdBefore = config.getLockoutAttemptThreshold();
+        Object lockoutDurationBefore = config.getLockoutDurationMinutes();
         config.setReminderLeadMinutes(reminderLeadMinutes);
         config.setEscalationSlaHours(escalationSlaHours);
         config.setLockoutAttemptThreshold(lockoutAttemptThreshold);
         config.setLockoutDurationMinutes(lockoutDurationMinutes);
         touch(config, actor);
-        Map<String, Object> after = Map.of(
-                "Reminder Lead Time",        config.getReminderLeadMinutes(),
-                "Escalation SLA",            config.getEscalationSlaHours(),
-                "Lockout Attempt Threshold", config.getLockoutAttemptThreshold(),
-                "Lockout Duration Minutes",  config.getLockoutDurationMinutes());
-        writeAudit(CONFIG_ID, "UPDATE", before, after, actor);
+        // One row per field — see updateTimeAttendance for why.
+        writeAudit(CONFIG_ID, "UPDATE", ruleSnapshot("Reminder Lead Time", reminderBefore), ruleSnapshot("Reminder Lead Time", config.getReminderLeadMinutes()), actor);
+        writeAudit(CONFIG_ID, "UPDATE", ruleSnapshot("Escalation SLA", slaBefore), ruleSnapshot("Escalation SLA", config.getEscalationSlaHours()), actor);
+        writeAudit(CONFIG_ID, "UPDATE", ruleSnapshot("Lockout Attempt Threshold", lockoutThresholdBefore), ruleSnapshot("Lockout Attempt Threshold", config.getLockoutAttemptThreshold()), actor);
+        writeAudit(CONFIG_ID, "UPDATE", ruleSnapshot("Lockout Duration Minutes", lockoutDurationBefore), ruleSnapshot("Lockout Duration Minutes", config.getLockoutDurationMinutes()), actor);
         return BusinessRuleConfigDto.from(config);
     }
 
@@ -119,13 +116,13 @@ public class BusinessRuleService {
     public BusinessRuleConfigDto updateAllowances(Integer monthlyAdjustmentMinutes, String actingEmail) {
         BusinessRuleConfig config = requireConfig();
         AppUser actor = requireActorByEmail(actingEmail);
-        Map<String, Object> before = Map.of(
-                "Monthly Time Adjustment Budget (minutes)", config.getMonthlyAdjustmentMinutes());
+        Object before = config.getMonthlyAdjustmentMinutes();
         config.setMonthlyAdjustmentMinutes(monthlyAdjustmentMinutes);
         touch(config, actor);
-        Map<String, Object> after = Map.of(
-                "Monthly Time Adjustment Budget (minutes)", config.getMonthlyAdjustmentMinutes());
-        writeAudit(CONFIG_ID, "UPDATE", before, after, actor);
+        writeAudit(CONFIG_ID, "UPDATE",
+                ruleSnapshot("Monthly Time Adjustment Budget (minutes)", before),
+                ruleSnapshot("Monthly Time Adjustment Budget (minutes)", config.getMonthlyAdjustmentMinutes()),
+                actor);
         return BusinessRuleConfigDto.from(config);
     }
 
@@ -246,6 +243,21 @@ public class BusinessRuleService {
                 .build();
         holiday = holidayRepository.save(holiday);
         writeAudit(holiday.getId(), "CREATE", null, ruleSnapshot(holiday.getName(), holiday.getHolidayDate()), actor);
+        return HolidayDto.from(holiday);
+    }
+
+    public HolidayDto updateHoliday(Long id, UpdateHolidayRequest req, String actingEmail) {
+        Holiday holiday = holidayRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Holiday not found"));
+        if (!holiday.getHolidayDate().equals(req.holidayDate()) && holidayRepository.existsByHolidayDate(req.holidayDate())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A holiday is already defined on this date");
+        }
+        AppUser actor = requireActorByEmail(actingEmail);
+        Map<String, Object> before = ruleSnapshot(holiday.getName(), holiday.getHolidayDate());
+        holiday.setName(req.name());
+        holiday.setHolidayDate(req.holidayDate());
+        holiday = holidayRepository.save(holiday);
+        writeAudit(holiday.getId(), "UPDATE", before, ruleSnapshot(holiday.getName(), holiday.getHolidayDate()), actor);
         return HolidayDto.from(holiday);
     }
 

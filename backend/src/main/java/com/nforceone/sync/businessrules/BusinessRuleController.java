@@ -105,6 +105,11 @@ public class BusinessRuleController {
         return businessRuleService.createHoliday(request, actingEmail());
     }
 
+    @PutMapping("/holidays/{id}")
+    public HolidayDto updateHoliday(@PathVariable Long id, @Valid @RequestBody UpdateHolidayRequest request) {
+        return businessRuleService.updateHoliday(id, request, actingEmail());
+    }
+
     @DeleteMapping("/holidays/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteHoliday(@PathVariable Long id) {

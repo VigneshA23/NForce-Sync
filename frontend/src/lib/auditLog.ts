@@ -136,7 +136,9 @@ export function formatRelative(iso: string): string {
   if (m < 1)  return 'just now';
   if (m < 60) return `${m}m ago`;
   if (h < 24) return `${h}h ago`;
-  return `${d}d ago`;
+  // Beyond a week, "Nd ago" stops being a useful sense of time — an absolute date reads better.
+  if (d < 7)  return `${d}d ago`;
+  return `on ${formatDateTime(iso)}`;
 }
 
 export function formatAuditDate(iso: string): string {

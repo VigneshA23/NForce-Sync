@@ -103,6 +103,9 @@ export interface AuditFilters {
   action?: string;
   actorId?: number;
   actorName?: string;
+  // Comma-separated list of the "name" field inside before/after JSON (see
+  // BusinessRuleService.ruleSnapshot) — lets a caller ask for just its own rule's latest row.
+  entityNames?: string;
   from?: string;
   to?: string;
   page?: number;

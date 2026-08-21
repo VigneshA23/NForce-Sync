@@ -135,6 +135,11 @@ export async function createHoliday(payload: HolidayPayload): Promise<HolidayDto
   return res.data;
 }
 
+export async function updateHoliday(id: number, payload: HolidayPayload): Promise<HolidayDto> {
+  const res = await api.put<HolidayDto>(`/admin/business-rules/holidays/${id}`, payload);
+  return res.data;
+}
+
 export async function deleteHoliday(id: number): Promise<void> {
   await api.delete(`/admin/business-rules/holidays/${id}`);
 }

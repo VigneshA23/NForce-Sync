@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
+import java.util.Arrays;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/audit")
@@ -33,6 +35,7 @@ public class AuditLogController {
             @RequestParam(required = false) String action,
             @RequestParam(required = false) Long actorId,
             @RequestParam(required = false) String actorName,
+            @RequestParam(required = false) String entityNames,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
             @RequestParam(required = false)
@@ -40,11 +43,16 @@ public class AuditLogController {
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "25") int size) {
 
+        List<String> entityNameList = entityNames == null || entityNames.isBlank()
+                ? null
+                : Arrays.asList(entityNames.split(","));
+
         Specification<AuditLog> spec = Specification
                 .where(AuditLogSpecs.entityTypeIs(entityType))
                 .and(AuditLogSpecs.actionIs(action))
                 .and(AuditLogSpecs.actorIdIs(actorId))
                 .and(AuditLogSpecs.actorNameContains(actorName))
+                .and(AuditLogSpecs.entityNameIn(entityNameList))
                 .and(AuditLogSpecs.occurredAfter(from))
                 .and(AuditLogSpecs.occurredBefore(to));
 
