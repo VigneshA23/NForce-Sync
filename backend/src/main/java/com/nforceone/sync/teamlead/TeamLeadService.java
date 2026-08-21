@@ -6,6 +6,7 @@ import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.businessrules.BusinessRuleConfig;
 import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
+import com.nforceone.sync.businessrules.Holiday;
 import com.nforceone.sync.businessrules.HolidayRepository;
 import com.nforceone.sync.eod.BlockerReply;
 import com.nforceone.sync.eod.BlockerReplyRepository;
@@ -16,6 +17,8 @@ import com.nforceone.sync.eod.EodTaskRepository;
 import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.org.Designation;
 import com.nforceone.sync.org.DesignationRepository;
+import com.nforceone.sync.project.Allocation;
+import com.nforceone.sync.project.AllocationRepository;
 import com.nforceone.sync.teamlead.dto.BlockerStatusRequest;
 import com.nforceone.sync.teamlead.dto.DashboardTrendDto;
 import com.nforceone.sync.teamlead.dto.MemberEodStatusDto;
@@ -36,9 +39,12 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Backs the Team Lead Dashboard. Every method resolves the acting Team Lead from
@@ -66,6 +72,7 @@ public class TeamLeadService {
     private final DesignationRepository        designationRepository;
     private final BlockerReplyRepository       replyRepository;
     private final NotificationService          notificationService;
+    private final AllocationRepository         allocationRepository;
 
     public TeamLeadService(AppUserRepository userRepository,
                             EodEntryRepository entryRepository,
@@ -76,7 +83,8 @@ public class TeamLeadService {
                             ApprovalActionRepository actionRepository,
                             DesignationRepository designationRepository,
                             BlockerReplyRepository replyRepository,
-                            NotificationService notificationService) {
+                            NotificationService notificationService,
+                            AllocationRepository allocationRepository) {
         this.userRepository    = userRepository;
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
@@ -87,6 +95,7 @@ public class TeamLeadService {
         this.designationRepository = designationRepository;
         this.replyRepository   = replyRepository;
         this.notificationService = notificationService;
+        this.allocationRepository = allocationRepository;
     }
 
     public ThresholdsDto getThresholds() {
@@ -104,13 +113,17 @@ public class TeamLeadService {
         boolean holidayToday = holidayRepository.existsByHolidayDate(to);
 
         List<AppUser> members = activeMembers(lead.getId());
+        List<Long> memberIds = members.stream().map(AppUser::getId).toList();
+        Map<Long, EodEntry> entryByMember = entriesForMembersOnDate(memberIds, to);
+        Map<Long, BigDecimal> pctByMember = utilizationService.resolveUtilizationPctForEmployees(memberIds, to);
+
         int onLeave = 0, missing = 0, pending = 0, submitted = 0;
         int underutilized = 0, overloaded = 0;
         BigDecimal utilSum = BigDecimal.ZERO;
         int utilCount = 0;
 
         for (AppUser member : members) {
-            Optional<EodEntry> entry = entryRepository.findByEmployeeIdAndEntryDate(member.getId(), to);
+            Optional<EodEntry> entry = Optional.ofNullable(entryByMember.get(member.getId()));
             String status = resolveStatus(entry, holidayToday);
             switch (status) {
                 case "ON_LEAVE" -> onLeave++;
@@ -120,7 +133,7 @@ public class TeamLeadService {
                 default -> { }
             }
 
-            BigDecimal pct = utilizationPct(member.getId(), to);
+            BigDecimal pct = pctByMember.get(member.getId());
             if (pct != null) {
                 utilSum = utilSum.add(pct);
                 utilCount++;
@@ -151,20 +164,25 @@ public class TeamLeadService {
         boolean holidayToday = holidayRepository.existsByHolidayDate(to);
 
         List<AppUser> members = activeMembers(lead.getId());
+        List<Long> memberIds = members.stream().map(AppUser::getId).toList();
         List<TeamBlockerDto> openBlockers = getBlockers(from, to, actingEmail, false);
+        Map<Long, List<String>> projectNamesByEmployee = activeProjectNamesByEmployee(memberIds, to);
+        Map<Long, EodEntry> entryByMember = entriesForMembersOnDate(memberIds, to);
+        Map<Long, BigDecimal> pctByMember = utilizationService.resolveUtilizationPctForEmployees(memberIds, to);
 
         return members.stream().map(member -> {
-            Optional<EodEntry> entry = entryRepository.findByEmployeeIdAndEntryDate(member.getId(), to);
+            Optional<EodEntry> entry = Optional.ofNullable(entryByMember.get(member.getId()));
             String status = resolveStatus(entry, holidayToday);
-            BigDecimal pct = utilizationPct(member.getId(), to);
+            BigDecimal pct = pctByMember.get(member.getId());
             boolean underutilized = pct != null && pct.compareTo(config.getUnderutilizedThresholdPct()) < 0;
             boolean overloaded    = pct != null && pct.compareTo(config.getOverloadedThresholdPct()) > 0;
             boolean hasOpenBlocker = openBlockers.stream()
                     .anyMatch(b -> b.employeeId().equals(member.getId()) && !b.acknowledged());
+            List<String> projectNames = projectNamesByEmployee.getOrDefault(member.getId(), List.of());
 
             return new MemberEodStatusDto(
                     member.getId(), member.getFullName(), member.getEmployeeCode(),
-                    status, entry.map(EodEntry::getId).orElse(null), projectNamesFor(entry),
+                    status, entry.map(EodEntry::getId).orElse(null), projectNames,
                     pct, underutilized, overloaded, hasOpenBlocker);
         }).sorted(TeamLeadService::compareByStatusPriority).toList();
     }
@@ -309,6 +327,25 @@ public class TeamLeadService {
         List<AppUser> members = activeMembers(lead.getId());
         List<EodTask> allBlocked = taskRepository.findBlockedByManagerId(lead.getId());
 
+        LocalDate startDate = endDate.minusDays(days - 1);
+        List<Long> memberIds = members.stream().map(AppUser::getId).toList();
+
+        // Batched over the whole window rather than looping per (member, day) — a 7-day trend for
+        // an M-member team previously issued O(M × 7) queries for entries alone (plus another
+        // O(M × 7) for utilization); this does exactly 2 queries total regardless of team size or
+        // window length: one for every entry in range, one for every day's resolved utilization.
+        Set<LocalDate> holidays = holidayRepository.findAllByOrderByHolidayDateAsc()
+                .stream()
+                .map(Holiday::getHolidayDate)
+                .collect(Collectors.toSet());
+        Map<Long, Map<LocalDate, EodEntry>> entriesByMemberAndDate = memberIds.isEmpty() ? Map.of()
+                : entryRepository.findWithTasksByEmployeeIdInAndEntryDateBetween(memberIds, startDate, endDate)
+                        .stream()
+                        .collect(Collectors.groupingBy(e -> e.getEmployee().getId(),
+                                Collectors.toMap(EodEntry::getEntryDate, e -> e, (a, b) -> a)));
+        Map<Long, Map<LocalDate, BigDecimal>> pctByMemberAndDate = memberIds.isEmpty() ? Map.of()
+                : utilizationService.resolveUtilizationPctForEmployees(memberIds, startDate, endDate);
+
         List<TrendPointDto> avgUtil = new ArrayList<>();
         List<TrendPointDto> submitted = new ArrayList<>();
         List<TrendPointDto> pending = new ArrayList<>();
@@ -316,7 +353,7 @@ public class TeamLeadService {
 
         for (int i = days - 1; i >= 0; i--) {
             LocalDate date = endDate.minusDays(i);
-            boolean holidayToday = holidayRepository.existsByHolidayDate(date);
+            boolean holidayToday = holidays.contains(date);
             boolean workingDay = utilizationService.isWorkingDay(date);
 
             int submittedCount = 0, pendingCount = 0;
@@ -324,12 +361,13 @@ public class TeamLeadService {
             int utilCount = 0;
 
             for (AppUser member : members) {
-                Optional<EodEntry> entry = entryRepository.findByEmployeeIdAndEntryDate(member.getId(), date);
+                Optional<EodEntry> entry = Optional.ofNullable(
+                        entriesByMemberAndDate.getOrDefault(member.getId(), Map.of()).get(date));
                 String status = resolveStatus(entry, holidayToday);
                 if (status.equals("SUBMITTED")) submittedCount++;
                 if (status.equals("PENDING_APPROVAL")) pendingCount++;
 
-                BigDecimal pct = utilizationPct(member.getId(), date);
+                BigDecimal pct = pctByMemberAndDate.getOrDefault(member.getId(), Map.of()).get(date);
                 if (pct != null) {
                     utilSum = utilSum.add(pct);
                     utilCount++;
@@ -446,17 +484,31 @@ public class TeamLeadService {
                 t.getTaskCategory() != null && LEAVE_HOLIDAY_CATEGORY.equals(t.getTaskCategory().getName()));
     }
 
-    private List<String> projectNamesFor(Optional<EodEntry> entryOpt) {
-        if (entryOpt.isEmpty()) return List.of();
-        return entryOpt.get().getTasks().stream()
-                .map(t -> t.getProject() != null ? t.getProject().getName() : null)
-                .filter(java.util.Objects::nonNull)
-                .distinct()
-                .toList();
+    // Batches the per-member EOD-entry-for-a-single-date lookup that getSummary and
+    // getMemberStatuses each used to do in a per-member loop (one findByEmployeeIdAndEntryDate
+    // call per team member) into a single query for the whole team.
+    private Map<Long, EodEntry> entriesForMembersOnDate(List<Long> employeeIds, LocalDate date) {
+        if (employeeIds.isEmpty()) return Map.of();
+        return entryRepository.findWithTasksByEmployeeIdInAndEntryDateBetween(employeeIds, date, date)
+                .stream()
+                .collect(Collectors.toMap(e -> e.getEmployee().getId(), e -> e, (a, b) -> a));
     }
 
-    private BigDecimal utilizationPct(Long employeeId, LocalDate date) {
-        return utilizationService.resolveUtilizationPct(employeeId, date);
+    // Team Status "Project" column: the employee's actual project assignment (Allocation),
+    // not whatever project (if any) they happened to tag their EOD tasks with — an employee
+    // with no entry yet for `onDate`, or whose tasks weren't tagged, still has an assignment.
+    // Batched into one query for the whole team rather than per-member, to avoid N+1.
+    private Map<Long, List<String>> activeProjectNamesByEmployee(List<Long> employeeIds, LocalDate onDate) {
+        if (employeeIds.isEmpty()) return Map.of();
+        Map<Long, List<String>> byEmployee = new LinkedHashMap<>();
+        for (Allocation allocation : allocationRepository.findActiveInRangeForEmployees(employeeIds, onDate, onDate)) {
+            List<String> names = byEmployee.computeIfAbsent(allocation.getEmployee().getId(), id -> new ArrayList<>());
+            // "{code} — {name}" matches the existing project-display convention used
+            // elsewhere in the app (e.g. the project pickers in SubmitEOD/ProjectsAllocation).
+            String projectLabel = allocation.getProject().getCode() + " — " + allocation.getProject().getName();
+            if (!names.contains(projectLabel)) names.add(projectLabel);
+        }
+        return byEmployee;
     }
 
     private static int compareByStatusPriority(MemberEodStatusDto a, MemberEodStatusDto b) {

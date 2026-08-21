@@ -123,7 +123,8 @@ public class UserService {
         // Manager assignment
         if (request.managerId() != null) {
             AppUser manager = userRepository.findById(request.managerId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Manager not found"));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reporting manager not found"));
+            requireValidReportingManagerRole(request.role(), manager);
             user.setManager(manager);
         }
 
@@ -179,12 +180,13 @@ public class UserService {
         if (request.managerId() != null) {
             if (request.managerId().equals(id)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "A user cannot be their own Team Lead");
+                        "A user cannot be their own reporting manager");
             }
             AppUser manager = userRepository.findById(request.managerId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "Team Lead not found"));
+                            "Reporting manager not found"));
             requireNoManagerCycle(id, manager);
+            requireValidReportingManagerRole(request.role(), manager);
             user.setManager(manager);
         } else {
             user.setManager(null);
@@ -205,6 +207,22 @@ public class UserService {
                         "This assignment would create a circular reporting chain");
             }
             current = current.getManager();
+        }
+    }
+
+    // Enforces the org's reporting hierarchy (Project Manager -> Team Lead -> Employee):
+    // an Employee's reporting manager must be a Team Lead, and a Team Lead's must be a
+    // Project Manager. Other roles have no reporting-manager restriction here.
+    private static final Map<AppUser.Role, AppUser.Role> REQUIRED_MANAGER_ROLE = Map.of(
+            AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER,
+            AppUser.Role.MANAGER,  AppUser.Role.PM
+    );
+
+    private void requireValidReportingManagerRole(AppUser.Role role, AppUser manager) {
+        AppUser.Role requiredRole = REQUIRED_MANAGER_ROLE.get(role);
+        if (requiredRole != null && manager.getRole() != requiredRole) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    ROLE_LABELS.get(role) + " reporting manager must be a " + ROLE_LABELS.get(requiredRole) + ".");
         }
     }
 

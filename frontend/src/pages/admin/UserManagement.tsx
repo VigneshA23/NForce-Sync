@@ -53,6 +53,18 @@ const WORK_MODES = [
   { value: 'REMOTE', label: 'Remote' },
 ];
 
+// Mirrors the backend hierarchy (UserService.REQUIRED_MANAGER_ROLE): an Employee's
+// Reporting Manager must be a Team Lead, a Team Lead's must be a Project Manager.
+// Roles not listed here keep the prior behavior (Team Leads offered as the option).
+const REPORTING_MANAGER_ROLE_FOR: Record<string, string> = {
+  EMPLOYEE: 'MANAGER',
+  MANAGER: 'PM',
+};
+
+function reportingManagerRoleFilter(role: string): string {
+  return REPORTING_MANAGER_ROLE_FOR[role] ?? 'MANAGER';
+}
+
 /**
  * Letters and spaces only — digits and punctuation are dropped as they are typed or pasted.
  *
@@ -518,7 +530,7 @@ function AddModal({
   // itself. Always true while mounted — the parent only renders this when open.
   useBodyScrollLock(true);
 
-  const managers = allUsers.filter(u => u.role === 'MANAGER');
+  const managers = allUsers.filter(u => u.role === reportingManagerRoleFilter(form.role));
 
   const mutation = useMutation({
     mutationFn: createUser,
@@ -680,7 +692,7 @@ function AddModal({
             <select
               style={selectStyle(!!form.role)}
               value={form.role}
-              onChange={e => set('role', e.target.value)}
+              onChange={e => setForm(f => ({ ...f, role: e.target.value, managerId: undefined }))}
             >
               <option value="" style={placeholderOptionStyle}>Select role</option>
               {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value} style={realOptionStyle}>{r.label}</option>)}
@@ -821,11 +833,13 @@ function AddModal({
             </Field>
           </div>
 
-          {/* Manager — full width. Optional: no-manager is a genuinely valid state
-              (e.g. top-level roles), so "No manager" is a real, explicitly-chosen
-              option — distinct from the untouched placeholder. */}
+          {/* Reporting Manager — full width. Optional: no-manager is a genuinely valid
+              state (e.g. top-level roles), so "No manager" is a real, explicitly-chosen
+              option — distinct from the untouched placeholder. Options are filtered by
+              the selected Role (see reportingManagerRoleFilter); the backend enforces
+              the same hierarchy independently of this dropdown. */}
           <div style={{ gridColumn: '1/-1' }}>
-            <Field label="Manager">
+            <Field label="Reporting Manager">
               <select
                 style={selectStyle(form.managerId !== undefined)}
                 value={form.managerId === undefined ? '' : form.managerId === null ? 'none' : String(form.managerId)}
@@ -834,8 +848,8 @@ function AddModal({
                   set('managerId', v === 'none' ? null : v ? Number(v) : undefined);
                 }}
               >
-                <option value="" style={placeholderOptionStyle}>Select manager</option>
-                <option value="none" style={realOptionStyle}>No manager</option>
+                <option value="" style={placeholderOptionStyle}>Select reporting manager</option>
+                <option value="none" style={realOptionStyle}>No reporting manager</option>
                 {managers.map(m => (
                   <option key={m.id} value={m.id} style={realOptionStyle}>{m.fullName} ({m.email})</option>
                 ))}
@@ -911,7 +925,7 @@ function EditModal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const managers = allUsers.filter(u => u.role === 'MANAGER' && u.id !== user?.id);
+  const managers = allUsers.filter(u => u.role === reportingManagerRoleFilter(form.role) && u.id !== user?.id);
 
   const mutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateUserPayload }) => updateUser(id, data),
@@ -970,7 +984,7 @@ function EditModal({
               id={roleId}
               value={form.role}
               options={ROLE_OPTIONS}
-              onChange={v => set('role', v)}
+              onChange={v => setForm(f => ({ ...f, role: v, managerId: null }))}
             />
           </Field>
 
@@ -1046,9 +1060,11 @@ function EditModal({
             </Field>
           </div>
 
-          {/* Manager — full width */}
+          {/* Reporting Manager — full width. Options are filtered by the selected Role
+              (see reportingManagerRoleFilter); the backend enforces the same hierarchy
+              independently of this dropdown. */}
           <div style={{ gridColumn: '1/-1' }}>
-            <Field label="Manager">
+            <Field label="Reporting Manager">
               <PlainSelect
                 value={form.managerId != null ? String(form.managerId) : ''}
                 options={managers.map(m => ({ value: String(m.id), label: `${m.fullName} (${m.email})` }))}
@@ -1593,7 +1609,7 @@ function exportUsersCsv(
   const mgrName  = (id: number | null) => allUsers.find(u => u.id === id)?.fullName ?? '';
 
   const rows: string[][] = [
-    ['Employee Code', 'Full Name', 'Email', 'Role', 'Department', 'Location', 'Manager', 'Status', 'Work Mode', 'Employment Type', 'Joining Date'],
+    ['Employee Code', 'Full Name', 'Email', 'Role', 'Department', 'Location', 'Reporting Manager', 'Status', 'Work Mode', 'Employment Type', 'Joining Date'],
     ...users.map(u => [
       u.employeeCode,
       u.fullName,
@@ -1902,7 +1918,7 @@ export default function UserManagement() {
                   <th style={thStyle}>
                     <ColumnFilterHeader label="Location" options={locOptions} selected={locFilter} onChange={setLocFilter} />
                   </th>
-                  <th style={thStyle}>Manager</th>
+                  <th style={thStyle}>Reporting Manager</th>
                   <th style={thStyle}>Status</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
                 </tr>

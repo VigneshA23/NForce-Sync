@@ -22,6 +22,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -256,6 +257,69 @@ public class UtilizationService {
             }
         }
         return UtilizationCalculator.computeUtilizationPct(approvedProductive, available);
+    }
+
+    /**
+     * Batched equivalent of calling resolveUtilizationPct() once per (employee, day) — used by
+     * the Team Dashboard's summary/member-status/trend endpoints, which previously looped over
+     * every team member calling resolveUtilizationPct individually (each its own isWorkingDay +
+     * snapshot lookup, i.e. 2+ DB round trips per member), turning a single dashboard load into
+     * O(members) or, for the 7-day trend, O(members × days) queries. This does 3 queries total
+     * (holidays, snapshots, entries) regardless of team size or window length, mirroring
+     * getTrendForEmployee's approach but across multiple employees at once.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, Map<LocalDate, BigDecimal>> resolveUtilizationPctForEmployees(
+            List<Long> employeeIds, LocalDate from, LocalDate to) {
+        Map<Long, Map<LocalDate, BigDecimal>> result = new HashMap<>();
+        if (employeeIds.isEmpty()) return result;
+        for (Long id : employeeIds) result.put(id, new HashMap<>());
+
+        Set<LocalDate> holidays = holidayRepository.findAllByOrderByHolidayDateAsc()
+                .stream()
+                .map(Holiday::getHolidayDate)
+                .collect(Collectors.toSet());
+
+        Map<Long, Map<LocalDate, UtilSnapshot>> snapByEmployeeAndDate = snapshotRepository
+                .findByEmployeeIdInAndSnapshotDateBetween(employeeIds, from, to)
+                .stream()
+                .collect(Collectors.groupingBy(UtilSnapshot::getEmployeeId,
+                        Collectors.toMap(UtilSnapshot::getSnapshotDate, s -> s, (a, b) -> a)));
+
+        Map<Long, Map<LocalDate, EodEntry>> entryByEmployeeAndDate = entryRepository
+                .findWithTasksByEmployeeIdInAndEntryDateBetween(employeeIds, from, to)
+                .stream()
+                .collect(Collectors.groupingBy(e -> e.getEmployee().getId(),
+                        Collectors.toMap(EodEntry::getEntryDate, e -> e, (a, b) -> a)));
+
+        for (Long id : employeeIds) {
+            Map<LocalDate, UtilSnapshot> snapByDate = snapByEmployeeAndDate.getOrDefault(id, Map.of());
+            Map<LocalDate, EodEntry> entryByDate = entryByEmployeeAndDate.getOrDefault(id, Map.of());
+            Map<LocalDate, BigDecimal> perDate = result.get(id);
+            for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+                boolean isHoliday = holidays.contains(d);
+                boolean workingDay = !isWeekend(d) && !isHoliday;
+                if (!workingDay) {
+                    perDate.put(d, null);
+                    continue;
+                }
+                UtilSnapshot snap = snapByDate.get(d);
+                BigDecimal pct = snap != null
+                        ? snap.getUtilizationPct()
+                        : computeUtilizationPctInMemory(entryByDate.get(d), d, isHoliday);
+                perDate.put(d, pct);
+            }
+        }
+        return result;
+    }
+
+    /** Single-date convenience overload of {@link #resolveUtilizationPctForEmployees(List, LocalDate, LocalDate)}. */
+    @Transactional(readOnly = true)
+    public Map<Long, BigDecimal> resolveUtilizationPctForEmployees(List<Long> employeeIds, LocalDate date) {
+        Map<Long, Map<LocalDate, BigDecimal>> byDate = resolveUtilizationPctForEmployees(employeeIds, date, date);
+        Map<Long, BigDecimal> result = new HashMap<>();
+        byDate.forEach((id, dates) -> result.put(id, dates.get(date)));
+        return result;
     }
 
     @Transactional(readOnly = true)

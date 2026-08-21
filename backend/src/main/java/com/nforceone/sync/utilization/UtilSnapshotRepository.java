@@ -24,4 +24,11 @@ public interface UtilSnapshotRepository extends JpaRepository<UtilSnapshot, Long
     @Query("SELECT s FROM UtilSnapshot s WHERE s.snapshotDate = :date AND s.employeeId IN :employeeIds")
     List<UtilSnapshot> findByEmployeeIdInAndSnapshotDate(@Param("employeeIds") List<Long> employeeIds,
                                                           @Param("date") LocalDate date);
+
+    // Range variant — backs resolveUtilizationPctForEmployees, one query for a whole team over
+    // a whole date window instead of one query per (employee, day).
+    @Query("SELECT s FROM UtilSnapshot s WHERE s.snapshotDate BETWEEN :from AND :to AND s.employeeId IN :employeeIds")
+    List<UtilSnapshot> findByEmployeeIdInAndSnapshotDateBetween(@Param("employeeIds") List<Long> employeeIds,
+                                                                 @Param("from") LocalDate from,
+                                                                 @Param("to") LocalDate to);
 }

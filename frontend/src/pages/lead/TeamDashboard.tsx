@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowDown, ArrowUp, Ban, Calendar, ChevronDown, ChevronRight, ClipboardCheck, ClipboardList,
-  Download, Flag, Gauge, Hourglass, Loader2, RefreshCw, Scale,
+  Download, Flag, Gauge, Hourglass, Loader2, Scale,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -985,9 +985,11 @@ export default function TeamDashboard() {
         <Card style={{ padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>Status Distribution</div>
-            {/* No per-panel week filter exists yet — mirrors the header's selected range. */}
+            {/* Read-only label mirroring the top date filter — this panel has no filter of its
+                own, so no chevron/dropdown affordance is shown here (would misleadingly imply
+                one exists). */}
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--txt-dim)' }}>
-              {panelRangeLabel} <ChevronDown size={11} aria-hidden="true" />
+              {panelRangeLabel}
             </span>
           </div>
           <StatusDistributionDonut summary={summary} />
@@ -996,8 +998,9 @@ export default function TeamDashboard() {
         <Card style={{ padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>Utilization Overview</div>
+            {/* Read-only label mirroring the top date filter — see Status Distribution above. */}
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--txt-dim)' }}>
-              {panelRangeLabel} <ChevronDown size={11} aria-hidden="true" />
+              {panelRangeLabel}
             </span>
           </div>
           <UtilizationOverviewRing summary={summary} />
@@ -1029,9 +1032,10 @@ export default function TeamDashboard() {
         </Card>
       </div>
 
-      {/* Footer */}
-      <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-        <RefreshCw size={11} aria-hidden="true" />
+      {/* Footer — status text only. The RefreshCw icon this used to pair with wasn't wired to
+          any click handler (refreshing already happens via the top date filter/live polling),
+          so it read as a redundant, non-functional refresh button. */}
+      <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--txt-dim)' }}>
         Last updated: {agoLabel(nowTick - dataUpdatedAt)}
       </div>
 
