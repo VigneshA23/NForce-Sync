@@ -162,8 +162,7 @@ public class ProjectDashboardService {
             Allocation match = allocations.stream().filter(a -> a.getEmployee().getId().equals(employeeId)).findFirst()
                     .orElse(null);
             if (match == null) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                        "Employee is not allocated to your projects in this range");
+                return emptySummary(totalAssignedProjects, activeProjects, onHoldProjects, completedProjects);
             }
             allocations = allocations.stream().filter(a -> a.getEmployee().getId().equals(employeeId)).toList();
         }

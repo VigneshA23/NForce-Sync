@@ -24,6 +24,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -38,6 +40,17 @@ import java.util.Set;
 @Service
 public class ReportExportService {
 
+    /**
+     * Dates read the same in a download as they do on screen: the app renders every date as
+     * DD-MM-YYYY (frontend lib/date.ts formatDate), so an export showing the raw ISO
+     * LocalDate.toString() was the one place that convention broke.
+     */
+    private static final DateTimeFormatter DISPLAY_DATE = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+
+    private static String displayDate(LocalDate date) {
+        return date != null ? date.format(DISPLAY_DATE) : "";
+    }
+
     private static final String[] COLUMNS = {"Employee", "Employee Code", "Entry Date", "Project", "Category", "Hours", "Billable"};
 
     public byte[] buildCsv(EodByEmployeeReportDto report) {
@@ -47,7 +60,7 @@ public class ReportExportService {
             for (EodByEmployeeEntryDto e : sortedByDate(emp.entries())) {
                 sb.append(csvField(emp.employeeName())).append(',')
                   .append(csvField(emp.employeeCode())).append(',')
-                  .append(csvField(e.date() != null ? e.date().toString() : "")).append(',')
+                  .append(csvField(displayDate(e.date()))).append(',')
                   .append(csvField(e.projectCode())).append(',')
                   .append(csvField(e.categoryName())).append(',')
                   .append(csvField(e.hours() != null ? e.hours().toPlainString() : "0")).append(',')
@@ -72,10 +85,17 @@ public class ReportExportService {
             boldFont.setBold(true);
             boldStyle.setFont(boldFont);
 
+            // A real date cell, not the formatted string the CSV and PDF use: those are read as
+            // text anyway, but a spreadsheet column has to stay sortable and filterable as a date.
+            // The dd-MM-yyyy data format makes it DISPLAY exactly as the app does whatever the
+            // reader's locale, so the two agree without giving up the date semantics.
+            CellStyle dateStyle = workbook.createCellStyle();
+            dateStyle.setDataFormat(workbook.createDataFormat().getFormat("dd-MM-yyyy"));
+
             Set<String> usedSheetNames = new HashSet<>();
             for (EodByEmployeeRowDto emp : sortedByName(report)) {
                 SXSSFSheet sheet = workbook.createSheet(uniqueSheetName(emp.employeeName(), usedSheetNames));
-                writeEmployeeSheet(sheet, emp, boldStyle);
+                writeEmployeeSheet(sheet, emp, boldStyle, dateStyle);
             }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -86,7 +106,8 @@ public class ReportExportService {
         }
     }
 
-    private void writeEmployeeSheet(SXSSFSheet sheet, EodByEmployeeRowDto emp, CellStyle boldStyle) {
+    private void writeEmployeeSheet(SXSSFSheet sheet, EodByEmployeeRowDto emp,
+                                     CellStyle boldStyle, CellStyle dateStyle) {
         int rowNum = 0;
 
         Row nameRow = sheet.createRow(rowNum++);
@@ -114,7 +135,11 @@ public class ReportExportService {
 
         for (EodByEmployeeEntryDto e : sortedByDate(emp.entries())) {
             Row row = sheet.createRow(rowNum++);
-            row.createCell(0).setCellValue(e.date() != null ? e.date().toString() : "");
+            Cell dateCell = row.createCell(0);
+            if (e.date() != null) {
+                dateCell.setCellValue(e.date());
+                dateCell.setCellStyle(dateStyle);
+            }
             row.createCell(1).setCellValue(e.projectCode() != null ? e.projectCode() : "");
             row.createCell(2).setCellValue(e.categoryName() != null ? e.categoryName() : "");
             row.createCell(3).setCellValue(e.hours() != null ? e.hours().doubleValue() : 0d);
@@ -181,7 +206,7 @@ public class ReportExportService {
                         table.addCell(cell);
                     }
                     for (EodByEmployeeEntryDto e : entries) {
-                        table.addCell(new Phrase(e.date() != null ? e.date().toString() : "", tableCellFont));
+                        table.addCell(new Phrase(displayDate(e.date()), tableCellFont));
                         table.addCell(new Phrase(e.projectCode() != null ? e.projectCode() : "—", tableCellFont));
                         table.addCell(new Phrase(e.categoryName() != null ? e.categoryName() : "—", tableCellFont));
                         table.addCell(new Phrase(fmt(e.hours()), tableCellFont));

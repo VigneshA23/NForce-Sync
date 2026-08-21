@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ChevronDown, ChevronRight, Check, X, CheckCheck, RefreshCw,
-  Search,
+  ChevronDown, ChevronRight, X, CheckCheck, RefreshCw,
+  Search, AlertTriangle,
 } from 'lucide-react';
 import {
   usePendingApprovals, useDecidedApprovals,
-  useApprove, useReject, useBatchApprove, type PendingApprovalsRange,
+  useApprove, useReject, type PendingApprovalsRange,
 } from '../api/approvals';
-import { Modal } from '../components/Modal';
 import { FilterDropdown } from '../components/FilterDropdown';
 import { useToast } from '../lib/toast';
 import { formatDate as fmtDate } from '../lib/date';
@@ -16,19 +15,24 @@ import { useSearchParams } from 'react-router-dom';
 import {
   sumHours, hrs, entryProjects, entryCategories,
   daySummary, timeAdjustmentLabel, formatRelative, extractError, initials,
-  Skel, Card, Btn, Chip, AuditTrail, SubmissionDetailModal,
+  Skel, Card, Chip, AuditTrail, SubmissionDetailModal,
 } from './approvals/shared';
+
+// Matches the PM Approvals page's helper of the same name, so the two screens describe the same
+// stretch of inactivity identically.
+function formatInactivity(hoursSince: number | null | undefined): string {
+  if (hoursSince == null) return '';
+  if (hoursSince >= 24) return `${Math.floor(hoursSince / 24)}d`;
+  return `${hoursSince}h`;
+}
 
 // ── entry row ─────────────────────────────────────────────────────────────────
 
 function EntryRow({
-  entry, actionable, checked, onToggleCheck,
+  entry,
   expanded, onToggleExpand, onOpenDetails, highlighted,
 }: {
   entry: EodEntryDto;
-  actionable: boolean;
-  checked: boolean;
-  onToggleCheck: () => void;
   expanded: boolean;
   onToggleExpand: () => void;
   onOpenDetails: () => void;
@@ -59,17 +63,18 @@ function EntryRow({
       ref={rowRef}
       style={{
         borderBottom: '1px solid var(--line)',
-        background: highlighted ? 'color-mix(in srgb, var(--info) 12%, transparent)' : undefined,
+        // A deep-linked row keeps its blue highlight — that one was clicked deliberately and must
+        // stay unmistakable. The amber escalation wash is the fallback, matching the PM's page.
+        background: highlighted
+          ? 'color-mix(in srgb, var(--info) 12%, transparent)'
+          : entry.escalated
+            ? 'linear-gradient(90deg, color-mix(in srgb, var(--warn) 7%, transparent), transparent 45%)'
+            : undefined,
         boxShadow: highlighted ? 'inset 3px 0 0 var(--info)' : undefined,
         transition: 'background 0.3s ease',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding }}>
-        {actionable && (
-          <div style={{ marginTop: 2 }}>
-            <input type="checkbox" checked={checked} onChange={onToggleCheck} style={{ width: 15, height: 15, accentColor: 'var(--brand-bright)', cursor: 'pointer' }} />
-          </div>
-        )}
         <div style={{
           width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
@@ -82,6 +87,14 @@ function EntryRow({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--txt)' }}>{entry.employeeName}</span>
             <span style={{ fontSize: 11.5, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>{entry.employeeCode}</span>
+            {/* The escalation is only ever computed for a SUBMITTED entry, so this can never
+                appear on the Approved/Rejected tabs. It is informational, not a lock: the entry
+                is still the Team Lead's to decide — see the tooltip. */}
+            {entry.escalated && (
+              <span title="This entry passed the review SLA, so the Project Manager can now see and act on it too. You can still approve or reject it yourself — whoever acts first decides it.">
+                <Chip tone="warn"><AlertTriangle size={11} aria-hidden="true" /> Escalated to Project Manager</Chip>
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             <span>{fmtDate(entry.entryDate)}</span>
@@ -89,6 +102,9 @@ function EntryRow({
             <span>Submitted {formatRelative(entry.submittedAt)}</span>
             <span>·</span>
             <span>{entry.tasks.length} task{entry.tasks.length !== 1 ? 's' : ''} · {projects.length} project{projects.length !== 1 ? 's' : ''}</span>
+            {entry.escalated && entry.tlInactivityHours != null && (
+              <><span>·</span><span style={{ color: 'var(--warn)' }}>Awaiting your review for {formatInactivity(entry.tlInactivityHours)}</span></>
+            )}
           </div>
 
           {/* A task-less full-day Leave still needs to be openable — this box is the only way to
@@ -179,7 +195,6 @@ export default function Approvals() {
   const { data: pending, isPending: pendingLoading, isError: pendingError, refetch } = usePendingApprovals(true, range);
   const { data: approved, isPending: approvedLoading } = useDecidedApprovals('APPROVED');
   const { data: rejected, isPending: rejectedLoading } = useDecidedApprovals('REJECTED');
-  const batchApprove = useBatchApprove();
   const reject = useReject();
   const { show } = useToast();
 
@@ -189,10 +204,7 @@ export default function Approvals() {
   const [employeeFilter, setEmployeeFilter] = useState<Set<string>>(new Set());
   const [projectFilter, setProjectFilter] = useState<Set<string>>(new Set());
   const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set());
-  const [selected, setSelected] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [rejectTarget, setRejectTarget] = useState<'bulk' | number | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
   const [detailsEntryId, setDetailsEntryId] = useState<number | null>(null);
 
   const modalApprove = useApprove();
@@ -238,8 +250,6 @@ export default function Approvals() {
     return sorted;
   }, [baseList, employeeFilter, projectFilter, categoryFilter, search, sort]);
 
-  const actionable = tab === 'pending';
-
   // Looked up from baseList (not `visible`) so the modal survives a filter change while open.
   const detailsEntry = baseList.find(e => e.id === detailsEntryId) ?? null;
 
@@ -253,8 +263,8 @@ export default function Approvals() {
     }
   }
 
-  // Rejected in place from the detail modal, which supplies the reason — no separate dialog. The
-  // bulk path below still uses one, since it spans entries and has no single entry to sit under.
+  // Rejected in place from the detail modal, which supplies the reason — no separate dialog.
+  // Every decision is made on one opened entry, so there is no cross-entry path needing its own.
   async function handleDetailReject(entryId: number, reason: string) {
     if (!reason) return;
     try {
@@ -284,12 +294,6 @@ export default function Approvals() {
     setCategoryFilter(new Set());
   }
 
-  function toggleCheck(id: number) {
-    const next = new Set(selected);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setSelected(next);
-  }
-
   function toggleExpand(id: number) {
     const next = new Set(expanded);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -298,41 +302,6 @@ export default function Approvals() {
 
   function switchTab(t: Tab) {
     setTab(t);
-    setSelected(new Set());
-  }
-
-  async function approveIds(ids: number[]) {
-    if (ids.length === 0) return;
-    try {
-      const result = await batchApprove.mutateAsync(ids);
-      // The backend silently skips entries not fully billable-decided (or no longer SUBMITTED),
-      // so the response can be shorter than the request — report what actually happened.
-      const approvedCount = result.length;
-      const skipped = ids.length - approvedCount;
-      show(
-        `${approvedCount} entr${approvedCount !== 1 ? 'ies' : 'y'} approved.`
-          + (skipped > 0 ? ` ${skipped} skipped (billable not yet decided).` : ' Utilization recomputed.'),
-        'success',
-      );
-      setSelected(new Set());
-    } catch (err) {
-      show(extractError(err), 'error');
-    }
-  }
-
-  async function confirmRejectSubmit() {
-    const reason = rejectReason.trim();
-    if (!reason) return;
-    const ids = rejectTarget === 'bulk' ? [...selected] : rejectTarget != null ? [rejectTarget] : [];
-    if (ids.length === 0) return;
-    const results = await Promise.allSettled(ids.map(id => reject.mutateAsync({ entryId: id, comment: reason })));
-    const failed = results.filter(r => r.status === 'rejected').length;
-    const succeeded = ids.length - failed;
-    if (failed === 0) show(`${succeeded} entr${succeeded !== 1 ? 'ies' : 'y'} rejected.`, 'success');
-    else show(`${succeeded} of ${ids.length} rejected, ${failed} failed — please retry the rest.`, 'error');
-    setSelected(new Set());
-    setRejectTarget(null);
-    setRejectReason('');
   }
 
   if (pendingError) {
@@ -424,22 +393,6 @@ export default function Approvals() {
         </select>
       </div>
 
-      {/* Bulk bar */}
-      {actionable && selected.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-          background: 'var(--raised)', border: '1px solid rgba(177,17,22,.4)', borderRadius: 12,
-          padding: '10px 16px', marginBottom: 14, position: 'sticky', top: 10, zIndex: 15,
-        }}>
-          <span style={{ fontSize: 13, color: 'var(--txt)' }}>{selected.size} selected</span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Btn onClick={() => setSelected(new Set())}>Clear</Btn>
-            <Btn variant="danger" onClick={() => { setRejectTarget('bulk'); setRejectReason(''); }}><X size={12} aria-hidden="true" /> Reject selected</Btn>
-            <Btn variant="success" onClick={() => approveIds([...selected])} disabled={batchApprove.isPending}><Check size={12} aria-hidden="true" /> Approve selected</Btn>
-          </div>
-        </div>
-      )}
-
       {/* List */}
       {isLoading ? (
         <Card>
@@ -469,9 +422,6 @@ export default function Approvals() {
             <EntryRow
               key={entry.id}
               entry={entry}
-              actionable={actionable}
-              checked={selected.has(entry.id)}
-              onToggleCheck={() => toggleCheck(entry.id)}
               expanded={expanded.has(entry.id)}
               onToggleExpand={() => toggleExpand(entry.id)}
               onOpenDetails={() => setDetailsEntryId(entry.id)}
@@ -480,30 +430,6 @@ export default function Approvals() {
           ))}
         </Card>
       )}
-
-      {/* Reject modal */}
-      <Modal
-        open={rejectTarget != null}
-        title="Reject entry"
-        onClose={() => setRejectTarget(null)}
-        footer={
-          <>
-            <Btn onClick={() => setRejectTarget(null)}>Cancel</Btn>
-            <Btn variant="danger" onClick={confirmRejectSubmit} disabled={!rejectReason.trim() || reject.isPending}>
-              {reject.isPending ? 'Rejecting…' : 'Confirm reject'}
-            </Btn>
-          </>
-        }
-      >
-        <p style={{ margin: '0 0 12px', color: 'var(--txt-mut)', fontSize: 12.5 }}>This reason is shared with the employee.</p>
-        <textarea
-          rows={4}
-          value={rejectReason}
-          onChange={e => setRejectReason(e.target.value)}
-          placeholder="e.g. Missing task description for the overtime hours logged"
-          style={{ width: '100%', resize: 'vertical', padding: 10, background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 8, color: 'var(--txt)', fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }}
-        />
-      </Modal>
 
       <SubmissionDetailModal
         entry={detailsEntry}
