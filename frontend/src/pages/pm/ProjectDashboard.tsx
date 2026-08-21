@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   FolderKanban, CheckCircle2, PauseCircle, Archive, Gauge, Briefcase, Ban,
   Target, TrendingUp, AlertTriangle, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown, X,
@@ -8,7 +8,6 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell,
 } from 'recharts';
 import { KpiCard } from '../../components/KpiCard';
-import { todayISO } from '../../lib/date';
 import { useIsPhone } from '../../lib/useMediaQuery';
 import {
   useProjectDashboardFilters, useProjectDashboardSummary,
@@ -67,6 +66,29 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }
     <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--line)' }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{title}</div>
       {subtitle && <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 2 }}>{subtitle}</div>}
+    </div>
+  );
+}
+
+/** Same header layout/styling as the original Resource Utilization search — reused so every
+ *  searchable section stays visually consistent, regardless of what it searches by. */
+function SectionHeaderWithSearch({ title, subtitle, search, onSearchChange, placeholder = 'Search employee' }: {
+  title: string; subtitle?: string; search: string; onSearchChange: (v: string) => void; placeholder?: string;
+}) {
+  return (
+    <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 2 }}>{subtitle}</div>}
+      </div>
+      <input
+        type="search"
+        value={search}
+        onChange={e => onSearchChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        style={{ ...inputStyle, width: 200, fontWeight: 400 }}
+      />
     </div>
   );
 }
@@ -144,14 +166,17 @@ function StatusPill({ color, label }: { color: string; label: string }) {
 }
 
 // ── date range filter ────────────────────────────────────────────────────────
-// Self-contained DD-MM-YYYY manual entry + calendar picker for the dashboard's From/To
-// filters, mirroring the pattern built for Employee "My EOD History" (EodHistory.tsx):
-// character-level input masking (never leaves invalid text sitting in the field), explicit
-// calendar/leap-year arithmetic (never `new Date()` parsing/normalization), a future-date
-// check for To, and a From <= To check — all funnelled through one validation path shared by
-// both manual typing and the calendar picker. Kept local to this page rather than folded into
-// the shared `components/DatePicker.tsx`, since that component is also used by Submit EOD,
-// Admin User Management, and two other PM report pages that this change must not touch.
+// DD / MM / YYYY are each their own <input> here, not one text field with a rebuild-the-whole-
+// string mask — a single-field digit mask can't tell "the digits that used to be YYYY" apart
+// from "the digits that used to be MM" once any middle portion is cleared, so clearing one
+// component was sliding the others into its place. Three independently-bounded (maxLength 2/2/4)
+// inputs make that structurally impossible: clearing DD can only ever touch DD's own state.
+// Explicit calendar/leap-year arithmetic (never `new Date()` parsing/normalization), a
+// future-date check for To, and a From <= To check are unchanged, and still funnel through one
+// validation path shared by both manual typing and the calendar picker. Kept local to this page
+// rather than folded into the shared `components/DatePicker.tsx`, since that component is also
+// used by Submit EOD, Admin User Management, and two other PM report pages that this change
+// must not touch.
 
 const MIN_ISO_DATE = '1900-01-01';
 const MAX_ISO_DATE = '2099-12-31';
@@ -184,10 +209,32 @@ function parseStrictDDMMYYYY(text: string): string | null {
   return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
-/** `YYYY-MM-DD` → `DD-MM-YYYY`, for mirroring a calendar-picker selection into the text field. */
-function isoToDDMMYYYY(iso: string): string {
-  const [y, mo, d] = iso.split('-');
-  return `${d}-${mo}-${y}`;
+/** One date field's three independent segments, as raw (possibly partial) digit strings. */
+interface DateParts { day: string; month: string; year: string }
+
+const EMPTY_PARTS: DateParts = { day: '', month: '', year: '' };
+
+/** `YYYY-MM-DD` → `{ day, month, year }`, for seeding the three segment inputs from a
+ * calendar-picker selection or the parent's committed value. */
+function isoToParts(iso: string): DateParts {
+  if (!iso) return EMPTY_PARTS;
+  const [year, month, day] = iso.split('-');
+  return { day, month, year };
+}
+
+function partsAreEmpty(p: DateParts): boolean {
+  return p.day === '' && p.month === '' && p.year === '';
+}
+
+/** True once every segment has been typed out to its full width — the only point at which a
+ * date is complete enough to run calendar validation on; anything short of this is still
+ * mid-edit and must be treated as neither valid nor an error. */
+function partsAreComplete(p: DateParts): boolean {
+  return p.day.length === 2 && p.month.length === 2 && p.year.length === 4;
+}
+
+function partsToDDMMYYYY(p: DateParts): string {
+  return `${p.day}-${p.month}-${p.year}`;
 }
 
 // Both sides are always fixed-width, zero-padded `YYYY-MM-DD` by this point, so a plain
@@ -207,15 +254,17 @@ function todayIsoLocal(): string {
   return `${y}-${mo}-${day}`;
 }
 
-/** Restricts raw keystrokes to the DD-MM-YYYY structure itself: strips every non-digit
- * character, caps at 8 digits (2+2+4), and auto-inserts the `-` separators as digits
- * accumulate. Always a syntactically-valid prefix of DD-MM-YYYY — completeness and calendar
- * validity are checked separately, on blur/Enter, by `parseStrictDDMMYYYY`. */
-function maskDateInput(raw: string): string {
-  const digits = raw.replace(/\D/g, '').slice(0, 8);
-  if (digits.length > 4) return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
-  if (digits.length > 2) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
-  return digits;
+/** The 1st of the current local month, as `YYYY-MM-DD` — the dashboard's default From date on
+ * every fresh login, computed off today's actual local date rather than any fixed month/year. */
+function firstDayOfMonthIsoLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+/** Strips everything but digits and caps to `max` — the only transform a segment's own value
+ * ever goes through; the native `maxLength` attribute backs this up for paste as well. */
+function digitsOnly(raw: string, max: number): string {
+  return raw.replace(/\D/g, '').slice(0, max);
 }
 
 /** Whether the dashboard should show data at all: 'ready' covers both a fully valid From+To
@@ -232,25 +281,32 @@ function DateRangeFilter({ from, to, onApply, onStatusChange }: {
   onApply: (from: string, to: string) => void;
   onStatusChange: (status: DateRangeStatus) => void;
 }) {
-  const [fromText, setFromText] = useState(() => (from ? isoToDDMMYYYY(from) : ''));
-  const [toText, setToText] = useState(() => (to ? isoToDDMMYYYY(to) : ''));
+  const [fromParts, setFromParts] = useState<DateParts>(() => isoToParts(from));
+  const [toParts, setToParts] = useState<DateParts>(() => isoToParts(to));
   const [dateError, setDateError] = useState<string | null>(null);
   const [fromInvalid, setFromInvalid] = useState(false);
   const [toInvalid, setToInvalid] = useState(false);
 
-  // The single validation/commit path for BOTH manual typing (via onBlur/Enter) and the
-  // calendar picker (via handlePickerChange below). Order: format/day/month/year/calendar
-  // validity → both-sides-present → To not in the future → From <= To. Only calls onApply
-  // once every step passes (or both fields are empty); any failure reports 'invalid' and
-  // leaves the parent's committed from/to exactly as they were — never a fallback to
-  // whatever was last valid.
-  function evaluate(nextFromText: string, nextToText: string) {
-    const fromTrimmed = nextFromText.trim();
-    const toTrimmed = nextToText.trim();
-    const fromEmpty = fromTrimmed === '';
-    const toEmpty = toTrimmed === '';
+  // Focus targets for auto-advance (day → month → year) and backspace-to-previous-segment.
+  const fromGroupRef = useRef<HTMLDivElement>(null);
+  const toGroupRef = useRef<HTMLDivElement>(null);
+  const fromMonthRef = useRef<HTMLInputElement>(null);
+  const fromYearRef = useRef<HTMLInputElement>(null);
+  const fromDayRef = useRef<HTMLInputElement>(null);
+  const toMonthRef = useRef<HTMLInputElement>(null);
+  const toYearRef = useRef<HTMLInputElement>(null);
+  const toDayRef = useRef<HTMLInputElement>(null);
 
-    if (fromEmpty && toEmpty) {
+  // The single validation/commit path for BOTH manual typing (via the group blur handlers below)
+  // and the calendar picker (via handlePickerChange). Order: complete? → calendar validity →
+  // both-sides-present → To not in the future → From <= To. Only calls onApply once every step
+  // passes (or both sides are entirely empty); a merely *incomplete* pair (still being typed)
+  // reports 'invalid' silently — no error text — and never falls back to stale data.
+  function evaluate(f: DateParts, t: DateParts) {
+    const fEmpty = partsAreEmpty(f);
+    const tEmpty = partsAreEmpty(t);
+
+    if (fEmpty && tEmpty) {
       setFromInvalid(false);
       setToInvalid(false);
       setDateError(null);
@@ -259,23 +315,36 @@ function DateRangeFilter({ from, to, onApply, onStatusChange }: {
       return;
     }
 
-    const fromIso = fromEmpty ? null : parseStrictDDMMYYYY(fromTrimmed);
-    const toIso = toEmpty ? null : parseStrictDDMMYYYY(toTrimmed);
-    const fromBad = !fromEmpty && fromIso === null;
-    const toBad = !toEmpty && toIso === null;
+    const fComplete = partsAreComplete(f);
+    const tComplete = partsAreComplete(t);
+
+    // Anything short of every segment being fully typed is mid-edit, not a bad date — stay
+    // quiet and simply withhold filtering until it's complete.
+    if ((!fEmpty && !fComplete) || (!tEmpty && !tComplete)) {
+      setFromInvalid(false);
+      setToInvalid(false);
+      setDateError(null);
+      onStatusChange('invalid');
+      return;
+    }
+
+    // Both sides are now either empty or fully typed. One side fully empty while the other is
+    // complete is an incomplete pair — same silent withholding as above.
+    if (fEmpty || tEmpty) {
+      setDateError(null);
+      onStatusChange('invalid');
+      return;
+    }
+
+    const fromIso = parseStrictDDMMYYYY(partsToDDMMYYYY(f));
+    const toIso = parseStrictDDMMYYYY(partsToDDMMYYYY(t));
+    const fromBad = fromIso === null;
+    const toBad = toIso === null;
     setFromInvalid(fromBad);
     setToInvalid(toBad);
 
     if (fromBad || toBad) {
       setDateError('Invalid date. Please enter a valid date in DD-MM-YYYY format.');
-      onStatusChange('invalid');
-      return;
-    }
-
-    // Both individually well-formed at this point — an incomplete pair (only one side
-    // filled in) must not filter, and must not fall back to showing unfiltered/stale data.
-    if (fromEmpty || toEmpty) {
-      setDateError(null);
       onStatusChange('invalid');
       return;
     }
@@ -287,7 +356,7 @@ function DateRangeFilter({ from, to, onApply, onStatusChange }: {
       return;
     }
 
-    if (!isRangeValid(fromIso ?? '', toIso ?? '')) {
+    if (!isRangeValid(fromIso!, toIso!)) {
       setDateError('From date cannot be later than To date.');
       onStatusChange('invalid');
       return;
@@ -295,79 +364,210 @@ function DateRangeFilter({ from, to, onApply, onStatusChange }: {
 
     setDateError(null);
     onStatusChange('ready');
-    onApply(fromIso ?? '', toIso ?? '');
+    onApply(fromIso!, toIso!);
   }
 
-  // The calendar picker's native <input type="date"> value is browser-guaranteed to be
-  // either empty or a genuine valid date, but it still funnels through the same `evaluate`
-  // so a picker pick and a manual entry are validated/committed identically — including
-  // still being subject to the From <= To and future-To checks.
+  // Zero-pads a single leftover digit (user typed "5" then tabbed/clicked away) so "5" and "05"
+  // behave identically — applied only once the user has actually left the whole DD-MM-YYYY group,
+  // never mid-edit.
+  function padParts(p: DateParts): DateParts {
+    return {
+      day: p.day.length === 1 ? p.day.padStart(2, '0') : p.day,
+      month: p.month.length === 1 ? p.month.padStart(2, '0') : p.month,
+      year: p.year,
+    };
+  }
+
+  // Fires only when focus has left the entire From (or To) group of three segment inputs —
+  // not on every inter-segment blur — so validation runs once per completed edit, exactly when
+  // "a complete date has been entered", rather than while the user is still mid-component.
+  function handleFromGroupBlur(e: React.FocusEvent) {
+    if (fromGroupRef.current?.contains(e.relatedTarget as Node | null)) return;
+    const padded = padParts(fromParts);
+    if (padded.day !== fromParts.day || padded.month !== fromParts.month) setFromParts(padded);
+    evaluate(padded, toParts);
+  }
+
+  function handleToGroupBlur(e: React.FocusEvent) {
+    if (toGroupRef.current?.contains(e.relatedTarget as Node | null)) return;
+    const padded = padParts(toParts);
+    if (padded.day !== toParts.day || padded.month !== toParts.month) setToParts(padded);
+    evaluate(fromParts, padded);
+  }
+
+  // The calendar picker's native <input type="date"> value is browser-guaranteed to be either
+  // empty or a genuine valid date, but it still funnels through the same `evaluate` so a picker
+  // pick and manual entry are validated/committed identically — including the From <= To and
+  // future-To checks. Unlike manual entry, a picker pick is always already complete, so it
+  // evaluates immediately rather than waiting for the group to lose focus.
   function handlePickerChange(field: 'from' | 'to', e: React.ChangeEvent<HTMLInputElement>) {
-    const iso = e.target.value;
-    const ddmmyyyy = iso ? isoToDDMMYYYY(iso) : '';
+    const parts = isoToParts(e.target.value);
     if (field === 'from') {
-      setFromText(ddmmyyyy);
-      evaluate(ddmmyyyy, toText);
+      setFromParts(parts);
+      evaluate(parts, toParts);
     } else {
-      setToText(ddmmyyyy);
-      evaluate(fromText, ddmmyyyy);
+      setToParts(parts);
+      evaluate(fromParts, parts);
     }
   }
 
+  function handleEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') e.currentTarget.blur();
+  }
+
+  /** Backspace on an already-empty segment moves focus (never digits) to the previous segment,
+   * landing the caret at its end so backspacing can continue — a pure focus move, so it can
+   * never pull digits across component boundaries. */
+  function backspaceToPrev(e: React.KeyboardEvent<HTMLInputElement>, current: string, prevRef: React.RefObject<HTMLInputElement | null>) {
+    if (e.key !== 'Backspace' || current !== '') return;
+    const prev = prevRef.current;
+    if (!prev) return;
+    e.preventDefault();
+    prev.focus();
+    prev.setSelectionRange(prev.value.length, prev.value.length);
+  }
+
+  function focusAndSelect(input: HTMLInputElement | null) {
+    input?.focus();
+    input?.select();
+  }
+
+  const segStyle: React.CSSProperties = {
+    border: 'none', background: 'transparent', outline: 'none', color: 'inherit',
+    font: 'inherit', textAlign: 'center', padding: 0, boxSizing: 'border-box', flexShrink: 0,
+  };
+  // Fixed px, not `ch` — `ch` sizes off the current font's digit ('0') advance width, but the
+  // placeholders here are letters ("DD"/"MM"/"YYYY"), which render wider than digits in Inter.
+  // A `2ch`/`4ch` box was clipping its own placeholder text even though the segment held a
+  // "complete" value. These widths are sized to the letter placeholders, the wider case, so the
+  // same box comfortably fits either the placeholder or two/four typed digits.
+  const SEG_WIDTH_DD_MM = 22;
+  const SEG_WIDTH_YYYY = 38;
+  const sepStyle: React.CSSProperties = { color: 'var(--txt-dim)', flexShrink: 0 };
+  // "From" and "To" are different lengths, so a plain inline label left the icon — which was
+  // pinned to a fixed offset from the *container's* right edge — sitting behind a variable
+  // amount of slack: identical container width and identical icon offset still produced a
+  // visibly bigger gap after "To" than after "From", since less label text meant less content
+  // pushing the segments (and the fixed-position icon) toward the right. A fixed-width,
+  // right-aligned label box makes both labels end at the same x position regardless of text
+  // length, so "DD" always starts from the same spot in both fields.
+  const LABEL_WIDTH = 30;
+  const labelStyle: React.CSSProperties = {
+    color: 'var(--txt-dim)', fontSize: 12, width: LABEL_WIDTH, textAlign: 'right', flexShrink: 0,
+  };
+
   return (
     <>
-      <div style={{ position: 'relative', display: 'inline-flex' }}>
+      <div
+        ref={fromGroupRef}
+        onBlur={handleFromGroupBlur}
+        style={{ ...inputStyle, display: 'inline-flex', alignItems: 'center', gap: 4, width: 196, paddingRight: 10, fontWeight: 400 }}
+      >
+        <span style={labelStyle}>From</span>
         <input
-          type="text" inputMode="numeric" placeholder="From (DD-MM-YYYY)" maxLength={10}
-          value={fromText}
-          onChange={e => setFromText(maskDateInput(e.target.value))}
-          onBlur={() => evaluate(fromText, toText)}
-          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          aria-label="From date"
-          aria-invalid={fromInvalid}
-          style={{ ...inputStyle, width: 150, paddingRight: 26, fontWeight: 400 }}
+          ref={fromDayRef}
+          type="text" inputMode="numeric" placeholder="DD" maxLength={2}
+          value={fromParts.day}
+          onChange={e => {
+            const day = digitsOnly(e.target.value, 2);
+            setFromParts(p => ({ ...p, day }));
+            if (day.length === 2) focusAndSelect(fromMonthRef.current);
+          }}
+          onKeyDown={handleEnter}
+          aria-label="From day" aria-invalid={fromInvalid}
+          style={{ ...segStyle, width: SEG_WIDTH_DD_MM }}
         />
-        <div style={{
-          position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
-          color: 'var(--txt-dim)', display: 'flex', pointerEvents: 'none',
-        }}>
-          <CalendarIcon size={13} aria-hidden="true" />
+        <span style={sepStyle}>-</span>
+        <input
+          ref={fromMonthRef}
+          type="text" inputMode="numeric" placeholder="MM" maxLength={2}
+          value={fromParts.month}
+          onChange={e => {
+            const month = digitsOnly(e.target.value, 2);
+            setFromParts(p => ({ ...p, month }));
+            if (month.length === 2) focusAndSelect(fromYearRef.current);
+          }}
+          onKeyDown={e => { backspaceToPrev(e, fromParts.month, fromDayRef); handleEnter(e); }}
+          aria-label="From month" aria-invalid={fromInvalid}
+          style={{ ...segStyle, width: SEG_WIDTH_DD_MM }}
+        />
+        <span style={sepStyle}>-</span>
+        <input
+          ref={fromYearRef}
+          type="text" inputMode="numeric" placeholder="YYYY" maxLength={4}
+          value={fromParts.year}
+          onChange={e => setFromParts(p => ({ ...p, year: digitsOnly(e.target.value, 4) }))}
+          onKeyDown={e => { backspaceToPrev(e, fromParts.year, fromMonthRef); handleEnter(e); }}
+          aria-label="From year" aria-invalid={fromInvalid}
+          style={{ ...segStyle, width: SEG_WIDTH_YYYY }}
+        />
+        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, flexShrink: 0 }}>
+          <CalendarIcon size={13} aria-hidden="true" style={{ color: 'var(--txt-dim)', pointerEvents: 'none' }} />
+          <input
+            type="date" min={MIN_ISO_DATE} max={MAX_ISO_DATE}
+            value={from}
+            onChange={e => handlePickerChange('from', e)}
+            tabIndex={-1}
+            aria-label="Pick From date from calendar"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }}
+          />
         </div>
-        <input
-          type="date" min={MIN_ISO_DATE} max={MAX_ISO_DATE}
-          value={from}
-          onChange={e => handlePickerChange('from', e)}
-          tabIndex={-1}
-          aria-label="Pick From date from calendar"
-          style={{ position: 'absolute', right: 0, top: 0, width: 24, height: '100%', opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }}
-        />
       </div>
       <span style={{ color: 'var(--txt-dim)', fontSize: 12 }}>→</span>
-      <div style={{ position: 'relative', display: 'inline-flex' }}>
+      <div
+        ref={toGroupRef}
+        onBlur={handleToGroupBlur}
+        style={{ ...inputStyle, display: 'inline-flex', alignItems: 'center', gap: 4, width: 196, paddingRight: 10, fontWeight: 400 }}
+      >
+        <span style={labelStyle}>To</span>
         <input
-          type="text" inputMode="numeric" placeholder="To (DD-MM-YYYY)" maxLength={10}
-          value={toText}
-          onChange={e => setToText(maskDateInput(e.target.value))}
-          onBlur={() => evaluate(fromText, toText)}
-          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          aria-label="To date"
-          aria-invalid={toInvalid}
-          style={{ ...inputStyle, width: 150, paddingRight: 26, fontWeight: 400 }}
+          ref={toDayRef}
+          type="text" inputMode="numeric" placeholder="DD" maxLength={2}
+          value={toParts.day}
+          onChange={e => {
+            const day = digitsOnly(e.target.value, 2);
+            setToParts(p => ({ ...p, day }));
+            if (day.length === 2) focusAndSelect(toMonthRef.current);
+          }}
+          onKeyDown={handleEnter}
+          aria-label="To day" aria-invalid={toInvalid}
+          style={{ ...segStyle, width: SEG_WIDTH_DD_MM }}
         />
-        <div style={{
-          position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
-          color: 'var(--txt-dim)', display: 'flex', pointerEvents: 'none',
-        }}>
-          <CalendarIcon size={13} aria-hidden="true" />
+        <span style={sepStyle}>-</span>
+        <input
+          ref={toMonthRef}
+          type="text" inputMode="numeric" placeholder="MM" maxLength={2}
+          value={toParts.month}
+          onChange={e => {
+            const month = digitsOnly(e.target.value, 2);
+            setToParts(p => ({ ...p, month }));
+            if (month.length === 2) focusAndSelect(toYearRef.current);
+          }}
+          onKeyDown={e => { backspaceToPrev(e, toParts.month, toDayRef); handleEnter(e); }}
+          aria-label="To month" aria-invalid={toInvalid}
+          style={{ ...segStyle, width: SEG_WIDTH_DD_MM }}
+        />
+        <span style={sepStyle}>-</span>
+        <input
+          ref={toYearRef}
+          type="text" inputMode="numeric" placeholder="YYYY" maxLength={4}
+          value={toParts.year}
+          onChange={e => setToParts(p => ({ ...p, year: digitsOnly(e.target.value, 4) }))}
+          onKeyDown={e => { backspaceToPrev(e, toParts.year, toMonthRef); handleEnter(e); }}
+          aria-label="To year" aria-invalid={toInvalid}
+          style={{ ...segStyle, width: SEG_WIDTH_YYYY }}
+        />
+        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, flexShrink: 0 }}>
+          <CalendarIcon size={13} aria-hidden="true" style={{ color: 'var(--txt-dim)', pointerEvents: 'none' }} />
+          <input
+            type="date" min={MIN_ISO_DATE} max={todayIsoLocal()}
+            value={to}
+            onChange={e => handlePickerChange('to', e)}
+            tabIndex={-1}
+            aria-label="Pick To date from calendar"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }}
+          />
         </div>
-        <input
-          type="date" min={MIN_ISO_DATE} max={todayIsoLocal()}
-          value={to}
-          onChange={e => handlePickerChange('to', e)}
-          tabIndex={-1}
-          aria-label="Pick To date from calendar"
-          style={{ position: 'absolute', right: 0, top: 0, width: 24, height: '100%', opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }}
-        />
       </div>
       {dateError && (
         <span role="alert" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--risk)' }}>
@@ -387,11 +587,6 @@ interface Filters {
   employeeId: string;
   teamManagerId: string;
   client: string;
-}
-
-function firstDayOfMonthISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
 function FilterBar({ filters, onChange, onDateStatusChange }: {
@@ -480,25 +675,32 @@ function FilterBar({ filters, onChange, onDateStatusChange }: {
 type ProjectSortKey = 'projectName' | 'plannedHours' | 'actualHours' | 'variance' | 'utilizationPct';
 
 function ProjectUtilizationTable({ rows }: { rows: ProjectUtilizationRowDto[] }) {
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [sort, setSort] = useState<{ key: ProjectSortKey; dir: SortDir }>({ key: 'projectName', dir: 'asc' });
 
   function toggle(key: ProjectSortKey) {
     setSort(prev => (prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
   }
 
-  const sorted = useMemo(() => {
-    const copy = [...rows];
+  const filtered = useMemo(() => {
+    const term = debouncedSearch.trim().toLowerCase();
+    const base = term === '' ? rows : rows.filter(r => r.projectName.toLowerCase().includes(term));
+    const copy = [...base];
     copy.sort((a, b) => {
       const va = a[sort.key], vb = b[sort.key];
       const cmp = typeof va === 'string' ? va.localeCompare(vb as string) : (va as number) - (vb as number);
       return sort.dir === 'asc' ? cmp : -cmp;
     });
     return copy;
-  }, [rows, sort]);
+  }, [rows, debouncedSearch, sort]);
 
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
-      <SectionHeader title="Project-wise Utilization" subtitle="Planned vs. actual hours logged, per project" />
+      <SectionHeaderWithSearch
+        title="Project-wise Utilization" subtitle="Planned vs. actual hours logged, per project"
+        search={search} onSearchChange={setSearch} placeholder="Search project..."
+      />
       {rows.length === 0 ? (
         <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No data for the selected filters.</div>
       ) : (
@@ -514,7 +716,7 @@ function ProjectUtilizationTable({ rows }: { rows: ProjectUtilizationRowDto[] })
               </tr>
             </thead>
             <tbody>
-              {sorted.map(r => (
+              {filtered.map(r => (
                 <tr key={r.projectId}>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{r.projectName}</td>
                   <td style={tdStyle}>{fmtHours(r.plannedHours)}</td>
@@ -525,6 +727,9 @@ function ProjectUtilizationTable({ rows }: { rows: ProjectUtilizationRowDto[] })
                   <td style={{ ...tdStyle, color: utilColor(r.utilizationPct), fontWeight: 600 }}>{fmtPct(r.utilizationPct)}</td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={5} style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No project matches your search.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -560,20 +765,10 @@ function ResourceUtilizationTable({ rows }: { rows: ResourceUtilizationRowDto[] 
 
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>Resource Utilization</div>
-          <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 2 }}>Per-employee allocation vs. logged hours</div>
-        </div>
-        <input
-          type="search"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search employee"
-          aria-label="Search employee"
-          style={{ ...inputStyle, width: 200, fontWeight: 400 }}
-        />
-      </div>
+      <SectionHeaderWithSearch
+        title="Resource Utilization" subtitle="Per-employee allocation vs. logged hours"
+        search={search} onSearchChange={setSearch}
+      />
       {rows.length === 0 ? (
         <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No data for the selected filters.</div>
       ) : (
@@ -612,9 +807,20 @@ function ResourceUtilizationTable({ rows }: { rows: ResourceUtilizationRowDto[] 
 // ── missing EOD table ────────────────────────────────────────────────────────────
 
 function MissingEodTable({ rows }: { rows: MissingEodRowDto[] }) {
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
+
+  const filtered = useMemo(() => {
+    const term = debouncedSearch.trim().toLowerCase();
+    return term === '' ? rows : rows.filter(r => r.employeeName.toLowerCase().includes(term));
+  }, [rows, debouncedSearch]);
+
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
-      <SectionHeader title="Missing EOD Submission Breakdown" subtitle="Working days in range with no submitted/approved EOD" />
+      <SectionHeaderWithSearch
+        title="Missing EOD Submission Breakdown" subtitle="Working days in range with no submitted/approved EOD"
+        search={search} onSearchChange={setSearch}
+      />
       {rows.length === 0 ? (
         <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No missing submissions in this range.</div>
       ) : (
@@ -631,7 +837,7 @@ function MissingEodTable({ rows }: { rows: MissingEodRowDto[] }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => {
+              {filtered.map(r => {
                 const cfg = MISSING_STATUS_CFG[r.status];
                 return (
                   <tr key={r.employeeId}>
@@ -644,6 +850,9 @@ function MissingEodTable({ rows }: { rows: MissingEodRowDto[] }) {
                   </tr>
                 );
               })}
+              {filtered.length === 0 && (
+                <tr><td colSpan={6} style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No employee matches your search.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -657,13 +866,18 @@ function MissingEodTable({ rows }: { rows: MissingEodRowDto[] }) {
 export default function ProjectDashboard() {
   // Recharts measures axis width in JS, so this one can't be done in CSS.
   const isPhone = useIsPhone();
+  // From/To default to the 1st of the current month through today, computed fresh off the
+  // real local date (never a fixed month/year) — and are never persisted to storage, so this
+  // plain useState re-derives that same default on every fresh mount, including the one that
+  // follows a logout/login (the protected route tree unmounts entirely on logout). Any custom
+  // dates a user picks live only in this instance's state and vanish with it — the next login,
+  // by the same user or a different one, always starts from this computed default again.
   const [filters, setFilters] = useState<Filters>({
-    from: firstDayOfMonthISO(),
-    to: todayISO(),
+    from: firstDayOfMonthIsoLocal(), to: todayIsoLocal(),
     projectId: '', employeeId: '', teamManagerId: '', client: '',
   });
-  // Gates whether the dashboard shows data at all — see DateRangeFilter above. Starts
-  // 'ready' since the initial from/to are already a valid, backend-default-matching range.
+  // Gates whether the dashboard shows data at all — see DateRangeFilter above. Starts 'ready'
+  // since the initial From+To pair is already a valid, complete range.
   const [dateFilterStatus, setDateFilterStatus] = useState<DateRangeStatus>('ready');
 
   const { data, isPending, isError, refetch } = useProjectDashboardSummary({
@@ -771,6 +985,7 @@ export default function ProjectDashboard() {
                 <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} unit="h" />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: 'var(--txt-mut)' }} width={90} />
                 <Tooltip
+                  cursor={false}
                   contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }}
                   formatter={((value: number, _name: string, item: { payload: { pct: number } }) =>
                     [`${value.toFixed(1)}h (${item.payload.pct.toFixed(1)}%)`, 'Hours']) as never}
@@ -794,7 +1009,7 @@ export default function ProjectDashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} interval={0} angle={-15} textAnchor="end" height={50} />
                   <YAxis tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} unit="h" />
-                  <Tooltip contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }} />
+                  <Tooltip cursor={false} contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="Planned" fill="var(--info)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                   <Bar dataKey="Actual" fill="var(--ok)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
@@ -818,7 +1033,7 @@ export default function ProjectDashboard() {
                 {/* 140px of category labels leaves only ~160px for the bars on a
                     phone, so give the labels less and the data more down there. */}
                 <YAxis type="category" dataKey="name" tick={{ fontSize: isPhone ? 10 : 12, fill: 'var(--txt-mut)' }} width={isPhone ? 84 : 140} />
-                <Tooltip contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }} formatter={((v: number) => [`${v.toFixed(1)}h`, 'Hours']) as never} />
+                <Tooltip cursor={false} contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }} formatter={((v: number) => [`${v.toFixed(1)}h`, 'Hours']) as never} />
                 <Bar dataKey="hours" fill="var(--info)" radius={[0, 4, 4, 0]} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>

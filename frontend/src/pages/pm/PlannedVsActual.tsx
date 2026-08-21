@@ -754,6 +754,7 @@ function PageContent({ data }: { data: { cards: import('../../api/plannedVsActua
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} interval={0} angle={-15} textAnchor="end" height={50} />
                 <YAxis tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} unit="%" />
                 <Tooltip
+                  cursor={false}
                   contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }}
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
@@ -794,6 +795,7 @@ function PageContent({ data }: { data: { cards: import('../../api/plannedVsActua
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} interval={0} angle={-15} textAnchor="end" height={50} />
                 <YAxis tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} unit="h" />
                 <Tooltip
+                  cursor={false}
                   contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }}
                   formatter={((value: number) => [`${value.toFixed(1)}h`, undefined]) as never}
                 />

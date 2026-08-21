@@ -74,6 +74,23 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
                                      @Param("openEnded") LocalDate openEnded,
                                      @Param("excludeId") Long excludeId);
 
+    /**
+     * Same overlap idiom as {@link #findOverlapping}, but across every project the employee holds
+     * rather than one specific project — the pool that a "total allocation cannot exceed 100%"
+     * check has to sum. Deliberately excludes only {@code excludeId} (the row being edited, or -1
+     * on create), not by project, since a capacity ceiling applies to the employee as a whole.
+     */
+    @Query("SELECT a FROM Allocation a " +
+           "WHERE a.employee.id = :employeeId " +
+           "AND a.id <> :excludeId " +
+           "AND a.effectiveFrom <= :newTo " +
+           "AND COALESCE(a.effectiveTo, :openEnded) >= :newFrom")
+    List<Allocation> findOverlappingForEmployee(@Param("employeeId") Long employeeId,
+                                                @Param("newFrom") LocalDate newFrom,
+                                                @Param("newTo") LocalDate newTo,
+                                                @Param("openEnded") LocalDate openEnded,
+                                                @Param("excludeId") Long excludeId);
+
     // Project Dashboard: every allocation on one of a PM's projects whose effective window
     // overlaps the requested date range, with employee+project JOIN FETCHed to avoid N+1.
     @Query("SELECT a FROM Allocation a JOIN FETCH a.employee JOIN FETCH a.project " +

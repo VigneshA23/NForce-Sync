@@ -6,6 +6,8 @@ import com.nforceone.sync.project.dto.AllocationDto;
 import com.nforceone.sync.project.dto.CreateAllocationRequest;
 import com.nforceone.sync.project.dto.EmployeeRefDto;
 import com.nforceone.sync.project.dto.UpdateAllocationRequest;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,9 @@ public class AllocationService {
     private final AllocationRepository allocationRepository;
     private final ProjectRepository projectRepository;
     private final AppUserRepository appUserRepository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public AllocationService(AllocationRepository allocationRepository,
                              ProjectRepository projectRepository,
@@ -74,8 +79,15 @@ public class AllocationService {
         Project project = projectRepository.findById(req.projectId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
 
+        requirePctValid(req.allocationPct());
         requireDateOrder(req.effectiveFrom(), req.effectiveTo());
+        // Serializes create/update for this employee for the rest of the transaction, so two
+        // concurrent requests can never both read the same "current total" and both pass the
+        // capacity check below — see requireWithinCapacity's javadoc.
+        lockEmployeeAllocations(employee.getId());
         requireNoOverlap(employee, project, req.effectiveFrom(), req.effectiveTo(), NOTHING_TO_EXCLUDE);
+        requireWithinCapacity(employee, req.effectiveFrom(), req.effectiveTo(),
+                req.allocationPct(), NOTHING_TO_EXCLUDE);
 
         Allocation allocation = new Allocation();
         allocation.setEmployee(employee);
@@ -96,11 +108,15 @@ public class AllocationService {
         Allocation allocation = allocationRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Allocation not found"));
 
+        requirePctValid(req.allocationPct());
         requireDateOrder(req.effectiveFrom(), req.effectiveTo());
+        lockEmployeeAllocations(allocation.getEmployee().getId());
         // Excludes itself, so re-sending a row's own dates is not a conflict with itself. The
         // employee and project come from the row because this endpoint never reassigns them.
         requireNoOverlap(allocation.getEmployee(), allocation.getProject(),
                 req.effectiveFrom(), req.effectiveTo(), allocation.getId());
+        requireWithinCapacity(allocation.getEmployee(), req.effectiveFrom(), req.effectiveTo(),
+                req.allocationPct(), allocation.getId());
 
         allocation.setEffectiveFrom(req.effectiveFrom());
         allocation.setEffectiveTo(req.effectiveTo());
@@ -121,6 +137,63 @@ public class AllocationService {
         if (effectiveTo != null && effectiveTo.isBefore(effectiveFrom)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Effective To cannot be earlier than Effective From");
+        }
+    }
+
+    /**
+     * Capacity share must be a whole multiple of 10 between 10 and 100. Enforced here rather than
+     * with {@code @Min}/{@code @Max} on the request records so every rejection — bounds or
+     * multiple-of-10 alike — reads as the same one message, and so the same rule applies
+     * identically to a direct API call as to the form (bean validation alone cannot express
+     * "multiple of 10" without a custom constraint annotation this codebase doesn't otherwise need).
+     */
+    private void requirePctValid(Integer allocationPct) {
+        if (allocationPct == null || allocationPct < 10 || allocationPct > 100 || allocationPct % 10 != 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Allocation must be between 10% and 100% and must be a multiple of 10.");
+        }
+    }
+
+    /**
+     * Serializes every create/update for one employee for the remainder of this transaction, via a
+     * Postgres transaction-scoped advisory lock (auto-released on commit/rollback — never leaked).
+     *
+     * <p>{@link #requireWithinCapacity} is a read-then-decide check: without this lock, two
+     * concurrent requests for the same employee (e.g. two different PMs, or one submitted twice)
+     * could each read the same pre-update total, each individually pass, and together push the
+     * employee over 100% — the DB has no row to lock yet for a brand-new allocation, and no CHECK
+     * constraint can express "the SUM of these rows" across rows. Locking on the employee id closes
+     * that window for both create (nothing to lock via the row itself) and update alike.
+     */
+    private void lockEmployeeAllocations(Long employeeId) {
+        entityManager.createNativeQuery("SELECT pg_advisory_xact_lock(:id)")
+                .setParameter("id", employeeId)
+                .getSingleResult();
+    }
+
+    /**
+     * An employee's allocation percentages, summed across every allocation (any project) whose
+     * window overlaps the one being created/edited, must never exceed 100 once the new/edited share
+     * is added. Only allocations that actually overlap the requested window count toward this — a
+     * since-ended or not-yet-started allocation on some other project does not compete for the same
+     * capacity, matching the same date-overlap idiom {@link #requireNoOverlap} already uses.
+     *
+     * <p>On edit, {@code excludeId} drops the row being edited from "existing" — it is being
+     * replaced by {@code newPct}, not stacked on top of itself.
+     */
+    private void requireWithinCapacity(AppUser employee, LocalDate effectiveFrom, LocalDate effectiveTo,
+                                       int newPct, Long excludeId) {
+        List<Allocation> overlapping = allocationRepository.findOverlappingForEmployee(
+                employee.getId(), effectiveFrom,
+                effectiveTo != null ? effectiveTo : Allocation.OPEN_ENDED,
+                Allocation.OPEN_ENDED, excludeId);
+        int existingTotal = overlapping.stream().mapToInt(Allocation::getAllocationPct).sum();
+        int total = existingTotal + newPct;
+        if (total > 100) {
+            int available = Math.max(0, 100 - existingTotal);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Cannot allocate %d%%. %s already has %d%% allocated for this period — only %d%% is available."
+                            .formatted(newPct, employee.getFullName(), existingTotal, available));
         }
     }
 
