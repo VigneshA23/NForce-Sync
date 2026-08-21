@@ -266,6 +266,15 @@ function windowsOverlap(aFrom: string, aTo: string | null, bFrom: string, bTo: s
   return aFrom <= (bTo || OPEN_ENDED_ISO) && (aTo || OPEN_ENDED_ISO) >= bFrom;
 }
 
+/** The only allocation % values the form accepts — multiples of 10 from 10 through 100. */
+const ALLOCATION_PCT_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+/** Mirrors AllocationService.requirePctValid — kept as a single source so the "which values are
+ * even offered" list and "is this value valid" check can never drift apart. */
+function isValidAllocationPct(pct: number | null): pct is number {
+  return pct !== null && Number.isInteger(pct) && pct >= 10 && pct <= 100 && pct % 10 === 0;
+}
+
 /** Shared wording for the clash message, so both allocation modals read identically. */
 function describeClash(a: AllocationDto): string {
   const window = a.effectiveTo
@@ -956,7 +965,7 @@ function AllocationModal({ open, onClose, projects }: {
   const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
   const dateFormatInvalid = effectiveFromInvalid || effectiveToInvalid;
   const pctNum = allocationPct === '' ? null : Number(allocationPct);
-  const badPct = pctNum !== null && (!Number.isInteger(pctNum) || pctNum < 1 || pctNum > 100);
+  const badPct = pctNum !== null && !isValidAllocationPct(pctNum);
 
   // Tells the PM the person is already on this project before they submit. The server repeats the
   // check and is the authority — this only saves a round trip.
@@ -974,6 +983,10 @@ function AllocationModal({ open, onClose, projects }: {
     if (!employeeId || !effectiveFrom || badDateOrder) return 0;
     return overlappingAllocationTotal(allAllocations ?? [], Number(employeeId), effectiveFrom, effectiveTo || null);
   }, [allAllocations, employeeId, effectiveFrom, effectiveTo, badDateOrder]);
+
+  // Mirrors AllocationService.requireWithinCapacity — advisory here (the server enforces it), but
+  // blocking submission client-side saves a round trip for the by-far most common case.
+  const wouldExceedCapacity = pctNum !== null && currentAllocationTotal + pctNum > 100;
 
   // Only ACTIVE projects are allocatable — you cannot staff someone onto work that is
   // completed, on hold, or inactive. It would also be invisible to them: the EOD Project
@@ -997,7 +1010,7 @@ function AllocationModal({ open, onClose, projects }: {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!employeeId || !projectId || !effectiveFrom || badDateOrder || dateFormatInvalid
-      || clash || pctNum === null || badPct) return;
+      || clash || pctNum === null || badPct || wouldExceedCapacity) return;
     setError(null);
     try {
       await createMutation.mutateAsync({
@@ -1087,24 +1100,32 @@ function AllocationModal({ open, onClose, projects }: {
 
         <div style={{ marginBottom: 14 }}>
           <label style={labelStyle}>Allocation % *</label>
-          <input
-            type="number" min={1} max={100} step={1} style={{ ...inputStyle, width: 140 }}
+          <select
+            style={{ ...inputStyle, width: 140 }}
             value={allocationPct}
-            placeholder="e.g. 60"
             onChange={e => setAllocationPct(e.target.value)}
-          />
+          >
+            <option value="">Select %…</option>
+            {ALLOCATION_PCT_OPTIONS.map(pct => <option key={pct} value={pct}>{pct}%</option>)}
+          </select>
           <p style={{ fontSize: 11, color: 'var(--txt-dim)', margin: '5px 0 0' }}>
             Share of the employee's available capacity planned for this project.
           </p>
           {badPct && (
             <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>
-              Allocation % must be a whole number between 1 and 100.
+              Allocation must be between 10% and 100% and must be a multiple of 10.
             </p>
           )}
         </div>
 
         {employeeId && effectiveFrom && !badDateOrder && (
           <AllocationTotalSummary current={currentAllocationTotal} incoming={pctNum ?? 0} />
+        )}
+        {wouldExceedCapacity && (
+          <p style={{ fontSize: 11, color: 'var(--risk)', margin: '0 0 14px' }} role="alert">
+            Cannot allocate {pctNum}%. This employee has only {Math.max(0, 100 - currentAllocationTotal)}%
+            {' '}allocation capacity remaining for this period.
+          </p>
         )}
 
         {clash && (
@@ -1117,7 +1138,7 @@ function AllocationModal({ open, onClose, projects }: {
             type="submit"
             disabled={createMutation.isPending || !employeeId || !projectId
               || !effectiveFrom || badDateOrder || dateFormatInvalid
-              || clash != null || pctNum === null || badPct}
+              || clash != null || pctNum === null || badPct || wouldExceedCapacity}
             style={{
               padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
               color: '#fff', fontSize: 13, fontWeight: 600,
@@ -1163,7 +1184,7 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
   const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
   const dateFormatInvalid = effectiveFromInvalid || effectiveToInvalid;
   const pctNum = allocationPct === '' ? null : Number(allocationPct);
-  const badPct = pctNum !== null && (!Number.isInteger(pctNum) || pctNum < 1 || pctNum > 100);
+  const badPct = pctNum !== null && !isValidAllocationPct(pctNum);
 
   // Widening a window can collide with another allocation of the same pair. Excludes this row, so
   // re-saving its own dates is never a conflict with itself.
@@ -1184,10 +1205,14 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
       allAllocations ?? [], allocation.employeeId, effectiveFrom, effectiveTo || null, allocation.id);
   }, [allAllocations, allocation, effectiveFrom, effectiveTo, badDateOrder]);
 
+  // Mirrors AllocationService.requireWithinCapacity — advisory here (the server enforces it), but
+  // blocking submission client-side saves a round trip for the by-far most common case.
+  const wouldExceedCapacity = pctNum !== null && currentAllocationTotal + pctNum > 100;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!allocation || !effectiveFrom || badDateOrder || dateFormatInvalid
-      || clash || pctNum === null || badPct) return;
+      || clash || pctNum === null || badPct || wouldExceedCapacity) return;
     setError(null);
     try {
       await updateMutation.mutateAsync({
@@ -1275,20 +1300,29 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
 
           <div style={{ marginBottom: 14 }}>
             <label style={labelStyle}>Allocation % *</label>
-            <input
-              type="number" min={1} max={100} step={1} style={{ ...inputStyle, width: 140 }}
+            <select
+              style={{ ...inputStyle, width: 140 }}
               value={allocationPct}
               onChange={e => setAllocationPct(e.target.value)}
-            />
+            >
+              <option value="">Select %…</option>
+              {ALLOCATION_PCT_OPTIONS.map(pct => <option key={pct} value={pct}>{pct}%</option>)}
+            </select>
             {badPct && (
               <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>
-                Allocation % must be a whole number between 1 and 100.
+                Allocation must be between 10% and 100% and must be a multiple of 10.
               </p>
             )}
           </div>
 
           {effectiveFrom && !badDateOrder && (
             <AllocationTotalSummary current={currentAllocationTotal} incoming={pctNum ?? 0} />
+          )}
+          {wouldExceedCapacity && (
+            <p style={{ fontSize: 11, color: 'var(--risk)', margin: '0 0 14px' }} role="alert">
+              Cannot allocate {pctNum}%. This employee has only {Math.max(0, 100 - currentAllocationTotal)}%
+              {' '}allocation capacity remaining for this period.
+            </p>
           )}
 
           {clash && (
@@ -1301,7 +1335,7 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
             <button
               type="submit"
               disabled={updateMutation.isPending || !effectiveFrom || badDateOrder || dateFormatInvalid
-                || clash != null || pctNum === null || badPct}
+                || clash != null || pctNum === null || badPct || wouldExceedCapacity}
               style={{
                 padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
                 color: '#fff', fontSize: 13, fontWeight: 600,
