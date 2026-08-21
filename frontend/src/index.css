@@ -150,6 +150,25 @@ body {
   border-radius: 3px;
 }
 
+/* ─── Chart focus ring suppression (recharts) ───────────────────── */
+/* Recharts renders its chart root <svg class="recharts-surface"> (and, for
+ * Pie charts, an inner <g class="recharts-pie">) with tabIndex/role set by
+ * its built-in accessibility layer, which is on by default for every chart
+ * type used in this app. That makes the *:focus-visible rule above draw a
+ * rectangular ring around the chart's square bounding box on click/focus —
+ * a stray rectangle around what is visually a donut, bar, or line shape.
+ * Scoped to .recharts-wrapper (the container recharts' ResponsiveContainer
+ * always renders) so this never touches focus rings on real interactive
+ * controls (buttons, links, inputs, tabs, etc.) elsewhere in the app; the
+ * elements remain focusable/keyboard-navigable, only the visual ring is
+ * removed. */
+.recharts-wrapper svg:focus,
+.recharts-wrapper svg:focus-visible,
+.recharts-wrapper [tabindex]:focus,
+.recharts-wrapper [tabindex]:focus-visible {
+  outline: none;
+}
+
 /* ─── Tabular numbers for data columns ────────────────────────── */
 .font-mono {
   font-variant-numeric: tabular-nums;

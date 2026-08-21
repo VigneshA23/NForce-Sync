@@ -8,7 +8,7 @@ import type { ProjectFullDto } from '../../api/projects';
 // same components/styles instead of duplicating them. Team Lead-only concerns (category
 // management, project details' assigned-employees roster) stay in pages/lead/MyProjects.tsx.
 
-export type ProjectStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ON_HOLD';
+export type ProjectStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ON_HOLD' | 'COMPLETED';
 
 export const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -270,6 +270,7 @@ export function ProjectsPanel({
               { value: 'ACTIVE', label: 'Active' },
               { value: 'INACTIVE', label: 'Inactive' },
               { value: 'ON_HOLD', label: 'On Hold' },
+              { value: 'COMPLETED', label: 'Completed' },
             ]}
           />
         </div>
