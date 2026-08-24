@@ -636,6 +636,17 @@ public class EodService {
         if (task.getProject() != null && !ProjectDto.billableAllowed(task.getProject())) {
             task.setIsBillable(Boolean.FALSE);
         }
+
+        // The billable value above is authoritative — it is derived from the project's billing
+        // eligibility, not guessed — so it counts as decided from the moment the task is saved.
+        //
+        // It used to default to FALSE, which meant the approval gate (isEntryFullyDecided) treated
+        // every fresh submission as undecided while the reviewer's checkbox rendered isBillable and
+        // showed it already ticked. Approve was disabled with "Set Billable on every eligible task"
+        // against a task that looked answered, and the only way through was to click the box twice
+        // to land back on the same value. The reviewer can still override the value; what is no
+        // longer required is re-confirming one that was never in question.
+        task.setBillableDecided(Boolean.TRUE);
         return task;
     }
 
