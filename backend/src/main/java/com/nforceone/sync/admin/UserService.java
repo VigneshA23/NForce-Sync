@@ -253,12 +253,16 @@ public class UserService {
         }
     }
 
-    // Enforces the org's reporting hierarchy (Project Manager -> Team Lead -> Employee):
-    // an Employee's reporting manager must be a Team Lead, and a Team Lead's must be a
-    // Project Manager. Other roles have no reporting-manager restriction here.
+    // Enforces the org's reporting hierarchy (Super Admin -> Project Manager -> Team Lead
+    // -> Employee, with HR Admin also reporting to Super Admin): an Employee's reporting
+    // manager must be a Team Lead, a Team Lead's must be a Project Manager, and a Project
+    // Manager's or HR Admin's must be a Super Admin. Other roles have no reporting-manager
+    // restriction here.
     private static final Map<AppUser.Role, AppUser.Role> REQUIRED_MANAGER_ROLE = Map.of(
             AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER,
-            AppUser.Role.MANAGER,  AppUser.Role.PM
+            AppUser.Role.MANAGER,  AppUser.Role.PM,
+            AppUser.Role.PM,       AppUser.Role.SUPERADMIN,
+            AppUser.Role.HR,       AppUser.Role.SUPERADMIN
     );
 
     private void requireValidReportingManagerRole(AppUser.Role role, AppUser manager) {

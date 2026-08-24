@@ -835,7 +835,7 @@ function BlockersPanel({ tasks, onSelect }: { tasks: BlockedTask[]; onSelect: (t
                 {t.description}
               </div>
               {t.blockerReason && (
-                <div style={{ fontSize: 10, color: 'var(--txt-mut)', fontStyle: 'italic', lineHeight: 1.4, marginBottom: 3 }}>
+                <div style={{ fontSize: 10, color: 'var(--txt-mut)', lineHeight: 1.4, marginBottom: 3 }}>
                   {t.blockerReason}
                 </div>
               )}

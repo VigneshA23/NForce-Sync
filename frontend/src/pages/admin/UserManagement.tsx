@@ -54,11 +54,14 @@ const WORK_MODES = [
 ];
 
 // Mirrors the backend hierarchy (UserService.REQUIRED_MANAGER_ROLE): an Employee's
-// Reporting Manager must be a Team Lead, a Team Lead's must be a Project Manager.
+// Reporting Manager must be a Team Lead, a Team Lead's must be a Project Manager,
+// a Project Manager's and an HR Admin's must be a Super Admin.
 // Roles not listed here keep the prior behavior (Team Leads offered as the option).
 const REPORTING_MANAGER_ROLE_FOR: Record<string, string> = {
   EMPLOYEE: 'MANAGER',
   MANAGER: 'PM',
+  PM: 'SUPERADMIN',
+  HR: 'SUPERADMIN',
 };
 
 function reportingManagerRoleFilter(role: string): string {
