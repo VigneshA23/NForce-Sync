@@ -80,6 +80,16 @@ public class ProfileController {
         return buildDto(user);
     }
 
+    /** Clears the photo, returning the caller to their initials avatar. Idempotent. */
+    @DeleteMapping("/photo")
+    @Transactional
+    public ProfileDto deletePhoto() {
+        AppUser user = requireCurrentUser();
+        user.setPhotoData(null);
+        userRepository.save(user);
+        return buildDto(user);
+    }
+
     private AppUser requireCurrentUser() {
         String email = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return userRepository.findByEmailAndDeletedAtIsNull(email)

@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Camera, Lock, Shield, Loader2, AlertCircle } from 'lucide-react';
-import { fetchProfile, updateProfile, uploadPhoto, type ProfileDto, type UpdateProfilePayload } from '../api/profile';
+import { Camera, Lock, Shield, Loader2, AlertCircle, Trash2 } from 'lucide-react';
+import { fetchProfile, updateProfile, uploadPhoto, deletePhoto, type ProfileDto, type UpdateProfilePayload } from '../api/profile';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
+import { Modal } from '../components/Modal';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,7 @@ export default function Profile() {
   const [editing, setEditing] = useState(false);
   const [form, setForm]       = useState<UpdateProfilePayload>({});
   const [uploading, setUploading] = useState(false);
+  const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
 
   // Query key includes user email to prevent stale cache across login sessions
   const { data: profile, isLoading, error } = useQuery<ProfileDto>({
@@ -165,6 +167,21 @@ export default function Profile() {
     }
   }
 
+  // Writes the same ['profile', email] cache entry the upload path does, which is what the
+  // Shell's avatars read — so the header, dropdown and sidebar drop back to initials at once.
+  async function handlePhotoRemove() {
+    setUploading(true);
+    try {
+      const updated = await deletePhoto();
+      qc.setQueryData(['profile', authUser?.email], updated);
+      showToast('success', 'Photo removed');
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Could not remove photo');
+    } finally {
+      setUploading(false);
+    }
+  }
+
   function field(key: keyof UpdateProfilePayload) {
     return String(form[key] ?? '');
   }
@@ -210,32 +227,29 @@ export default function Profile() {
 
       {/* Avatar + identity card */}
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20 }}>
-        {/* Avatar */}
+        {/* Avatar — the card carries no photo controls of its own. Clicking it opens the viewer
+            below, which is where uploading and removing live, so the identity card stays clean
+            and the two actions sit next to a picture big enough to actually judge. */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
-          {profile.photoDataUrl ? (
-            <img src={profile.photoDataUrl} alt="Profile" style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--line2)' }} />
-          ) : (
-            <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--brand)', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 22, fontWeight: 700, border: '2px solid rgba(177,17,22,.4)', fontFamily: '"Space Grotesk", sans-serif' }}>
-              {initials}
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => setPhotoViewerOpen(true)}
+            aria-label={profile.photoDataUrl ? 'View profile photo' : 'Add a profile photo'}
+            title={profile.photoDataUrl ? 'View profile photo' : 'Add a profile photo'}
+            style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer', display: 'block', borderRadius: '50%' }}
+          >
+            {profile.photoDataUrl ? (
+              <img src={profile.photoDataUrl} alt="Profile" style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--line2)', display: 'block' }} />
+            ) : (
+              <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--brand)', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 22, fontWeight: 700, border: '2px solid rgba(177,17,22,.4)', fontFamily: '"Space Grotesk", sans-serif' }}>
+                {initials}
+              </div>
+            )}
+          </button>
           {uploading && (
             <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,.5)', display: 'grid', placeItems: 'center' }}>
               <Loader2 size={16} color="#fff" style={{ animation: 'spin 1s linear infinite' }} />
             </div>
-          )}
-          {profile.hasEmployeeRecord && (
-            <>
-              <button
-                onClick={() => photoInputRef.current?.click()}
-                disabled={uploading}
-                aria-label="Change photo"
-                style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: '50%', background: 'var(--brand)', border: '2px solid var(--panel)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}
-              >
-                <Camera size={11} color="#fff" aria-hidden />
-              </button>
-              <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
-            </>
           )}
         </div>
 
@@ -384,6 +398,76 @@ export default function Profile() {
           </span>
         </div>
       </div>
+
+      {/* Photo viewer — opened by clicking the avatar. Shows the picture large enough to judge,
+          and is the only place upload/remove live, so the identity card stays uncluttered. */}
+      <Modal
+        open={photoViewerOpen}
+        title="Profile photo"
+        onClose={() => setPhotoViewerOpen(false)}
+        footer={
+          // Own flex row rather than relying on Modal's footer: that one has no wrapping, and
+          // three buttons would squeeze off the edge of a narrow phone.
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-end', width: '100%' }}>
+            <button
+              onClick={() => setPhotoViewerOpen(false)}
+              style={{ padding: '7px 14px', background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 6, fontSize: 12.5, color: 'var(--txt-mut)', cursor: 'pointer' }}
+            >
+              Close
+            </button>
+            {profile.hasEmployeeRecord && profile.photoDataUrl && (
+              <button
+                onClick={handlePhotoRemove}
+                disabled={uploading}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'transparent', border: '1px solid rgba(228,55,61,.4)', borderRadius: 6, fontSize: 12.5, fontWeight: 600, color: 'var(--risk)', cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? .6 : 1 }}
+              >
+                <Trash2 size={13} aria-hidden />
+                Delete image
+              </button>
+            )}
+            {profile.hasEmployeeRecord && (
+              <button
+                onClick={() => photoInputRef.current?.click()}
+                disabled={uploading}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', background: 'var(--brand)', border: 'none', borderRadius: 6, fontSize: 12.5, fontWeight: 600, color: '#fff', cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? .7 : 1 }}
+              >
+                {uploading ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Camera size={13} aria-hidden />}
+                {uploading ? 'Working…' : profile.photoDataUrl ? 'Change image' : 'Upload image'}
+              </button>
+            )}
+          </div>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+          {/* Scales with the viewport so it stays large on a desktop and never overflows a
+              narrow phone — the modal itself is already min(440px, 100%). */}
+          <div style={{ position: 'relative', width: 'clamp(150px, 55vw, 240px)', aspectRatio: '1 / 1' }}>
+            {profile.photoDataUrl ? (
+              <img
+                src={profile.photoDataUrl}
+                alt={`${profile.fullName}'s profile photo`}
+                style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--line2)', display: 'block' }}
+              />
+            ) : (
+              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'var(--brand)', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 'clamp(38px, 14vw, 64px)', fontWeight: 700, border: '3px solid rgba(177,17,22,.4)', fontFamily: '"Space Grotesk", sans-serif' }}>
+                {initials}
+              </div>
+            )}
+            {uploading && (
+              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,.5)', display: 'grid', placeItems: 'center' }}>
+                <Loader2 size={26} color="#fff" style={{ animation: 'spin 1s linear infinite' }} />
+              </div>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--txt-dim)', textAlign: 'center' }}>
+            {profile.hasEmployeeRecord
+              ? 'JPG or PNG, up to 2 MB.'
+              : 'Your account has no employee record, so the photo cannot be changed here.'}
+          </div>
+        </div>
+        {/* Lives inside the modal now — the identity card no longer carries photo controls. */}
+        <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
+      </Modal>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

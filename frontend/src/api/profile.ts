@@ -54,6 +54,12 @@ export async function updateProfile(payload: UpdateProfilePayload): Promise<Prof
   return data;
 }
 
+/** Clears the photo so the avatar falls back to initials. Returns the refreshed profile. */
+export async function deletePhoto(): Promise<ProfileDto> {
+  const { data } = await apiClient.delete<ProfileDto>("/profile/photo");
+  return data;
+}
+
 export async function uploadPhoto(file: File): Promise<ProfileDto> {
   const form = new FormData();
   form.append("file", file);

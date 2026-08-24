@@ -9,6 +9,7 @@ import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { NotAuthorized } from '../pages/NotAuthorized';
 import { searchUsers, listLocations } from '../api/admin';
+import { fetchProfile } from '../api/profile';
 import { toRole } from '../api/auth';
 import { useUnreadNotificationsCount } from '../api/notifications';
 import { usePendingApprovalsCount } from '../api/approvals';
@@ -20,6 +21,41 @@ import { todayISO } from '../lib/date';
 // ─── Workspace search (top nav) ────────────────────────────────────────────────
 // Only wired up for superadmin — the destination (User Management) and the
 // backend /users/search endpoint are both superadmin-only today.
+
+/**
+ * The signed-in user's uploaded photo, or null while they have none.
+ *
+ * Reads the SAME ['profile', email] query the Profile page owns, deliberately: uploading or
+ * removing a photo there writes that cache entry directly, so every avatar in the chrome swaps
+ * over in the same tick without a refetch or a page reload. The auth user in localStorage only
+ * carries initials — it is built from the login response and never sees a later upload, which is
+ * why the header kept showing "SG" after a photo was added.
+ */
+function useProfilePhoto(): string | null {
+  const { user } = useAuth();
+  const { data } = useQuery({
+    queryKey: ['profile', user?.email],
+    queryFn: fetchProfile,
+    staleTime: 300_000,
+    enabled: !!user,
+  });
+  return data?.photoDataUrl ?? null;
+}
+
+/**
+ * What goes inside an avatar circle. The circles differ in size and element type across the
+ * chrome, so this fills whatever it is dropped into rather than imposing its own dimensions.
+ */
+function AvatarContent({ photo, initials }: { photo: string | null; initials: string }) {
+  if (!photo) return <>{initials}</>;
+  return (
+    <img
+      src={photo}
+      alt=""
+      style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', display: 'block' }}
+    />
+  );
+}
 
 function WorkspaceSearch() {
   const navigate = useNavigate();
@@ -180,6 +216,7 @@ function WorkspaceSearch() {
 
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const { user } = useAuth();
+  const photo = useProfilePhoto();
   const location = useLocation();
 
   const role = user!.role;
@@ -389,7 +426,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
               fontFamily: 'Inter, sans-serif',
             }}
           >
-            {user!.initials}
+            <AvatarContent photo={photo} initials={user!.initials} />
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
@@ -426,6 +463,7 @@ export function Shell() {
   const profileRef = useRef<HTMLDivElement>(null);
 
   const { user, logout } = useAuth();
+  const photo = useProfilePhoto();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate  = useNavigate();
@@ -744,7 +782,7 @@ export function Shell() {
                     padding: 0,
                   }}
                 >
-                  {user!.initials}
+                  <AvatarContent photo={photo} initials={user!.initials} />
                 </button>
 
                 {/* Super Admin shield badge — sibling of button, outside its grid context */}
@@ -804,7 +842,7 @@ export function Shell() {
                         color: '#fff',
                         flexShrink: 0,
                       }}>
-                        {user!.initials}
+                        <AvatarContent photo={photo} initials={user!.initials} />
                       </span>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: '#E8EAED', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
