@@ -192,8 +192,13 @@ public class EodService {
         entry.setSubmittedAt(now);
         entry.setUpdatedAt(now);
         // Snapshot who manages the employee right now — this locks in who the entry stays
-        // visible to even if the employee is reassigned to a different manager afterward.
-        entry.setManagerId(employee.getManager() != null ? employee.getManager().getId() : null);
+        // visible/actionable to even if the employee is reassigned to a different manager
+        // afterward. Set once, on first submission, and never touched again: a resubmit after
+        // rejection must stay with whoever owned the original cycle, not re-snapshot to
+        // whoever currently manages the employee.
+        if (entry.getManagerId() == null) {
+            entry.setManagerId(employee.getManager() != null ? employee.getManager().getId() : null);
+        }
 
         return EodEntryDto.from(entryRepository.save(entry));
     }

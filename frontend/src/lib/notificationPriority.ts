@@ -50,6 +50,9 @@ const BASE_PRIORITY_BY_TYPE: Record<string, NotificationPriority> = {
   // ── Medium — attention needed, not urgent ──────────────────────────────
   ACCOUNT_CREATED: 'Medium',       // emitted today (UserService)
   PASSWORD_RESET: 'Medium',        // emitted today (UserService)
+  MANAGER_CHANGED: 'Medium',       // emitted today (UserService.updateUser)
+  TEAM_MEMBER_ADDED: 'Medium',     // emitted today (UserService.updateUser)
+  TEAM_MEMBER_REMOVED: 'Medium',   // emitted today (UserService.updateUser)
   EOD_REMINDER: 'Medium',          // not yet emitted — escalates to High if overdue, see below
   PROJECT_ASSIGNMENT: 'Medium',    // not yet emitted
   PROJECT_MILESTONE: 'Medium',     // not yet emitted — escalates near/at due date, see below

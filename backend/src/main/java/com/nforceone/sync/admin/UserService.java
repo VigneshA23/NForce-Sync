@@ -177,24 +177,67 @@ public class UserService {
             user.setWorkMode(request.workMode());
         }
 
+        AppUser oldManager = user.getManager();
+        AppUser newManager = null;
+
         if (request.managerId() != null) {
             if (request.managerId().equals(id)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "A user cannot be their own reporting manager");
             }
-            AppUser manager = userRepository.findById(request.managerId())
+            newManager = userRepository.findById(request.managerId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "Reporting manager not found"));
-            requireNoManagerCycle(id, manager);
-            requireValidReportingManagerRole(request.role(), manager);
-            user.setManager(manager);
+            requireNoManagerCycle(id, newManager);
+            requireValidReportingManagerRole(request.role(), newManager);
+            user.setManager(newManager);
         } else {
             user.setManager(null);
         }
 
         user = userRepository.save(user);
         writeAudit("APP_USER", user.getId(), "UPDATE", before, toJson(UserDto.from(user)), actor);
+
+        boolean managerChanged = !java.util.Objects.equals(
+                oldManager != null ? oldManager.getId() : null,
+                newManager != null ? newManager.getId() : null);
+        if (managerChanged) {
+            notifyManagerChanged(user, oldManager, newManager);
+        }
+
         return UserDto.from(user);
+    }
+
+    // Reporting-manager reassignment is always immediate — there's no scheduling, so the
+    // "effective date" is simply today. The old manager keeps approve/reject authority over
+    // EOD entries submitted before this change (see EodEntry.managerId snapshot); they're
+    // told so explicitly since it's easy to assume authority ends the moment the reassignment
+    // happens.
+    private void notifyManagerChanged(AppUser employee, AppUser oldManager, AppUser newManager) {
+        String today = com.nforceone.sync.notification.NotificationDates.format(java.time.LocalDate.now());
+        String oldManagerName = oldManager != null ? oldManager.getFullName() : "Unassigned";
+        String newManagerName = newManager != null ? newManager.getFullName() : "Unassigned";
+        String changeSummary = "Reporting Manager Changed: " + oldManagerName + " → " + newManagerName
+                + ". Effective Date: " + today + ".";
+
+        notificationService.send(employee.getId(), "MANAGER_CHANGED",
+                "Your reporting manager has changed",
+                changeSummary,
+                "/profile");
+
+        if (oldManager != null) {
+            notificationService.send(oldManager.getId(), "TEAM_MEMBER_REMOVED",
+                    employee.getFullName() + "'s reporting manager has changed",
+                    changeSummary + " You remain responsible for approving/rejecting EOD entries "
+                            + "submitted before this date.",
+                    "/team/approvals");
+        }
+        if (newManager != null) {
+            notificationService.send(newManager.getId(), "TEAM_MEMBER_ADDED",
+                    employee.getFullName() + " now reports to you",
+                    changeSummary,
+                    "/team/approvals");
+        }
     }
 
     // Walks the proposed manager's own reporting chain — if it leads back to `userId`,

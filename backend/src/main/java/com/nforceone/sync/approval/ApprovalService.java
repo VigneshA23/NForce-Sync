@@ -233,7 +233,7 @@ public class ApprovalService {
 
     private EodEntryEnrichment enrich(EodEntry entry, List<ApprovalAction> actions,
                                        int slaHours, BigDecimal standardHours, OffsetDateTime now) {
-        AppUser tl = entry.getEmployee().getManager();
+        AppUser tl = resolveManagerFromSnapshot(entry);
         // "Awaiting review again after having been sent back" — so it requires BOTH a prior
         // rejection AND the entry being back in SUBMITTED. A prior-rejection check alone is true
         // for an entry that is merely sitting rejected, which would label it as resubmitted on
@@ -322,7 +322,7 @@ public class ApprovalService {
     private void checkManagerAuthorization(AppUser actor, EodEntry entry) {
         if (actor.getRole() == AppUser.Role.SUPERADMIN) return;
 
-        AppUser manager = entry.getEmployee().getManager();
+        AppUser manager = resolveManagerFromSnapshot(entry);
         boolean isDirectManager = manager != null && manager.getId().equals(actor.getId());
 
         // Keys off projectManager, NOT pm — pm holds the project's Team Lead. Using pm here let a
@@ -340,6 +340,17 @@ public class ApprovalService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Only the employee's direct manager or a project manager on this entry can perform this action");
         }
+    }
+
+    // The manager who actually owns this entry's approval cycle — the manager_id snapshot
+    // taken at submission time, NOT the employee's current/live manager. Falls back to the
+    // employee's live manager for pre-snapshot entries (managerId == null, e.g. rows that
+    // predate V57 and were never resubmitted since).
+    private AppUser resolveManagerFromSnapshot(EodEntry entry) {
+        if (entry.getManagerId() != null) {
+            return userRepository.findById(entry.getManagerId()).orElse(null);
+        }
+        return entry.getEmployee().getManager();
     }
 
     /**
