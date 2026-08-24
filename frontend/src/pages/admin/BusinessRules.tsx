@@ -1111,15 +1111,15 @@ function ShiftFormModal({ state, onClose, onSubmit, isPending, error, fieldError
           <input id={nameId} type="text" placeholder="e.g. General" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} autoFocus />
           <FieldError msg={fieldErrors.name} />
         </div>
-        <div style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
-          <div style={{ flex: 1 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12, marginBottom: 4 }}>
+          <div style={{ minWidth: 0 }}>
             <label style={labelStyle} id="shift-start-label">Start Time *</label>
-            <TimeStepperInput id="shift-start" label="Start time" value={start} onChange={setStart} />
+            <TimeStepperInput id="shift-start" label="Start time" value={start} onChange={setStart} compact />
             <FieldError msg={fieldErrors.startTime} />
           </div>
-          <div style={{ flex: 1 }}>
+          <div style={{ minWidth: 0 }}>
             <label style={labelStyle} id="shift-end-label">End Time *</label>
-            <TimeStepperInput id="shift-end" label="End time" value={end} onChange={setEnd} />
+            <TimeStepperInput id="shift-end" label="End time" value={end} onChange={setEnd} compact />
             <FieldError msg={fieldErrors.endTime} />
           </div>
         </div>

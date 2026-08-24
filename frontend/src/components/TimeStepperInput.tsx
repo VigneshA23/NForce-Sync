@@ -17,6 +17,8 @@ interface TimeStepperInputProps {
   onChange: (value: string) => void;
   /** Used to build distinct aria-labels (e.g. "Start time hour") when a form has more than one. */
   label: string;
+  /** Tightens internal spacing/padding for narrow layouts (e.g. side-by-side columns). Default rendering is unchanged when omitted. */
+  compact?: boolean;
 }
 
 function parse24h(value: string): { hour12: number; minute: number; period: 'AM' | 'PM' } {
@@ -39,16 +41,20 @@ const chevronButtonStyle: React.CSSProperties = {
   color: 'var(--txt-dim)', cursor: 'pointer',
 };
 
+const chevronButtonStyleCompact: React.CSSProperties = { ...chevronButtonStyle, width: 14, height: 11 };
+
 const numberBoxStyle: React.CSSProperties = {
   width: 26, textAlign: 'center', background: 'transparent', border: 'none',
   color: 'var(--txt)', fontSize: 15, fontFamily: 'inherit', fontWeight: 600, outline: 'none',
 };
 
+const numberBoxStyleCompact: React.CSSProperties = { ...numberBoxStyle, width: 18, fontSize: 13 };
+
 // One HH or MM field: a typeable box plus an up/down chevron pair, wrapping at [min, max].
 function NumberStepper({
-  value, min, max, ariaLabel, onChange,
+  value, min, max, ariaLabel, onChange, compact,
 }: {
-  value: number; min: number; max: number; ariaLabel: string; onChange: (n: number) => void;
+  value: number; min: number; max: number; ariaLabel: string; onChange: (n: number) => void; compact?: boolean;
 }) {
   const [text, setText] = useState(String(value).padStart(2, '0'));
 
@@ -68,7 +74,7 @@ function NumberStepper({
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 1 : 2 }}>
       <input
         aria-label={ariaLabel}
         type="text"
@@ -82,39 +88,39 @@ function NumberStepper({
           if (e.key === 'ArrowUp') { e.preventDefault(); onChange(wrap(value + 1)); }
           if (e.key === 'ArrowDown') { e.preventDefault(); onChange(wrap(value - 1)); }
         }}
-        style={numberBoxStyle}
+        style={compact ? numberBoxStyleCompact : numberBoxStyle}
       />
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <button type="button" aria-label={`Increase ${ariaLabel}`} onClick={() => onChange(wrap(value + 1))} style={chevronButtonStyle}>
-          <ChevronUp size={12} aria-hidden="true" />
+        <button type="button" aria-label={`Increase ${ariaLabel}`} onClick={() => onChange(wrap(value + 1))} style={compact ? chevronButtonStyleCompact : chevronButtonStyle}>
+          <ChevronUp size={compact ? 10 : 12} aria-hidden="true" />
         </button>
-        <button type="button" aria-label={`Decrease ${ariaLabel}`} onClick={() => onChange(wrap(value - 1))} style={chevronButtonStyle}>
-          <ChevronDown size={12} aria-hidden="true" />
+        <button type="button" aria-label={`Decrease ${ariaLabel}`} onClick={() => onChange(wrap(value - 1))} style={compact ? chevronButtonStyleCompact : chevronButtonStyle}>
+          <ChevronDown size={compact ? 10 : 12} aria-hidden="true" />
         </button>
       </div>
     </div>
   );
 }
 
-export function TimeStepperInput({ id, value, onChange, label }: TimeStepperInputProps) {
+export function TimeStepperInput({ id, value, onChange, label, compact }: TimeStepperInputProps) {
   const { hour12, minute, period } = parse24h(value);
 
   return (
     <div
       id={id}
       style={{
-        display: 'flex', alignItems: 'center', gap: 8,
+        display: 'flex', alignItems: 'center', gap: compact ? 4 : 8,
         background: 'var(--shell)', border: '1px solid var(--line2)', borderRadius: 6,
-        padding: '7px 10px', boxSizing: 'border-box',
+        padding: compact ? '6px 6px' : '7px 10px', boxSizing: 'border-box',
       }}
     >
       <NumberStepper
-        value={hour12} min={1} max={12} ariaLabel={`${label} hour`}
+        value={hour12} min={1} max={12} ariaLabel={`${label} hour`} compact={compact}
         onChange={(h) => onChange(to24h(h, minute, period))}
       />
-      <span style={{ color: 'var(--txt-mut)', fontWeight: 600, fontSize: 15 }}>:</span>
+      <span style={{ color: 'var(--txt-mut)', fontWeight: 600, fontSize: compact ? 13 : 15 }}>:</span>
       <NumberStepper
-        value={minute} min={0} max={59} ariaLabel={`${label} minute`}
+        value={minute} min={0} max={59} ariaLabel={`${label} minute`} compact={compact}
         onChange={(m) => onChange(to24h(hour12, m, period))}
       />
       <div style={{ display: 'flex', marginLeft: 'auto', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--line2)' }}>
@@ -126,7 +132,7 @@ export function TimeStepperInput({ id, value, onChange, label }: TimeStepperInpu
             aria-label={`${label} ${p}`}
             onClick={() => onChange(to24h(hour12, minute, p))}
             style={{
-              padding: '5px 10px', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer',
+              padding: compact ? '4px 6px' : '5px 10px', fontSize: compact ? 10 : 11, fontWeight: 600, border: 'none', cursor: 'pointer',
               background: period === p ? 'var(--brand)' : 'transparent',
               color: period === p ? '#fff' : 'var(--txt-mut)',
             }}
