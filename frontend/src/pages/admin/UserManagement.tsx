@@ -237,7 +237,6 @@ function CreatableSelect<T extends CreatableItem>({
   onCreate,
   invalidateKey,
   placeholder,
-  unsetLabel,
   noneLabel = 'No matches',
 }: {
   items: T[];
@@ -247,13 +246,6 @@ function CreatableSelect<T extends CreatableItem>({
   onCreate: (name: string) => Promise<T>;
   invalidateKey: string[];
   placeholder: string;
-  /**
-   * First row of the list, and what unassigning this field is called — e.g. "Select department".
-   * Worded and positioned to match the Add User modal's placeholder option, which is where users
-   * learn what "no value" looks like. It replaced a "— Clear —" row sitting at the BOTTOM, which
-   * read as an action rather than a choice and put the same concept in a different place.
-   */
-  unsetLabel: string;
   noneLabel?: string;
 }) {
   const queryClient = useQueryClient();
@@ -309,22 +301,10 @@ function CreatableSelect<T extends CreatableItem>({
           background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 7,
           boxShadow: '0 8px 24px rgba(0,0,0,.3)', zIndex: 100, maxHeight: 200, overflowY: 'auto',
         }}>
-          {/* Only while the list is unfiltered: once the user is searching, an "unset" row among
-              the matches is noise rather than a candidate. */}
-          {!query.trim() && (
-            <div
-              onMouseDown={() => { onChange(null); setQuery(''); setOpen(false); }}
-              style={{
-                padding: '9px 14px', fontSize: 13, cursor: 'pointer',
-                color: value == null ? 'var(--brand-bright)' : 'var(--txt-dim)',
-                background: value == null ? 'rgba(176,17,22,.12)' : 'transparent',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--raised)')}
-              onMouseLeave={e => (e.currentTarget.style.background = value == null ? 'rgba(176,17,22,.12)' : 'transparent')}
-            >
-              {unsetLabel}
-            </div>
-          )}
+          {/* No "unset" row here by design: the list offers real values only, the same way Role
+              and Work Mode do. Manager is the one field that genuinely needs "nobody" as a
+              choice, and it is a PlainSelect with an explicit emptyLabel. Clearing the text still
+              unassigns, for the rare case someone needs to. */}
           {filtered.length === 0 && !showCreate && (
             <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--txt-dim)' }}>{noneLabel}</div>
           )}
@@ -377,14 +357,23 @@ function CreatableSelect<T extends CreatableItem>({
  * component with a "can you type?" switch running through every branch.
  */
 function PlainSelect({
-  id, value, options, onChange, emptyLabel,
+  id, value, options, onChange, emptyLabel, placeholder,
 }: {
   id?: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
-  /** Adds a leading row mapping to '' — replaces the old `<option value="">— None —</option>`. */
+  /**
+   * Adds a leading row mapping to '' — i.e. offers "no value" as a real choice. Only Manager
+   * uses it: "no reporting manager" is a genuine state for top-level roles. Every other field
+   * lists real values only, matching Role and Work Mode.
+   */
   emptyLabel?: string;
+  /**
+   * Dim text for the CLOSED control when nothing is selected. Unlike `emptyLabel` this adds
+   * nothing to the list — it just stops a not-yet-set field rendering as a blank box.
+   */
+  placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -441,9 +430,12 @@ function PlainSelect({
         aria-expanded={open}
         onClick={() => (open ? setOpen(false) : openList())}
         onKeyDown={onKeyDown}
-        style={{ ...inputStyle, cursor: 'pointer', textAlign: 'left', paddingRight: 32 }}
+        style={{
+          ...inputStyle, cursor: 'pointer', textAlign: 'left', paddingRight: 32,
+          color: currentLabel ? 'var(--txt)' : 'var(--txt-dim)',
+        }}
       >
-        {currentLabel}
+        {currentLabel || placeholder || ''}
       </button>
       <ChevronDown size={14} style={{
         position: 'absolute', right: 10, top: '50%',
@@ -1034,7 +1026,6 @@ function EditModal({
               onCreate={createDepartment}
               invalidateKey={['org', 'departments']}
               placeholder="Select or type a new department…"
-              unsetLabel="Select department"
               noneLabel="No departments found"
             />
           </Field>
@@ -1049,7 +1040,6 @@ function EditModal({
               onCreate={createDesignation}
               invalidateKey={['org', 'designations']}
               placeholder="Select or type a new designation…"
-              unsetLabel="Select designation"
               noneLabel="No designations found"
             />
           </Field>
@@ -1060,7 +1050,7 @@ function EditModal({
               value={form.shiftId != null ? String(form.shiftId) : ''}
               options={shifts.map((s: ShiftDefinitionDto) => ({ value: String(s.id), label: formatShiftLabel(s) }))}
               onChange={v => set('shiftId', v ? Number(v) : null)}
-              emptyLabel="Select shift"
+              placeholder="Select shift"
             />
           </Field>
 
@@ -1075,7 +1065,6 @@ function EditModal({
                 onCreate={createLocation}
                 invalidateKey={['org', 'locations']}
                 placeholder="Select or type a new location…"
-                unsetLabel="Select location"
                 noneLabel="No locations found"
               />
             </Field>
