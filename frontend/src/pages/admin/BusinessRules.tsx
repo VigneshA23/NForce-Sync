@@ -11,6 +11,7 @@ import { extractApiError, extractFieldErrors, isHttpStatus, listAuditLog } from 
 import type { AuditLogDto } from '../../api/admin';
 import { formatRelative } from '../../lib/auditLog';
 import { formatDate, formatTime12h } from '../../lib/date';
+import { capitalizeFirst } from '../../lib/strings';
 import { Modal } from '../../components/Modal';
 import { DropdownMenu } from '../../components/DropdownMenu';
 import { TimeStepperInput } from '../../components/TimeStepperInput';
@@ -1108,7 +1109,7 @@ function ShiftFormModal({ state, onClose, onSubmit, isPending, error, fieldError
         {error && <ErrorBanner message={error} />}
         <div style={{ marginBottom: 14 }}>
           <label style={labelStyle} htmlFor={nameId}>Shift Name *</label>
-          <input id={nameId} type="text" placeholder="e.g. General" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} autoFocus />
+          <input id={nameId} type="text" placeholder="e.g. General" value={name} onChange={(e) => setName(capitalizeFirst(e.target.value))} style={inputStyle} autoFocus />
           <FieldError msg={fieldErrors.name} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12, marginBottom: 4 }}>
@@ -1202,7 +1203,7 @@ function HolidayFormModal({ state, onClose, onSubmit, isPending, error, fieldErr
         {error && <ErrorBanner message={error} />}
         <div style={{ marginBottom: 14 }}>
           <label style={labelStyle} htmlFor={nameId}>Holiday Name *</label>
-          <input id={nameId} type="text" placeholder="e.g. Independence Day" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} autoFocus />
+          <input id={nameId} type="text" placeholder="e.g. Independence Day" value={name} onChange={(e) => setName(capitalizeFirst(e.target.value))} style={inputStyle} autoFocus />
           <FieldError msg={fieldErrors.name} />
         </div>
         <div>
