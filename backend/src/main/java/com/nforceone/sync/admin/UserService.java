@@ -49,6 +49,14 @@ public class UserService {
             AppUser.Role.SUPERADMIN, "Super Admin"
     );
 
+    // Roles selectable when creating a user (or reassigning role on an existing one) from the
+    // Add/Edit User screens. Delivery Manager, Finance Admin and Leadership Viewer remain valid
+    // AppUser.Role values for existing users but are no longer offered going forward.
+    private static final java.util.Set<AppUser.Role> CREATABLE_ROLES = java.util.EnumSet.of(
+            AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER, AppUser.Role.HR,
+            AppUser.Role.SUPERADMIN, AppUser.Role.PM
+    );
+
     private final AppUserRepository userRepository;
     private final AuditLogRepository auditLogRepository;
     private final PasswordEncoder passwordEncoder;
@@ -92,6 +100,10 @@ public class UserService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This Employee ID is already in use");
         }
+        if (!CREATABLE_ROLES.contains(request.role())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unsupported role: " + ROLE_LABELS.get(request.role()));
+        }
         AppUser actor = requireActorByEmail(actingEmail);
 
         requireOrgReferencesExist(request.departmentId(), request.designationId(), request.locationId());
@@ -121,12 +133,13 @@ public class UserService {
         user.setJoiningDate(request.joiningDate());
 
         // Manager assignment
+        AppUser manager = null;
         if (request.managerId() != null) {
-            AppUser manager = userRepository.findById(request.managerId())
+            manager = userRepository.findById(request.managerId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reporting manager not found"));
-            requireValidReportingManagerRole(request.role(), manager);
-            user.setManager(manager);
         }
+        requireValidReportingManager(request.role(), manager);
+        user.setManager(manager);
 
         user = userRepository.save(user);
 
@@ -157,6 +170,14 @@ public class UserService {
         }
 
         requireOrgReferencesExist(request.departmentId(), request.designationId(), request.locationId());
+
+        // Reassigning to a legacy role (Delivery Manager, Finance Admin, Leadership Viewer) is
+        // blocked going forward, but a user who already holds one is left untouched as long as
+        // the role isn't being changed — editing their other fields shouldn't force a role switch.
+        if (!CREATABLE_ROLES.contains(request.role()) && request.role() != user.getRole()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unsupported role: " + ROLE_LABELS.get(request.role()));
+        }
 
         String before = toJson(UserDto.from(user));
 
@@ -189,11 +210,9 @@ public class UserService {
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "Reporting manager not found"));
             requireNoManagerCycle(id, newManager);
-            requireValidReportingManagerRole(request.role(), newManager);
-            user.setManager(newManager);
-        } else {
-            user.setManager(null);
         }
+        requireValidReportingManager(request.role(), newManager);
+        user.setManager(newManager);
 
         user = userRepository.save(user);
         writeAudit("APP_USER", user.getId(), "UPDATE", before, toJson(UserDto.from(user)), actor);
@@ -253,11 +272,11 @@ public class UserService {
         }
     }
 
-    // Enforces the org's reporting hierarchy (Super Admin -> Project Manager -> Team Lead
-    // -> Employee, with HR Admin also reporting to Super Admin): an Employee's reporting
-    // manager must be a Team Lead, a Team Lead's must be a Project Manager, and a Project
-    // Manager's or HR Admin's must be a Super Admin. Other roles have no reporting-manager
-    // restriction here.
+    // Enforces the org's reporting hierarchy: Employee -> Team Lead -> Project Manager ->
+    // Super Admin, with HR Admin also reporting to a Super Admin. A Reporting Manager is
+    // mandatory for these four roles. Super Admin sits at the top of the hierarchy and may
+    // optionally report to another Super Admin (or to no one at all). Legacy roles not listed
+    // here (Delivery Manager, Finance Admin, Leadership Viewer) have no enforced hierarchy.
     private static final Map<AppUser.Role, AppUser.Role> REQUIRED_MANAGER_ROLE = Map.of(
             AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER,
             AppUser.Role.MANAGER,  AppUser.Role.PM,
@@ -265,15 +284,24 @@ public class UserService {
             AppUser.Role.HR,       AppUser.Role.SUPERADMIN
     );
 
-    private void requireValidReportingManagerRole(AppUser.Role role, AppUser manager) {
-        // Super Admin sits at the top of the org hierarchy — it never has a reporting
-        // manager, regardless of what REQUIRED_MANAGER_ROLE says for other roles.
+    private void requireValidReportingManager(AppUser.Role role, AppUser manager) {
         if (role == AppUser.Role.SUPERADMIN) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Reporting Manager is not applicable for Super Admin.");
+            // Optional — a Super Admin may report to another Super Admin, or to no one.
+            if (manager != null && manager.getRole() != AppUser.Role.SUPERADMIN) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Super Admin reporting manager must be a Super Admin.");
+            }
+            return;
         }
         AppUser.Role requiredRole = REQUIRED_MANAGER_ROLE.get(role);
-        if (requiredRole != null && manager.getRole() != requiredRole) {
+        if (requiredRole == null) {
+            return;
+        }
+        if (manager == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Reporting Manager is required for " + ROLE_LABELS.get(role) + ".");
+        }
+        if (manager.getRole() != requiredRole) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     ROLE_LABELS.get(role) + " reporting manager must be a " + ROLE_LABELS.get(requiredRole) + ".");
         }

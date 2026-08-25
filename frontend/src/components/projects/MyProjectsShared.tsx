@@ -107,7 +107,10 @@ export function SearchBox({ value, onChange, placeholder, ariaLabel }: {
         style={{ position: 'absolute', left: 10, color: 'var(--txt-dim)', pointerEvents: 'none' }}
       />
       <input
-        type="search"
+        // type="text" (not "search") — Chromium/WebKit render their own built-in clear
+        // icon for type="search" once it has a value, which stacked on top of the custom
+        // clear button below and showed as two X controls in the same field.
+        type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
@@ -208,13 +211,14 @@ export function ProjectsPanel({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>('ALL');
 
+  // Project-only search — matches the project's own name/code, not client, Team Lead,
+  // Project Manager, or any other assignment metadata.
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return projects.filter(p => {
       const matchesSearch = term === ''
         || p.name.toLowerCase().includes(term)
-        || p.code.toLowerCase().includes(term)
-        || (p.client ?? '').toLowerCase().includes(term);
+        || p.code.toLowerCase().includes(term);
       const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -258,7 +262,7 @@ export function ProjectsPanel({
               value={search}
               onChange={setSearch}
               placeholder="Search assigned projects..."
-              ariaLabel="Search assigned projects by name, client, or code"
+              ariaLabel="Search assigned projects by name or code"
             />
           </div>
           <StatusFilterSelect
