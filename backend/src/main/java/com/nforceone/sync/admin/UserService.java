@@ -266,6 +266,12 @@ public class UserService {
     );
 
     private void requireValidReportingManagerRole(AppUser.Role role, AppUser manager) {
+        // Super Admin sits at the top of the org hierarchy — it never has a reporting
+        // manager, regardless of what REQUIRED_MANAGER_ROLE says for other roles.
+        if (role == AppUser.Role.SUPERADMIN) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Reporting Manager is not applicable for Super Admin.");
+        }
         AppUser.Role requiredRole = REQUIRED_MANAGER_ROLE.get(role);
         if (requiredRole != null && manager.getRole() != requiredRole) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
