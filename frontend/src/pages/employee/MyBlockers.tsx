@@ -94,26 +94,36 @@ function DateFilterButton({ mode, range, onChange }: {
             <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
               Custom range
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <input
-                type="date" value={draftFrom} max={todayISO}
-                onChange={(e) => setDraftFrom(e.target.value)}
-                style={{ flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)' }}
-              />
-              <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>to</span>
-              <input
-                type="date" value={draftTo} max={todayISO}
-                onChange={(e) => setDraftTo(e.target.value)}
-                style={{ flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)' }}
-              />
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>From</div>
+                <input
+                  type="date" value={draftFrom} max={todayISO}
+                  onChange={(e) => setDraftFrom(e.target.value)}
+                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>To</div>
+                <input
+                  type="date" value={draftTo} max={todayISO}
+                  onChange={(e) => setDraftTo(e.target.value)}
+                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
+                />
+              </div>
             </div>
+            {draftFrom > draftTo && (
+              <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
+                From date cannot be later than To date.
+              </div>
+            )}
             <button
               onClick={() => { if (draftFrom > draftTo) return; onChange('range', { from: draftFrom, to: draftTo }); setOpen(false); }}
               disabled={draftFrom > draftTo}
               style={{
                 width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
                 background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                cursor: draftFrom > draftTo ? 'default' : 'pointer', opacity: draftFrom > draftTo ? 0.6 : 1,
+                cursor: draftFrom > draftTo ? 'not-allowed' : 'pointer', opacity: draftFrom > draftTo ? 0.6 : 1,
               }}
             >
               Apply

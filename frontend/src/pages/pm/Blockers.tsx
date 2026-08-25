@@ -82,7 +82,7 @@ function DateFilterButton({ mode, range, onChange }: {
     : range.from === range.to ? fmtShortDate(range.from) : `${fmtShortDate(range.from)} – ${fmtShortDate(range.to)}`;
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <button
         onClick={() => { setDraftFrom(range.from); setDraftTo(range.to); setOpen(o => !o); }}
         style={{
@@ -95,6 +95,19 @@ function DateFilterButton({ mode, range, onChange }: {
         {label}
         <ChevronDown size={12} aria-hidden="true" />
       </button>
+      {mode === 'range' && (
+        <button
+          type="button"
+          aria-label="Clear custom range"
+          onClick={() => onChange('today', { from: todayISO, to: todayISO })}
+          style={{
+            background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
+            display: 'flex', padding: 2,
+          }}
+        >
+          <X size={13} aria-hidden="true" />
+        </button>
+      )}
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
@@ -128,26 +141,41 @@ function DateFilterButton({ mode, range, onChange }: {
             <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
               Custom range
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <input
-                type="date" value={draftFrom} max={todayISO}
-                onChange={(e) => setDraftFrom(e.target.value)}
-                style={{ flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)' }}
-              />
-              <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>to</span>
-              <input
-                type="date" value={draftTo} max={todayISO}
-                onChange={(e) => setDraftTo(e.target.value)}
-                style={{ flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)' }}
-              />
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>From</div>
+                <input
+                  type="date" value={draftFrom} max={todayISO}
+                  onChange={(e) => setDraftFrom(e.target.value)}
+                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>To</div>
+                <input
+                  type="date" value={draftTo} max={todayISO}
+                  onChange={(e) => setDraftTo(e.target.value)}
+                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
+                />
+              </div>
             </div>
+            {(draftFrom === '' || draftTo === '') ? (
+              <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
+                Please enter a valid date.
+              </div>
+            ) : draftFrom > draftTo && (
+              <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
+                From date must be earlier than To date.
+              </div>
+            )}
             <button
-              onClick={() => { if (draftFrom > draftTo) return; onChange('range', { from: draftFrom, to: draftTo }); setOpen(false); }}
-              disabled={draftFrom > draftTo}
+              onClick={() => { if (draftFrom === '' || draftTo === '' || draftFrom > draftTo) return; onChange('range', { from: draftFrom, to: draftTo }); setOpen(false); }}
+              disabled={draftFrom === '' || draftTo === '' || draftFrom > draftTo}
               style={{
                 width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
                 background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                cursor: draftFrom > draftTo ? 'default' : 'pointer', opacity: draftFrom > draftTo ? 0.6 : 1,
+                cursor: (draftFrom === '' || draftTo === '' || draftFrom > draftTo) ? 'not-allowed' : 'pointer',
+                opacity: (draftFrom === '' || draftTo === '' || draftFrom > draftTo) ? 0.6 : 1,
               }}
             >
               Apply
@@ -420,11 +448,11 @@ export default function PmBlockers() {
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(b =>
-        (b.description ?? '').toLowerCase().includes(q)
-        || (b.blockerReason ?? '').toLowerCase().includes(q)
-        || b.employeeName.toLowerCase().includes(q)
-        || (b.projectName ?? '').toLowerCase().includes(q)
-        || b.teamName.toLowerCase().includes(q),
+        (b.description ?? '').toLowerCase().startsWith(q)
+        || (b.blockerReason ?? '').toLowerCase().startsWith(q)
+        || b.employeeName.toLowerCase().startsWith(q)
+        || (b.projectName ?? '').toLowerCase().startsWith(q)
+        || b.teamName.toLowerCase().startsWith(q),
       );
     }
     return [...list].sort((a, b) => {
@@ -450,7 +478,7 @@ export default function PmBlockers() {
   const openBlockers = filtered.filter(b => b.status !== 'RESOLVED');
   const avgOpenHours = openBlockers.length
     ? Math.round(openBlockers.reduce((sum, b) => sum + b.openHours, 0) / openBlockers.length)
-    : 0;
+    : null;
   const needsResponseCount = filtered.filter(b => b.status === 'NEEDS_RESPONSE').length;
   const acknowledgedCount = filtered.filter(b => b.status === 'ACKNOWLEDGED').length;
   const resolvedCount = filtered.filter(b => b.status === 'RESOLVED').length;
@@ -479,7 +507,7 @@ export default function PmBlockers() {
     return (
       <div>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>All Blockers</h1>
+          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Blockers</h1>
         </div>
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load blockers.</div>
@@ -501,7 +529,7 @@ export default function PmBlockers() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-              All Blockers
+              Blockers
             </h1>
             <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
               Monitor and track blockers across all teams and projects.
@@ -545,7 +573,13 @@ export default function PmBlockers() {
             tile on its own row at in-between widths). */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
           <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={String(total)} caption="Across all teams" accent="var(--warn)" />
-          <StatCard icon={<Clock size={18} aria-hidden="true" />} label="Avg. Open Duration" value={fmtDuration(avgOpenHours)} caption="Across all open blockers" accent="var(--info)" />
+          <StatCard
+            icon={<Clock size={18} aria-hidden="true" />}
+            label="Average Open Duration"
+            value={avgOpenHours == null ? '—' : fmtDuration(avgOpenHours)}
+            caption={total === 0 ? 'No blockers in this range' : avgOpenHours == null ? 'All resolved' : 'Across all open blockers'}
+            accent="var(--info)"
+          />
           <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={String(needsResponseCount)} caption="Requires follow-up" accent={STATUS_META.NEEDS_RESPONSE.color} />
           <StatCard icon={<Users size={18} aria-hidden="true" />} label="Acknowledged" value={String(acknowledgedCount)} caption="Being worked on" accent={STATUS_META.ACKNOWLEDGED.color} />
           <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Resolved" value={String(resolvedCount)} caption="Closed out" accent={STATUS_META.RESOLVED.color} />
