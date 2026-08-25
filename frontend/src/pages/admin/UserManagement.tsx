@@ -55,7 +55,8 @@ const WORK_MODES = [
 
 // Mirrors the backend hierarchy (UserService.REQUIRED_MANAGER_ROLE): an Employee's
 // Reporting Manager must be a Team Lead, a Team Lead's must be a Project Manager,
-// a Project Manager's and an HR Admin's must be a Super Admin.
+// a Project Manager's and an HR Admin's must be a Super Admin. A Super Admin sits
+// at the top of the org and has no Reporting Manager at all.
 // Roles not listed here keep the prior behavior (Team Leads offered as the option).
 const REPORTING_MANAGER_ROLE_FOR: Record<string, string> = {
   EMPLOYEE: 'MANAGER',
@@ -64,7 +65,10 @@ const REPORTING_MANAGER_ROLE_FOR: Record<string, string> = {
   HR: 'SUPERADMIN',
 };
 
-function reportingManagerRoleFilter(role: string): string {
+// Super Admin is the top of the hierarchy — no role qualifies as its manager, so no
+// Reporting Manager options should ever be offered for it.
+function reportingManagerRoleFilter(role: string): string | null {
+  if (role === 'SUPERADMIN') return null;
   return REPORTING_MANAGER_ROLE_FOR[role] ?? 'MANAGER';
 }
 
@@ -543,7 +547,8 @@ function AddModal({
   // itself. Always true while mounted — the parent only renders this when open.
   useBodyScrollLock(true);
 
-  const managers = allUsers.filter(u => u.role === reportingManagerRoleFilter(form.role));
+  const isSuperAdmin = form.role === 'SUPERADMIN';
+  const managers = isSuperAdmin ? [] : allUsers.filter(u => u.role === reportingManagerRoleFilter(form.role));
 
   const mutation = useMutation({
     mutationFn: createUser,
@@ -606,7 +611,8 @@ function AddModal({
       designationId: form.designationId ?? null,
       locationId:    form.locationId    ?? null,
       shiftId:       form.shiftId       ?? null,
-      managerId:     form.managerId     ?? null,
+      // Never send a stale manager selection for a role that can't have one.
+      managerId:     isSuperAdmin ? null : (form.managerId ?? null),
     };
     mutation.mutate(payload);
   }
@@ -850,23 +856,30 @@ function AddModal({
               state (e.g. top-level roles), so "No manager" is a real, explicitly-chosen
               option — distinct from the untouched placeholder. Options are filtered by
               the selected Role (see reportingManagerRoleFilter); the backend enforces
-              the same hierarchy independently of this dropdown. */}
+              the same hierarchy independently of this dropdown. Super Admin sits at the
+              top of the org, so it never gets a manager to pick from. */}
           <div style={{ gridColumn: '1/-1' }}>
             <Field label="Reporting Manager">
-              <select
-                style={selectStyle(form.managerId !== undefined)}
-                value={form.managerId === undefined ? '' : form.managerId === null ? 'none' : String(form.managerId)}
-                onChange={e => {
-                  const v = e.target.value;
-                  set('managerId', v === 'none' ? null : v ? Number(v) : undefined);
-                }}
-              >
-                <option value="" style={placeholderOptionStyle}>Select reporting manager</option>
-                <option value="none" style={realOptionStyle}>No reporting manager</option>
-                {managers.map(m => (
-                  <option key={m.id} value={m.id} style={realOptionStyle}>{m.fullName} ({m.email})</option>
-                ))}
-              </select>
+              {isSuperAdmin ? (
+                <div style={{ ...inputStyle, color: 'var(--txt-dim)', cursor: 'not-allowed' }}>
+                  Not Applicable — Super Admin has no Reporting Manager
+                </div>
+              ) : (
+                <select
+                  style={selectStyle(form.managerId !== undefined)}
+                  value={form.managerId === undefined ? '' : form.managerId === null ? 'none' : String(form.managerId)}
+                  onChange={e => {
+                    const v = e.target.value;
+                    set('managerId', v === 'none' ? null : v ? Number(v) : undefined);
+                  }}
+                >
+                  <option value="" style={placeholderOptionStyle}>Select reporting manager</option>
+                  <option value="none" style={realOptionStyle}>No reporting manager</option>
+                  {managers.map(m => (
+                    <option key={m.id} value={m.id} style={realOptionStyle}>{m.fullName} ({m.email})</option>
+                  ))}
+                </select>
+              )}
             </Field>
           </div>
 
@@ -938,7 +951,8 @@ function EditModal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const managers = allUsers.filter(u => u.role === reportingManagerRoleFilter(form.role) && u.id !== user?.id);
+  const isSuperAdmin = form.role === 'SUPERADMIN';
+  const managers = isSuperAdmin ? [] : allUsers.filter(u => u.role === reportingManagerRoleFilter(form.role) && u.id !== user?.id);
 
   const mutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateUserPayload }) => updateUser(id, data),
@@ -962,7 +976,8 @@ function EditModal({
     if (!user) return;
     if (!form.fullName.trim()) { setError('Full name is required.'); return; }
     setError(null);
-    mutation.mutate({ id: user.id, data: form });
+    // Never send a stale manager selection for a role that can't have one.
+    mutation.mutate({ id: user.id, data: isSuperAdmin ? { ...form, managerId: null } : form });
   }
 
   const set = (key: keyof UpdateUserPayload, val: unknown) =>
@@ -1075,15 +1090,22 @@ function EditModal({
 
           {/* Reporting Manager — full width. Options are filtered by the selected Role
               (see reportingManagerRoleFilter); the backend enforces the same hierarchy
-              independently of this dropdown. */}
+              independently of this dropdown. Super Admin sits at the top of the org, so
+              it never gets a manager to pick from. */}
           <div style={{ gridColumn: '1/-1' }}>
             <Field label="Reporting Manager">
-              <PlainSelect
-                value={form.managerId != null ? String(form.managerId) : ''}
-                options={managers.map(m => ({ value: String(m.id), label: `${m.fullName} (${m.email})` }))}
-                onChange={v => set('managerId', v ? Number(v) : null)}
-                emptyLabel="Select manager"
-              />
+              {isSuperAdmin ? (
+                <div style={{ ...inputStyle, color: 'var(--txt-dim)', cursor: 'not-allowed' }}>
+                  Not Applicable — Super Admin has no Reporting Manager
+                </div>
+              ) : (
+                <PlainSelect
+                  value={form.managerId != null ? String(form.managerId) : ''}
+                  options={managers.map(m => ({ value: String(m.id), label: `${m.fullName} (${m.email})` }))}
+                  onChange={v => set('managerId', v ? Number(v) : null)}
+                  emptyLabel="Select manager"
+                />
+              )}
             </Field>
           </div>
 
