@@ -192,6 +192,12 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   opacity: 0.9;
   cursor: pointer;
 }
+/* Chromium's own built-in reset "x" would sit right on top of our themed
+   clear button (see the From/To fields in pm/Blockers.tsx) — suppress it so
+   there's only ever one clear affordance per field. */
+input[type="date"]::-webkit-clear-button {
+  display: none;
+}
 
 /* ─── Autofilled fields keep the app's own colours ──────────────── */
 /* Chromium paints an autofilled control with its own hard-coded background

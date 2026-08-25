@@ -144,38 +144,85 @@ function DateFilterButton({ mode, range, onChange }: {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>From</div>
-                <input
-                  type="date" value={draftFrom} max={todayISO}
-                  onChange={(e) => setDraftFrom(e.target.value)}
-                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="date" value={draftFrom} max={todayISO}
+                    onChange={(e) => setDraftFrom(e.target.value)}
+                    style={{
+                      width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
+                      background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
+                      boxSizing: 'border-box', paddingRight: draftFrom ? 40 : 8,
+                    }}
+                  />
+                  {draftFrom && (
+                    <button
+                      type="button"
+                      aria-label="Clear from date"
+                      onClick={() => setDraftFrom('')}
+                      style={{
+                        position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                        background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
+                        display: 'flex', padding: 4, borderRadius: 4,
+                      }}
+                    >
+                      <X size={12} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>To</div>
-                <input
-                  type="date" value={draftTo} max={todayISO}
-                  onChange={(e) => setDraftTo(e.target.value)}
-                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="date" value={draftTo} max={todayISO}
+                    onChange={(e) => setDraftTo(e.target.value)}
+                    style={{
+                      width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
+                      background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
+                      boxSizing: 'border-box', paddingRight: draftTo ? 40 : 8,
+                    }}
+                  />
+                  {draftTo && (
+                    <button
+                      type="button"
+                      aria-label="Clear to date"
+                      onClick={() => setDraftTo('')}
+                      style={{
+                        position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                        background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
+                        display: 'flex', padding: 4, borderRadius: 4,
+                      }}
+                    >
+                      <X size={12} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-            {(draftFrom === '' || draftTo === '') ? (
-              <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
-                Please enter a valid date.
-              </div>
-            ) : draftFrom > draftTo && (
+            {draftFrom !== '' && draftTo !== '' && draftFrom > draftTo && (
               <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
                 From date must be earlier than To date.
               </div>
             )}
             <button
-              onClick={() => { if (draftFrom === '' || draftTo === '' || draftFrom > draftTo) return; onChange('range', { from: draftFrom, to: draftTo }); setOpen(false); }}
-              disabled={draftFrom === '' || draftTo === '' || draftFrom > draftTo}
+              onClick={() => {
+                if (draftFrom !== '' && draftTo !== '' && draftFrom > draftTo) return;
+                // Either side can be cleared independently (see From/To "X" buttons above) —
+                // an empty side falls back to the other so a single-ended selection still
+                // resolves to a real range; clearing both reverts to the Today default,
+                // same as the "Clear custom range" X next to the filter button.
+                if (draftFrom === '' && draftTo === '') { onChange('today', { from: todayISO, to: todayISO }); setOpen(false); return; }
+                const from = draftFrom || draftTo;
+                const to = draftTo || draftFrom;
+                onChange('range', { from, to });
+                setOpen(false);
+              }}
+              disabled={draftFrom !== '' && draftTo !== '' && draftFrom > draftTo}
               style={{
                 width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
                 background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                cursor: (draftFrom === '' || draftTo === '' || draftFrom > draftTo) ? 'not-allowed' : 'pointer',
-                opacity: (draftFrom === '' || draftTo === '' || draftFrom > draftTo) ? 0.6 : 1,
+                cursor: (draftFrom !== '' && draftTo !== '' && draftFrom > draftTo) ? 'not-allowed' : 'pointer',
+                opacity: (draftFrom !== '' && draftTo !== '' && draftFrom > draftTo) ? 0.6 : 1,
               }}
             >
               Apply
