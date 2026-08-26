@@ -6,11 +6,16 @@ on:
       - main
       - dev
 
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   deploy-preview:
     name: Preview deploy (dev)
     if: github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +29,7 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          url=$(vercel deploy --token=$VERCEL_TOKEN)
+          url=$(vercel deploy --yes --token=$VERCEL_TOKEN)
           echo "Deployed: $url"
           echo "preview_url=$url" >> $GITHUB_OUTPUT
 
@@ -40,6 +45,7 @@ jobs:
     name: Production deploy (main)
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -51,4 +57,4 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel deploy --prod --token=$VERCEL_TOKEN
+        run: vercel deploy --prod --yes --token=$VERCEL_TOKEN
