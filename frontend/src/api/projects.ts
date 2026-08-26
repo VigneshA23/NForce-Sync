@@ -87,6 +87,13 @@ export interface EmployeeRefDto {
   id: number;
   fullName: string;
   employeeCode: string;
+  /**
+   * The employee's reporting manager. A project is only allocatable to them when its Team Lead
+   * (`ProjectFullDto.pmId`) is this person — see the Project filter in AllocationModal.
+   * `managerName` is display-only, for naming them when no project qualifies. Null when unset.
+   */
+  managerId: number | null;
+  managerName: string | null;
 }
 
 export interface AllocationDto {

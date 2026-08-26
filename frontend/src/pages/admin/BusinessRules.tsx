@@ -318,13 +318,6 @@ export default function BusinessRules() {
   // hours-after-shift-end offset, in the Shift Timings card below — a single time could not
   // express a deadline for a shift ending after midnight.
 
-  // ── 6. Reminder lead time ───────────────────────────────────────────────────
-  const [reminderDraft, setReminderDraft] = useState('');
-  const [reminderError, setReminderError] = useState<string | null>(null);
-  useEffect(() => {
-    if (configQuery.data) setReminderDraft(String(configQuery.data.reminderLeadMinutes));
-  }, [configQuery.data]);
-
   // ── 7. Escalation SLA ───────────────────────────────────────────────────────
   const [slaDraft, setSlaDraft] = useState('');
   const [slaError, setSlaError] = useState<string | null>(null);
@@ -353,7 +346,7 @@ export default function BusinessRules() {
       invalidateConfig();
       queryClient.invalidateQueries({ queryKey: ['business-rules', 'audit', 'notifications'] });
       toast.showToast('success', 'Notifications & escalation updated');
-      setReminderError(null); setSlaError(null); setLockoutError(null);
+      setSlaError(null); setLockoutError(null);
     },
     onError: (err) => {
       const msg = extractApiError(err, 'Failed to update notifications & escalation.');
@@ -418,16 +411,11 @@ export default function BusinessRules() {
   const timeAttendancePending = timeAttendanceMutation.isPending;
 
   function saveNotifications() {
-    const reminderLeadMinutes = Number(reminderDraft);
     const escalationSlaHours  = Number(slaDraft);
     const lockoutAttemptThreshold = Number(lockoutThresholdDraft);
     const lockoutDurationMinutes  = Number(lockoutDurationDraft);
 
     let invalid = false;
-    if (!Number.isInteger(reminderLeadMinutes) || reminderLeadMinutes <= 0 || reminderLeadMinutes > 720) {
-      setReminderError('Enter a whole number of minutes between 1 and 720.');
-      invalid = true;
-    } else setReminderError(null);
 
     if (!Number.isInteger(escalationSlaHours) || escalationSlaHours <= 0 || escalationSlaHours > 168) {
       setSlaError('Enter a whole number of hours between 1 and 168.');
@@ -444,7 +432,6 @@ export default function BusinessRules() {
 
     if (invalid) return;
     notificationsMutation.mutate({
-      reminderLeadMinutes,
       escalationSlaHours,
       lockoutAttemptThreshold,
       lockoutDurationMinutes,
@@ -627,32 +614,18 @@ export default function BusinessRules() {
         </button>
       </RuleCard>
 
-      {/* Notifications & Escalation — reminder lead time + SLA, one Save for both. The EOD cutoff
-          moved to the Shift Timings card, as hours after each shift's end. */}
+      {/* Notifications & Escalation — SLA + lockout policy, one Save for all. A "Reminder lead
+          time" field sat here too until it was found to be dead config: it meant "N minutes before
+          the global EOD cutoff", and that cutoff moved to the Shift Timings card as hours after
+          each shift's end, which is also what reminders now fire from. */}
       <RuleCard
         title="Notifications & Escalation"
-        description="Reminder, escalation, and lockout timing for EOD submissions. EOD cutoff is set per shift below."
+        description="Escalation and lockout timing for EOD submissions. The EOD cutoff — and the reminder that follows it — is set per shift below."
         icon={<Bell size={16} aria-hidden="true" />}
         accent="var(--warn)"
         footer={<LastUpdatedCaption info={notificationsUpdate} isReady={notificationsAudit.isSuccess} />}
       >
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 16 }}>
-          <div style={{ minWidth: 160 }}>
-            <label style={labelStyle} htmlFor="reminder-input">Reminder lead time</label>
-            <UnitField unit="min">
-              <input
-                id="reminder-input"
-                type="number"
-                min={1}
-                max={720}
-                step={1}
-                value={reminderDraft}
-                onChange={(e) => setReminderDraft(e.target.value)}
-                style={{ ...inputStyle, paddingRight: 40 }}
-              />
-            </UnitField>
-            <FieldError msg={reminderError ?? undefined} />
-          </div>
           <div style={{ minWidth: 160 }}>
             <label style={labelStyle} htmlFor="sla-input">Escalation SLA</label>
             <UnitField unit="hrs">

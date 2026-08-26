@@ -38,6 +38,14 @@ public class BusinessRuleConfig {
     @Column(name = "eod_cutoff_time", nullable = false)
     private LocalTime eodCutoffTime;
 
+    /**
+     * Dead config, kept only to satisfy the NOT NULL column. It meant "remind N minutes before the
+     * global EOD cutoff"; that cutoff moved onto the shift in V58, so nothing reads this. Reminders
+     * fire from {@code EodReminderScheduler} off {@code shift_definition.eod_cutoff_hours}. Removed
+     * from the DTO, the update request and the Business Rules screen — do not wire it back up
+     * without giving it a consumer.
+     */
+    @Deprecated
     @Column(name = "reminder_lead_minutes", nullable = false)
     private Integer reminderLeadMinutes;
 

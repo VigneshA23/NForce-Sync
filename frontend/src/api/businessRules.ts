@@ -7,8 +7,10 @@ export type WeekendRule = 'SAT_SUN' | 'SUN_ONLY';
 export interface BusinessRuleConfigDto {
   workingHoursPerDay: number;
   weekendRule: WeekendRule;
-  // No eodCutoffTime: the EOD deadline is per shift now — see ShiftDefinitionDto.eodCutoffHours.
-  reminderLeadMinutes: number;
+  // No eodCutoffTime and no reminderLeadMinutes: the EOD deadline is per shift now (see
+  // ShiftDefinitionDto.eodCutoffHours), and the lead time only ever meant "N minutes before the
+  // global cutoff", so it had nothing to hang off. Both columns still exist server-side but are
+  // no longer read or exposed.
   escalationSlaHours: number;
   /** Account Lockout: consecutive failed sign-ins that lock an account, and for how long. */
   lockoutAttemptThreshold: number;
@@ -63,7 +65,6 @@ export async function updateTimeAttendance(payload: TimeAttendancePayload): Prom
 // eodCutoffHours; PUT /admin/business-rules/eod-cutoff no longer exists.
 
 export interface NotificationsPayload {
-  reminderLeadMinutes: number;
   escalationSlaHours: number;
   /** Account Lockout policy — saved with the rest of the card so the row is written once. */
   lockoutAttemptThreshold: number;

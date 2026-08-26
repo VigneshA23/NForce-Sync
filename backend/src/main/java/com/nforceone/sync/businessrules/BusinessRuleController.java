@@ -49,7 +49,6 @@ public class BusinessRuleController {
     @PutMapping("/notifications")
     public BusinessRuleConfigDto updateNotifications(@Valid @RequestBody UpdateNotificationsRequest request) {
         return businessRuleService.updateNotifications(
-                request.reminderLeadMinutes(),
                 request.escalationSlaHours(),
                 request.lockoutAttemptThreshold(),
                 request.lockoutDurationMinutes(),

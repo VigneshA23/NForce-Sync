@@ -13,9 +13,6 @@ import jakarta.validation.constraints.NotNull;
  * not to save until it was clicked again.
  */
 public record UpdateNotificationsRequest(
-        @NotNull @Min(value = 1, message = "Reminder lead time must be at least 1 minute")
-        @Max(value = 720, message = "Reminder lead time cannot exceed 720 minutes") Integer reminderLeadMinutes,
-
         @NotNull @Min(value = 1, message = "Escalation SLA must be at least 1 hour")
         @Max(value = 168, message = "Escalation SLA cannot exceed 168 hours (1 week)") Integer escalationSlaHours,
 

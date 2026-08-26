@@ -81,28 +81,29 @@ public class BusinessRuleService {
     }
 
     /**
-     * Every Notifications &amp; Escalation field — reminder lead time, escalation SLA, and the
-     * Account Lockout policy — saved as one rule with one audit row. See
-     * {@link #updateTimeAttendance} for why this is not one endpoint per field.
+     * Every Notifications &amp; Escalation field — escalation SLA and the Account Lockout policy —
+     * saved as one rule with one audit row. See {@link #updateTimeAttendance} for why this is not
+     * one endpoint per field.
+     *
+     * <p>Reminder lead time used to be edited here too. It was removed once it became clear nothing
+     * read it: it meant "remind N minutes before the global EOD cutoff", and that cutoff moved onto
+     * the shift in V58, so EodReminderScheduler fires off {@code ShiftSchedule.cutoffAt} instead.
+     * The column stays on the row (unread) so the audit history that names it still resolves.
      */
-    public BusinessRuleConfigDto updateNotifications(Integer reminderLeadMinutes,
-                                                     Integer escalationSlaHours,
+    public BusinessRuleConfigDto updateNotifications(Integer escalationSlaHours,
                                                      Integer lockoutAttemptThreshold,
                                                      Integer lockoutDurationMinutes,
                                                      String actingEmail) {
         BusinessRuleConfig config = requireConfig();
         AppUser actor = requireActorByEmail(actingEmail);
-        Object reminderBefore = config.getReminderLeadMinutes();
         Object slaBefore = config.getEscalationSlaHours();
         Object lockoutThresholdBefore = config.getLockoutAttemptThreshold();
         Object lockoutDurationBefore = config.getLockoutDurationMinutes();
-        config.setReminderLeadMinutes(reminderLeadMinutes);
         config.setEscalationSlaHours(escalationSlaHours);
         config.setLockoutAttemptThreshold(lockoutAttemptThreshold);
         config.setLockoutDurationMinutes(lockoutDurationMinutes);
         touch(config, actor);
         // One row per field — see updateTimeAttendance for why.
-        writeAudit(CONFIG_ID, "UPDATE", ruleSnapshot("Reminder Lead Time", reminderBefore), ruleSnapshot("Reminder Lead Time", config.getReminderLeadMinutes()), actor);
         writeAudit(CONFIG_ID, "UPDATE", ruleSnapshot("Escalation SLA", slaBefore), ruleSnapshot("Escalation SLA", config.getEscalationSlaHours()), actor);
         writeAudit(CONFIG_ID, "UPDATE", ruleSnapshot("Lockout Attempt Threshold", lockoutThresholdBefore), ruleSnapshot("Lockout Attempt Threshold", config.getLockoutAttemptThreshold()), actor);
         writeAudit(CONFIG_ID, "UPDATE", ruleSnapshot("Lockout Duration Minutes", lockoutDurationBefore), ruleSnapshot("Lockout Duration Minutes", config.getLockoutDurationMinutes()), actor);
