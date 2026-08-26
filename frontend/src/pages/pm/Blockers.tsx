@@ -112,7 +112,7 @@ function DateFilterButton({ mode, range, onChange }: {
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
           <div className="nf-r-popover" style={{
-            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 260,
+            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 300,
             background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
             boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
           }}>
@@ -142,7 +142,7 @@ function DateFilterButton({ mode, range, onChange }: {
               Custom range
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 130 }}>
                 <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>From</div>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -151,7 +151,7 @@ function DateFilterButton({ mode, range, onChange }: {
                     style={{
                       width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
                       background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                      boxSizing: 'border-box', paddingRight: draftFrom ? 40 : 8,
+                      boxSizing: 'border-box', paddingRight: 44,
                     }}
                   />
                   {draftFrom && (
@@ -160,7 +160,7 @@ function DateFilterButton({ mode, range, onChange }: {
                       aria-label="Clear from date"
                       onClick={() => setDraftFrom('')}
                       style={{
-                        position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                        position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)',
                         background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
                         display: 'flex', padding: 4, borderRadius: 4,
                       }}
@@ -170,7 +170,7 @@ function DateFilterButton({ mode, range, onChange }: {
                   )}
                 </div>
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 130 }}>
                 <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>To</div>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -179,7 +179,7 @@ function DateFilterButton({ mode, range, onChange }: {
                     style={{
                       width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
                       background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                      boxSizing: 'border-box', paddingRight: draftTo ? 40 : 8,
+                      boxSizing: 'border-box', paddingRight: 44,
                     }}
                   />
                   {draftTo && (
@@ -188,7 +188,7 @@ function DateFilterButton({ mode, range, onChange }: {
                       aria-label="Clear to date"
                       onClick={() => setDraftTo('')}
                       style={{
-                        position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                        position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)',
                         background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
                         display: 'flex', padding: 4, borderRadius: 4,
                       }}
