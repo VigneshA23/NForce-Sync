@@ -67,6 +67,17 @@ function yesterdayISO(): string {
   return toLocalISODate(d);
 }
 
+// Mirrors getBlockerRangeSubtitle's mode-aware wording (lib/pmBlockersDateFilter.ts) but for
+// the "Total Blockers" tile, which counts every status (not just open) — kept as its own
+// page-local function rather than sharing that helper, since "open" wouldn't be accurate here.
+function totalBlockersCaption(mode: DateMode, from: string, to: string): string {
+  if (mode === 'today') return 'Across blockers today';
+  if (mode === 'yesterday') return `Across blockers yesterday, ${fmtShortDate(from)}`;
+  return from === to
+    ? `Across blockers on ${fmtShortDate(from)}`
+    : `Across blockers from ${fmtShortDate(from)} to ${fmtShortDate(to)}`;
+}
+
 function DateFilterButton({ mode, range, onChange, loading }: {
   mode: DateMode;
   range: DateRange;
@@ -533,7 +544,7 @@ export default function PmBlockers() {
     if (statusFilter.size > 1) list = list.filter(b => statusFilter.has(b.status));
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(b => b.employeeName.toLowerCase().startsWith(q));
+      list = list.filter(b => b.employeeName.toLowerCase().split(/\s+/).some(w => w.startsWith(q)));
     }
     return [...list].sort((a, b) => {
       if (sortBy === 'employee') return a.employeeName.localeCompare(b.employeeName);
@@ -653,7 +664,7 @@ export default function PmBlockers() {
             leaving uneven gaps (unlike a fixed 5-column grid, which would strand a lone
             tile on its own row at in-between widths). */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={String(total)} caption="Across all teams" accent="var(--warn)" loading={isRefetching} />
+          <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={String(total)} caption={totalBlockersCaption(dateMode, range.from, range.to)} accent="var(--warn)" loading={isRefetching} />
           <StatCard
             icon={<Clock size={18} aria-hidden="true" />}
             label="Average Open Duration"

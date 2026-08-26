@@ -67,6 +67,17 @@ function yesterdayISO(): string {
   return toLocalISODate(d);
 }
 
+// Mode-aware wording for the "Total Blockers" tile — independent implementation of the same
+// pattern used by PM Blockers' getBlockerRangeSubtitle, kept page-local per no-shared-component
+// scoping (this page has no equivalent "Average Open Duration" tile to share it with anyway).
+function totalBlockersCaption(mode: DateMode, from: string, to: string): string {
+  if (mode === 'today') return 'Across blockers today';
+  if (mode === 'yesterday') return `Across blockers yesterday, ${fmtShortDate(from)}`;
+  return from === to
+    ? `Across blockers on ${fmtShortDate(from)}`
+    : `Across blockers from ${fmtShortDate(from)} to ${fmtShortDate(to)}`;
+}
+
 function DateFilterButton({ mode, range, onChange, loading }: {
   mode: DateMode;
   range: DateRange;
@@ -632,7 +643,7 @@ export default function Blockers() {
     if (assigneeFilter.size) list = list.filter(b => assigneeFilter.has(b.employeeName));
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(b => b.employeeName.toLowerCase().startsWith(q));
+      list = list.filter(b => b.employeeName.toLowerCase().split(/\s+/).some(w => w.startsWith(q)));
     }
     return [...list].sort((a, b) => {
       const aT = a.acknowledged ? new Date(a.acknowledgedAt ?? 0).getTime() : 0;
@@ -762,7 +773,7 @@ export default function Blockers() {
 
         {/* KPI row */}
         <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={total} caption="Across all projects" accent="var(--warn)" loading={isApplyingDateFilter} />
+          <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={total} caption={totalBlockersCaption(dateMode, range.from, range.to)} accent="var(--warn)" loading={isApplyingDateFilter} />
           <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={needsResponse} caption="No reply from Team Lead" accent="var(--risk)" loading={isApplyingDateFilter} />
           <StatCard icon={<Users size={18} aria-hidden="true" />} label="Acknowledged" value={acknowledgedCount} caption="Replied by Team Lead" accent="var(--info)" loading={isApplyingDateFilter} />
           <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Resolved" value={resolvedCount} caption="Marked resolved by Team Lead" accent="var(--ok)" loading={isApplyingDateFilter} />

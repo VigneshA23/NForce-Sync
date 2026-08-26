@@ -58,9 +58,11 @@ function fmtShortDate(iso: string): string {
  */
 export function getBlockerRangeSubtitle(mode: DateMode, from: string, to: string, hasBlockers: boolean): string {
   if (hasBlockers) {
+    if (mode === 'today') return 'Across blockers today';
+    if (mode === 'yesterday') return `Across blockers yesterday, ${fmtShortDate(from)}`;
     return from === to
-      ? `Across all open blockers on ${fmtShortDate(from)}`
-      : `Across all open blockers from ${fmtShortDate(from)} to ${fmtShortDate(to)}`;
+      ? `Across blockers on ${fmtShortDate(from)}`
+      : `Across blockers from ${fmtShortDate(from)} to ${fmtShortDate(to)}`;
   }
   if (mode === 'today') return `No blockers for today, ${fmtShortDate(from)}`;
   if (mode === 'yesterday') return `No blockers for yesterday, ${fmtShortDate(from)}`;
