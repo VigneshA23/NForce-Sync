@@ -451,7 +451,7 @@ function PendingCorrectionsPanel({ corrections }: { corrections: PendingCorrecti
                   </span>
                 </div>
                 {c.reviewerComment && (
-                  <div style={{ fontSize: 11, color: 'var(--txt-mut)', fontStyle: 'italic', lineHeight: 1.4 }}>
+                  <div style={{ fontSize: 11, color: 'var(--txt-mut)', lineHeight: 1.4 }}>
                     "{c.reviewerComment}"
                   </div>
                 )}

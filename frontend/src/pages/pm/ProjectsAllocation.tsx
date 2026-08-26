@@ -917,7 +917,7 @@ function ProjectsTab() {
                     {fmtDateDMY(p.startDate)}
                     <span style={{ color: 'var(--txt-dim)' }}> → </span>
                     {p.endDate ? fmtDateDMY(p.endDate) : (
-                      <span style={{ color: 'var(--txt-mut)', fontStyle: 'italic' }}>
+                      <span style={{ color: 'var(--txt-mut)' }}>
                         {STATUS_CFG[p.status]?.label ?? p.status}
                       </span>
                     )}

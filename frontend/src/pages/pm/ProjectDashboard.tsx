@@ -986,9 +986,17 @@ export default function ProjectDashboard() {
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: 'var(--txt-mut)' }} width={90} />
                 <Tooltip
                   cursor={false}
-                  contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }}
-                  formatter={((value: number, _name: string, item: { payload: { pct: number } }) =>
-                    [`${value.toFixed(1)}h (${item.payload.pct.toFixed(1)}%)`, 'Hours']) as never}
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const p = payload[0].payload as typeof billableChartData[number];
+                    const idx = billableChartData.findIndex((d) => d.name === p.name);
+                    return (
+                      <div style={{ background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 8, padding: '10px 12px', fontSize: 12 }}>
+                        <div style={{ fontWeight: 600, color: 'var(--txt)', marginBottom: 6 }}>{p.name}</div>
+                        <div style={{ color: BILLABLE_COLORS[idx] || 'var(--txt)' }}>Hours: {p.hours.toFixed(1)}h ({p.pct.toFixed(1)}%)</div>
+                      </div>
+                    );
+                  }}
                 />
                 <Bar dataKey="hours" radius={[0, 4, 4, 0]} isAnimationActive={false}>
                   {billableChartData.map((entry, i) => <Cell key={entry.name} fill={BILLABLE_COLORS[i]} />)}
