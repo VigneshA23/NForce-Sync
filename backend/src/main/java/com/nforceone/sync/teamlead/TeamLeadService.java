@@ -194,9 +194,8 @@ public class TeamLeadService {
     @Transactional(readOnly = true)
     public List<TeamBlockerDto> getBlockers(LocalDate from, LocalDate to, String actingEmail, boolean includeAcknowledged) {
         AppUser lead = requireLead(actingEmail);
-        List<EodTask> tasks = taskRepository.findBlockedByManagerId(lead.getId())
+        List<EodTask> tasks = taskRepository.findBlockedByManagerIdAndDateRange(lead.getId(), from, to)
                 .stream()
-                .filter(t -> inRange(t.getEodEntry().getEntryDate(), from, to))
                 .filter(t -> includeAcknowledged || t.getAcknowledgedAt() == null)
                 .toList();
 

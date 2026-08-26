@@ -91,9 +91,7 @@ public class PmBlockersService {
             projects = List.of(match);
         }
 
-        return findBlockedTasks(projects).stream()
-                .filter(t -> !t.getEodEntry().getEntryDate().isBefore(from)
-                        && !t.getEodEntry().getEntryDate().isAfter(to))
+        return findBlockedTasksInRange(projects, from, to).stream()
                 .filter(t -> teamManagerId == null
                         || (t.getEodEntry().getEmployee().getManager() != null
                             && teamManagerId.equals(t.getEodEntry().getEmployee().getManager().getId())))
@@ -106,6 +104,15 @@ public class PmBlockersService {
         List<Long> projectIds = projects.stream().map(Project::getId).toList();
         if (projectIds.isEmpty()) return List.of();
         return eodTaskRepository.findBlockedByProjectIds(projectIds);
+    }
+
+    // Date range narrowed at the DB level (see EodTaskRepository) rather than fetched in full
+    // and filtered in Java — the getBlockers list endpoint always has a from/to, so every call
+    // (Today/Yesterday/Custom Range alike) benefits.
+    private List<EodTask> findBlockedTasksInRange(List<Project> projects, LocalDate from, LocalDate to) {
+        List<Long> projectIds = projects.stream().map(Project::getId).toList();
+        if (projectIds.isEmpty()) return List.of();
+        return eodTaskRepository.findBlockedByProjectIdsAndDateRange(projectIds, from, to);
     }
 
     private AppUser requirePm(String actingEmail) {

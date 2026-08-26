@@ -11,7 +11,7 @@ import { FilterDropdown, SortDropdown, toggleFilterVal } from '../../components/
 import { usePmBlockers, usePmBlockersFilters, type PmBlockerDto } from '../../api/pmBlockers';
 import type { DateRange } from '../../api/teamLead';
 import { todayISO as localTodayISO, toLocalISODate } from '../../lib/date';
-import { readStoredDateFilter, resolveBlockersDateFilter, writeStoredDateFilter } from '../../lib/pmBlockersDateFilter';
+import { getBlockerRangeSubtitle, readStoredDateFilter, resolveBlockersDateFilter, writeStoredDateFilter } from '../../lib/pmBlockersDateFilter';
 
 // ── Table layout ───────────────────────────────────────────────────────────────
 // Header row and body rows must share one template or the columns desync.
@@ -67,15 +67,24 @@ function yesterdayISO(): string {
   return toLocalISODate(d);
 }
 
-function DateFilterButton({ mode, range, onChange }: {
+function DateFilterButton({ mode, range, onChange, loading }: {
   mode: DateMode;
   range: DateRange;
   onChange: (mode: DateMode, range: DateRange) => void;
+  loading: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const todayISO = localTodayISO();
   const [draftFrom, setDraftFrom] = useState(range.from);
   const [draftTo, setDraftTo] = useState(range.to);
+
+  // Native <input type="date"> min/max constraints trigger the browser's own validation
+  // bubble (e.g. "Value must be 26-08-2026 or earlier") on top of our inline error message —
+  // so min/max is intentionally omitted from the inputs below and enforced here in JS instead,
+  // keeping the inline message as the single source of validation feedback.
+  const orderInvalid = draftFrom !== '' && draftTo !== '' && draftFrom > draftTo;
+  const futureInvalid = (draftFrom !== '' && draftFrom > todayISO) || (draftTo !== '' && draftTo > todayISO);
+  const rangeInvalid = orderInvalid || futureInvalid;
 
   const label = mode === 'today' ? `Today, ${fmtShortDate(todayISO)}`
     : mode === 'yesterday' ? `Yesterday, ${fmtShortDate(range.from)}`
@@ -84,14 +93,21 @@ function DateFilterButton({ mode, range, onChange }: {
   return (
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <button
+        // Disabled while the previous selection's data is still loading — closing the trigger
+        // is what stops a user from firing a second, overlapping request before the first
+        // settles (there's nowhere else to reopen the picker from).
+        disabled={loading}
         onClick={() => { setDraftFrom(range.from); setDraftTo(range.to); setOpen(o => !o); }}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px',
           fontSize: 12.5, fontWeight: 600, color: 'var(--txt)', background: 'var(--raised)',
-          border: '1px solid var(--line)', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
+          border: '1px solid var(--line)', borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer',
+          whiteSpace: 'nowrap', opacity: loading ? 0.7 : 1,
         }}
       >
-        <Calendar size={13} aria-hidden="true" />
+        {loading
+          ? <RefreshCw size={13} aria-hidden="true" className="nf-r-spin" />
+          : <Calendar size={13} aria-hidden="true" />}
         {label}
         <ChevronDown size={12} aria-hidden="true" />
       </button>
@@ -99,16 +115,17 @@ function DateFilterButton({ mode, range, onChange }: {
         <button
           type="button"
           aria-label="Clear custom range"
+          disabled={loading}
           onClick={() => onChange('today', { from: todayISO, to: todayISO })}
           style={{
-            background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
-            display: 'flex', padding: 2,
+            background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: loading ? 'not-allowed' : 'pointer',
+            display: 'flex', padding: 2, opacity: loading ? 0.5 : 1,
           }}
         >
           <X size={13} aria-hidden="true" />
         </button>
       )}
-      {open && (
+      {open && !loading && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
           <div className="nf-r-popover" style={{
@@ -146,8 +163,9 @@ function DateFilterButton({ mode, range, onChange }: {
                 <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>From</div>
                 <div style={{ position: 'relative' }}>
                   <input
-                    type="date" value={draftFrom} max={todayISO}
+                    type="date" value={draftFrom}
                     onChange={(e) => setDraftFrom(e.target.value)}
+                    onInvalid={(e) => e.preventDefault()}
                     style={{
                       width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
                       background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
@@ -174,8 +192,9 @@ function DateFilterButton({ mode, range, onChange }: {
                 <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>To</div>
                 <div style={{ position: 'relative' }}>
                   <input
-                    type="date" value={draftTo} max={todayISO}
+                    type="date" value={draftTo}
                     onChange={(e) => setDraftTo(e.target.value)}
+                    onInvalid={(e) => e.preventDefault()}
                     style={{
                       width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
                       background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
@@ -199,14 +218,19 @@ function DateFilterButton({ mode, range, onChange }: {
                 </div>
               </div>
             </div>
-            {draftFrom !== '' && draftTo !== '' && draftFrom > draftTo && (
+            {orderInvalid && (
               <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
                 From date must be earlier than To date.
               </div>
             )}
+            {!orderInvalid && futureInvalid && (
+              <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
+                Date cannot be later than today.
+              </div>
+            )}
             <button
               onClick={() => {
-                if (draftFrom !== '' && draftTo !== '' && draftFrom > draftTo) return;
+                if (rangeInvalid) return;
                 // Either side can be cleared independently (see From/To "X" buttons above) —
                 // an empty side falls back to the other so a single-ended selection still
                 // resolves to a real range; clearing both reverts to the Today default,
@@ -217,12 +241,12 @@ function DateFilterButton({ mode, range, onChange }: {
                 onChange('range', { from, to });
                 setOpen(false);
               }}
-              disabled={draftFrom !== '' && draftTo !== '' && draftFrom > draftTo}
+              disabled={rangeInvalid}
               style={{
                 width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
                 background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                cursor: (draftFrom !== '' && draftTo !== '' && draftFrom > draftTo) ? 'not-allowed' : 'pointer',
-                opacity: (draftFrom !== '' && draftTo !== '' && draftFrom > draftTo) ? 0.6 : 1,
+                cursor: rangeInvalid ? 'not-allowed' : 'pointer',
+                opacity: rangeInvalid ? 0.6 : 1,
               }}
             >
               Apply
@@ -236,8 +260,8 @@ function DateFilterButton({ mode, range, onChange }: {
 
 // ── KPI stat card (same shape as the Team Lead Blockers page's StatCard) ───────────
 
-function StatCard({ icon, label, value, caption, accent }: {
-  icon: React.ReactNode; label: string; value: string; caption: string; accent: string;
+function StatCard({ icon, label, value, caption, accent, loading }: {
+  icon: React.ReactNode; label: string; value: string; caption: string; accent: string; loading?: boolean;
 }) {
   return (
     <Card>
@@ -251,10 +275,19 @@ function StatCard({ icon, label, value, caption, accent }: {
         </div>
         <div>
           <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', fontWeight: 600, marginBottom: 2 }}>{label}</div>
-          <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
-            {value}
-          </div>
-          <div style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{caption}</div>
+          {loading ? (
+            <>
+              <div style={{ marginBottom: 6 }}><Skel h={26} w={48} /></div>
+              <Skel h={11} w={110} />
+            </>
+          ) : (
+            <>
+              <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
+                {value}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{caption}</div>
+            </>
+          )}
         </div>
       </div>
     </Card>
@@ -478,12 +511,18 @@ export default function PmBlockers() {
   const projectByName = useMemo(() => new Map((filters?.projects ?? []).map(p => [p.name, p.id])), [filters]);
   const teamByName = useMemo(() => new Map((filters?.teams ?? []).map(t => [t.managerName, t.managerId])), [filters]);
 
-  const { data: blockers, isPending, isError, refetch } = usePmBlockers({
+  const { data: blockers, isPending, isFetching, isError, refetch } = usePmBlockers({
     ...range,
     projectId: projectFilter.size === 1 ? projectByName.get([...projectFilter][0]) : undefined,
     teamManagerId: teamFilter.size === 1 ? teamByName.get([...teamFilter][0]) : undefined,
     status: statusFilter.size === 1 ? [...statusFilter][0] : undefined,
   });
+
+  // usePmBlockers keeps the previous page's data visible while a new range/filter loads
+  // (keepPreviousData), so isPending only ever fires once, on first mount — every later
+  // date-filter/Apply click needs isFetching instead, or the app looks frozen with zero
+  // feedback for however long the request takes.
+  const isRefetching = isFetching && !isPending;
 
   const filtered = useMemo(() => {
     let list = blockers ?? [];
@@ -494,13 +533,7 @@ export default function PmBlockers() {
     if (statusFilter.size > 1) list = list.filter(b => statusFilter.has(b.status));
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(b =>
-        (b.description ?? '').toLowerCase().startsWith(q)
-        || (b.blockerReason ?? '').toLowerCase().startsWith(q)
-        || b.employeeName.toLowerCase().startsWith(q)
-        || (b.projectName ?? '').toLowerCase().startsWith(q)
-        || b.teamName.toLowerCase().startsWith(q),
-      );
+      list = list.filter(b => b.employeeName.toLowerCase().startsWith(q));
     }
     return [...list].sort((a, b) => {
       if (sortBy === 'employee') return a.employeeName.localeCompare(b.employeeName);
@@ -586,6 +619,7 @@ export default function PmBlockers() {
             <DateFilterButton
               mode={dateMode}
               range={range}
+              loading={isRefetching}
               onChange={(m, r) => {
                 const next = new URLSearchParams(searchParams);
                 next.set('mode', m);
@@ -619,17 +653,18 @@ export default function PmBlockers() {
             leaving uneven gaps (unlike a fixed 5-column grid, which would strand a lone
             tile on its own row at in-between widths). */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={String(total)} caption="Across all teams" accent="var(--warn)" />
+          <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={String(total)} caption="Across all teams" accent="var(--warn)" loading={isRefetching} />
           <StatCard
             icon={<Clock size={18} aria-hidden="true" />}
             label="Average Open Duration"
             value={avgOpenHours == null ? '—' : fmtDuration(avgOpenHours)}
-            caption={total === 0 ? 'No blockers in this range' : avgOpenHours == null ? 'All resolved' : 'Across all open blockers'}
+            caption={total === 0 ? getBlockerRangeSubtitle(dateMode, range.from, range.to, false) : avgOpenHours == null ? 'All resolved' : getBlockerRangeSubtitle(dateMode, range.from, range.to, true)}
             accent="var(--info)"
+            loading={isRefetching}
           />
-          <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={String(needsResponseCount)} caption="Requires follow-up" accent={STATUS_META.NEEDS_RESPONSE.color} />
-          <StatCard icon={<Users size={18} aria-hidden="true" />} label="Acknowledged" value={String(acknowledgedCount)} caption="Being worked on" accent={STATUS_META.ACKNOWLEDGED.color} />
-          <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Resolved" value={String(resolvedCount)} caption="Closed out" accent={STATUS_META.RESOLVED.color} />
+          <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={String(needsResponseCount)} caption="Requires follow-up" accent={STATUS_META.NEEDS_RESPONSE.color} loading={isRefetching} />
+          <StatCard icon={<Users size={18} aria-hidden="true" />} label="Acknowledged" value={String(acknowledgedCount)} caption="Being worked on" accent={STATUS_META.ACKNOWLEDGED.color} loading={isRefetching} />
+          <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Resolved" value={String(resolvedCount)} caption="Closed out" accent={STATUS_META.RESOLVED.color} loading={isRefetching} />
         </div>
 
         {/* Filter bar */}
@@ -640,7 +675,7 @@ export default function PmBlockers() {
               ref={searchInputRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search blockers/employees..."
+              placeholder="Search by employee name..."
               style={{
                 width: '100%', padding: '7px 28px 7px 32px', fontSize: 12.5, borderRadius: 8,
                 background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
@@ -712,9 +747,29 @@ export default function PmBlockers() {
             <span>Status</span>
           </div>
 
-          {pageItems.length === 0 ? (
+          {isRefetching ? (
+            // A new date range/filter is loading — show row placeholders instead of the stale
+            // (or now-mismatched) rows underneath, so the table never sits there looking frozen.
+            [0, 1, 2, 3].map(i => (
+              <div key={i} style={{
+                display: 'grid', gridTemplateColumns: BLOCKER_TABLE_COLUMNS, gap: 12,
+                padding: '14px 20px', alignItems: 'center', borderBottom: '1px solid var(--line)',
+              }}>
+                <Skel h={12} w={16} />
+                <Skel h={14} w="80%" />
+                <Skel h={14} w="70%" />
+                <Skel h={14} w="70%" />
+                <Skel h={14} w="60%" />
+                <Skel h={14} w="50%" />
+                <Skel h={20} w={80} />
+              </div>
+            ))
+          ) : pageItems.length === 0 ? (
             <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>
-              No blockers match these filters.
+              {/* If Search/Project/Team/Status filters are also narrowing the list, the zero
+                  result isn't attributable to the date range alone — keep the generic message
+                  so we don't mislead the user about the cause. */}
+              {hasFilters ? 'No blockers match these filters.' : getBlockerRangeSubtitle(dateMode, range.from, range.to, false)}
             </div>
           ) : (
             pageItems.map((b, i) => (

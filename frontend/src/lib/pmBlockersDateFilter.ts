@@ -45,6 +45,28 @@ export interface ResolvedDateFilter {
   isToday: boolean;
 }
 
+function fmtShortDate(iso: string): string {
+  return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/**
+ * Single source of truth for the range-descriptive subtitle shown wherever the PM Blockers
+ * page needs to tell the user what date range it's looking at — the "Average Open Duration"
+ * tile (both its "has data" and empty states) and the table's empty state (date-only case).
+ * Today/Yesterday resolve to a real from===to date (see resolveBlockersDateFilter), so the
+ * single-date case collapses "from X to X" into "on X" instead of repeating the date.
+ */
+export function getBlockerRangeSubtitle(mode: DateMode, from: string, to: string, hasBlockers: boolean): string {
+  if (hasBlockers) {
+    return from === to
+      ? `Across all open blockers on ${fmtShortDate(from)}`
+      : `Across all open blockers from ${fmtShortDate(from)} to ${fmtShortDate(to)}`;
+  }
+  if (mode === 'today') return `No blockers for today, ${fmtShortDate(from)}`;
+  if (mode === 'yesterday') return `No blockers for yesterday, ${fmtShortDate(from)}`;
+  return `No blockers from ${fmtShortDate(from)} to ${fmtShortDate(to)}`;
+}
+
 export function resolveBlockersDateFilter(searchParams: URLSearchParams): ResolvedDateFilter {
   const todayISO = localTodayISO();
   const stored = searchParams.get('mode') ? null : readStoredDateFilter();

@@ -368,6 +368,15 @@ textarea:-webkit-autofill:focus {
   border-radius: 4px;
 }
 
+/* ─── Loading spinner (icon rotation) ─────────────────────────────── */
+.nf-r-spin {
+  animation: nf-r-spin 0.8s linear infinite;
+}
+@keyframes nf-r-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* ═══ Responsive adaptation — tablet & mobile ═══════════════════════
  *
  * The desktop design is the source of truth and is expressed entirely in

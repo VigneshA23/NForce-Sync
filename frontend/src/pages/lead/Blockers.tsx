@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle, UserX, Users, CheckCircle2, Search, ChevronDown, RefreshCw, List as ListIcon, LayoutGrid,
   MessageCircle, X, Folder, Clock, ListChecks, CalendarDays,
-  ChevronLeft, ChevronRight, Calendar, Download, Check,
+  ChevronLeft, ChevronRight, Calendar, Check,
 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
 import { Avatar, avatarColor, TL_AVATAR_BG, BlockerThreadView } from '../../components/BlockerThread';
@@ -17,9 +17,9 @@ import { readStoredDateFilter, resolveBlockersDateFilter, writeStoredDateFilter 
 
 // ── Table layout ───────────────────────────────────────────────────────────────
 // Header row and body rows must share one template or the columns desync.
-const BLOCKER_TABLE_COLUMNS = '32px 2.2fr 1fr 1fr 0.7fr 1.3fr 1fr';
+const BLOCKER_TABLE_COLUMNS = '32px 2.2fr 1fr 1.1fr 1fr 0.7fr 1.3fr 1fr';
 // Under the 1074px desktop content width, so this never scrolls on desktop.
-const BLOCKER_TABLE_MIN_WIDTH = 900;
+const BLOCKER_TABLE_MIN_WIDTH = 1040;
 
 // ── date helpers (page-local — reference shows "31 Jul 2026, 10:24 AM" / "4d ago" /
 // "Yesterday" formats distinct from the app's DD-MM-YYYY convention used elsewhere) ──
@@ -67,15 +67,24 @@ function yesterdayISO(): string {
   return toLocalISODate(d);
 }
 
-function DateFilterButton({ mode, range, onChange }: {
+function DateFilterButton({ mode, range, onChange, loading }: {
   mode: DateMode;
   range: DateRange;
   onChange: (mode: DateMode, range: DateRange) => void;
+  loading: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const todayISO = localTodayISO();
   const [draftFrom, setDraftFrom] = useState(range.from);
   const [draftTo, setDraftTo] = useState(range.to);
+
+  // Native <input type="date"> min/max constraints trigger the browser's own validation
+  // bubble (e.g. "Value must be 26-08-2026 or earlier") on top of our inline error message —
+  // so min/max is intentionally omitted from the inputs below and enforced here in JS instead,
+  // keeping the inline message as the single source of validation feedback.
+  const orderInvalid = draftFrom !== '' && draftTo !== '' && draftFrom > draftTo;
+  const futureInvalid = (draftFrom !== '' && draftFrom > todayISO) || (draftTo !== '' && draftTo > todayISO);
+  const rangeInvalid = orderInvalid || futureInvalid;
 
   const label = mode === 'today' ? `Today, ${fmtShortDate(todayISO)}`
     : mode === 'yesterday' ? `Yesterday, ${fmtShortDate(range.from)}`
@@ -84,18 +93,25 @@ function DateFilterButton({ mode, range, onChange }: {
   return (
     <div style={{ position: 'relative' }}>
       <button
+        // Disabled while the previous selection's data is still loading — closing the trigger
+        // is what stops a user from firing a second, overlapping request before the first
+        // settles (there's nowhere else to reopen the picker from).
+        disabled={loading}
         onClick={() => { setDraftFrom(range.from); setDraftTo(range.to); setOpen(o => !o); }}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px',
           fontSize: 12.5, fontWeight: 600, color: 'var(--txt)', background: 'var(--raised)',
-          border: '1px solid var(--line)', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
+          border: '1px solid var(--line)', borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer',
+          whiteSpace: 'nowrap', opacity: loading ? 0.7 : 1,
         }}
       >
-        <Calendar size={13} aria-hidden="true" />
+        {loading
+          ? <RefreshCw size={13} aria-hidden="true" className="nf-r-spin" />
+          : <Calendar size={13} aria-hidden="true" />}
         {label}
         <ChevronDown size={12} aria-hidden="true" />
       </button>
-      {open && (
+      {open && !loading && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
           <div className="nf-r-popover" style={{
@@ -131,33 +147,90 @@ function DateFilterButton({ mode, range, onChange }: {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>From</div>
-                <input
-                  type="date" value={draftFrom} max={todayISO}
-                  onChange={(e) => setDraftFrom(e.target.value)}
-                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="date" value={draftFrom}
+                    onChange={(e) => setDraftFrom(e.target.value)}
+                    onInvalid={(e) => e.preventDefault()}
+                    style={{
+                      width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
+                      background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
+                      boxSizing: 'border-box', paddingRight: draftFrom ? 40 : 8,
+                    }}
+                  />
+                  {draftFrom && (
+                    <button
+                      type="button"
+                      aria-label="Clear from date"
+                      onClick={() => setDraftFrom('')}
+                      style={{
+                        position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                        background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
+                        display: 'flex', padding: 4, borderRadius: 4,
+                      }}
+                    >
+                      <X size={12} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>To</div>
-                <input
-                  type="date" value={draftTo} max={todayISO}
-                  onChange={(e) => setDraftTo(e.target.value)}
-                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="date" value={draftTo}
+                    onChange={(e) => setDraftTo(e.target.value)}
+                    onInvalid={(e) => e.preventDefault()}
+                    style={{
+                      width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
+                      background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
+                      boxSizing: 'border-box', paddingRight: draftTo ? 40 : 8,
+                    }}
+                  />
+                  {draftTo && (
+                    <button
+                      type="button"
+                      aria-label="Clear to date"
+                      onClick={() => setDraftTo('')}
+                      style={{
+                        position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                        background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
+                        display: 'flex', padding: 4, borderRadius: 4,
+                      }}
+                    >
+                      <X size={12} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-            {draftFrom > draftTo && (
+            {orderInvalid && (
               <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
                 From date cannot be later than To date.
               </div>
             )}
+            {!orderInvalid && futureInvalid && (
+              <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
+                Date cannot be later than today.
+              </div>
+            )}
             <button
-              onClick={() => { if (draftFrom > draftTo) return; onChange('range', { from: draftFrom, to: draftTo }); setOpen(false); }}
-              disabled={draftFrom > draftTo}
+              onClick={() => {
+                if (rangeInvalid) return;
+                // Either side can be cleared independently (see From/To "X" buttons above) —
+                // an empty side falls back to the other so a single-ended selection still
+                // resolves to a real range; clearing both reverts to the Today default.
+                if (draftFrom === '' && draftTo === '') { onChange('today', { from: todayISO, to: todayISO }); setOpen(false); return; }
+                const from = draftFrom || draftTo;
+                const to = draftTo || draftFrom;
+                onChange('range', { from, to });
+                setOpen(false);
+              }}
+              disabled={rangeInvalid}
               style={{
                 width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
                 background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                cursor: draftFrom > draftTo ? 'not-allowed' : 'pointer', opacity: draftFrom > draftTo ? 0.6 : 1,
+                cursor: rangeInvalid ? 'not-allowed' : 'pointer', opacity: rangeInvalid ? 0.6 : 1,
               }}
             >
               Apply
@@ -171,8 +244,8 @@ function DateFilterButton({ mode, range, onChange }: {
 
 // ── KPI stat card (colored icon box, per reference — distinct from the neutral-box KpiCard) ──
 
-function StatCard({ icon, label, value, caption, accent }: {
-  icon: React.ReactNode; label: string; value: number; caption: string; accent: string;
+function StatCard({ icon, label, value, caption, accent, loading }: {
+  icon: React.ReactNode; label: string; value: number; caption: string; accent: string; loading?: boolean;
 }) {
   return (
     <Card>
@@ -186,10 +259,19 @@ function StatCard({ icon, label, value, caption, accent }: {
         </div>
         <div>
           <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', fontWeight: 600, marginBottom: 2 }}>{label}</div>
-          <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
-            {value}
-          </div>
-          <div style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{caption}</div>
+          {loading ? (
+            <>
+              <div style={{ marginBottom: 6 }}><Skel h={26} w={48} /></div>
+              <Skel h={11} w={110} />
+            </>
+          ) : (
+            <>
+              <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
+                {value}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{caption}</div>
+            </>
+          )}
         </div>
       </div>
     </Card>
@@ -322,6 +404,12 @@ function BlockerRow({ b, index, selected, onClick }: {
         </div>
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{b.projectName ?? b.projectCode ?? '—'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <Avatar name={b.employeeName} bg={avatarColor(b.employeeName)} size={26} />
+        <span style={{ fontSize: 12.5, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {b.employeeName}
+        </span>
+      </div>
       <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
         {reportedDate}<br />{reportedTime}
       </div>
@@ -502,9 +590,22 @@ export default function Blockers() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { data: blockers, isPending, isError, refetch } = useTeamLeadBlockers(range, isToday, true);
+  const { data: blockers, isPending, isFetching, isError, refetch } = useTeamLeadBlockers(range, isToday, true);
+
+  // "Today" live-polls in the background (see useTeamLeadBlockers' refetchInterval), so raw
+  // isFetching can't drive the date-filter loading UI directly — every silent poll would flip
+  // it too and flash the trigger/tiles/table for a fetch the user never asked for. Track only
+  // the range/mode the user explicitly applied via the picker, and treat isFetching as "loading"
+  // solely while it's still catching up to that pending selection.
+  const [pendingDateKey, setPendingDateKey] = useState<string | null>(null);
+  const currentDateKey = `${dateMode}:${range.from}:${range.to}`;
+  const isApplyingDateFilter = pendingDateKey === currentDateKey && isFetching;
+  useEffect(() => {
+    if (pendingDateKey === currentDateKey && !isFetching) setPendingDateKey(null);
+  }, [isFetching, pendingDateKey, currentDateKey]);
 
   const [search, setSearch] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [projectFilter, setProjectFilter] = useState<Set<string>>(new Set());
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
   const [view, setView] = useState<'list' | 'group'>('list');
@@ -531,12 +632,7 @@ export default function Blockers() {
     if (assigneeFilter.size) list = list.filter(b => assigneeFilter.has(b.employeeName));
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(b =>
-        (b.description ?? '').toLowerCase().includes(q)
-        || (b.blockerReason ?? '').toLowerCase().includes(q)
-        || b.employeeName.toLowerCase().includes(q)
-        || (b.projectName ?? '').toLowerCase().includes(q),
-      );
+      list = list.filter(b => b.employeeName.toLowerCase().startsWith(q));
     }
     return [...list].sort((a, b) => {
       const aT = a.acknowledged ? new Date(a.acknowledgedAt ?? 0).getTime() : 0;
@@ -645,6 +741,7 @@ export default function Blockers() {
             <DateFilterButton
               mode={dateMode}
               range={range}
+              loading={isApplyingDateFilter}
               onChange={(m, r) => {
                 const next = new URLSearchParams(searchParams);
                 next.set('mode', m);
@@ -657,28 +754,18 @@ export default function Blockers() {
                 }
                 setSearchParams(next, { replace: true });
                 writeStoredDateFilter(m === 'range' ? { mode: m, from: r.from, to: r.to } : { mode: m });
+                setPendingDateKey(`${m}:${r.from}:${r.to}`);
               }}
             />
-            {/* TODO(backend): no export endpoint exists yet — disabled until one does. */}
-            <button
-              disabled
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', fontSize: 12.5, fontWeight: 600,
-                borderRadius: 8, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt-dim)',
-                cursor: 'not-allowed', whiteSpace: 'nowrap',
-              }}
-            >
-              <Download size={14} aria-hidden="true" /> Export Report
-            </button>
           </div>
         </div>
 
         {/* KPI row */}
         <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={total} caption="Across all projects" accent="var(--warn)" />
-          <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={needsResponse} caption="No reply from Team Lead" accent="var(--risk)" />
-          <StatCard icon={<Users size={18} aria-hidden="true" />} label="Acknowledged" value={acknowledgedCount} caption="Replied by Team Lead" accent="var(--info)" />
-          <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Resolved" value={resolvedCount} caption="Marked resolved by Team Lead" accent="var(--ok)" />
+          <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={total} caption="Across all projects" accent="var(--warn)" loading={isApplyingDateFilter} />
+          <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={needsResponse} caption="No reply from Team Lead" accent="var(--risk)" loading={isApplyingDateFilter} />
+          <StatCard icon={<Users size={18} aria-hidden="true" />} label="Acknowledged" value={acknowledgedCount} caption="Replied by Team Lead" accent="var(--info)" loading={isApplyingDateFilter} />
+          <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Resolved" value={resolvedCount} caption="Marked resolved by Team Lead" accent="var(--ok)" loading={isApplyingDateFilter} />
         </div>
 
         {/* Filter bar */}
@@ -686,14 +773,29 @@ export default function Blockers() {
           <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 180 }}>
             <Search size={14} aria-hidden="true" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-dim)' }} />
             <input
+              ref={searchInputRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by employee/blocker..."
+              placeholder="Search by employee name..."
               style={{
-                width: '100%', padding: '7px 10px 7px 32px', fontSize: 12.5, borderRadius: 8,
+                width: '100%', padding: '7px 28px 7px 32px', fontSize: 12.5, borderRadius: 8,
                 background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
               }}
             />
+            {search && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => { setSearch(''); searchInputRef.current?.focus(); }}
+                style={{
+                  position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
+                  display: 'flex', padding: 2,
+                }}
+              >
+                <X size={13} aria-hidden="true" />
+              </button>
+            )}
           </div>
           <FilterDropdown
             label="Project" options={projectOptions} selected={projectFilter}
@@ -745,16 +847,35 @@ export default function Blockers() {
             padding: '10px 20px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)',
             fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
           }}>
-            <span>#</span>
+            <span>S.NO</span>
             <span>Blocker</span>
             <span>Project</span>
+            <span>Reported By</span>
             <span>Reported On</span>
             <span>Replies</span>
             <span>Last Reply</span>
             <span>Status</span>
           </div>
 
-          {pageItems.length === 0 ? (
+          {isApplyingDateFilter ? (
+            // A new date range is loading — show row placeholders instead of the stale (or
+            // now-mismatched) rows underneath, so the table never sits there looking frozen.
+            [0, 1, 2, 3].map(i => (
+              <div key={i} style={{
+                display: 'grid', gridTemplateColumns: BLOCKER_TABLE_COLUMNS, gap: 12,
+                padding: '14px 20px', alignItems: 'center', borderBottom: '1px solid var(--line)',
+              }}>
+                <Skel h={12} w={16} />
+                <Skel h={14} w="80%" />
+                <Skel h={14} w="60%" />
+                <Skel h={14} w="60%" />
+                <Skel h={14} w="60%" />
+                <Skel h={14} w="40%" />
+                <Skel h={14} w="60%" />
+                <Skel h={20} w={80} />
+              </div>
+            ))
+          ) : pageItems.length === 0 ? (
             <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>
               No blockers match these filters.
             </div>

@@ -27,14 +27,61 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
            "ORDER BY t.eodEntry.entryDate DESC")
     List<EodTask> findBlockedByManagerId(@Param("managerId") Long managerId);
 
+    // Same as findBlockedByManagerId, narrowed to an entry-date range at the DB level and with
+    // eodEntry/employee/project/taskCategory/acknowledgedBy/resolvedBy JOIN FETCHed up front —
+    // TeamBlockerDto.from touches all of them, and without the fetch each one lazy-loads per
+    // row (N+1). findBlockedByManagerId itself is left untouched since EodService.getBlockedTasks
+    // and TeamService's dashboard blocker count also call it and don't share this bug.
+    @Query("SELECT DISTINCT t FROM EodTask t " +
+           "JOIN FETCH t.eodEntry e " +
+           "JOIN FETCH e.employee emp " +
+           "LEFT JOIN FETCH t.project " +
+           "LEFT JOIN FETCH t.taskCategory " +
+           "LEFT JOIN FETCH t.acknowledgedBy " +
+           "LEFT JOIN FETCH t.resolvedBy " +
+           "WHERE t.taskStatus = com.nforceone.sync.eod.EodTask.TaskStatus.BLOCKED " +
+           "AND e.managerId = :managerId " +
+           "AND e.status <> com.nforceone.sync.eod.EodEntry.Status.DRAFT " +
+           "AND e.entryDate BETWEEN :from AND :to " +
+           "ORDER BY e.entryDate DESC")
+    List<EodTask> findBlockedByManagerIdAndDateRange(@Param("managerId") Long managerId,
+                                                       @Param("from") LocalDate from,
+                                                       @Param("to") LocalDate to);
+
     // Cross-team view for the Project Manager Blockers page: every blocker raised against any
     // of the PM's own projects, regardless of which Team Lead the reporting employee belongs to.
-    @Query("SELECT t FROM EodTask t " +
+    // JOIN FETCHes eodEntry/employee/manager/project/taskCategory up front — PmBlockerDto.from
+    // touches all of them, and without the fetch each one lazy-loads per row (N+1), which is
+    // what made this query take ~10s once a PM's portfolio had more than a handful of blockers.
+    @Query("SELECT DISTINCT t FROM EodTask t " +
+           "JOIN FETCH t.eodEntry e " +
+           "JOIN FETCH e.employee emp " +
+           "LEFT JOIN FETCH emp.manager " +
+           "LEFT JOIN FETCH t.project " +
+           "LEFT JOIN FETCH t.taskCategory " +
            "WHERE t.taskStatus = com.nforceone.sync.eod.EodTask.TaskStatus.BLOCKED " +
            "AND t.project.id IN :projectIds " +
-           "AND t.eodEntry.status <> com.nforceone.sync.eod.EodEntry.Status.DRAFT " +
-           "ORDER BY t.eodEntry.entryDate DESC")
+           "AND e.status <> com.nforceone.sync.eod.EodEntry.Status.DRAFT " +
+           "ORDER BY e.entryDate DESC")
     List<EodTask> findBlockedByProjectIds(@Param("projectIds") List<Long> projectIds);
+
+    // Same as above, narrowed to an entry-date range at the DB level — used by the Blockers
+    // page's date filter (Today/Yesterday/Custom Range all go through this) instead of fetching
+    // the PM's entire blocker history and filtering it in Java on every request.
+    @Query("SELECT DISTINCT t FROM EodTask t " +
+           "JOIN FETCH t.eodEntry e " +
+           "JOIN FETCH e.employee emp " +
+           "LEFT JOIN FETCH emp.manager " +
+           "LEFT JOIN FETCH t.project " +
+           "LEFT JOIN FETCH t.taskCategory " +
+           "WHERE t.taskStatus = com.nforceone.sync.eod.EodTask.TaskStatus.BLOCKED " +
+           "AND t.project.id IN :projectIds " +
+           "AND e.status <> com.nforceone.sync.eod.EodEntry.Status.DRAFT " +
+           "AND e.entryDate BETWEEN :from AND :to " +
+           "ORDER BY e.entryDate DESC")
+    List<EodTask> findBlockedByProjectIdsAndDateRange(@Param("projectIds") List<Long> projectIds,
+                                                        @Param("from") LocalDate from,
+                                                        @Param("to") LocalDate to);
 
     // ── Project Dashboard aggregates ──────────────────────────────────────────
     // All scoped to APPROVED entries only — matches UtilizationService's convention that only
