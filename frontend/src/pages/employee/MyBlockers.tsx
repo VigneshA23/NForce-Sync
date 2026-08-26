@@ -65,7 +65,7 @@ function DateFilterButton({ mode, range, onChange }: {
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
           <div className="nf-r-popover" style={{
-            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 260,
+            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 300,
             background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
             boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
           }}>
@@ -95,35 +95,86 @@ function DateFilterButton({ mode, range, onChange }: {
               Custom range
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 130 }}>
                 <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>From</div>
-                <input
-                  type="date" value={draftFrom} max={todayISO}
-                  onChange={(e) => setDraftFrom(e.target.value)}
-                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="date" value={draftFrom} max={todayISO}
+                    onChange={(e) => setDraftFrom(e.target.value)}
+                    style={{
+                      width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
+                      background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
+                      boxSizing: 'border-box', paddingRight: 44,
+                    }}
+                  />
+                  {draftFrom && (
+                    <button
+                      type="button"
+                      aria-label="Clear from date"
+                      onClick={() => setDraftFrom('')}
+                      style={{
+                        position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)',
+                        background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
+                        display: 'flex', padding: 4, borderRadius: 4,
+                      }}
+                    >
+                      <X size={12} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 130 }}>
                 <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>To</div>
-                <input
-                  type="date" value={draftTo} max={todayISO}
-                  onChange={(e) => setDraftTo(e.target.value)}
-                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="date" value={draftTo} max={todayISO}
+                    onChange={(e) => setDraftTo(e.target.value)}
+                    style={{
+                      width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
+                      background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
+                      boxSizing: 'border-box', paddingRight: 44,
+                    }}
+                  />
+                  {draftTo && (
+                    <button
+                      type="button"
+                      aria-label="Clear to date"
+                      onClick={() => setDraftTo('')}
+                      style={{
+                        position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)',
+                        background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
+                        display: 'flex', padding: 4, borderRadius: 4,
+                      }}
+                    >
+                      <X size={12} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-            {draftFrom > draftTo && (
+            {draftFrom !== '' && draftTo !== '' && draftFrom > draftTo && (
               <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
                 From date cannot be later than To date.
               </div>
             )}
             <button
-              onClick={() => { if (draftFrom > draftTo) return; onChange('range', { from: draftFrom, to: draftTo }); setOpen(false); }}
-              disabled={draftFrom > draftTo}
+              onClick={() => {
+                if (draftFrom !== '' && draftTo !== '' && draftFrom > draftTo) return;
+                // Either side can be cleared independently (see From/To "X" buttons above) —
+                // an empty side falls back to the other so a single-ended selection still
+                // resolves to a real range; clearing both reverts to the Today default.
+                if (draftFrom === '' && draftTo === '') { onChange('today', { from: todayISO, to: todayISO }); setOpen(false); return; }
+                const from = draftFrom || draftTo;
+                const to = draftTo || draftFrom;
+                onChange('range', { from, to });
+                setOpen(false);
+              }}
+              disabled={draftFrom !== '' && draftTo !== '' && draftFrom > draftTo}
               style={{
                 width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
                 background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                cursor: draftFrom > draftTo ? 'not-allowed' : 'pointer', opacity: draftFrom > draftTo ? 0.6 : 1,
+                cursor: (draftFrom !== '' && draftTo !== '' && draftFrom > draftTo) ? 'not-allowed' : 'pointer',
+                opacity: (draftFrom !== '' && draftTo !== '' && draftFrom > draftTo) ? 0.6 : 1,
               }}
             >
               Apply
@@ -269,7 +320,7 @@ function BlockerRow({ b, selected, onClick }: {
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 2 }}>
           <span style={{ color: 'var(--txt-dim)', fontWeight: 500 }}>Category: </span>
-          {b.description ?? 'Blocked task'}
+          {b.categoryName ?? 'Blocked task'}
         </div>
         <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           <span style={{ color: 'var(--txt-dim)' }}>Reason: </span>
@@ -314,7 +365,7 @@ function DetailPanel({ b, onClose }: { b: BlockedTask; onClose: () => void }) {
 
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
           <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Category: </span>
-          {b.description ?? 'Blocked task'}
+          {b.categoryName ?? 'Blocked task'}
         </div>
         <div style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.5, marginBottom: 16 }}>
           <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Reason: </span>

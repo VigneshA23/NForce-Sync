@@ -143,12 +143,15 @@ export function SearchBox({ value, onChange, placeholder, ariaLabel }: {
 // a non-default value is chosen, the identical "X Clear" button used there — same markup,
 // style and hover behavior — so clearing the status here works exactly like clearing a filter
 // on that page, without touching the other filter(s) in this toolbar (e.g. search).
-export function StatusFilterSelect({ value, onChange, options, ariaLabel, defaultValue = 'ALL' }: {
+export function StatusFilterSelect({ value, onChange, options, ariaLabel, defaultValue = 'ALL', showOwnClear = true }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   ariaLabel: string;
   defaultValue?: string;
+  // Set false when this select sits alongside other filters that already share one combined
+  // Clear control (see ProjectsPanel below) — avoids showing two "Clear" buttons at once.
+  showOwnClear?: boolean;
 }) {
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -162,7 +165,7 @@ export function StatusFilterSelect({ value, onChange, options, ariaLabel, defaul
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
-      {value !== defaultValue && (
+      {showOwnClear && value !== defaultValue && (
         <button
           type="button"
           onClick={() => onChange(defaultValue)}
@@ -224,6 +227,15 @@ export function ProjectsPanel({
     });
   }, [projects, search, statusFilter]);
 
+  // Drives the toolbar's single Clear button — visible the moment either filter is active,
+  // not just when status is set (see StatusFilterSelect's showOwnClear={false} below, which
+  // hands off its own per-field clear to this combined control).
+  const anyFilterSet = search !== '' || statusFilter !== 'ALL';
+  function clearFilters() {
+    setSearch('');
+    setStatusFilter('ALL');
+  }
+
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
       <div style={{
@@ -269,6 +281,7 @@ export function ProjectsPanel({
             value={statusFilter}
             onChange={v => setStatusFilter(v as ProjectStatusFilter)}
             ariaLabel="Filter assigned projects by status"
+            showOwnClear={false}
             options={[
               { value: 'ALL', label: 'Filter by status' },
               { value: 'ACTIVE', label: 'Active' },
@@ -277,6 +290,22 @@ export function ProjectsPanel({
               { value: 'COMPLETED', label: 'Completed' },
             ]}
           />
+          {anyFilterSet && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              aria-label="Clear all filters"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 12px',
+                background: 'transparent', border: '1px solid var(--line2)', borderRadius: 7,
+                color: 'var(--txt-mut)', fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--txt)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--txt-mut)'; }}
+            >
+              <X size={13} aria-hidden="true" /> Clear
+            </button>
+          )}
         </div>
       )}
 

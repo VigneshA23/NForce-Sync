@@ -30,6 +30,7 @@ export interface BlockedTask {
   entryId: number;
   entryDate: string;
   projectName: string;
+  categoryName: string | null;
   description: string;
   blockerReason: string | null;
   acknowledged: boolean;

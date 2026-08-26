@@ -36,6 +36,7 @@ public record DashboardSummaryDto(
             Long entryId,
             LocalDate entryDate,
             String projectName,
+            String categoryName,
             String description,
             String blockerReason,
             boolean acknowledged,

@@ -206,11 +206,13 @@ public class EmployeeService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
         String projectName = task.getProject() != null ? task.getProject().getName() : "—";
+        String categoryName = task.getTaskCategory() != null ? task.getTaskCategory().getName() : null;
         return new DashboardSummaryDto.BlockedTask(
                 task.getId(),
                 entry.getId(),
                 entry.getEntryDate(),
                 projectName,
+                categoryName,
                 task.getDescription(),
                 task.getBlockerReason(),
                 task.getAcknowledgedAt() != null,
@@ -239,11 +241,13 @@ public class EmployeeService {
             for (EodTask task : entry.getTasks()) {
                 if (task.getTaskStatus() == EodTask.TaskStatus.BLOCKED) {
                     String projectName = task.getProject() != null ? task.getProject().getName() : "—";
+                    String categoryName = task.getTaskCategory() != null ? task.getTaskCategory().getName() : null;
                     blocked.add(new DashboardSummaryDto.BlockedTask(
                             task.getId(),
                             entry.getId(),
                             entry.getEntryDate(),
                             projectName,
+                            categoryName,
                             task.getDescription(),
                             task.getBlockerReason(),
                             task.getAcknowledgedAt() != null,
