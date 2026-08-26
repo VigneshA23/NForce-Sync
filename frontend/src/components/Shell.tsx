@@ -1,16 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Menu, X, Search, Bell, LogOut, Sun, Moon, UserCircle2, HelpCircle, Shield } from 'lucide-react';
+import { Menu, X, Search, Bell, LogOut, Sun, Moon, UserCircle2, HelpCircle, Shield, FolderKanban } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { NAV, ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem } from '../lib/nav';
+import type { NavItem } from '../lib/nav';
 import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { NotAuthorized } from '../pages/NotAuthorized';
-import { searchUsers, listLocations } from '../api/admin';
-import { fetchProfile } from '../api/profile';
+import { globalSearch } from '../api/search';
+import type { UserResult, ProjectResult } from '../api/search';
 import { toRole } from '../api/auth';
+import { fetchProfile } from '../api/profile';
 import { useUnreadNotificationsCount } from '../api/notifications';
 import { usePendingApprovalsCount } from '../api/approvals';
 import { useTeamLeadSummary } from '../api/teamLead';
@@ -19,8 +21,9 @@ import { resolveBlockersDateFilter } from '../lib/pmBlockersDateFilter';
 import { todayISO } from '../lib/date';
 
 // ─── Workspace search (top nav) ────────────────────────────────────────────────
-// Only wired up for superadmin — the destination (User Management) and the
-// backend /users/search endpoint are both superadmin-only today.
+// Pattern mirrors OneHR's global search: nav items filtered client-side (instant),
+// users + projects via a single debounced /api/search call (300ms). All roles.
+// Keyboard nav: ArrowUp/Down, Enter to select, Escape to close.
 
 /**
  * The signed-in user's uploaded photo, or null while they have none.
@@ -59,42 +62,67 @@ function AvatarContent({ photo, initials }: { photo: string | null; initials: st
 
 function WorkspaceSearch() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [open, setOpen] = useState(false);
+  const [idx, setIdx] = useState(-1);
 
-  // Debounce ~300ms
+  const role = user!.role;
+  const allNavItems = useMemo(
+    () => NAV[role].flatMap((s) => s.items),
+    [role],
+  );
+
+  // Nav items matched client-side (instant, no debounce)
+  const navMatches = useMemo<NavItem[]>(() => {
+    const q = query.toLowerCase().trim();
+    if (!q) return [];
+    return allNavItems.filter((n) => n.label.toLowerCase().includes(q)).slice(0, 4);
+  }, [query, allNavItems]);
+
+  // 300ms debounce for backend call
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 300);
     return () => clearTimeout(t);
   }, [query]);
 
-  const { data: results, isFetching } = useQuery({
-    queryKey: ['workspace-search', debounced],
-    queryFn: () => searchUsers({ q: debounced }),
-    enabled: debounced.length > 0,
+  const { data: searchData, isFetching } = useQuery({
+    queryKey: ['global-search', debounced],
+    queryFn: () => globalSearch(debounced),
+    enabled: debounced.length >= 2,
+    staleTime: 30_000,
   });
 
-  const { data: locations } = useQuery({
-    queryKey: ['org', 'locations'],
-    queryFn: listLocations,
-    staleTime: 5 * 60 * 1000,
-  });
+  const userMatches: UserResult[] = searchData?.users ?? [];
+  const projectMatches: ProjectResult[] = searchData?.projects ?? [];
 
-  function locationName(id: number | null): string | null {
-    if (id == null) return null;
-    return locations?.find((l) => l.id === id)?.name ?? null;
-  }
+  // Flat list for keyboard navigation indexing
+  type ResultItem =
+    | { kind: 'nav'; item: NavItem }
+    | { kind: 'user'; user: UserResult }
+    | { kind: 'project'; project: ProjectResult };
+
+  const allResults = useMemo<ResultItem[]>(() => [
+    ...navMatches.map((item) => ({ kind: 'nav' as const, item })),
+    ...userMatches.map((u) => ({ kind: 'user' as const, user: u })),
+    ...projectMatches.map((p) => ({ kind: 'project' as const, project: p })),
+  ], [navMatches, userMatches, projectMatches]);
+
+  useEffect(() => { setIdx(-1); }, [query]);
 
   // Close on outside click / Escape
   useEffect(() => {
     if (!open) return;
     function onMouse(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false); setIdx(-1);
+      }
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') { setOpen(false); setIdx(-1); }
     }
     document.addEventListener('mousedown', onMouse);
     document.addEventListener('keydown', onKey);
@@ -104,13 +132,32 @@ function WorkspaceSearch() {
     };
   }, [open]);
 
-  function handleSelect(userId: number) {
-    setOpen(false);
-    setQuery('');
-    navigate(`/admin/users?userId=${userId}`);
+  function projectRoute(): string {
+    if (role === 'pm') return '/projects';
+    if (role === 'lead') return '/team/projects';
+    if (role === 'dm') return '/dm/allocation';
+    if (role === 'employee') return '/my-projects';
+    return '/projects';
   }
 
-  const showDropdown = open && debounced.length > 0;
+  function handleSelect(result: ResultItem) {
+    setOpen(false); setQuery(''); setIdx(-1);
+    if (result.kind === 'nav') navigate(result.item.path);
+    else if (result.kind === 'user') navigate(`/admin/users?userId=${result.user.id}`);
+    else navigate(projectRoute());
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setIdx((i) => Math.min(i + 1, allResults.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setIdx((i) => Math.max(i - 1, -1)); }
+    else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); handleSelect(allResults[idx]); }
+    else if (e.key === 'Escape') { setOpen(false); setIdx(-1); }
+  }
+
+  const hasResults = navMatches.length > 0 || userMatches.length > 0 || projectMatches.length > 0;
+  const showEmpty = !isFetching && !hasResults && debounced.length >= 2;
+  const showLoading = isFetching && !hasResults;
+  const showDropdown = open && query.trim().length >= 1;
 
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
@@ -119,36 +166,37 @@ function WorkspaceSearch() {
         role="search"
         aria-label="Search workspace"
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          background: '#1E2128',
-          border: '1px solid #2A2E37',
-          borderRadius: 8,
-          padding: '7px 11px',
-          color: '#6B7280',
-          fontSize: 12,
-          minWidth: 188,
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: '#1E2128', border: '1px solid #2A2E37', borderRadius: 8,
+          padding: '7px 11px', color: '#6B7280', fontSize: 12, minWidth: 188,
         }}
       >
         <Search size={13} aria-hidden="true" style={{ flexShrink: 0 }} />
         <input
+          ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
+          onKeyDown={handleKeyDown}
           placeholder="Search this workspace..."
-          aria-label="Search workspace by name, email, role, or location"
+          aria-label="Search navigation, people, and projects"
+          aria-expanded={showDropdown}
+          aria-haspopup="listbox"
           style={{
-            background: 'transparent',
-            border: 'none',
-            outline: 'none',
-            color: '#C8CCD2',
-            fontSize: 12,
-            width: '100%',
-            fontFamily: 'Inter, sans-serif',
+            background: 'transparent', border: 'none', outline: 'none',
+            color: '#C8CCD2', fontSize: 12, width: '100%', fontFamily: 'Inter, sans-serif',
           }}
         />
+        {query && (
+          <button
+            onClick={() => { setQuery(''); setOpen(false); setIdx(-1); }}
+            aria-label="Clear search"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', padding: 0, display: 'flex', alignItems: 'center' }}
+          >
+            <X size={12} aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       {showDropdown && (
@@ -157,53 +205,94 @@ function WorkspaceSearch() {
           aria-label="Search results"
           className="nf-r-popover"
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            width: 300,
-            background: '#1E2128',
-            border: '1px solid #2A2E37',
-            borderRadius: 10,
-            boxShadow: '0 8px 24px rgba(0,0,0,.44)',
-            zIndex: 100,
-            maxHeight: 320,
-            overflowY: 'auto',
+            position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 300,
+            background: '#16181D', border: '1px solid #2A2E37', borderRadius: 10,
+            boxShadow: '0 8px 32px rgba(0,0,0,.55)', zIndex: 100,
+            maxHeight: 360, overflowY: 'auto',
           }}
         >
-          {isFetching ? (
+          {/* Navigate */}
+          {navMatches.length > 0 && (
+            <>
+              <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em' }}>Navigate</div>
+              {navMatches.map((item, i) => {
+                const Icon = item.icon;
+                const highlighted = idx === i;
+                return (
+                  <button key={item.key}
+                    onMouseDown={() => handleSelect({ kind: 'nav', item })}
+                    onMouseEnter={() => setIdx(i)}
+                    onMouseLeave={() => setIdx(-1)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: highlighted ? 'rgba(255,255,255,.06)' : 'none', border: 'none', cursor: 'pointer', color: '#C8CCD2', fontSize: 13, textAlign: 'left' }}>
+                    <Icon size={14} style={{ color: '#9BA1AC', flexShrink: 0 }} aria-hidden="true" />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </>
+          )}
+
+          {/* People */}
+          {userMatches.length > 0 && (
+            <>
+              <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em', borderTop: navMatches.length > 0 ? '1px solid #23262D' : 'none' }}>People</div>
+              {userMatches.map((u, i) => {
+                const globalIdx = navMatches.length + i;
+                const highlighted = idx === globalIdx;
+                const initials = u.fullName.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
+                return (
+                  <button key={u.id}
+                    onMouseDown={() => handleSelect({ kind: 'user', user: u })}
+                    onMouseEnter={() => setIdx(globalIdx)}
+                    onMouseLeave={() => setIdx(-1)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: highlighted ? 'rgba(255,255,255,.06)' : 'none', border: 'none', cursor: 'pointer', color: '#C8CCD2', fontSize: 13, textAlign: 'left' }}>
+                    <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', background: '#B11116', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 600, color: '#fff', flexShrink: 0 }}>
+                      {initials}
+                    </span>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.fullName}</div>
+                      <div style={{ fontSize: 11, color: '#6B7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.email} · {ROLE_LABELS[toRole(u.role)] ?? u.role}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </>
+          )}
+
+          {/* Projects */}
+          {projectMatches.length > 0 && (
+            <>
+              <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.08em', borderTop: (navMatches.length > 0 || userMatches.length > 0) ? '1px solid #23262D' : 'none' }}>Projects</div>
+              {projectMatches.map((p, i) => {
+                const globalIdx = navMatches.length + userMatches.length + i;
+                const highlighted = idx === globalIdx;
+                return (
+                  <button key={p.id}
+                    onMouseDown={() => handleSelect({ kind: 'project', project: p })}
+                    onMouseEnter={() => setIdx(globalIdx)}
+                    onMouseLeave={() => setIdx(-1)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: highlighted ? 'rgba(255,255,255,.06)' : 'none', border: 'none', cursor: 'pointer', color: '#C8CCD2', fontSize: 13, textAlign: 'left' }}>
+                    <FolderKanban size={14} style={{ color: '#9BA1AC', flexShrink: 0 }} aria-hidden="true" />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                      <div style={{ fontSize: 11, color: '#6B7280' }}>{p.code}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </>
+          )}
+
+          {/* Loading */}
+          {showLoading && (
             <div style={{ padding: '14px 16px', fontSize: 12, color: '#9BA1AC' }}>Searching…</div>
-          ) : !results || results.length === 0 ? (
+          )}
+
+          {/* Empty */}
+          {showEmpty && (
             <div style={{ padding: '14px 16px', fontSize: 12, color: '#9BA1AC' }}>
               No results for &ldquo;{debounced}&rdquo;
             </div>
-          ) : (
-            results.map((u) => (
-              <button
-                key={u.id}
-                type="button"
-                role="option"
-                aria-selected={false}
-                onClick={() => handleSelect(u.id)}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '10px 14px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: '1px solid #2A2E37',
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.05)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              >
-                <div style={{ fontSize: 13, color: '#E8EAED', fontWeight: 500 }}>{u.fullName}</div>
-                <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>
-                  {u.email} · {ROLE_LABELS[toRole(u.role)] ?? u.role}
-                  {locationName(u.locationId) ? ` · ${locationName(u.locationId)}` : ''}
-                </div>
-              </button>
-            ))
           )}
         </div>
       )}
@@ -659,34 +748,8 @@ export function Shell() {
           {/* Right controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
 
-            {/* Search bar — functional for superadmin (User Management search target);
-                decorative placeholder for other roles, matching the original spec */}
-            {role === 'superadmin' ? (
-              <WorkspaceSearch />
-            ) : (
-              <div
-                className="shell-search"
-                role="search"
-                aria-label="Search workspace"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  background: '#1E2128',
-                  border: '1px solid #2A2E37',
-                  borderRadius: 8,
-                  padding: '7px 11px',
-                  color: '#6B7280',
-                  fontSize: 12,
-                  cursor: 'text',
-                  userSelect: 'none',
-                  minWidth: 188,
-                }}
-              >
-                <Search size={13} aria-hidden="true" style={{ flexShrink: 0 }} />
-                <span>Search this workspace...</span>
-              </div>
-            )}
+            {/* Global search — nav items (client-side), people + projects (role-scoped backend) */}
+            <WorkspaceSearch />
 
             {/* Theme toggle — current-mode text label */}
             <button
