@@ -322,6 +322,10 @@ function BlockerRow({ b, selected, onClick }: {
           <span style={{ color: 'var(--txt-dim)', fontWeight: 500 }}>Category: </span>
           {b.categoryName ?? 'Blocked task'}
         </div>
+        <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
+          <span style={{ color: 'var(--txt-dim)' }}>Description: </span>
+          {b.description || '—'}
+        </div>
         <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           <span style={{ color: 'var(--txt-dim)' }}>Reason: </span>
           {b.blockerReason ?? '—'}
@@ -366,6 +370,10 @@ function DetailPanel({ b, onClose }: { b: BlockedTask; onClose: () => void }) {
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
           <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Category: </span>
           {b.categoryName ?? 'Blocked task'}
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.5, marginBottom: 10 }}>
+          <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Description: </span>
+          {b.description || 'No description provided.'}
         </div>
         <div style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.5, marginBottom: 16 }}>
           <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Reason: </span>
