@@ -97,8 +97,11 @@ export function fmtDateDMY(iso: string | null | undefined): string {
 
 // ── Search box (mirrors pages/pm/ProjectsAllocation.tsx search pattern) ─────────
 
-export function SearchBox({ value, onChange, placeholder, ariaLabel }: {
+export function SearchBox({ value, onChange, placeholder, ariaLabel, showClearButton = true }: {
   value: string; onChange: (v: string) => void; placeholder: string; ariaLabel: string;
+  // Set false to omit the in-field "X" clear button (e.g. Assigned Projects search, where
+  // clearing is meant to be keyboard-only — Backspace/Delete — with no clear icon at all).
+  showClearButton?: boolean;
 }) {
   return (
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: '100%', maxWidth: 320 }}>
@@ -115,9 +118,9 @@ export function SearchBox({ value, onChange, placeholder, ariaLabel }: {
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={ariaLabel}
-        style={{ ...inputStyle, paddingLeft: 30, paddingRight: value !== '' ? 30 : 12, fontWeight: 400 }}
+        style={{ ...inputStyle, paddingLeft: 30, paddingRight: showClearButton && value !== '' ? 30 : 12, fontWeight: 400 }}
       />
-      {value !== '' && (
+      {showClearButton && value !== '' && (
         <button
           type="button"
           onClick={() => onChange('')}
@@ -275,6 +278,7 @@ export function ProjectsPanel({
               onChange={setSearch}
               placeholder="Search assigned projects..."
               ariaLabel="Search assigned projects by name or code"
+              showClearButton={false}
             />
           </div>
           <StatusFilterSelect

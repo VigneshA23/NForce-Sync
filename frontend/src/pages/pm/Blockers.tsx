@@ -351,9 +351,15 @@ function BlockerRow({ b, index, selected, onClick }: {
       <div style={{ fontSize: 12, color: 'var(--txt-dim)', fontWeight: 600 }}>{index}</div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 2 }}>
-          {b.description ?? 'Blocked task'}
+          <span style={{ color: 'var(--txt-dim)', fontWeight: 500 }}>Category: </span>
+          {b.categoryName ?? 'Blocked task'}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
+          <span style={{ color: 'var(--txt-dim)' }}>Description: </span>
+          {b.description || '—'}
         </div>
         <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--txt-dim)' }}>Reason: </span>
           {b.blockerReason ?? '—'}
         </div>
       </div>
@@ -403,7 +409,7 @@ function DetailPanel({ b, onClose }: { b: PmBlockerDto; onClose: () => void }) {
             <Avatar name={b.employeeName} bg={avatarColor(b.employeeName)} size={38} />
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>{b.description ?? 'Blocked task'}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>{b.categoryName ?? 'Blocked task'}</div>
               </div>
               <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>{b.employeeName} · {b.employeeCode}</div>
             </div>
@@ -445,14 +451,21 @@ function DetailPanel({ b, onClose }: { b: PmBlockerDto; onClose: () => void }) {
 
       <div style={{ padding: '16px 20px', flex: 1, minHeight: 0, overflowY: 'auto' }}>
         <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-          Description
+          Category
         </div>
         <div style={{ fontSize: 13, color: 'var(--txt)', lineHeight: 1.5, marginBottom: 16 }}>
-          {b.description ?? 'No description provided.'}
+          {b.categoryName ?? 'Blocked task'}
         </div>
 
         <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-          Blocker Reason
+          Description
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--txt)', lineHeight: 1.5, marginBottom: 16 }}>
+          {b.description || 'No description provided.'}
+        </div>
+
+        <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+          Reason
         </div>
         <div style={{ fontSize: 13, color: 'var(--txt)', lineHeight: 1.5, marginBottom: 20 }}>
           {b.blockerReason ?? 'No detail provided.'}

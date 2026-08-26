@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle, UserX, Users, CheckCircle2, Search, ChevronDown, RefreshCw, List as ListIcon, LayoutGrid,
-  MessageCircle, X, Folder, Clock, ListChecks, CalendarDays,
+  MessageCircle, X, Folder, Clock, CalendarDays,
   ChevronLeft, ChevronRight, Calendar, Check,
 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
@@ -406,7 +406,11 @@ function BlockerRow({ b, index, selected, onClick }: {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 2 }}>
             <span style={{ color: 'var(--txt-dim)', fontWeight: 500 }}>Category: </span>
-            {b.description ?? 'Blocked task'}
+            {b.categoryName ?? 'Blocked task'}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
+            <span style={{ color: 'var(--txt-dim)' }}>Description: </span>
+            {b.description || '—'}
           </div>
           <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             <span style={{ color: 'var(--txt-dim)' }}>Reason: </span>
@@ -509,7 +513,11 @@ function DetailPanel({ b, range, onClose }: { b: TeamBlockerDto; range: DateRang
 
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)', marginBottom: 6 }}>
           <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Category: </span>
-          {b.description ?? 'Blocked task'}
+          {b.categoryName ?? 'Blocked task'}
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.5, marginBottom: 10 }}>
+          <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Description: </span>
+          {b.description || 'No description provided.'}
         </div>
         <div style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.5, marginBottom: 16 }}>
           <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Reason: </span>
@@ -523,9 +531,6 @@ function DetailPanel({ b, range, onClose }: { b: TeamBlockerDto; range: DateRang
           <InfoField icon={<Clock size={14} aria-hidden="true" />} label="Reported On">
             {reportedDate}, {reportedTime}
             {b.submittedAt && <span style={{ color: 'var(--txt-dim)', fontWeight: 400 }}> ({fmtRelativeDays(b.submittedAt)})</span>}
-          </InfoField>
-          <InfoField icon={<ListChecks size={14} aria-hidden="true" />} label="Task / Module">
-            {b.categoryName ?? '—'}
           </InfoField>
           <InfoField icon={<CalendarDays size={14} aria-hidden="true" />} label="Reported in EOD">
             {fmtShortDate(b.entryDate)}
