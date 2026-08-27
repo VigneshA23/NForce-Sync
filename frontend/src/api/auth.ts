@@ -75,6 +75,18 @@ export async function changePassword(
   return res.data;
 }
 
+export async function resetPasswordWithToken(
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ token: string; user: ServerUser; mustChangePassword: boolean }> {
+  const res = await api.post<{ token: string; user: ServerUser; mustChangePassword: boolean }>(
+    '/auth/reset-password-with-token',
+    { token, currentPassword, newPassword },
+  );
+  return res.data;
+}
+
 export async function getMe(token: string): Promise<ServerUser> {
   const res = await api.get<ServerUser>('/auth/me', {
     headers: { Authorization: `Bearer ${token}` },

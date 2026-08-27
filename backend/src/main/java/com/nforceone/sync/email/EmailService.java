@@ -41,9 +41,9 @@ public class EmailService {
         sendAsync(toEmail, subject, html);
     }
 
-    public void sendPasswordResetEmail(String toEmail, String fullName, String tempPassword) {
+    public void sendPasswordResetEmail(String toEmail, String fullName, String tempPassword, String resetToken) {
         String subject = "NForce Sync — your password has been reset";
-        String html = buildResetHtml(fullName, toEmail, tempPassword);
+        String html = buildResetHtml(fullName, toEmail, tempPassword, resetToken);
         sendAsync(toEmail, subject, html);
     }
 
@@ -57,9 +57,9 @@ public class EmailService {
      *
      * @return true when Resend accepted the message (2xx)
      */
-    public boolean sendPasswordResetEmailSync(String toEmail, String fullName, String tempPassword) {
+    public boolean sendPasswordResetEmailSync(String toEmail, String fullName, String tempPassword, String resetToken) {
         String subject = "NForce Sync — your password has been reset";
-        String html = buildResetHtml(fullName, toEmail, tempPassword);
+        String html = buildResetHtml(fullName, toEmail, tempPassword, resetToken);
         return sendBlocking(toEmail, subject, html);
     }
 
@@ -161,7 +161,7 @@ public class EmailService {
                 """.formatted(fullName, email, tempPassword, baseUrlResolver.resolve());
     }
 
-    private String buildResetHtml(String fullName, String email, String tempPassword) {
+    private String buildResetHtml(String fullName, String email, String tempPassword, String resetToken) {
         return """
                 <!DOCTYPE html>
                 <html lang="en">
@@ -189,7 +189,7 @@ public class EmailService {
                             <p style="margin:0;font-size:13px;color:#f4a5a8;line-height:1.5;">You will be required to set a new password on sign-in. If you didn't request this, contact your HR administrator immediately.</p>
                           </div>
 
-                          <a href="%s/login" style="display:inline-block;background:#B11116;color:#ffffff;font-weight:700;font-size:14px;text-decoration:none;padding:12px 28px;border-radius:8px;">Sign in to NForce Sync →</a>
+                          <a href="%s/force-change-password?token=%s" style="display:inline-block;background:#B11116;color:#ffffff;font-weight:700;font-size:14px;text-decoration:none;padding:12px 28px;border-radius:8px;">Sign in to NForce Sync →</a>
                         </td></tr>
                         <tr><td style="padding:20px 36px;border-top:1px solid #2A2E37;">
                           <p style="margin:0;font-size:12px;color:#6B7280;">This email was sent by NForce Sync. If you didn't request a password reset, please ignore this email.</p>
@@ -199,7 +199,7 @@ public class EmailService {
                   </table>
                 </body>
                 </html>
-                """.formatted(fullName, email, tempPassword, baseUrlResolver.resolve());
+                """.formatted(fullName, email, tempPassword, baseUrlResolver.resolve(), resetToken);
     }
 
     private String jsonString(String raw) {

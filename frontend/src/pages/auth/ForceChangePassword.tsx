@@ -1,9 +1,9 @@
 import { useState, useId } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
 import { AuthLayout } from './AuthLayout';
 import { useAuth, ROLE_LANDING, buildAuthUser } from '../../lib/auth';
-import { changePassword } from '../../api/auth';
+import { changePassword, resetPasswordWithToken } from '../../api/auth';
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -36,6 +36,10 @@ const labelStyle: React.CSSProperties = {
 export default function ForceChangePassword() {
   const { user, loginWithCredentials } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Present when opened from the "Sign in to NForce Sync" link in the password-reset email —
+  // that flow has no active session yet, so the reset token stands in for one.
+  const resetToken = searchParams.get('token');
 
   const curId  = useId();
   const newId  = useId();
@@ -69,10 +73,9 @@ export default function ForceChangePassword() {
 
     setSubmitting(true);
     try {
-      const { token, user: serverUser, mustChangePassword } = await changePassword(
-        currentPassword,
-        newPassword,
-      );
+      const { token, user: serverUser, mustChangePassword } = resetToken
+        ? await resetPasswordWithToken(resetToken, currentPassword, newPassword)
+        : await changePassword(currentPassword, newPassword);
       const freshUser = buildAuthUser(serverUser, mustChangePassword);
       loginWithCredentials(token, freshUser);
       navigate(ROLE_LANDING[freshUser.role], { replace: true });

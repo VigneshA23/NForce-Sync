@@ -8,6 +8,8 @@ import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.auth.AuditLog;
 import com.nforceone.sync.auth.AuditLogRepository;
+import com.nforceone.sync.auth.PasswordResetToken;
+import com.nforceone.sync.auth.PasswordResetTokenRepository;
 import com.nforceone.sync.auth.dto.UserDto;
 import com.nforceone.sync.email.EmailService;
 import com.nforceone.sync.notification.NotificationService;
@@ -67,6 +69,7 @@ public class UserService {
     private final OrgLocationRepository locationRepository;
     private final EmailService emailService;
     private final NotificationService notificationService;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
 
     public UserService(AppUserRepository userRepository,
                        AuditLogRepository auditLogRepository,
@@ -76,7 +79,8 @@ public class UserService {
                        DesignationRepository designationRepository,
                        OrgLocationRepository locationRepository,
                        EmailService emailService,
-                       NotificationService notificationService) {
+                       NotificationService notificationService,
+                       PasswordResetTokenRepository passwordResetTokenRepository) {
         this.userRepository        = userRepository;
         this.auditLogRepository    = auditLogRepository;
         this.passwordEncoder       = passwordEncoder;
@@ -86,6 +90,7 @@ public class UserService {
         this.locationRepository    = locationRepository;
         this.emailService          = emailService;
         this.notificationService   = notificationService;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
     }
 
     public UserCreateResult createUser(CreateUserRequest request, String actingEmail) {
@@ -157,6 +162,31 @@ public class UserService {
     private String generateTempPassword() {
         int digits = 100000 + RANDOM.nextInt(900000);
         return "NFSync@" + digits;
+    }
+
+    /** Reset-link lifetime: long enough to open an email, short enough to bound exposure. */
+    private static final int RESET_TOKEN_TTL_MINUTES = 30;
+
+    // URL-safe so it drops straight into the emailed link with no additional encoding.
+    private String generateResetTokenValue() {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private String createPasswordResetToken(AppUser user) {
+        String token = generateResetTokenValue();
+        savePasswordResetToken(user, token);
+        return token;
+    }
+
+    private void savePasswordResetToken(AppUser user, String token) {
+        PasswordResetToken resetToken = new PasswordResetToken();
+        resetToken.setUser(user);
+        resetToken.setToken(token);
+        resetToken.setExpiresAt(OffsetDateTime.now().plusMinutes(RESET_TOKEN_TTL_MINUTES));
+        resetToken.setUsed(false);
+        passwordResetTokenRepository.save(resetToken);
     }
 
     public UserDto updateUser(Long id, UpdateUserRequest request, String actingEmail) {
@@ -356,7 +386,8 @@ public class UserService {
         user.setLockedUntil(null);
         userRepository.save(user);
 
-        emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), tempPassword);
+        String resetToken = createPasswordResetToken(user);
+        emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), tempPassword, resetToken);
         notificationService.send(user.getId(), "PASSWORD_RESET",
                 "Password has been reset",
                 "An admin has reset your password. Check your email for the temporary password.",
@@ -385,9 +416,10 @@ public class UserService {
         userRepository.findByEmailAndDeletedAtIsNull(normalized).ifPresent(user -> {
             if (user.getStatus() == AppUser.Status.ACTIVE && user.getDeletedAt() == null) {
                 String tempPassword = generateTempPassword();
+                String resetToken = generateResetTokenValue();
 
                 if (!emailService.sendPasswordResetEmailSync(
-                        user.getEmail(), user.getFullName(), tempPassword)) {
+                        user.getEmail(), user.getFullName(), tempPassword, resetToken)) {
                     log.error("Password reset for {} abandoned — the email could not be sent, so the "
                             + "existing password was left in place.", user.getEmail());
                     return;
@@ -400,6 +432,7 @@ public class UserService {
                 user.setFailedLoginAttempts(0);
                 user.setLockedUntil(null);
                 userRepository.save(user);
+                savePasswordResetToken(user, resetToken);
                 writeAudit("APP_USER", user.getId(), "PASSWORD_RESET_SELF", null, null, user);
             }
         });

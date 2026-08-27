@@ -46,7 +46,8 @@ public class SecurityConfig {
                 // /error must be permitted: Spring Boot forwards exceptions there, and
                 // the Security filter chain re-runs for FORWARD dispatches — without this,
                 // any controller exception (409, 404, 500…) gets silently converted to 401.
-                .requestMatchers("/api/auth/login", "/api/auth/forgot-password", "/error").permitAll()
+                .requestMatchers("/api/auth/login", "/api/auth/forgot-password",
+                        "/api/auth/reset-password-with-token", "/error").permitAll()
                 .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex

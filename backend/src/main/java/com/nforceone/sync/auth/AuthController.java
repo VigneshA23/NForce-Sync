@@ -5,6 +5,7 @@ import com.nforceone.sync.auth.dto.ChangePasswordRequest;
 import com.nforceone.sync.auth.dto.ForgotPasswordRequest;
 import com.nforceone.sync.auth.dto.LoginRequest;
 import com.nforceone.sync.auth.dto.LoginResponse;
+import com.nforceone.sync.auth.dto.ResetPasswordWithTokenRequest;
 import com.nforceone.sync.auth.dto.UserDto;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -33,19 +34,22 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final UserService userService;
     private final AccountLockoutService accountLockoutService;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtService jwtService,
                           AppUserRepository appUserRepository,
                           PasswordEncoder passwordEncoder,
                           UserService userService,
-                          AccountLockoutService accountLockoutService) {
+                          AccountLockoutService accountLockoutService,
+                          PasswordResetTokenRepository passwordResetTokenRepository) {
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.appUserRepository = appUserRepository;
         this.passwordEncoder = passwordEncoder;
         this.userService = userService;
         this.accountLockoutService = accountLockoutService;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
     }
 
     @PostMapping("/login")
@@ -157,5 +161,52 @@ public class AuthController {
         String newToken = jwtService.generateToken(user);
         return ResponseEntity.ok(
                 new LoginResponse(newToken, UserDto.from(user), false));
+    }
+
+    /**
+     * Reached from the "Sign in to NForce Sync" link in the password-reset email. Unauthenticated
+     * by design — the reset token (not a session) is what proves this is the right account, and the
+     * temporary password (checked here, same as {@link #changePassword}) is what proves the caller
+     * actually received that email.
+     */
+    @PostMapping("/reset-password-with-token")
+    public ResponseEntity<?> resetPasswordWithToken(@Valid @RequestBody ResetPasswordWithTokenRequest request) {
+        Optional<PasswordResetToken> tokenOpt = passwordResetTokenRepository.findByToken(request.token());
+        if (tokenOpt.isEmpty()) {
+            return invalidResetLinkResponse();
+        }
+
+        PasswordResetToken resetToken = tokenOpt.get();
+        if (resetToken.isUsed() || resetToken.getExpiresAt().isBefore(java.time.OffsetDateTime.now())) {
+            return invalidResetLinkResponse();
+        }
+
+        AppUser user = resetToken.getUser();
+        if (user == null || user.getDeletedAt() != null || user.getStatus() != AppUser.Status.ACTIVE) {
+            return invalidResetLinkResponse();
+        }
+
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "Current password is incorrect"));
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        user.setMustChangePassword(false);
+        accountLockoutService.clearLock(user);
+        appUserRepository.save(user);
+
+        resetToken.setUsed(true);
+        passwordResetTokenRepository.save(resetToken);
+
+        String newToken = jwtService.generateToken(user);
+        return ResponseEntity.ok(
+                new LoginResponse(newToken, UserDto.from(user), false));
+    }
+
+    /** Deliberately generic — must not tell an attacker whether a link is stale vs. never existed. */
+    private ResponseEntity<Map<String, Object>> invalidResetLinkResponse() {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", "This password reset link is invalid or has expired. Please request a new one."));
     }
 }

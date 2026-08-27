@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ThemeProvider } from './lib/theme';
 import { AuthProvider, useAuth, ROLE_LANDING } from './lib/auth';
@@ -119,6 +119,17 @@ function RequireAuth() {
   );
 }
 
+// The password-reset email links here with a one-time reset token — that visitor has no session
+// yet, so this route must be reachable without RequireAuth. Without a token, it falls back to the
+// original authenticated behavior (reached via the forced-change redirect after normal login).
+function ForceChangePasswordRoute() {
+  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  if (searchParams.get('token')) return <ForceChangePassword />;
+  if (!user) return <Navigate to="/login" replace />;
+  return <ForceChangePassword />;
+}
+
 function RedirectAuth() {
   const { user } = useAuth();
   if (user) return <Navigate to={ROLE_LANDING[user.role]} replace />;
@@ -144,11 +155,12 @@ function AppRoutes() {
       <Route path="/locked"   element={<Locked />} />
       <Route path="/inactive" element={<Inactive />} />
 
+      {/* Force-change-password: reachable via a reset-token link (no session) or, once
+          logged in, via RequireAuth's forced-change redirect. No Shell chrome either way. */}
+      <Route path="/force-change-password" element={<ForceChangePasswordRoute />} />
+
       {/* App shell — requires auth */}
       <Route element={<RequireAuth />}>
-        {/* Force-change-password: requires auth but no Shell chrome */}
-        <Route path="/force-change-password" element={<ForceChangePassword />} />
-
         <Route element={<Shell />}>
           <Route index element={<RoleLanding />} />
 
