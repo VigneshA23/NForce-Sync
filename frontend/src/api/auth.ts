@@ -64,9 +64,15 @@ export function attemptsRemainingFrom(err: unknown): number | null {
   return Number.isFinite(remaining) ? remaining : null;
 }
 
+/**
+ * currentPassword is omitted for the forced-password-change flow (temporary password from a
+ * Super Admin reset or the forgot-password email) — the backend already knows the caller
+ * authenticated with it via /login and does not ask for it again. A voluntary change (from the
+ * account settings page) must still pass it.
+ */
 export async function changePassword(
-  currentPassword: string,
   newPassword: string,
+  currentPassword?: string,
 ): Promise<{ token: string; user: ServerUser; mustChangePassword: boolean }> {
   const res = await api.post<{ token: string; user: ServerUser; mustChangePassword: boolean }>(
     '/auth/change-password',
@@ -75,22 +81,15 @@ export async function changePassword(
   return res.data;
 }
 
-export async function resetPasswordWithToken(
-  token: string,
-  newPassword: string,
-): Promise<{ token: string; user: ServerUser; mustChangePassword: boolean }> {
-  const res = await api.post<{ token: string; user: ServerUser; mustChangePassword: boolean }>(
-    '/auth/reset-password-with-token',
-    { token, newPassword },
-  );
-  return res.data;
-}
-
-/** Checked on page load so an expired/used/unknown link never renders the password form. */
+/**
+ * Checked when the sign-in screen is opened from the password-reset email link, so the email
+ * field can be pre-filled and an expired/used/unknown link can be reported. Never returns a
+ * password or a session — actual authentication still happens through the normal login() call.
+ */
 export async function checkResetTokenValid(
   token: string,
-): Promise<{ valid: boolean; firstName?: string }> {
-  const res = await api.get<{ valid: boolean; firstName?: string }>(
+): Promise<{ valid: boolean; firstName?: string; email?: string }> {
+  const res = await api.get<{ valid: boolean; firstName?: string; email?: string }>(
     '/auth/reset-password-token-status',
     { params: { token } },
   );

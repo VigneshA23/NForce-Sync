@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Eye, EyeOff, AlertCircle, Lock } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Lock, Info } from 'lucide-react';
 import axios from 'axios';
 import { AuthLayout } from './AuthLayout';
 import { useAuth, ROLE_LANDING, buildAuthUser } from '../../lib/auth';
-import { login, asLockedError, attemptsRemainingFrom } from '../../api/auth';
+import { login, asLockedError, attemptsRemainingFrom, checkResetTokenValid } from '../../api/auth';
 import { useCountdown, formatCountdown } from '../../lib/useCountdown';
 
 function MicrosoftIcon() {
@@ -33,6 +33,7 @@ export default function Login() {
   const { loginWithCredentials } = useAuth();
   const navigate = useNavigate();
   const reduced = useReducedMotion();
+  const [searchParams] = useSearchParams();
 
   const emailId  = useId();
   const passId   = useId();
@@ -48,16 +49,48 @@ export default function Login() {
   const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
   // Epoch ms when the lock lifts; drives the inline countdown and disables the submit button.
   const [lockedUntilMs, setLockedUntilMs] = useState<number | null>(null);
+  // Set when this screen was opened from the "Sign in to NForce Sync" password-reset email —
+  // used only to look up which email to pre-fill. It never authenticates anything; the user
+  // still has to type the temporary password from the email and submit it through normal login.
+  const [resetLinkNotice, setResetLinkNotice] = useState<string | null>(null);
 
   const lockRemaining = useCountdown(lockedUntilMs);
   const isLocked = lockRemaining > 0;
 
   const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   // Once the window elapses, drop the banner so the form is usable again without a reload.
   useEffect(() => {
     if (lockedUntilMs != null && lockRemaining === 0) setLockedUntilMs(null);
   }, [lockRemaining, lockedUntilMs]);
+
+  useEffect(() => {
+    const resetToken = searchParams.get('resetToken');
+    if (!resetToken) return;
+    let cancelled = false;
+    checkResetTokenValid(resetToken)
+      .then(({ valid, email: linkedEmail }) => {
+        if (cancelled) return;
+        if (valid && linkedEmail) {
+          setEmail(linkedEmail);
+          passwordRef.current?.focus();
+        } else {
+          setResetLinkNotice(
+            'This password reset link is invalid or has expired. Enter your email and temporary password below, or request a new reset link.',
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResetLinkNotice(
+            'This password reset link is invalid or has expired. Enter your email and temporary password below, or request a new reset link.',
+          );
+        }
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleCredentialSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -185,6 +218,33 @@ export default function Login() {
           </div>
         </motion.div>
 
+        {/* Shown only when the reset-link lookup failed (expired/used/unknown token) — the user
+            can still sign in normally, they just have to type their email themselves. */}
+        {resetLinkNotice && (
+          <motion.div
+            initial={reduced ? undefined : { opacity: 0, y: -6 }}
+            animate={reduced ? undefined : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            role="status"
+            aria-live="polite"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 10,
+              padding: '12px 14px',
+              borderRadius: 8,
+              background: 'var(--raised)',
+              border: '1px solid var(--line2)',
+              color: 'var(--txt-mut)',
+              fontSize: 13,
+              marginBottom: 18,
+            }}
+          >
+            <Info size={15} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
+            <span>{resetLinkNotice}</span>
+          </motion.div>
+        )}
+
         {/* Lockout banner — shown when this account is still inside its cooldown window.
             Ticks down to 00:00, at which point the form re-enables on its own. */}
         {isLocked && (
@@ -284,6 +344,7 @@ export default function Login() {
               </label>
               <div style={{ position: 'relative' }}>
                 <input
+                  ref={passwordRef}
                   id={passId}
                   type={showPass ? 'text' : 'password'}
                   autoComplete="current-password"

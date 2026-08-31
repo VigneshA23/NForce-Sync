@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { Navigate, Outlet, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ThemeProvider } from './lib/theme';
 import { AuthProvider, useAuth, ROLE_LANDING } from './lib/auth';
@@ -119,13 +119,10 @@ function RequireAuth() {
   );
 }
 
-// The password-reset email links here with a one-time reset token — that visitor has no session
-// yet, so this route must be reachable without RequireAuth. Without a token, it falls back to the
-// original authenticated behavior (reached via the forced-change redirect after normal login).
+// Reached via RequireAuth's forced-change redirect after login with a temporary password. Kept
+// outside the Shell-wrapped RequireAuth block since it renders without Shell chrome.
 function ForceChangePasswordRoute() {
   const { user } = useAuth();
-  const [searchParams] = useSearchParams();
-  if (searchParams.get('token')) return <ForceChangePassword />;
   if (!user) return <Navigate to="/login" replace />;
   return <ForceChangePassword />;
 }

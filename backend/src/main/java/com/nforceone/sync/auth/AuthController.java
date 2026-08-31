@@ -5,7 +5,6 @@ import com.nforceone.sync.auth.dto.ChangePasswordRequest;
 import com.nforceone.sync.auth.dto.ForgotPasswordRequest;
 import com.nforceone.sync.auth.dto.LoginRequest;
 import com.nforceone.sync.auth.dto.LoginResponse;
-import com.nforceone.sync.auth.dto.ResetPasswordWithTokenRequest;
 import com.nforceone.sync.auth.dto.UserDto;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -145,9 +144,17 @@ public class AuthController {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
 
-        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", "Current password is incorrect"));
+        // A forced password change (temporary password from Super Admin reset or the self-service
+        // forgot-password flow) already proved the caller knows the current password: that's exactly
+        // what /login just checked to issue this JWT. Re-checking it here would only make the user
+        // retype the temporary password a second time. A voluntary change (mustChangePassword already
+        // false) still requires it, since here it's the only proof the caller isn't a hijacked session.
+        if (!user.isMustChangePassword()) {
+            if (request.currentPassword() == null || request.currentPassword().isBlank()
+                    || !passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "Current password is incorrect"));
+            }
         }
 
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
@@ -164,9 +171,10 @@ public class AuthController {
     }
 
     /**
-     * Lets the frontend check a reset link's validity before rendering the "set new password" form,
-     * so an expired/used/unknown token never renders alongside an error banner. Read-only — does not
-     * consume the token — so the actual submit below must still re-validate independently.
+     * Lets the frontend pre-fill the email field on the sign-in screen when opened from the
+     * "Sign in to NForce Sync" link in the password-reset email, and check the link's validity
+     * up front. Read-only and does not authenticate — the temporary password itself must still be
+     * submitted through the normal /login endpoint for authentication to actually occur.
      */
     @GetMapping("/reset-password-token-status")
     public ResponseEntity<Map<String, Object>> resetPasswordTokenStatus(@RequestParam("token") String token) {
@@ -174,9 +182,14 @@ public class AuthController {
         if (resetToken.isEmpty()) {
             return ResponseEntity.ok(Map.of("valid", false));
         }
-        // First name only, for the "Welcome, X" greeting — the token itself already proves the
-        // caller owns this account, so this reveals nothing the link didn't already imply.
-        return ResponseEntity.ok(Map.of("valid", true, "firstName", firstNameOf(resetToken.get().getUser())));
+        // First name + email, for the "Welcome, X" greeting and pre-filling the sign-in form —
+        // the token itself already proves the caller owns this account, so this reveals nothing
+        // the link didn't already imply. It never returns a password or grants any access.
+        AppUser user = resetToken.get().getUser();
+        return ResponseEntity.ok(Map.of(
+                "valid", true,
+                "firstName", firstNameOf(user),
+                "email", user.getEmail()));
     }
 
     private static String firstNameOf(AppUser user) {
@@ -185,37 +198,6 @@ public class AuthController {
         return fullName.trim().split("\\s+")[0];
     }
 
-    /**
-     * Reached from the "Sign in to NForce Sync" link in the password-reset email. Unauthenticated
-     * by design — the reset token (not a session, not a re-entered password) is what proves this is
-     * the right account: it was emailed only to the account owner.
-     */
-    @PostMapping("/reset-password-with-token")
-    public ResponseEntity<?> resetPasswordWithToken(@Valid @RequestBody ResetPasswordWithTokenRequest request) {
-        Optional<PasswordResetToken> tokenOpt = findValidResetToken(request.token());
-        if (tokenOpt.isEmpty()) {
-            return invalidResetLinkResponse();
-        }
-        PasswordResetToken resetToken = tokenOpt.get();
-        AppUser user = resetToken.getUser();
-
-        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
-        user.setMustChangePassword(false);
-        accountLockoutService.clearLock(user);
-        appUserRepository.save(user);
-
-        resetToken.setUsed(true);
-        passwordResetTokenRepository.save(resetToken);
-
-        String newToken = jwtService.generateToken(user);
-        return ResponseEntity.ok(
-                new LoginResponse(newToken, UserDto.from(user), false));
-    }
-
-    /**
-     * Shared by the status check and the actual reset — the same rules must gate both, or a token the
-     * status check calls valid could be rejected (or vice versa) at submit time.
-     */
     private Optional<PasswordResetToken> findValidResetToken(String token) {
         if (token == null || token.isBlank()) {
             return Optional.empty();
@@ -228,11 +210,5 @@ public class AuthController {
                     return user != null && user.getDeletedAt() == null
                             && user.getStatus() == AppUser.Status.ACTIVE;
                 });
-    }
-
-    /** Deliberately generic — must not tell an attacker whether a link is stale vs. never existed. */
-    private ResponseEntity<Map<String, Object>> invalidResetLinkResponse() {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(Map.of("error", "This password reset link is invalid or has expired. Please request a new one."));
     }
 }

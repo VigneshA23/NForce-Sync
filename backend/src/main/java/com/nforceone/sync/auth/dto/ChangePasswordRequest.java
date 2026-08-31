@@ -5,7 +5,10 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record ChangePasswordRequest(
-        @NotBlank String currentPassword,
+        // Not @NotBlank: omitted/blank for the forced-password-change flow, where the JWT's
+        // mustChangePassword claim already proves the caller authenticated with the temporary
+        // password moments ago. Required (checked in the controller) for a voluntary change.
+        String currentPassword,
 
         @NotBlank
         @Size(min = 8)

@@ -87,7 +87,7 @@ export default function ChangePassword() {
 
     setLoading(true);
     try {
-      const result = await changePassword(current, next);
+      const result = await changePassword(next, current);
       loginWithCredentials(result.token, buildAuthUser(result.user, false));
       showToast('success', 'Password changed successfully');
       navigate('/profile', { replace: true });
