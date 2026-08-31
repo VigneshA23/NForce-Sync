@@ -49,10 +49,12 @@ export default function Login() {
   const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
   // Epoch ms when the lock lifts; drives the inline countdown and disables the submit button.
   const [lockedUntilMs, setLockedUntilMs] = useState<number | null>(null);
-  // Set when this screen was opened from the "Sign in to NForce Sync" password-reset email —
-  // used only to look up which email to pre-fill. It never authenticates anything; the user
-  // still has to type the temporary password from the email and submit it through normal login.
+  // Set when the resetToken in the URL turns out to be invalid or expired. It never
+  // authenticates anything; the user still has to type both fields and submit through normal login.
   const [resetLinkNotice, setResetLinkNotice] = useState<string | null>(null);
+  // True when a valid resetToken was found in the URL — drives the "Current (Temporary) Password"
+  // label. Email and password stay empty either way; the user always types both manually.
+  const [viaResetLink, setViaResetLink] = useState(false);
 
   const lockRemaining = useCountdown(lockedUntilMs);
   const isLocked = lockRemaining > 0;
@@ -73,8 +75,8 @@ export default function Login() {
       .then(({ valid, email: linkedEmail }) => {
         if (cancelled) return;
         if (valid && linkedEmail) {
-          setEmail(linkedEmail);
-          passwordRef.current?.focus();
+          setViaResetLink(true);
+          emailRef.current?.focus();
         } else {
           setResetLinkNotice(
             'This password reset link is invalid or has expired. Enter your email and temporary password below, or request a new reset link.',
@@ -340,7 +342,7 @@ export default function Login() {
           <motion.div variants={reduced ? undefined : itemVariants}>
             <div style={{ marginBottom: 14 }}>
               <label htmlFor={passId} style={labelStyle}>
-                Password
+                {viaResetLink ? 'Current (Temporary) Password' : 'Password'}
               </label>
               <div style={{ position: 'relative' }}>
                 <input
