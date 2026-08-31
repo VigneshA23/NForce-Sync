@@ -77,12 +77,22 @@ export async function changePassword(
 
 export async function resetPasswordWithToken(
   token: string,
-  currentPassword: string,
   newPassword: string,
 ): Promise<{ token: string; user: ServerUser; mustChangePassword: boolean }> {
   const res = await api.post<{ token: string; user: ServerUser; mustChangePassword: boolean }>(
     '/auth/reset-password-with-token',
-    { token, currentPassword, newPassword },
+    { token, newPassword },
+  );
+  return res.data;
+}
+
+/** Checked on page load so an expired/used/unknown link never renders the password form. */
+export async function checkResetTokenValid(
+  token: string,
+): Promise<{ valid: boolean; firstName?: string }> {
+  const res = await api.get<{ valid: boolean; firstName?: string }>(
+    '/auth/reset-password-token-status',
+    { params: { token } },
   );
   return res.data;
 }

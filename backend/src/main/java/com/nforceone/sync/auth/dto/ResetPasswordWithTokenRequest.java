@@ -7,8 +7,6 @@ import jakarta.validation.constraints.Size;
 public record ResetPasswordWithTokenRequest(
         @NotBlank String token,
 
-        @NotBlank String currentPassword,
-
         @NotBlank
         @Size(min = 8)
         @Pattern(

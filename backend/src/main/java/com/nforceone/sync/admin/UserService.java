@@ -165,7 +165,7 @@ public class UserService {
     }
 
     /** Reset-link lifetime: long enough to open an email, short enough to bound exposure. */
-    private static final int RESET_TOKEN_TTL_MINUTES = 30;
+    private static final int RESET_TOKEN_TTL_MINUTES = 10;
 
     // URL-safe so it drops straight into the emailed link with no additional encoding.
     private String generateResetTokenValue() {

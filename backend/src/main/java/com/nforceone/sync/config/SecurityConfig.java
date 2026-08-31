@@ -47,7 +47,8 @@ public class SecurityConfig {
                 // the Security filter chain re-runs for FORWARD dispatches — without this,
                 // any controller exception (409, 404, 500…) gets silently converted to 401.
                 .requestMatchers("/api/auth/login", "/api/auth/forgot-password",
-                        "/api/auth/reset-password-with-token", "/error").permitAll()
+                        "/api/auth/reset-password-with-token", "/api/auth/reset-password-token-status",
+                        "/error").permitAll()
                 .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex

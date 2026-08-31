@@ -164,32 +164,40 @@ public class AuthController {
     }
 
     /**
+     * Lets the frontend check a reset link's validity before rendering the "set new password" form,
+     * so an expired/used/unknown token never renders alongside an error banner. Read-only — does not
+     * consume the token — so the actual submit below must still re-validate independently.
+     */
+    @GetMapping("/reset-password-token-status")
+    public ResponseEntity<Map<String, Object>> resetPasswordTokenStatus(@RequestParam("token") String token) {
+        Optional<PasswordResetToken> resetToken = findValidResetToken(token);
+        if (resetToken.isEmpty()) {
+            return ResponseEntity.ok(Map.of("valid", false));
+        }
+        // First name only, for the "Welcome, X" greeting — the token itself already proves the
+        // caller owns this account, so this reveals nothing the link didn't already imply.
+        return ResponseEntity.ok(Map.of("valid", true, "firstName", firstNameOf(resetToken.get().getUser())));
+    }
+
+    private static String firstNameOf(AppUser user) {
+        String fullName = user.getFullName();
+        if (fullName == null || fullName.isBlank()) return "";
+        return fullName.trim().split("\\s+")[0];
+    }
+
+    /**
      * Reached from the "Sign in to NForce Sync" link in the password-reset email. Unauthenticated
-     * by design — the reset token (not a session) is what proves this is the right account, and the
-     * temporary password (checked here, same as {@link #changePassword}) is what proves the caller
-     * actually received that email.
+     * by design — the reset token (not a session, not a re-entered password) is what proves this is
+     * the right account: it was emailed only to the account owner.
      */
     @PostMapping("/reset-password-with-token")
     public ResponseEntity<?> resetPasswordWithToken(@Valid @RequestBody ResetPasswordWithTokenRequest request) {
-        Optional<PasswordResetToken> tokenOpt = passwordResetTokenRepository.findByToken(request.token());
+        Optional<PasswordResetToken> tokenOpt = findValidResetToken(request.token());
         if (tokenOpt.isEmpty()) {
             return invalidResetLinkResponse();
         }
-
         PasswordResetToken resetToken = tokenOpt.get();
-        if (resetToken.isUsed() || resetToken.getExpiresAt().isBefore(java.time.OffsetDateTime.now())) {
-            return invalidResetLinkResponse();
-        }
-
         AppUser user = resetToken.getUser();
-        if (user == null || user.getDeletedAt() != null || user.getStatus() != AppUser.Status.ACTIVE) {
-            return invalidResetLinkResponse();
-        }
-
-        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", "Current password is incorrect"));
-        }
 
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         user.setMustChangePassword(false);
@@ -202,6 +210,24 @@ public class AuthController {
         String newToken = jwtService.generateToken(user);
         return ResponseEntity.ok(
                 new LoginResponse(newToken, UserDto.from(user), false));
+    }
+
+    /**
+     * Shared by the status check and the actual reset — the same rules must gate both, or a token the
+     * status check calls valid could be rejected (or vice versa) at submit time.
+     */
+    private Optional<PasswordResetToken> findValidResetToken(String token) {
+        if (token == null || token.isBlank()) {
+            return Optional.empty();
+        }
+        return passwordResetTokenRepository.findByToken(token)
+                .filter(t -> !t.isUsed())
+                .filter(t -> t.getExpiresAt().isAfter(java.time.OffsetDateTime.now()))
+                .filter(t -> {
+                    AppUser user = t.getUser();
+                    return user != null && user.getDeletedAt() == null
+                            && user.getStatus() == AppUser.Status.ACTIVE;
+                });
     }
 
     /** Deliberately generic — must not tell an attacker whether a link is stale vs. never existed. */
