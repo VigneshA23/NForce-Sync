@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Eye, EyeOff, AlertCircle, Lock, Info } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Lock } from 'lucide-react';
 import axios from 'axios';
 import { AuthLayout } from './AuthLayout';
 import { useAuth, ROLE_LANDING, buildAuthUser } from '../../lib/auth';
@@ -78,16 +78,12 @@ export default function Login() {
           setViaResetLink(true);
           emailRef.current?.focus();
         } else {
-          setResetLinkNotice(
-            'This password reset link is invalid or has expired. Enter your email and temporary password below, or request a new reset link.',
-          );
+          setResetLinkNotice('This password reset link is invalid or has expired. Please request a new one.');
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setResetLinkNotice(
-            'This password reset link is invalid or has expired. Enter your email and temporary password below, or request a new reset link.',
-          );
+          setResetLinkNotice('This password reset link is invalid or has expired. Please request a new one.');
         }
       });
     return () => { cancelled = true; };
@@ -142,6 +138,66 @@ export default function Login() {
   }
 
   const hasError = Boolean(error);
+
+  // Reached only via an invalid/used/expired resetToken link. No form, no other banners —
+  // the link is dead either way (same status-check endpoint, no separate "expired" branch),
+  // so the only way forward is requesting a new one.
+  if (resetLinkNotice) {
+    return (
+      <AuthLayout
+        leftHeadline="Centralized Work & Utilization Management"
+        leftSubtext="Submit EOD updates, track approved hours, monitor utilization, and give leadership real-time insights all from one centralized platform."
+        showStats
+      >
+        <div>
+          <div style={{ marginBottom: 28 }}>
+            <h1
+              style={{
+                fontFamily: '"Space Grotesk", sans-serif',
+                fontSize: 26,
+                fontWeight: 700,
+                letterSpacing: '-0.01em',
+                color: 'var(--txt)',
+                marginBottom: 6,
+              }}
+            >
+              Change your password
+            </h1>
+          </div>
+
+          <div
+            role="alert"
+            aria-live="polite"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 10,
+              padding: '12px 14px',
+              borderRadius: 8,
+              background: 'rgba(228,55,61,.10)',
+              border: '1px solid rgba(228,55,61,.25)',
+              color: 'var(--risk)',
+              fontSize: 13,
+              marginBottom: 20,
+            }}
+          >
+            <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1, color: 'var(--risk)' }} aria-hidden="true" />
+            <span>{resetLinkNotice}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/forgot')}
+            style={submitButtonStyle}
+            onMouseEnter={(e) => Object.assign(e.currentTarget.style, submitButtonHoverStyle)}
+            onMouseLeave={(e) => Object.assign(e.currentTarget.style, submitButtonStyle)}
+          >
+            Request a new reset link
+          </button>
+        </div>
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout
@@ -219,33 +275,6 @@ export default function Login() {
             <span style={{ flex: 1, height: 1, background: 'var(--line)', display: 'block' }} />
           </div>
         </motion.div>
-
-        {/* Shown only when the reset-link lookup failed (expired/used/unknown token) — the user
-            can still sign in normally, they just have to type their email themselves. */}
-        {resetLinkNotice && (
-          <motion.div
-            initial={reduced ? undefined : { opacity: 0, y: -6 }}
-            animate={reduced ? undefined : { opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-            role="status"
-            aria-live="polite"
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 10,
-              padding: '12px 14px',
-              borderRadius: 8,
-              background: 'var(--raised)',
-              border: '1px solid var(--line2)',
-              color: 'var(--txt-mut)',
-              fontSize: 13,
-              marginBottom: 18,
-            }}
-          >
-            <Info size={15} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
-            <span>{resetLinkNotice}</span>
-          </motion.div>
-        )}
 
         {/* Lockout banner — shown when this account is still inside its cooldown window.
             Ticks down to 00:00, at which point the form re-enables on its own. */}
