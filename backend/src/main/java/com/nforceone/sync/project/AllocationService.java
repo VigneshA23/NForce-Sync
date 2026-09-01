@@ -82,6 +82,7 @@ public class AllocationService {
         requireAllocatableToEmployee(employee, project);
         requirePctValid(req.allocationPct());
         requireDateOrder(req.effectiveFrom(), req.effectiveTo());
+        requireNotBeforeProjectStart(project, req.effectiveFrom());
         // Serializes create/update for this employee for the rest of the transaction, so two
         // concurrent requests can never both read the same "current total" and both pass the
         // capacity check below — see requireWithinCapacity's javadoc.
@@ -111,6 +112,7 @@ public class AllocationService {
 
         requirePctValid(req.allocationPct());
         requireDateOrder(req.effectiveFrom(), req.effectiveTo());
+        requireNotBeforeProjectStart(allocation.getProject(), req.effectiveFrom());
         lockEmployeeAllocations(allocation.getEmployee().getId());
         // Excludes itself, so re-sending a row's own dates is not a conflict with itself. The
         // employee and project come from the row because this endpoint never reassigns them.
@@ -138,6 +140,22 @@ public class AllocationService {
         if (effectiveTo != null && effectiveTo.isBefore(effectiveFrom)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Effective To cannot be earlier than Effective From");
+        }
+    }
+
+    /**
+     * An employee cannot be allocated to a project before that project officially starts. A null
+     * project start date leaves this unconstrained rather than blocking every allocation to it.
+     *
+     * <p>Checked on both create and update — unlike {@link #requireAllocatableToEmployee}, this rule
+     * targets the date being set, not the employee/project pairing, so it applies whenever Effective
+     * From changes (an edit that moves the start date earlier can reintroduce this problem).
+     */
+    private void requireNotBeforeProjectStart(Project project, LocalDate effectiveFrom) {
+        LocalDate projectStart = project.getStartDate();
+        if (projectStart != null && effectiveFrom.isBefore(projectStart)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Effective From date cannot be earlier than the project start date.");
         }
     }
 

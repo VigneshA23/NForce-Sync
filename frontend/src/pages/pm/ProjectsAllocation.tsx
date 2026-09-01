@@ -1017,6 +1017,27 @@ function AllocationModal({ open, onClose, projects }: {
     return activeProjects.filter(p => p.pmId === selectedEmployee.managerId);
   }, [activeProjects, selectedEmployee]);
 
+  const selectedProject = useMemo(
+    () => projects.find(p => p.id === Number(projectId)) ?? null,
+    [projects, projectId],
+  );
+
+  // Mirrors AllocationService.requireNotBeforeProjectStart — an employee cannot be allocated before
+  // the project they're being staffed onto officially starts.
+  const projectStartDate = selectedProject?.startDate || undefined;
+  const badEffectiveFromBeforeStart =
+    effectiveFrom !== '' && projectStartDate != null && effectiveFrom < projectStartDate;
+
+  // Re-picking a project can invalidate a date already typed for the previous one — clear it
+  // rather than silently letting a now-invalid value sit in a disabled submit button.
+  useEffect(() => {
+    if (projectStartDate != null && effectiveFrom !== '' && effectiveFrom < projectStartDate) {
+      setEffectiveFrom('');
+    }
+    // Only re-check when the project (and so its start date) changes, not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectStartDate]);
+
   // Says which of the three empty cases applies, rather than a bare "no projects" that leaves the
   // PM guessing whether it is their pick, the employee's record, or the project data at fault.
   const projectPlaceholder =
@@ -1041,7 +1062,7 @@ function AllocationModal({ open, onClose, projects }: {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!employeeId || !projectId || !effectiveFrom || badDateOrder || dateFormatInvalid
-      || clash || pctNum === null || badPct || wouldExceedCapacity) return;
+      || badEffectiveFromBeforeStart || clash || pctNum === null || badPct || wouldExceedCapacity) return;
     setError(null);
     try {
       await createMutation.mutateAsync({
@@ -1103,9 +1124,16 @@ function AllocationModal({ open, onClose, projects }: {
             <StrictDateInput
               ariaLabel="Effective From"
               value={effectiveFrom}
+              min={projectStartDate}
               onChange={setEffectiveFrom}
               onInvalidChange={setEffectiveFromInvalid}
             />
+            {badEffectiveFromBeforeStart && (
+              <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>
+                Effective From date cannot be earlier than the project start date
+                {' '}({fmtDateDMY(projectStartDate!)}).
+              </p>
+            )}
           </div>
           <div>
             {/* Blank means the assignment is open-ended. */}
@@ -1182,7 +1210,7 @@ function AllocationModal({ open, onClose, projects }: {
           <button
             type="submit"
             disabled={createMutation.isPending || !employeeId || !projectId
-              || !effectiveFrom || badDateOrder || dateFormatInvalid
+              || !effectiveFrom || badDateOrder || dateFormatInvalid || badEffectiveFromBeforeStart
               || clash != null || pctNum === null || badPct || wouldExceedCapacity}
             style={{
               padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
@@ -1204,7 +1232,9 @@ function AllocationModal({ open, onClose, projects }: {
   );
 }
 
-function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDto | null; onClose: () => void }) {
+function EditAllocationModal({ allocation, onClose, projects }: {
+  allocation: AllocationDto | null; onClose: () => void; projects: ProjectFullDto[];
+}) {
   const { showToast } = useToast();
   const updateMutation = useUpdateAllocation();
   const { data: allAllocations } = useAllocations();
@@ -1230,6 +1260,15 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
   const dateFormatInvalid = effectiveFromInvalid || effectiveToInvalid;
   const pctNum = allocationPct === '' ? null : Number(allocationPct);
   const badPct = pctNum !== null && !isValidAllocationPct(pctNum);
+
+  // Mirrors AllocationService.requireNotBeforeProjectStart — the project itself is fixed on edit,
+  // but a moved Effective From must still not land before it officially started.
+  const projectStartDate = useMemo(
+    () => (allocation ? projects.find(p => p.id === allocation.projectId)?.startDate || undefined : undefined),
+    [projects, allocation],
+  );
+  const badEffectiveFromBeforeStart =
+    effectiveFrom !== '' && projectStartDate != null && effectiveFrom < projectStartDate;
 
   // Widening a window can collide with another allocation of the same pair. Excludes this row, so
   // re-saving its own dates is never a conflict with itself.
@@ -1257,7 +1296,7 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!allocation || !effectiveFrom || badDateOrder || dateFormatInvalid
-      || clash || pctNum === null || badPct || wouldExceedCapacity) return;
+      || badEffectiveFromBeforeStart || clash || pctNum === null || badPct || wouldExceedCapacity) return;
     setError(null);
     try {
       await updateMutation.mutateAsync({
@@ -1310,10 +1349,17 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
               <StrictDateInput
                 ariaLabel="Effective From"
                 value={effectiveFrom}
+                min={projectStartDate}
                 autoFocus
                 onChange={setEffectiveFrom}
                 onInvalidChange={setEffectiveFromInvalid}
               />
+              {badEffectiveFromBeforeStart && (
+                <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>
+                  Effective From date cannot be earlier than the project start date
+                  {' '}({fmtDateDMY(projectStartDate!)}).
+                </p>
+              )}
             </div>
             <div>
               <label style={labelStyle}>Effective To</label>
@@ -1380,7 +1426,7 @@ function EditAllocationModal({ allocation, onClose }: { allocation: AllocationDt
             <button
               type="submit"
               disabled={updateMutation.isPending || !effectiveFrom || badDateOrder || dateFormatInvalid
-                || clash != null || pctNum === null || badPct || wouldExceedCapacity}
+                || badEffectiveFromBeforeStart || clash != null || pctNum === null || badPct || wouldExceedCapacity}
               style={{
                 padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
                 color: '#fff', fontSize: 13, fontWeight: 600,
@@ -1634,7 +1680,7 @@ function AllocationTab() {
       )}
 
       <AllocationModal open={modalOpen} onClose={() => setModalOpen(false)} projects={projects ?? []} />
-      <EditAllocationModal allocation={toEdit} onClose={() => setToEdit(null)} />
+      <EditAllocationModal allocation={toEdit} onClose={() => setToEdit(null)} projects={projects ?? []} />
       <DeleteAllocationModal allocation={toDelete} onClose={() => setToDelete(null)} />
     </div>
   );
