@@ -55,6 +55,10 @@ export default function Login() {
   // True when a valid resetToken was found in the URL — drives the "Current (Temporary) Password"
   // label. Email and password stay empty either way; the user always types both manually.
   const [viaResetLink, setViaResetLink] = useState(false);
+  // True when arriving from the new-user invite email's "Sign in to NForce Sync" link
+  // (?newUser=1). Same label change as viaResetLink, no token to validate — fields stay empty
+  // and normal /auth/login + mustChangePassword redirect handle the rest untouched.
+  const viaNewUserLink = searchParams.get('newUser') === '1';
 
   const lockRemaining = useCountdown(lockedUntilMs);
   const isLocked = lockRemaining > 0;
@@ -371,7 +375,7 @@ export default function Login() {
           <motion.div variants={reduced ? undefined : itemVariants}>
             <div style={{ marginBottom: 14 }}>
               <label htmlFor={passId} style={labelStyle}>
-                {viaResetLink ? 'Current (Temporary) Password' : 'Password'}
+                {(viaResetLink || viaNewUserLink) ? 'Current (Temporary) Password' : 'Password'}
               </label>
               <div style={{ position: 'relative' }}>
                 <input

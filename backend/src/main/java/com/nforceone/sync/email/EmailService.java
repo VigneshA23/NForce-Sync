@@ -148,7 +148,7 @@ public class EmailService {
                             <p style="margin:0;font-size:13px;color:#f4a5a8;line-height:1.5;">You will be required to set your own password on first login. Keep this email private.</p>
                           </div>
 
-                          <a href="%s/login" style="display:inline-block;background:#B11116;color:#ffffff;font-weight:700;font-size:14px;text-decoration:none;padding:12px 28px;border-radius:8px;">Sign in to NForce Sync →</a>
+                          <a href="%s/login?newUser=1" style="display:inline-block;background:#B11116;color:#ffffff;font-weight:700;font-size:14px;text-decoration:none;padding:12px 28px;border-radius:8px;">Sign in to NForce Sync →</a>
                         </td></tr>
                         <tr><td style="padding:20px 36px;border-top:1px solid #2A2E37;">
                           <p style="margin:0;font-size:12px;color:#6B7280;">This email was sent by NForce Sync. If you didn't expect this, contact your HR administrator.</p>
