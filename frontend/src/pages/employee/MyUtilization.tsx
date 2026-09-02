@@ -12,6 +12,7 @@ import type { WeekTrend, HistoryDay } from '../../api/employee';
 import { UtilBar, UtilLegend } from '../../components/UtilBar';
 import { RULES, utilColor, utilState, fmtPct } from '../../lib/rules';
 import { todayISO, toLocalISODate } from '../../lib/date';
+import { totalHours } from '../../lib/hoursBreakdown';
 
 // ── Date range helpers ─────────────────────────────────────────────────────────
 
@@ -196,7 +197,7 @@ const DONUT_COLORS = ['var(--ok)', 'var(--warn)', 'var(--txt-dim)'];
 function DonutChart({ billable, nonBillable, bench }: {
   billable: number; nonBillable: number; bench: number;
 }) {
-  const total = billable + nonBillable + bench;
+  const total = totalHours(billable, nonBillable, bench);
   const data = [
     { name: 'Billable',     value: billable },
     { name: 'Non-Billable', value: nonBillable },
@@ -241,7 +242,7 @@ function DonutChart({ billable, nonBillable, bench }: {
             fontFamily: '"Space Grotesk", sans-serif', fontSize: 20, fontWeight: 700,
             color: 'var(--txt)', letterSpacing: '-0.02em', lineHeight: 1,
           }}>
-            {total.toFixed(0)}h
+            {total.toFixed(1)}h
           </span>
           <span style={{ fontSize: 9, color: 'var(--txt-dim)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Total

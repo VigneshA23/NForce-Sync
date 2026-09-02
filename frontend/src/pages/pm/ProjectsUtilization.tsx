@@ -11,6 +11,7 @@ import { UtilBar } from '../../components/UtilBar';
 import { SegmentDonut } from '../../components/UtilizationDonut';
 import { fmtPct, utilColor, utilState, RULES } from '../../lib/rules';
 import { todayISO, toLocalISODate } from '../../lib/date';
+import { totalHours, roundHours } from '../../lib/hoursBreakdown';
 import {
   useProjectDashboardFilters,
   useProjectDashboardSummary,
@@ -817,7 +818,7 @@ function CategoryBreakdownPanel({ rows, resourceRows, cards }: {
     ...topCategories.map((r, i) => ({ label: r.category, value: r.hours, color: CATEGORY_DONUT_COLORS[i] })),
     ...(otherHours > 0 ? [{ label: 'Other', value: otherHours, color: 'var(--txt-dim)' }] : []),
   ];
-  const donutTotal = donutSegments.reduce((sum, s) => sum + s.value, 0);
+  const donutTotal = roundHours(donutSegments.reduce((sum, s) => sum + roundHours(s.value), 0));
 
   if (rows.length === 0) {
     return (
@@ -1064,7 +1065,7 @@ export default function ProjectsUtilization() {
   const overCount = projectUtilization.filter(r => utilState(r.utilizationPct) === 'over').length;
   const totalProjects = projectUtilization.length;
 
-  const totalBillableHours = billableSplit.billableHours + billableSplit.nonBillableHours;
+  const totalBillableHours = totalHours(billableSplit.billableHours, billableSplit.nonBillableHours, 0);
 
   const insights = buildInsights(cards, projectUtilization, resourceUtilization);
 
@@ -1208,7 +1209,7 @@ export default function ProjectsUtilization() {
                 { label: 'Billable', value: billableSplit.billableHours, color: 'var(--ok)' },
                 { label: 'Non-Billable', value: billableSplit.nonBillableHours, color: 'var(--info)' },
               ]}
-              centerValue={`${totalBillableHours.toFixed(0)}h`}
+              centerValue={`${totalBillableHours.toFixed(1)}h`}
               size={130}
             />
             <DonutLegend items={[
