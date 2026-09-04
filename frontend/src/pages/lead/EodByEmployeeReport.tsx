@@ -106,7 +106,6 @@ interface Filters {
   projectId: string;
   client: string;
   status: string;
-  billable: string;
   employeeQuery: string;
 }
 
@@ -126,7 +125,7 @@ function filterId(v: string): number | undefined {
 function defaultFilters(): Filters {
   return {
     from: '', to: '',
-    projectId: '', client: '', status: '', billable: '', employeeQuery: '',
+    projectId: '', client: '', status: '', employeeQuery: '',
   };
 }
 
@@ -313,18 +312,6 @@ function FilterBar({
           </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>Billable or Internal</FieldLabel>
-          <FilterSelect
-            value={filters.billable} onChange={v => set('billable', v)}
-            style={selectStyle(filters.billable)} label="billable filter"
-          >
-            <option value="" disabled>Select Billable or Internal…</option>
-            <option style={OPTION_STYLE} value={ALL}>All work</option>
-            <option style={OPTION_STYLE} value="BILLABLE">Billable only</option>
-            <option style={OPTION_STYLE} value="INTERNAL">Internal only</option>
-          </FilterSelect>
-        </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Employee</FieldLabel>
           <EmployeeSearch
             query={filters.employeeQuery}
@@ -388,8 +375,8 @@ const ROSTER_PAGE_SIZE = 9;
 
 // Detail-pane entry table — header row and body rows must share one template
 // or the columns desync.
-const ENTRY_TABLE_COLUMNS = '100px 1.1fr 1.4fr 62px 74px';
-const ENTRY_TABLE_MIN_WIDTH = 520;
+const ENTRY_TABLE_COLUMNS = '100px 1.1fr 1.4fr 62px';
+const ENTRY_TABLE_MIN_WIDTH = 460;
 
 function RosterFlow({
   employees, isLoading, onExport, exportingKey, selectedId, setSelectedId,
@@ -550,12 +537,11 @@ function RosterFlow({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderBottom: '1px solid var(--line)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderBottom: '1px solid var(--line)' }}>
               {[
                 ['Entries', String(selected.entryCount)],
                 ['Days logged', String(new Set(selected.entries.map(e => e.date)).size)],
                 ['Total hrs', hrs(selected.totalHours)],
-                ['Billable hrs', hrs(selected.billableHours)],
               ].map(([label, value], i) => (
                 <div key={label} style={{ padding: '10px 14px', borderLeft: i > 0 ? '1px solid var(--line)' : undefined }}>
                   <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--txt-dim)', textTransform: 'uppercase', marginBottom: 3 }}>{label}</div>
@@ -576,7 +562,7 @@ function RosterFlow({
               >
                 Entry date {dateSort === 'asc' ? <ChevronDown size={11} aria-hidden="true" /> : <ChevronUp size={11} aria-hidden="true" />}
               </div>
-              <div>Project</div><div>Category</div><div style={{ textAlign: 'right' }}>Hours</div><div style={{ textAlign: 'center' }}>Billable</div>
+              <div>Project</div><div>Category</div><div style={{ textAlign: 'right' }}>Hours</div>
             </div>
             <div style={{ maxHeight: 396, overflowY: 'auto' }}>
               {sortedEntries.length === 0 ? (
@@ -596,7 +582,6 @@ function RosterFlow({
                   <div style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{e.projectCode ?? '—'}</div>
                   <div style={{ color: 'var(--txt-mut)' }}>{e.categoryName ?? '—'}</div>
                   <div style={{ textAlign: 'right', fontFamily: '"JetBrains Mono", monospace', fontWeight: 700, color: 'var(--txt)' }}>{hrs(e.hours)}</div>
-                  <div style={{ textAlign: 'center', fontSize: 10.5, fontWeight: 700, color: e.billable ? 'var(--ok)' : 'var(--txt-dim)' }}>{e.billable ? 'BILLABLE' : 'INTERNAL'}</div>
                 </div>
               ))}
             </div>
@@ -614,8 +599,8 @@ function RosterFlow({
 const TEAM_PAGE_SIZE = 12;
 
 // Header row and body rows must share one template or the columns desync.
-const TEAM_ENTRY_COLUMNS = '1.4fr 100px 1.1fr 1.3fr 60px 72px';
-const TEAM_ENTRY_MIN_WIDTH = 640;
+const TEAM_ENTRY_COLUMNS = '1.4fr 100px 1.1fr 1.3fr 60px';
+const TEAM_ENTRY_MIN_WIDTH = 580;
 
 function TeamFlow({
   employees, isLoading, onExport, exportingKey,
@@ -701,7 +686,6 @@ function TeamFlow({
                   <div style={{ flex: 1 }} />
                   <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{r.entryCount} {r.entryCount === 1 ? 'entry' : 'entries'}</span>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace' }}>{hrs(r.totalHours)}</span>
-                  <span style={{ fontSize: 11, color: 'var(--ok)', fontFamily: '"JetBrains Mono", monospace' }}>{hrs(r.billableHours)} b</span>
                   <StatusChip status={r.status} />
                   <button
                     onClick={e => { e.stopPropagation(); onExport(`emp-${r.employeeId}`, [r.employeeId]); }}
@@ -731,7 +715,6 @@ function TeamFlow({
                     <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{e.projectCode ?? '—'}</span>
                     <span>{e.categoryName ?? '—'}</span>
                     <span style={{ textAlign: 'right', fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{hrs(e.hours)}</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: e.billable ? 'var(--ok)' : 'var(--txt-dim)' }}>{e.billable ? 'BILLABLE' : 'INTERNAL'}</span>
                   </div>
                 ))}
               </div>
@@ -769,7 +752,6 @@ export default function LeadEodByEmployeeReport() {
     projectId: filterId(filters.projectId),
     client: filterValue(filters.client),
     status: filterValue(filters.status),
-    billable: filterValue(filters.billable),
     employeeQuery: filterValue(filters.employeeQuery),
   }, hasRange);
 
@@ -804,7 +786,6 @@ export default function LeadEodByEmployeeReport() {
         projectId: filterId(filters.projectId),
         client: filterValue(filters.client),
         status: filterValue(filters.status),
-        billable: filterValue(filters.billable),
         employeeQuery: filterValue(filters.employeeQuery),
         employeeIds,
         format,

@@ -32,16 +32,12 @@ export interface DashboardSummaryCardsDto {
   onHoldProjects: number;
   completedProjects: number;
   overallUtilizationPct: number;
-  billableUtilizationPct: number;
-  nonBillableUtilizationPct: number;
   plannedUtilizationPct: number;
   actualUtilizationPct: number;
   missingEodCount: number;
   /** vs-previous-period deltas (percentage points); null when there's no previous-period data. */
   overallUtilizationDeltaPct: number | null;
   actualUtilizationDeltaPct: number | null;
-  billableUtilizationDeltaPct: number | null;
-  nonBillableUtilizationDeltaPct: number | null;
   activeProjectsDelta: number | null;
 }
 
@@ -52,7 +48,6 @@ export interface ProjectUtilizationRowDto {
   actualHours: number;
   variance: number;
   utilizationPct: number;
-  billablePct: number;
   /** Previous-period utilizationPct for this project; null if no prior-period activity. */
   previousUtilizationPct: number | null;
 }
@@ -60,8 +55,6 @@ export interface ProjectUtilizationRowDto {
 export interface UtilizationTrendPointDto {
   date: string;
   overallPct: number;
-  billablePct: number;
-  nonBillablePct: number;
 }
 
 export interface ResourceUtilizationRowDto {
@@ -71,13 +64,6 @@ export interface ResourceUtilizationRowDto {
   productiveHours: number;
   availableHours: number;
   utilizationPct: number;
-}
-
-export interface BillableSplitDto {
-  billableHours: number;
-  nonBillableHours: number;
-  billablePct: number;
-  nonBillablePct: number;
 }
 
 export interface PlannedVsActualDto {
@@ -107,7 +93,6 @@ export interface ProjectDashboardSummaryDto {
   cards: DashboardSummaryCardsDto;
   projectUtilization: ProjectUtilizationRowDto[];
   resourceUtilization: ResourceUtilizationRowDto[];
-  billableSplit: BillableSplitDto;
   plannedVsActual: PlannedVsActualDto;
   missingEod: MissingEodRowDto[];
   taskCategoryBreakdown: TaskCategoryUtilizationRowDto[];

@@ -9,7 +9,6 @@ public record ProjectUtilizationRowDto(
         BigDecimal actualHours,
         BigDecimal variance,
         BigDecimal utilizationPct,
-        BigDecimal billablePct,
         /** Previous-period utilizationPct for the same project, for the table's trend sparkline.
          *  Null when the project had no allocations in the immediately-preceding period. */
         BigDecimal previousUtilizationPct

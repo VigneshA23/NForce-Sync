@@ -116,8 +116,6 @@ public class EmployeeService {
                         s.snapshotDate(),
                         s.availableHours(),
                         s.approvedProductiveHours(),
-                        s.billableHours(),
-                        s.nonBillableHours(),
                         s.benchHours(),
                         s.utilizationPct()
                 )).toList();
@@ -382,11 +380,9 @@ public class EmployeeService {
     }
 
     private UtilizationDetailDto.CategoryBreakdown buildCategoryBreakdown(List<UtilSnapshotDto> snaps) {
-        BigDecimal billable    = sum(snaps, UtilSnapshotDto::billableHours);
-        BigDecimal nonBillable = sum(snaps, UtilSnapshotDto::nonBillableHours);
-        BigDecimal bench       = sum(snaps, UtilSnapshotDto::benchHours);
-        BigDecimal total       = sum(snaps, UtilSnapshotDto::approvedProductiveHours);
-        return new UtilizationDetailDto.CategoryBreakdown(billable, nonBillable, bench, total);
+        BigDecimal productive = sum(snaps, UtilSnapshotDto::approvedProductiveHours);
+        BigDecimal bench      = sum(snaps, UtilSnapshotDto::benchHours);
+        return new UtilizationDetailDto.CategoryBreakdown(productive, bench, productive);
     }
 
     // ── Pure helpers ──────────────────────────────────────────────────────────

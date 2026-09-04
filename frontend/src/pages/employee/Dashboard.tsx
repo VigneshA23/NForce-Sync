@@ -16,6 +16,7 @@ import { useAuth } from '../../lib/auth';
 import { UtilPctDonut, CategoryDonut, SegmentDonut } from '../../components/UtilizationDonut';
 import { utilColor, fmtPct } from '../../lib/rules';
 import { formatDate, formatDateTime, formatTime12h, toLocalISODate, todayISO } from '../../lib/date';
+import { useHashScroll } from '../../lib/useHashScroll';
 
 // ── Primitives ─────────────────────────────────────────────────────────────────
 
@@ -36,11 +37,12 @@ function Card({
   );
 }
 
-function SectionLabel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+function SectionLabel({ children, style, id }: { children: React.ReactNode; style?: React.CSSProperties; id?: string }) {
   return (
-    <div style={{
+    <div id={id} style={{
       fontSize: 11, fontWeight: 700, color: 'var(--txt-dim)',
       textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14,
+      scrollMarginTop: 72,
       ...style,
     }}>
       {children}
@@ -354,7 +356,7 @@ function MonthStatsPanel({ days }: { days: CalendarDay[] }) {
 
   return (
     <div>
-      <SectionLabel>Month Overview</SectionLabel>
+      <SectionLabel id="month-overview">Month Overview</SectionLabel>
 
       {/* Completion donut + total */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
@@ -552,7 +554,7 @@ function AssignedProjectsPanel({ projects }: { projects: EmployeeProjectDto[] })
     <Card pad={0}>
       <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <FolderKanban size={13} color="var(--txt-mut)" style={{ flexShrink: 0 }} />
-        <SectionLabel style={{ marginBottom: 0 }}>Assigned Projects</SectionLabel>
+        <SectionLabel id="assigned-projects" style={{ marginBottom: 0 }}>Assigned Projects</SectionLabel>
         {projects.length > 0 && (
           <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
             {projects.length}
@@ -607,7 +609,7 @@ function HolidaysPanel({ holidays, year }: { holidays: HolidayDto[]; year: numbe
     <Card pad={0}>
       <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <CalendarDays size={13} color="var(--txt-mut)" style={{ flexShrink: 0 }} />
-        <SectionLabel style={{ marginBottom: 0 }}>Holiday Calendar &mdash; {year}</SectionLabel>
+        <SectionLabel id="holiday-calendar" style={{ marginBottom: 0 }}>Holiday Calendar &mdash; {year}</SectionLabel>
         {holidays.length > 0 && (
           <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
             {holidays.length}
@@ -648,14 +650,13 @@ function HolidaysPanel({ holidays, year }: { holidays: HolidayDto[]; year: numbe
 // ── Weekly / Monthly Utilization cards ──────────────────────────────────────────
 
 function UtilPeriodCard({
-  title, avgUtilPct, approvedHours, availableHours, billableHours, nonBillableHours, benchHours, breakdown, onViewFull,
+  title, avgUtilPct, approvedHours, availableHours, productiveHours, benchHours, breakdown, onViewFull,
 }: {
   title: string;
   avgUtilPct: number | null;
   approvedHours: number;
   availableHours: number;
-  billableHours: number;
-  nonBillableHours: number;
+  productiveHours: number;
   benchHours: number;
   breakdown?: { label: string; pct: number | null }[];
   onViewFull: () => void;
@@ -687,7 +688,7 @@ function UtilPeriodCard({
         </div>
       </div>
 
-      <CategoryDonut billableHours={billableHours} nonBillableHours={nonBillableHours} benchHours={benchHours} />
+      <CategoryDonut productiveHours={productiveHours} benchHours={benchHours} />
 
       {breakdown && (
         <div style={{ marginTop: 16 }}>
@@ -791,7 +792,7 @@ function BlockersPanel({ tasks, onSelect }: { tasks: BlockedTask[]; onSelect: (t
   if (tasks.length === 0) {
     return (
       <Card>
-        <SectionLabel>My Blockers</SectionLabel>
+        <SectionLabel id="dashboard-blockers">My Blockers</SectionLabel>
         <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 12, color: 'var(--txt-dim)' }}>
           <CheckCircle2 size={24} style={{ color: 'var(--ok)', display: 'block', margin: '0 auto 8px' }} />
           No active blockers
@@ -803,7 +804,7 @@ function BlockersPanel({ tasks, onSelect }: { tasks: BlockedTask[]; onSelect: (t
   return (
     <Card pad={0}>
       <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <SectionLabel style={{ marginBottom: 0 }}>My Blockers</SectionLabel>
+        <SectionLabel id="dashboard-blockers" style={{ marginBottom: 0 }}>My Blockers</SectionLabel>
         <Link
           to="/blockers"
           style={{
@@ -868,7 +869,7 @@ function RecentActivity({ entries }: { entries: RecentEntry[] }) {
         padding: '14px 16px 10px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <SectionLabel>Recent Entries</SectionLabel>
+        <SectionLabel id="recent-entries">Recent Entries</SectionLabel>
         <button
           onClick={() => navigate('/eod/history')}
           style={{
@@ -1073,6 +1074,7 @@ export default function Dashboard() {
   }, [monthOffset]);
 
   const { data, isPending, isError, refetch } = useDashboardSummary(calendarFrom, calendarTo);
+  useHashScroll(!isPending);
 
   const weekStart   = useMemo(() => currentWeekStartISO(), []);
   const monthStart  = useMemo(() => currentMonthStartISO(), []);
@@ -1202,7 +1204,7 @@ export default function Dashboard() {
         <Card>
           {/* Card header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <SectionLabel style={{ marginBottom: 0 }}>Monthly Activity</SectionLabel>
+            <SectionLabel id="monthly-activity" style={{ marginBottom: 0 }}>Monthly Activity</SectionLabel>
             <button
               onClick={() => navigate('/utilization')}
               style={{
@@ -1261,8 +1263,7 @@ export default function Dashboard() {
           avgUtilPct={weekUtil?.currentPeriod.avgUtilPct ?? null}
           approvedHours={weekUtil?.currentPeriod.totalApproved ?? 0}
           availableHours={weekUtil?.currentPeriod.totalAvailable ?? 0}
-          billableHours={weekUtil?.categoryBreakdown.billableHours ?? 0}
-          nonBillableHours={weekUtil?.categoryBreakdown.nonBillableHours ?? 0}
+          productiveHours={weekUtil?.categoryBreakdown.productiveHours ?? 0}
           benchHours={weekUtil?.categoryBreakdown.benchHours ?? 0}
           onViewFull={() => navigate('/utilization')}
         />
@@ -1271,8 +1272,7 @@ export default function Dashboard() {
           avgUtilPct={monthUtil?.currentPeriod.avgUtilPct ?? null}
           approvedHours={monthUtil?.currentPeriod.totalApproved ?? 0}
           availableHours={monthUtil?.currentPeriod.totalAvailable ?? 0}
-          billableHours={monthUtil?.categoryBreakdown.billableHours ?? 0}
-          nonBillableHours={monthUtil?.categoryBreakdown.nonBillableHours ?? 0}
+          productiveHours={monthUtil?.categoryBreakdown.productiveHours ?? 0}
           benchHours={monthUtil?.categoryBreakdown.benchHours ?? 0}
           breakdown={monthUtil?.weeklyTrend.map(w => ({
             label: new Date(w.weekStart + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),

@@ -131,8 +131,7 @@ export interface CurrentPeriod {
 }
 
 export interface CategoryBreakdown {
-  billableHours: number;
-  nonBillableHours: number;
+  productiveHours: number;
   benchHours: number;
   totalApproved: number;
 }
@@ -141,8 +140,6 @@ export interface HistoryDay {
   date: string;
   availableHours: number;
   approvedHours: number;
-  billableHours: number;
-  nonBillableHours: number;
   benchHours: number;
   utilizationPct: number | null;
 }

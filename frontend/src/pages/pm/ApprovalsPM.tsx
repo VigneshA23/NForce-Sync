@@ -16,9 +16,9 @@ import {
   Skel, Card, Btn, Chip, AuditTrail, SubmissionDetailModal,
 } from '../approvals/shared';
 
-// This page deliberately shares its billable-gate logic and submission detail modal with the
-// Team Lead's Approvals page (../Approvals.tsx) via ../approvals/shared — see that module's
-// header comment. What's PM-specific and stays local: Team-Lead grouping, the Escalated
+// This page deliberately shares its submission detail modal with the Team Lead's Approvals
+// page (../Approvals.tsx) via ../approvals/shared — see that module's header comment.
+// What's PM-specific and stays local: Team-Lead grouping, the Escalated
 // tab/banner/chip, and the "who decided" caption (a PM oversees every team on their projects,
 // not just entries they personally acted on — see EodEntryRepository.findByProjectManagerIdAndStatus).
 
@@ -121,7 +121,6 @@ function EntryRow({
                 }}>
                   <span style={{ color: 'var(--txt)', fontWeight: 600, minWidth: 120, flexShrink: 0 }}>{t.projectCode ?? '—'}</span>
                   <span style={{ flex: 1 }}>{t.categoryName ?? '—'}</span>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.isBillable ? 'var(--ok)' : 'transparent', border: t.isBillable ? 'none' : '1.5px solid var(--txt-dim)', flexShrink: 0 }} title={t.isBillable ? 'Billable' : 'Non-billable'} />
                   <span style={{ color: 'var(--txt)', fontWeight: 700, minWidth: 36, textAlign: 'right', flexShrink: 0 }}>{t.hours != null ? `${hrs(Number(t.hours))}h` : '—'}</span>
                 </div>
               ))}

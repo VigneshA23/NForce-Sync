@@ -1,11 +1,11 @@
 import { useMemo, useRef, useState } from 'react';
 import {
-  FolderKanban, CheckCircle2, PauseCircle, Archive, Gauge, Briefcase, Ban,
+  FolderKanban, CheckCircle2, PauseCircle, Archive, Gauge,
   Target, TrendingUp, AlertTriangle, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown, X,
   Calendar as CalendarIcon,
 } from 'lucide-react';
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell,
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 import { KpiCard } from '../../components/KpiCard';
 import { useIsPhone } from '../../lib/useMediaQuery';
@@ -924,13 +924,7 @@ export default function ProjectDashboard() {
     );
   }
 
-  const { cards, projectUtilization, resourceUtilization, billableSplit, plannedVsActual, missingEod, taskCategoryBreakdown } = data;
-
-  const billableChartData = [
-    { name: 'Billable', hours: billableSplit.billableHours, pct: billableSplit.billablePct },
-    { name: 'Non-Billable', hours: billableSplit.nonBillableHours, pct: billableSplit.nonBillablePct },
-  ];
-  const BILLABLE_COLORS = ['var(--ok)', 'var(--info)'];
+  const { cards, projectUtilization, resourceUtilization, plannedVsActual, missingEod, taskCategoryBreakdown } = data;
 
   const plannedActualChartData = projectUtilization.map(p => ({
     name: p.projectName, Planned: p.plannedHours, Actual: p.actualHours,
@@ -968,44 +962,12 @@ export default function ProjectDashboard() {
         <KpiCard icon={<Archive size={17} aria-hidden="true" />} label="Completed" value={cards.completedProjects} accent="var(--info)" />
         <KpiCard icon={<AlertTriangle size={17} aria-hidden="true" />} label="Missing EOD" value={cards.missingEodCount} accent={cards.missingEodCount > 0 ? 'var(--risk)' : 'var(--txt)'} />
         <KpiCard icon={<Gauge size={17} aria-hidden="true" />} label="Overall Utilization" value={fmtPct(cards.overallUtilizationPct)} accent={utilColor(cards.overallUtilizationPct)} />
-        <KpiCard icon={<Briefcase size={17} aria-hidden="true" />} label="Billable Utilization" value={fmtPct(cards.billableUtilizationPct)} accent="var(--ok)" />
-        <KpiCard icon={<Ban size={17} aria-hidden="true" />} label="Non-Billable Utilization" value={fmtPct(cards.nonBillableUtilizationPct)} accent="var(--info)" />
         <KpiCard icon={<Target size={17} aria-hidden="true" />} label="Planned Utilization" value={fmtPct(cards.plannedUtilizationPct)} />
         <KpiCard icon={<TrendingUp size={17} aria-hidden="true" />} label="Actual Utilization" value={fmtPct(cards.actualUtilizationPct)} accent={utilColor(cards.actualUtilizationPct)} />
       </div>
 
       {/* Charts row */}
-      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 16, marginBottom: 20 }}>
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <SectionHeader title="Billable vs Non-Billable" subtitle="Share of approved hours logged in range" />
-          <div style={{ padding: '20px 16px', height: 200 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={billableChartData} layout="vertical" margin={{ left: 10, right: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} unit="h" />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: 'var(--txt-mut)' }} width={90} />
-                <Tooltip
-                  cursor={false}
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const p = payload[0].payload as typeof billableChartData[number];
-                    const idx = billableChartData.findIndex((d) => d.name === p.name);
-                    return (
-                      <div style={{ background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 8, padding: '10px 12px', fontSize: 12 }}>
-                        <div style={{ fontWeight: 600, color: 'var(--txt)', marginBottom: 6 }}>{p.name}</div>
-                        <div style={{ color: BILLABLE_COLORS[idx] || 'var(--txt)' }}>Hours: {p.hours.toFixed(1)}h ({p.pct.toFixed(1)}%)</div>
-                      </div>
-                    );
-                  }}
-                />
-                <Bar dataKey="hours" radius={[0, 4, 4, 0]} isAnimationActive={false}>
-                  {billableChartData.map((entry, i) => <Cell key={entry.name} fill={BILLABLE_COLORS[i]} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16, marginBottom: 20 }}>
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <SectionHeader title="Planned vs Actual Utilization" subtitle={`Variance: ${plannedVsActual.variance >= 0 ? '+' : ''}${plannedVsActual.variance.toFixed(1)}h (${plannedVsActual.variancePct.toFixed(1)}%)`} />
           <div style={{ padding: '20px 16px', height: 200 }}>

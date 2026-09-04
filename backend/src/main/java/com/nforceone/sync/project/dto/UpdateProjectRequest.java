@@ -13,7 +13,6 @@ public record UpdateProjectRequest(
         @NotBlank @Size(max = 200) String name,
         @Size(max = 200) String client,
         @NotNull Long projectTypeId,
-        @NotNull Long billingModelId,
         @NotBlank String status,
         @NotNull LocalDate startDate,
         LocalDate endDate,

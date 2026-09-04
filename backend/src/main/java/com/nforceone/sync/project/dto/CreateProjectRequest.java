@@ -16,7 +16,6 @@ public record CreateProjectRequest(
         @NotBlank @Size(max = 200) String name,
         @Size(max = 200) String client,
         @NotNull Long projectTypeId,
-        @NotNull Long billingModelId,
         @NotNull LocalDate startDate,
         LocalDate endDate,
         /** The project's Team Lead, who approves its EOD entries. Must be an active MANAGER. */

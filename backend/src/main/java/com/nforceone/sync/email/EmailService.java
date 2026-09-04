@@ -42,7 +42,7 @@ public class EmailService {
     }
 
     public void sendPasswordResetEmail(String toEmail, String fullName, String tempPassword, String resetToken) {
-        String subject = "NForce Sync — your password has been reset";
+        String subject = "NForce Sync – Password Reset Request";
         String html = buildResetHtml(fullName, toEmail, tempPassword, resetToken);
         sendAsync(toEmail, subject, html);
     }
@@ -58,7 +58,7 @@ public class EmailService {
      * @return true when Resend accepted the message (2xx)
      */
     public boolean sendPasswordResetEmailSync(String toEmail, String fullName, String tempPassword, String resetToken) {
-        String subject = "NForce Sync — your password has been reset";
+        String subject = "NForce Sync – Password Reset Request";
         String html = buildResetHtml(fullName, toEmail, tempPassword, resetToken);
         return sendBlocking(toEmail, subject, html);
     }

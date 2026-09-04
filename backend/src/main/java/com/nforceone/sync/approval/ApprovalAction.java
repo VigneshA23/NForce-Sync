@@ -33,9 +33,6 @@ public class ApprovalAction {
     @Column(columnDefinition = "TEXT")
     private String comment;
 
-    @Column(name = "billable_override")
-    private Boolean billableOverride;
-
     @Column(name = "acted_at", nullable = false)
     private OffsetDateTime actedAt;
 

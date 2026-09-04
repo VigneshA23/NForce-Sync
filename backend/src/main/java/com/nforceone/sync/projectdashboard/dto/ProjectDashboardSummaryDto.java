@@ -6,7 +6,6 @@ public record ProjectDashboardSummaryDto(
         DashboardSummaryCardsDto cards,
         List<ProjectUtilizationRowDto> projectUtilization,
         List<ResourceUtilizationRowDto> resourceUtilization,
-        BillableSplitDto billableSplit,
         PlannedVsActualDto plannedVsActual,
         List<MissingEodRowDto> missingEod,
         List<TaskCategoryUtilizationRowDto> taskCategoryBreakdown,

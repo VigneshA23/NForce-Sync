@@ -51,7 +51,7 @@ public class ReportExportService {
         return date != null ? date.format(DISPLAY_DATE) : "";
     }
 
-    private static final String[] COLUMNS = {"Employee", "Employee Code", "Entry Date", "Project", "Category", "Hours", "Billable"};
+    private static final String[] COLUMNS = {"Employee", "Employee Code", "Entry Date", "Project", "Category", "Hours"};
 
     public byte[] buildCsv(EodByEmployeeReportDto report) {
         StringBuilder sb = new StringBuilder();
@@ -63,8 +63,7 @@ public class ReportExportService {
                   .append(csvField(displayDate(e.date()))).append(',')
                   .append(csvField(e.projectCode())).append(',')
                   .append(csvField(e.categoryName())).append(',')
-                  .append(csvField(e.hours() != null ? e.hours().toPlainString() : "0")).append(',')
-                  .append(csvField(e.billable() ? "Billable" : "Internal")).append("\r\n");
+                  .append(csvField(e.hours() != null ? e.hours().toPlainString() : "0")).append("\r\n");
             }
         }
         return sb.toString().getBytes(StandardCharsets.UTF_8);
@@ -76,7 +75,7 @@ public class ReportExportService {
         return (escaped.contains(",") || escaped.contains("\"") || escaped.contains("\n")) ? "\"" + escaped + "\"" : escaped;
     }
 
-    private static final String[] SHEET_COLUMNS = {"Entry Date", "Project", "Category", "Hours", "Billable"};
+    private static final String[] SHEET_COLUMNS = {"Entry Date", "Project", "Category", "Hours"};
 
     public byte[] buildExcel(EodByEmployeeReportDto report) {
         try (SXSSFWorkbook workbook = new SXSSFWorkbook()) {
@@ -122,7 +121,7 @@ public class ReportExportService {
 
         Row totalsRow = sheet.createRow(rowNum++);
         totalsRow.createCell(0).setCellValue("Entries: " + emp.entryCount()
-                + "  |  Total hours: " + fmt(emp.totalHours()) + "  |  Billable hours: " + fmt(emp.billableHours()));
+                + "  |  Total hours: " + fmt(emp.totalHours()));
 
         rowNum++; // blank spacer row
 
@@ -143,7 +142,6 @@ public class ReportExportService {
             row.createCell(1).setCellValue(e.projectCode() != null ? e.projectCode() : "");
             row.createCell(2).setCellValue(e.categoryName() != null ? e.categoryName() : "");
             row.createCell(3).setCellValue(e.hours() != null ? e.hours().doubleValue() : 0d);
-            row.createCell(4).setCellValue(e.billable() ? "Billable" : "Internal");
         }
 
         for (int c = 0; c < SHEET_COLUMNS.length; c++) {
@@ -191,16 +189,16 @@ public class ReportExportService {
                 String meta = String.join(" · ", nonBlank(emp.designationName()), "Status: " + emp.status(),
                         nonBlank(emp.client()), emp.managerName() != null ? "Reports to " + emp.managerName() : "");
                 document.add(new Paragraph(meta, metaFont));
-                document.add(new Paragraph("Total hours: " + fmt(emp.totalHours()) + "  |  Billable: " + fmt(emp.billableHours())
+                document.add(new Paragraph("Total hours: " + fmt(emp.totalHours())
                         + "  |  Entries: " + emp.entryCount(), metaFont));
 
                 List<EodByEmployeeEntryDto> entries = sortedByDate(emp.entries());
                 if (entries.isEmpty()) {
                     document.add(new Paragraph("No EOD entries in this range.", metaFont));
                 } else {
-                    PdfPTable table = new PdfPTable(new float[]{1.1f, 1.4f, 1.8f, 0.8f, 1f});
+                    PdfPTable table = new PdfPTable(new float[]{1.1f, 1.4f, 1.8f, 0.8f});
                     table.setWidthPercentage(100);
-                    for (String col : new String[]{"Entry Date", "Project", "Category", "Hours", "Billable"}) {
+                    for (String col : new String[]{"Entry Date", "Project", "Category", "Hours"}) {
                         PdfPCell cell = new PdfPCell(new Phrase(col, tableHeaderFont));
                         cell.setHorizontalAlignment(Element.ALIGN_LEFT);
                         table.addCell(cell);
@@ -210,7 +208,6 @@ public class ReportExportService {
                         table.addCell(new Phrase(e.projectCode() != null ? e.projectCode() : "—", tableCellFont));
                         table.addCell(new Phrase(e.categoryName() != null ? e.categoryName() : "—", tableCellFont));
                         table.addCell(new Phrase(fmt(e.hours()), tableCellFont));
-                        table.addCell(new Phrase(e.billable() ? "Billable" : "Internal", tableCellFont));
                     }
                     document.add(table);
                 }

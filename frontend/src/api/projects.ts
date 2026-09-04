@@ -6,12 +6,6 @@ export interface ProjectRef {
   code: string;
   name: string;
   client: string | null;
-  /**
-   * Whether a task row on this project may be marked billable: a CLIENT project whose billing
-   * model exists and is active. Computed server-side so the rule has one definition — see
-   * ProjectDto.billableAllowed, which EodService also enforces on save.
-   */
-  billableAllowed: boolean;
 }
 
 /**
@@ -35,10 +29,6 @@ export interface ProjectFullDto {
   projectType: string | null;
   /** Id of the same, for preselecting the edit form. */
   projectTypeId: number | null;
-  /** Display name of the billing model; null when unset. */
-  billingModel: string | null;
-  /** Id of the same, for preselecting the edit form. */
-  billingModelId: number | null;
   status: 'ACTIVE' | 'INACTIVE' | 'COMPLETED' | 'ON_HOLD';
   /** The Team Lead who approves this project's EOD entries. */
   pmId: number | null;
@@ -57,7 +47,6 @@ export interface CreateProjectPayload {
   /** Required when the chosen project type has requiresClient; forced to null otherwise. */
   client?: string | null;
   projectTypeId: number;
-  billingModelId: number;
   startDate: string;
   /** Null means the project is ongoing — no fixed end date. */
   endDate?: string | null;
@@ -73,7 +62,6 @@ export interface UpdateProjectPayload {
   name: string;
   client?: string | null;
   projectTypeId: number;
-  billingModelId: number;
   status: ProjectFullDto['status'];
   startDate: string;
   endDate?: string | null;

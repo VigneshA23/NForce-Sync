@@ -11,7 +11,6 @@ public record ApprovalActionDto(
         String                 actorName,
         ApprovalAction.Action  action,
         String                 comment,
-        Boolean                billableOverride,
         OffsetDateTime         actedAt
 ) {
     public static ApprovalActionDto from(ApprovalAction a) {
@@ -22,7 +21,6 @@ public record ApprovalActionDto(
                 a.getActor().getFullName(),
                 a.getAction(),
                 a.getComment(),
-                a.getBillableOverride(),
                 a.getActedAt()
         );
     }

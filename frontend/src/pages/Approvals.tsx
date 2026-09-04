@@ -125,7 +125,6 @@ function EntryRow({
                 }}>
                   <span style={{ color: 'var(--txt)', fontWeight: 600, minWidth: 120, flexShrink: 0 }}>{t.projectCode ?? '—'}</span>
                   <span style={{ flex: 1 }}>{t.categoryName ?? '—'}</span>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.isBillable ? 'var(--ok)' : 'transparent', border: t.isBillable ? 'none' : '1.5px solid var(--txt-dim)', flexShrink: 0 }} title={t.isBillable ? 'Billable' : 'Non-billable'} />
                   <span style={{ color: 'var(--txt)', fontWeight: 700, minWidth: 36, textAlign: 'right', flexShrink: 0 }}>{t.hours != null ? `${hrs(Number(t.hours))}h` : '—'}</span>
                 </div>
               )) : (

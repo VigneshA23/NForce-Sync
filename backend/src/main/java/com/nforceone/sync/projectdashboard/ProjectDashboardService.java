@@ -11,9 +11,8 @@ import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
 import com.nforceone.sync.eod.EodTaskRepository;
 import com.nforceone.sync.eod.dto.CategoryHoursRow;
-import com.nforceone.sync.eod.dto.DateBillableHoursRow;
+import com.nforceone.sync.eod.dto.DateHoursRow;
 import com.nforceone.sync.eod.dto.EmployeeProjectHoursRow;
-import com.nforceone.sync.eod.dto.ProjectBillableHoursRow;
 import com.nforceone.sync.eod.dto.ProjectHoursRow;
 import com.nforceone.sync.project.Allocation;
 import com.nforceone.sync.project.AllocationRepository;
@@ -35,8 +34,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Backs the PM-facing Project Dashboard: utilization, billable split, planned-vs-actual and
- * EOD-compliance across the projects a Project Manager owns. Strictly scoped server-side to
+ * Backs the PM-facing Project Dashboard: utilization, planned-vs-actual and EOD-compliance
+ * across the projects a Project Manager owns. Strictly scoped server-side to
  * {@code project.pm.id == caller.id} for the PM role (SUPERADMIN may view any PM's portfolio,
  * matching every other PM-facing controller's {@code hasAnyRole('PM','SUPERADMIN')} convention) —
  * filter params are validated against that scope, never trusted blindly.
@@ -216,21 +215,9 @@ public class ProjectDashboardService {
         Map<String, BigDecimal> actualByEmpProj = actualByEmpProjRows.stream()
                 .collect(Collectors.toMap(r -> r.employeeId() + ":" + r.projectId(), EmployeeProjectHoursRow::hours));
 
-        BigDecimal billableHours = nz(eodTaskRepository.sumHoursByBillable(projectIds, employeeIds, true, from, to));
-        BigDecimal nonBillableHours = nz(eodTaskRepository.sumHoursByBillable(projectIds, employeeIds, false, from, to));
-        BigDecimal totalActualHours = billableHours.add(nonBillableHours);
+        BigDecimal totalActualHours = actualByProject.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<CategoryHoursRow> categoryRows = eodTaskRepository.sumHoursByCategory(projectIds, employeeIds, from, to);
-
-        // Per-project billable split, for the Project Utilization Overview table's Billable % column
-        // — billable/non-billable hours were previously only summed org-wide, never per project.
-        List<ProjectBillableHoursRow> projectBillableRows =
-                eodTaskRepository.sumHoursByProjectAndBillable(projectIds, employeeIds, from, to);
-        Map<Long, BigDecimal> billableHoursByProject = new HashMap<>();
-        Map<Long, BigDecimal> nonBillableHoursByProject = new HashMap<>();
-        for (ProjectBillableHoursRow row : projectBillableRows) {
-            (row.billable() ? billableHoursByProject : nonBillableHoursByProject).merge(row.projectId(), row.hours(), BigDecimal::add);
-        }
 
         // Previous period (same length, immediately preceding `from`) — used only for the "vs last
         // month" deltas on the KPI cards and the per-project trend sparkline; its raw rows are
@@ -246,12 +233,9 @@ public class ProjectDashboardService {
                     BigDecimal planned = plannedByProject.getOrDefault(pid, BigDecimal.ZERO);
                     BigDecimal actual = actualByProject.getOrDefault(pid, BigDecimal.ZERO);
                     BigDecimal variance = actual.subtract(planned);
-                    BigDecimal projBillable = billableHoursByProject.getOrDefault(pid, BigDecimal.ZERO);
-                    BigDecimal projNonBillable = nonBillableHoursByProject.getOrDefault(pid, BigDecimal.ZERO);
-                    BigDecimal billablePct = pctOf(projBillable, projBillable.add(projNonBillable));
                     BigDecimal previousPct = previous.utilizationPctByProject().get(pid);
                     return new ProjectUtilizationRowDto(
-                            pid, p.getName(), planned, actual, variance, pctOf(actual, planned), billablePct, previousPct);
+                            pid, p.getName(), planned, actual, variance, pctOf(actual, planned), previousPct);
                 })
                 .sorted(Comparator.comparing(ProjectUtilizationRowDto::projectName))
                 .toList();
@@ -273,31 +257,21 @@ public class ProjectDashboardService {
                 .sorted(Comparator.comparing(ResourceUtilizationRowDto::employeeName))
                 .toList();
 
-        // Daily trend series for the Utilization Trend chart / KPI sparklines. Each day's Billable
-        // and Non-billable % are expressed against that day's available capacity (standard hours ×
-        // employees in scope), not as a split of that day's actual hours — this way Overall = Billable
-        // + Non-billable for every point, which a "% of actual hours" basis would not guarantee.
-        // This is a distinct (but related) basis from the billableUtilizationPct summary card, which
-        // is intentionally a split-of-actual figure; both are documented so they aren't confused.
-        List<DateBillableHoursRow> dailyRows = eodTaskRepository.sumHoursByDateAndBillable(projectIds, employeeIds, from, to);
-        Map<LocalDate, BigDecimal> dailyBillable = new HashMap<>();
-        Map<LocalDate, BigDecimal> dailyNonBillable = new HashMap<>();
-        for (DateBillableHoursRow row : dailyRows) {
-            (row.billable() ? dailyBillable : dailyNonBillable).merge(row.date(), row.hours(), BigDecimal::add);
+        // Daily trend series for the Utilization Trend chart / KPI sparklines — each day's actual
+        // hours against that day's available capacity (standard hours × employees in scope).
+        List<DateHoursRow> dailyRows = eodTaskRepository.sumHoursByDate(projectIds, employeeIds, from, to);
+        Map<LocalDate, BigDecimal> dailyActual = new HashMap<>();
+        for (DateHoursRow row : dailyRows) {
+            dailyActual.merge(row.date(), row.hours(), BigDecimal::add);
         }
         BigDecimal dailyAvailableHours = standardHours.multiply(BigDecimal.valueOf(employeeIds.size()));
         List<UtilizationTrendPointDto> utilizationTrend = new ArrayList<>();
         for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
             boolean working = !isWeekend(d) && !holidayDates.contains(d);
             BigDecimal dayAvailable = working ? dailyAvailableHours : BigDecimal.ZERO;
-            BigDecimal dayBillable = dailyBillable.getOrDefault(d, BigDecimal.ZERO);
-            BigDecimal dayNonBillable = dailyNonBillable.getOrDefault(d, BigDecimal.ZERO);
-            utilizationTrend.add(new UtilizationTrendPointDto(
-                    d, pctOf(dayBillable.add(dayNonBillable), dayAvailable), pctOf(dayBillable, dayAvailable), pctOf(dayNonBillable, dayAvailable)));
+            BigDecimal dayActual = dailyActual.getOrDefault(d, BigDecimal.ZERO);
+            utilizationTrend.add(new UtilizationTrendPointDto(d, pctOf(dayActual, dayAvailable)));
         }
-
-        BillableSplitDto billableSplit = new BillableSplitDto(
-                billableHours, nonBillableHours, pctOf(billableHours, totalActualHours), pctOf(nonBillableHours, totalActualHours));
 
         BigDecimal plannedVariance = totalActualHours.subtract(totalPlannedHours);
         PlannedVsActualDto plannedVsActual = new PlannedVsActualDto(
@@ -325,19 +299,15 @@ public class ProjectDashboardService {
                 // "Overall" reads as performance against plan; "Actual"/"Planned" read against
                 // org-standard available capacity — three distinct, non-redundant percentages.
                 overallPct,
-                billableSplit.billablePct(),
-                billableSplit.nonBillablePct(),
                 pctOf(totalPlannedHours, totalAvailableHours),
                 actualPct,
                 (int) missingEod.stream().map(MissingEodRowDto::employeeId).distinct().count(),
                 previous.hasData() ? overallPct.subtract(previous.overallPct()) : null,
                 previous.hasData() ? actualPct.subtract(previous.actualPct()) : null,
-                previous.hasData() ? billableSplit.billablePct().subtract(previous.billablePct()) : null,
-                previous.hasData() ? billableSplit.nonBillablePct().subtract(previous.nonBillablePct()) : null,
                 previous.hasData() ? currentActiveProjectCount - previous.activeProjectCount() : null);
 
         return new ProjectDashboardSummaryDto(
-                cards, projectUtilization, resourceUtilization, billableSplit, plannedVsActual, missingEod, taskCategoryBreakdown, utilizationTrend);
+                cards, projectUtilization, resourceUtilization, plannedVsActual, missingEod, taskCategoryBreakdown, utilizationTrend);
     }
 
     // ── Previous-period snapshot (for "vs last month" deltas) ──────────────────
@@ -350,13 +320,11 @@ public class ProjectDashboardService {
             Map<Long, BigDecimal> utilizationPctByProject,
             BigDecimal overallPct,
             BigDecimal actualPct,
-            BigDecimal billablePct,
-            BigDecimal nonBillablePct,
             int activeProjectCount
     ) {}
 
     private static final PeriodSnapshot EMPTY_SNAPSHOT =
-            new PeriodSnapshot(false, Map.of(), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0);
+            new PeriodSnapshot(false, Map.of(), BigDecimal.ZERO, BigDecimal.ZERO, 0);
 
     private PeriodSnapshot computeSnapshot(List<Long> projectIds, LocalDate from, LocalDate to, BusinessRuleConfig config) {
         if (projectIds.isEmpty()) return EMPTY_SNAPSHOT;
@@ -386,9 +354,7 @@ public class ProjectDashboardService {
         Map<Long, BigDecimal> actualByProject = eodTaskRepository.sumHoursByProject(projectIds, employeeIds, from, to)
                 .stream().collect(Collectors.toMap(ProjectHoursRow::projectId, ProjectHoursRow::hours));
 
-        BigDecimal billableHours = nz(eodTaskRepository.sumHoursByBillable(projectIds, employeeIds, true, from, to));
-        BigDecimal nonBillableHours = nz(eodTaskRepository.sumHoursByBillable(projectIds, employeeIds, false, from, to));
-        BigDecimal totalActualHours = billableHours.add(nonBillableHours);
+        BigDecimal totalActualHours = actualByProject.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
 
         int overallWorkingDays = countWorkingDays(from, to, holidayDates);
         BigDecimal totalAvailableHours = standardHours.multiply(BigDecimal.valueOf(overallWorkingDays))
@@ -405,8 +371,6 @@ public class ProjectDashboardService {
                 true, utilizationPctByProject,
                 pctOf(totalActualHours, totalPlannedHours),
                 pctOf(totalActualHours, totalAvailableHours),
-                pctOf(billableHours, totalActualHours),
-                pctOf(nonBillableHours, totalActualHours),
                 activeProjectCount);
     }
 
@@ -546,10 +510,6 @@ public class ProjectDashboardService {
         return a.isBefore(b) ? a : b;
     }
 
-    private static BigDecimal nz(BigDecimal value) {
-        return value != null ? value : BigDecimal.ZERO;
-    }
-
     /** Null-safe percentage; a zero denominator reads as 0% here (unlike UtilizationCalculator's
      *  N/A-on-weekend convention) since an empty plan/total is a real "nothing to report" case. */
     private static BigDecimal pctOf(BigDecimal numerator, BigDecimal denominator) {
@@ -565,10 +525,9 @@ public class ProjectDashboardService {
                                                             int onHoldProjects, int completedProjects) {
         DashboardSummaryCardsDto cards = new DashboardSummaryCardsDto(
                 totalAssignedProjects, activeProjects, onHoldProjects, completedProjects,
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0,
-                null, null, null, null, null);
-        BillableSplitDto billableSplit = new BillableSplitDto(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0,
+                null, null, null);
         PlannedVsActualDto plannedVsActual = new PlannedVsActualDto(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
-        return new ProjectDashboardSummaryDto(cards, List.of(), List.of(), billableSplit, plannedVsActual, List.of(), List.of(), List.of());
+        return new ProjectDashboardSummaryDto(cards, List.of(), List.of(), plannedVsActual, List.of(), List.of(), List.of());
     }
 }

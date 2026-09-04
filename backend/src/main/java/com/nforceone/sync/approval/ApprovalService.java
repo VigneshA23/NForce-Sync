@@ -15,7 +15,6 @@ import com.nforceone.sync.eod.dto.EodEntryDto;
 import com.nforceone.sync.eod.dto.EodEntryEnrichment;
 import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.project.Project;
-import com.nforceone.sync.project.dto.ProjectDto;
 import com.nforceone.sync.utilization.UtilizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -123,45 +122,12 @@ public class ApprovalService {
                 .toList();
     }
 
-    public EodEntryDto approve(Long entryId, String actorEmail,
-                               Boolean billableOverride, String comment) {
+    public EodEntryDto approve(Long entryId, String actorEmail, String comment) {
         AppUser actor = requireUserByEmail(actorEmail);
         EodEntry entry = requireEntryById(entryId);
         checkManagerAuthorization(actor, entry);
         requireStatus(entry, EodEntry.Status.SUBMITTED);
-        if (!isEntryFullyDecided(entry)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Set Billable on every eligible task before approving.");
-        }
-        return approveEntry(entry, actor, billableOverride, comment);
-    }
-
-    /**
-     * Sets a single task's billable flag during review and marks it as explicitly decided, so
-     * the approval gate (isEntryFullyDecided) stops counting it as undecided. Only callable while
-     * the entry is still SUBMITTED — once approved/rejected, billable is frozen with the decision.
-     */
-    public EodEntryDto setTaskBillable(Long entryId, Long taskId, String actorEmail, boolean isBillable) {
-        AppUser actor = requireUserByEmail(actorEmail);
-        EodEntry entry = requireEntryById(entryId);
-        checkManagerAuthorization(actor, entry);
-        requireStatus(entry, EodEntry.Status.SUBMITTED);
-
-        EodTask task = entry.getTasks().stream()
-                .filter(t -> t.getId().equals(taskId))
-                .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Task " + taskId + " not found on entry " + entryId));
-
-        if (isBillable && !(task.getProject() != null && ProjectDto.billableAllowed(task.getProject()))) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "This project is Non-Billable — task cannot be marked billable.");
-        }
-
-        task.setIsBillable(isBillable);
-        task.setBillableDecided(true);
-        entryRepository.save(entry);
-        return EodEntryDto.from(entry);
+        return approveEntry(entry, actor, comment);
     }
 
     public EodEntryDto reject(Long entryId, String actorEmail, String comment) {
@@ -171,7 +137,7 @@ public class ApprovalService {
         requireStatus(entry, EodEntry.Status.SUBMITTED);
 
         OffsetDateTime now = OffsetDateTime.now();
-        recordAction(entry, actor, ApprovalAction.Action.REJECT, comment, null, now);
+        recordAction(entry, actor, ApprovalAction.Action.REJECT, comment, now);
 
         entry.setStatus(EodEntry.Status.REJECTED);
         entry.setUpdatedAt(now);
@@ -189,17 +155,16 @@ public class ApprovalService {
     // requestChanges() removed in V44 — reject() covers it. A rejected entry is editable and
     // resubmittable, which is all "changes requested" ever did.
 
-    // Entries not yet SUBMITTED (already decided elsewhere) or with an undecided billable-eligible
-    // task are silently skipped rather than aborting the whole batch — a TL clicking "Approve all"
-    // expects the ready ones to go through, not to be blocked by the couple that still need a
-    // per-task billable decision. checkManagerAuthorization inside approveEntry still throws hard
-    // for an unauthorized entry that otherwise passed this filter.
+    // Entries not yet SUBMITTED (already decided elsewhere) are silently skipped rather than
+    // aborting the whole batch — a TL clicking "Approve all" expects the ready ones to go
+    // through. checkManagerAuthorization inside approveEntry still throws hard for an
+    // unauthorized entry that otherwise passed this filter.
     public List<EodEntryDto> batchApprove(List<Long> entryIds, String actorEmail) {
         AppUser actor = requireUserByEmail(actorEmail);
         return entryIds.stream()
                 .map(this::requireEntryById)
-                .filter(entry -> entry.getStatus() == EodEntry.Status.SUBMITTED && isEntryFullyDecided(entry))
-                .map(entry -> approveEntry(entry, actor, null, null))
+                .filter(entry -> entry.getStatus() == EodEntry.Status.SUBMITTED)
+                .map(entry -> approveEntry(entry, actor, null))
                 .toList();
     }
 
@@ -298,13 +263,12 @@ public class ApprovalService {
 
     // ── private helpers ─────────────────────────────────────────────
 
-    private EodEntryDto approveEntry(EodEntry entry, AppUser actor,
-                                      Boolean billableOverride, String comment) {
+    private EodEntryDto approveEntry(EodEntry entry, AppUser actor, String comment) {
         checkManagerAuthorization(actor, entry);
         requireStatus(entry, EodEntry.Status.SUBMITTED);
 
         OffsetDateTime now = OffsetDateTime.now();
-        recordAction(entry, actor, ApprovalAction.Action.APPROVE, comment, billableOverride, now);
+        recordAction(entry, actor, ApprovalAction.Action.APPROVE, comment, now);
 
         entry.setStatus(EodEntry.Status.APPROVED);
         entry.setUpdatedAt(now);
@@ -353,17 +317,6 @@ public class ApprovalService {
         return entry.getEmployee().getManager();
     }
 
-    /**
-     * True once every billable-eligible task on the entry has had its billable status explicitly
-     * decided by a Team Lead (see setTaskBillable) — tasks whose project isn't billable-eligible
-     * (ProjectDto.billableAllowed) never require a decision and don't count against this.
-     */
-    private boolean isEntryFullyDecided(EodEntry entry) {
-        return entry.getTasks().stream()
-                .filter(t -> t.getProject() != null && ProjectDto.billableAllowed(t.getProject()))
-                .allMatch(t -> Boolean.TRUE.equals(t.getBillableDecided()));
-    }
-
     private void requireStatus(EodEntry entry, EodEntry.Status required) {
         if (entry.getStatus() != required) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -373,13 +326,12 @@ public class ApprovalService {
 
     private void recordAction(EodEntry entry, AppUser actor,
                                ApprovalAction.Action action, String comment,
-                               Boolean billableOverride, OffsetDateTime now) {
+                               OffsetDateTime now) {
         ApprovalAction aa = new ApprovalAction();
         aa.setEodEntry(entry);
         aa.setActor(actor);
         aa.setAction(action);
         aa.setComment(comment);
-        aa.setBillableOverride(billableOverride);
         aa.setActedAt(now);
         actionRepository.save(aa);
     }

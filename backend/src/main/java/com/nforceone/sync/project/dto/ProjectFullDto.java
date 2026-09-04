@@ -13,10 +13,6 @@ public record ProjectFullDto(
         String projectType,
         /** Id of the same, so the edit form can preselect it. */
         Long projectTypeId,
-        /** Display name of the billing model; null when unset. */
-        String billingModel,
-        /** Id of the same, so the edit form can preselect it. */
-        Long billingModelId,
         String status,
         /** The Team Lead who approves this project's EOD entries. */
         Long pmId,
@@ -36,8 +32,6 @@ public record ProjectFullDto(
                 p.getClient(),
                 p.getProjectType() != null ? p.getProjectType().getName() : null,
                 p.getProjectType() != null ? p.getProjectType().getId() : null,
-                p.getBillingModel() != null ? p.getBillingModel().getName() : null,
-                p.getBillingModel() != null ? p.getBillingModel().getId() : null,
                 p.getStatus().name(),
                 p.getPm() != null ? p.getPm().getId() : null,
                 p.getPm() != null ? p.getPm().getFullName() : null,

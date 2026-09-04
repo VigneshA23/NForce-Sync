@@ -46,35 +46,6 @@ public class OrgController {
         orgService.deleteProjectType(id);
     }
 
-    // ── Billing models ─────────────────────────────────────────────────────────
-
-    /** Readable by any signed-in user — the PM Project form needs the list to populate its dropdown. */
-    @GetMapping("/billing-models")
-    @PreAuthorize("isAuthenticated()")
-    public List<BillingModelDto> listBillingModels() {
-        return orgService.listBillingModels();
-    }
-
-    @PostMapping("/billing-models")
-    @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('SUPERADMIN')")
-    public BillingModelDto createBillingModel(@Valid @RequestBody CreateBillingModelRequest request) {
-        return orgService.createBillingModel(request);
-    }
-
-    @PatchMapping("/billing-models/{id}")
-    @PreAuthorize("hasRole('SUPERADMIN')")
-    public BillingModelDto toggleBillingModel(@PathVariable Long id) {
-        return orgService.toggleBillingModel(id);
-    }
-
-    @DeleteMapping("/billing-models/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasRole('SUPERADMIN')")
-    public void deleteBillingModel(@PathVariable Long id) {
-        orgService.deleteBillingModel(id);
-    }
-
     // ── Departments ────────────────────────────────────────────────────────────
 
     @GetMapping("/departments")

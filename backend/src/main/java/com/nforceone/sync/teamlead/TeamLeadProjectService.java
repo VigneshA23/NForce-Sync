@@ -156,12 +156,10 @@ public class TeamLeadProjectService {
         try {
             // Mirror into a TaskCategory row so this category becomes selectable in the
             // Employee EOD dropdown for every employee, application-wide. Defaults match what
-            // this form collects — no productivity/billability distinction is asked of the
-            // Team Lead here.
+            // this form collects — no productivity distinction is asked of the Team Lead here.
             TaskCategory taskCategory = new TaskCategory();
             taskCategory.setName(name);
             taskCategory.setIsProductive(true);
-            taskCategory.setIsBillableDefault(false);
             taskCategory.setActive(status == ProjectCategory.Status.ACTIVE);
             taskCategory = taskCategoryRepository.save(taskCategory);
 

@@ -16,9 +16,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     // Projects the employee may log EOD time against on a given date: an allocation whose
     // effective window covers that date, on a project that is still ACTIVE. DISTINCT because
     // nothing prevents an employee holding more than one allocation row for the same project.
-    // billingModel JOIN FETCHed because ProjectDto computes billableAllowed from it — lazy access
-    // inside the mapper would fire one query per project.
-    @Query("SELECT DISTINCT a.project FROM Allocation a LEFT JOIN FETCH a.project.billingModel " +
+    @Query("SELECT DISTINCT a.project FROM Allocation a " +
            "WHERE a.employee.id = :employeeId " +
            "AND a.project.status = :status " +
            "AND a.effectiveFrom <= :onDate " +
@@ -40,34 +38,16 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
      */
     List<Project> findByProjectManagerIdOrderByNameAsc(Long projectManagerId);
 
-    /** FK guard for deleting a billing model — mirrors AppUserRepository.countByDepartmentId. */
-    long countByBillingModelId(Long billingModelId);
-
     /** FK guard for deleting a project type. */
     long countByProjectTypeId(Long projectTypeId);
 
-    /** Same grouped-headcount idiom as countCurrentEmployeesByBillingModel, keyed on project type. */
+    /** Grouped-headcount idiom, keyed on project type. */
     @Query("SELECT p.projectType.id, COUNT(DISTINCT a.employee.id) " +
            "FROM Allocation a JOIN a.project p " +
            "WHERE a.effectiveFrom <= :today " +
            "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :today) " +
            "GROUP BY p.projectType.id")
     List<Object[]> countCurrentEmployeesByProjectType(@Param("today") LocalDate today);
-
-    /**
-     * Distinct employees currently allocated per billing model, resolved in one grouped query so the
-     * Organization Masters list does not run a count per row.
-     *
-     * <p>"Currently" means the allocation's effective window covers {@code today}. No nullable bind
-     * parameter is used — Postgres cannot infer the type of {@code :param IS NULL}.
-     */
-    @Query("SELECT p.billingModel.id, COUNT(DISTINCT a.employee.id) " +
-           "FROM Allocation a JOIN a.project p " +
-           "WHERE p.billingModel IS NOT NULL " +
-           "AND a.effectiveFrom <= :today " +
-           "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :today) " +
-           "GROUP BY p.billingModel.id")
-    List<Object[]> countCurrentEmployeesByBillingModel(@Param("today") LocalDate today);
 
     // "My Projects" for an Employee (and, historically, mis-used for the Team Lead's own list
     // too): the given AppUser's OWN allocation rows — i.e. projects they are personally staffed

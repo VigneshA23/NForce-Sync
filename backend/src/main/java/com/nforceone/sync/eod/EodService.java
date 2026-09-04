@@ -16,7 +16,6 @@ import com.nforceone.sync.eod.dto.SaveEodRequest;
 import com.nforceone.sync.eod.dto.SaveEodTaskRequest;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
-import com.nforceone.sync.project.dto.ProjectDto;
 import com.nforceone.sync.project.TaskCategory;
 import com.nforceone.sync.project.TaskCategoryRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -411,10 +410,9 @@ public class EodService {
             // Defence in depth: buildTask already strips these, so reaching here means a row
             // was written by some other path.
             if (leaveRow && (task.getProject() != null
-                    || Boolean.TRUE.equals(task.getIsBillable())
                     || task.getTaskStatus() != EodTask.TaskStatus.COMPLETED)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Row #" + rowNumber + ": Leave rows cannot have a project or billable flag set.");
+                        "Row #" + rowNumber + ": Leave rows cannot have a project set.");
             }
             if (task.getHours() == null || task.getHours().compareTo(BigDecimal.ZERO) < 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -622,36 +620,17 @@ public class EodService {
         task.setDescription(req.description());
         task.setHours(req.hours());
         task.setTaskStatus(req.taskStatus() != null ? req.taskStatus() : EodTask.TaskStatus.COMPLETED);
-        task.setIsBillable(req.isBillable() != null ? req.isBillable() : Boolean.TRUE);
         task.setBlockerReason(req.blockerReason());
         task.setSupportNeeded(req.supportNeeded());
 
-        // A leave row is not work on a project: no project, never billable, always complete.
-        // Overridden after assignment so the request body cannot set these regardless of what
-        // it contains — the UI disables the fields, but this is what actually enforces it.
+        // A leave row is not work on a project: no project, always complete. Overridden after
+        // assignment so the request body cannot set these regardless of what it contains — the UI
+        // disables the fields, but this is what actually enforces it.
         if (isLeaveRow(task)) {
             task.setProject(null);
-            task.setIsBillable(Boolean.FALSE);
             task.setTaskStatus(EodTask.TaskStatus.COMPLETED);
         }
 
-        // Only work on a CLIENT project with an active billing model can be billable. Forced after
-        // assignment for the same reason as above: the disabled checkbox is a cue, not the rule.
-        // A project with no billing model counts as not billable — nothing to bill against.
-        if (task.getProject() != null && !ProjectDto.billableAllowed(task.getProject())) {
-            task.setIsBillable(Boolean.FALSE);
-        }
-
-        // The billable value above is authoritative — it is derived from the project's billing
-        // eligibility, not guessed — so it counts as decided from the moment the task is saved.
-        //
-        // It used to default to FALSE, which meant the approval gate (isEntryFullyDecided) treated
-        // every fresh submission as undecided while the reviewer's checkbox rendered isBillable and
-        // showed it already ticked. Approve was disabled with "Set Billable on every eligible task"
-        // against a task that looked answered, and the only way through was to click the box twice
-        // to land back on the same value. The reviewer can still override the value; what is no
-        // longer required is re-confirming one that was never in question.
-        task.setBillableDecided(Boolean.TRUE);
         return task;
     }
 

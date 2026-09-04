@@ -23,8 +23,7 @@ export type TaskStatus =
   | 'not_started';
 
 export type UtilCategory =
-  | 'billable'
-  | 'non_billable_productive'
+  | 'productive'
   | 'bench'
   | 'idle';
 
@@ -44,7 +43,6 @@ export interface Project {
   name: string;
   code: string;
   clientName: string;
-  isBillable: boolean;
   startDate: string;
   endDate: string | null;
   pmId: string;

@@ -17,7 +17,6 @@ public record EodByEmployeeEntryDto(
         String projectCode,
         String categoryName,
         BigDecimal hours,
-        boolean billable,
         /** LATE_ARRIVAL / INTERVENING / EARLY_LEAVE, or null on a day with no adjustment. */
         String timeAdjustmentType,
         Integer timeAdjustmentMinutes) {

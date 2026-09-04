@@ -14,6 +14,5 @@ public record EodByEmployeeRowDto(
         String status,
         int entryCount,
         BigDecimal totalHours,
-        BigDecimal billableHours,
         List<EodByEmployeeEntryDto> entries) {
 }

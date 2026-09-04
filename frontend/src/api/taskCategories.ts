@@ -4,7 +4,6 @@ export interface TaskCategoryRef {
   id: number;
   name: string;
   isProductive: boolean;
-  isBillableDefault: boolean;
 }
 
 // The backend (task_category_normalized_name_uq, see V60) and TaskCategoryController already

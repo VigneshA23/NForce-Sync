@@ -59,10 +59,9 @@ public class TeamReportsController {
             @RequestParam(required = false) Long projectId,
             @RequestParam(required = false) String client,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String billable,
             @RequestParam(required = false) String employeeQuery) {
         return eodService.getReport(actingEmail(), effectiveFrom(from), effectiveTo(to),
-                projectId, client, status, billable, employeeQuery);
+                projectId, client, status, employeeQuery);
     }
 
     /** Excel/PDF/CSV download of the same EOD report. */
@@ -73,14 +72,13 @@ public class TeamReportsController {
             @RequestParam(required = false) Long projectId,
             @RequestParam(required = false) String client,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String billable,
             @RequestParam(required = false) String employeeQuery,
             @RequestParam(required = false) List<Long> employeeIds,
             @RequestParam String format) {
         LocalDate effectiveFrom = effectiveFrom(from);
         LocalDate effectiveTo = effectiveTo(to);
         EodByEmployeeReportDto report = eodService.getReport(actingEmail(), effectiveFrom, effectiveTo,
-                projectId, client, status, billable, employeeQuery);
+                projectId, client, status, employeeQuery);
 
         if (employeeIds != null && !employeeIds.isEmpty()) {
             Set<Long> wanted = Set.copyOf(employeeIds);

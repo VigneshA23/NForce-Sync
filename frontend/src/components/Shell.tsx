@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Menu, X, Search, Bell, LogOut, Sun, Moon, UserCircle2, HelpCircle, Shield, FolderKanban } from 'lucide-react';
 import { BrandMark } from './BrandMark';
-import { NAV, ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem } from '../lib/nav';
+import { NAV, ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, navSubItemPath } from '../lib/nav';
 import type { NavItem } from '../lib/nav';
 import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
@@ -60,6 +60,16 @@ function AvatarContent({ photo, initials }: { photo: string | null; initials: st
   );
 }
 
+/** A flattened, searchable nav entry — either a top-level NavItem or one of its subItems. */
+interface SearchableNavEntry {
+  key: string;
+  label: string;
+  path: string;
+  icon: NavItem['icon'];
+  /** Set only for a subItem — the owning NavItem's label, shown as result meta text. */
+  parentLabel?: string;
+}
+
 function WorkspaceSearch() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -71,17 +81,43 @@ function WorkspaceSearch() {
   const [idx, setIdx] = useState(-1);
 
   const role = user!.role;
-  const allNavItems = useMemo(
-    () => NAV[role].flatMap((s) => s.items),
-    [role],
-  );
 
-  // Nav items matched client-side (instant, no debounce)
-  const navMatches = useMemo<NavItem[]>(() => {
+  // Every nav item PLUS its sub-headings (status filters, dashboard sections, etc. — see
+  // NavItem.subItems in nav.ts), flattened once per role. This is the single source both the
+  // sidebar and the search bar read from, so a sub-heading can never drift out of sync with — or
+  // expose more than — what NAV[role] actually grants this user.
+  const searchableEntries = useMemo<SearchableNavEntry[]>(() => {
+    const entries: SearchableNavEntry[] = [];
+    for (const section of NAV[role]) {
+      for (const item of section.items) {
+        entries.push({ key: item.key, label: item.label, path: item.path, icon: item.icon });
+        for (const sub of item.subItems ?? []) {
+          entries.push({
+            key: `${item.key}:${sub.key}`,
+            label: sub.label,
+            path: navSubItemPath(item, sub),
+            icon: item.icon,
+            parentLabel: item.label,
+          });
+        }
+      }
+    }
+    return entries;
+  }, [role]);
+
+  // Nav items + sub-headings matched client-side (instant, no debounce). A sub-heading also
+  // matches on "<parent label> <its own label>" so e.g. searching "eod" still surfaces "Rejected"
+  // under My EOD History, not just the parent item.
+  const navMatches = useMemo<SearchableNavEntry[]>(() => {
     const q = query.toLowerCase().trim();
     if (!q) return [];
-    return allNavItems.filter((n) => n.label.toLowerCase().includes(q)).slice(0, 4);
-  }, [query, allNavItems]);
+    return searchableEntries
+      .filter((n) => {
+        const haystack = n.parentLabel ? `${n.parentLabel} ${n.label}`.toLowerCase() : n.label.toLowerCase();
+        return haystack.includes(q);
+      })
+      .slice(0, 6);
+  }, [query, searchableEntries]);
 
   // 300ms debounce for backend call
   useEffect(() => {
@@ -101,7 +137,7 @@ function WorkspaceSearch() {
 
   // Flat list for keyboard navigation indexing
   type ResultItem =
-    | { kind: 'nav'; item: NavItem }
+    | { kind: 'nav'; item: SearchableNavEntry }
     | { kind: 'user'; user: UserResult }
     | { kind: 'project'; project: ProjectResult };
 
@@ -225,7 +261,14 @@ function WorkspaceSearch() {
                     onMouseLeave={() => setIdx(-1)}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: highlighted ? 'rgba(255,255,255,.06)' : 'none', border: 'none', cursor: 'pointer', color: '#C8CCD2', fontSize: 13, textAlign: 'left' }}>
                     <Icon size={14} style={{ color: '#9BA1AC', flexShrink: 0 }} aria-hidden="true" />
-                    {item.label}
+                    {item.parentLabel ? (
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</div>
+                        <div style={{ fontSize: 11, color: '#6B7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.parentLabel}</div>
+                      </div>
+                    ) : (
+                      item.label
+                    )}
                   </button>
                 );
               })}

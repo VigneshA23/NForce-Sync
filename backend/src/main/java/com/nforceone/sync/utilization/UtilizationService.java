@@ -1,7 +1,5 @@
 package com.nforceone.sync.utilization;
 
-import com.nforceone.sync.approval.ApprovalAction;
-import com.nforceone.sync.approval.ApprovalActionRepository;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.businessrules.Holiday;
@@ -34,18 +32,15 @@ import java.util.stream.Collectors;
 public class UtilizationService {
 
     private final EodEntryRepository      entryRepository;
-    private final ApprovalActionRepository actionRepository;
     private final AppUserRepository        userRepository;
     private final UtilSnapshotRepository   snapshotRepository;
     private final HolidayRepository        holidayRepository;
 
     public UtilizationService(EodEntryRepository entryRepository,
-                               ApprovalActionRepository actionRepository,
                                AppUserRepository userRepository,
                                UtilSnapshotRepository snapshotRepository,
                                HolidayRepository holidayRepository) {
         this.entryRepository   = entryRepository;
-        this.actionRepository  = actionRepository;
         this.userRepository    = userRepository;
         this.snapshotRepository = snapshotRepository;
         this.holidayRepository = holidayRepository;
@@ -65,8 +60,6 @@ public class UtilizationService {
         BigDecimal available = UtilizationCalculator.computeAvailableHours(date, isHoliday, isApprovedLeave);
 
         BigDecimal approvedProductive = BigDecimal.ZERO;
-        BigDecimal billable           = BigDecimal.ZERO;
-        BigDecimal nonBillable        = BigDecimal.ZERO;
         BigDecimal bench              = BigDecimal.ZERO;
 
         Optional<EodEntry> approvedOpt = entryOpt
@@ -75,30 +68,15 @@ public class UtilizationService {
         if (approvedOpt.isPresent()) {
             EodEntry entry = approvedOpt.get();
 
-            // Check for billable_override on the latest APPROVE action.
-            // If set, it overrides the per-task is_billable for billing categorization.
-            Boolean billableOverride = actionRepository
-                    .findByEodEntryIdOrderByActedAtDesc(entry.getId())
-                    .stream()
-                    .filter(a -> a.getAction() == ApprovalAction.Action.APPROVE)
-                    .findFirst()
-                    .map(ApprovalAction::getBillableOverride)
-                    .orElse(null);
-
             for (EodTask task : entry.getTasks()) {
                 if (task.getHours() == null) continue;
                 BigDecimal h = task.getHours();
 
                 boolean productive = task.getTaskCategory() != null
                         && Boolean.TRUE.equals(task.getTaskCategory().getIsProductive());
-                boolean isBillable = billableOverride != null
-                        ? billableOverride
-                        : Boolean.TRUE.equals(task.getIsBillable());
 
                 if (productive) {
                     approvedProductive = approvedProductive.add(h);
-                    if (isBillable) billable    = billable.add(h);
-                    else            nonBillable = nonBillable.add(h);
                 } else {
                     bench = bench.add(h);
                 }
@@ -116,8 +94,6 @@ public class UtilizationService {
         snap.setSnapshotDate(date);
         snap.setAvailableHours(available);
         snap.setApprovedProductiveHours(approvedProductive);
-        snap.setBillableHours(billable);
-        snap.setNonBillableHours(nonBillable);
         snap.setBenchHours(bench);
         snap.setIdleHours(idle);
         snap.setUtilizationPct(pct);
@@ -136,8 +112,6 @@ public class UtilizationService {
         snap.setSnapshotDate(date);
         snap.setAvailableHours(computed.getAvailableHours());
         snap.setApprovedProductiveHours(computed.getApprovedProductiveHours());
-        snap.setBillableHours(computed.getBillableHours());
-        snap.setNonBillableHours(computed.getNonBillableHours());
         snap.setBenchHours(computed.getBenchHours());
         snap.setIdleHours(computed.getIdleHours());
         snap.setUtilizationPct(computed.getUtilizationPct());
@@ -238,9 +212,7 @@ public class UtilizationService {
 
     // Mirrors buildSnapshot's productive-hours/utilization math, but reads from an already-
     // fetched entry instead of querying — the in-memory counterpart used by getTrendForEmployee
-    // for days with no persisted snapshot. Deliberately skips the billable-override lookup:
-    // that only reclassifies billable vs non-billable hours, it never changes whether hours
-    // count toward approvedProductiveHours, so it can't affect the utilization percentage.
+    // for days with no persisted snapshot.
     private BigDecimal computeUtilizationPctInMemory(EodEntry entry, LocalDate date, boolean isHoliday) {
         boolean isApprovedLeave = entry != null
                 && entry.getDayType() == EodEntry.DayType.LEAVE

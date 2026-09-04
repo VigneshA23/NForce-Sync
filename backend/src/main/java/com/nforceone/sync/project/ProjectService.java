@@ -2,8 +2,6 @@ package com.nforceone.sync.project;
 
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
-import com.nforceone.sync.org.BillingModel;
-import com.nforceone.sync.org.BillingModelRepository;
 import com.nforceone.sync.org.ProjectType;
 import com.nforceone.sync.org.ProjectTypeRepository;
 import com.nforceone.sync.project.dto.CreateProjectRequest;
@@ -27,18 +25,15 @@ public class ProjectService {
     private final ProjectRepository projectRepository;
     private final AllocationRepository allocationRepository;
     private final AppUserRepository appUserRepository;
-    private final BillingModelRepository billingModelRepository;
     private final ProjectTypeRepository projectTypeRepository;
 
     public ProjectService(ProjectRepository projectRepository,
                           AllocationRepository allocationRepository,
                           AppUserRepository appUserRepository,
-                          BillingModelRepository billingModelRepository,
                           ProjectTypeRepository projectTypeRepository) {
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
         this.appUserRepository = appUserRepository;
-        this.billingModelRepository = billingModelRepository;
         this.projectTypeRepository = projectTypeRepository;
     }
 
@@ -102,7 +97,6 @@ public class ProjectService {
         project.setName(req.name());
         project.setClient(client);
         project.setProjectType(projectType);
-        project.setBillingModel(resolveBillingModel(req.billingModelId(), null));
         project.setStatus(Project.Status.ACTIVE);
         project.setPm(resolveLead(req.pmId(), null));
         project.setProjectManager(resolveProjectManager(req.projectManagerId(), null));
@@ -147,7 +141,6 @@ public class ProjectService {
         project.setName(req.name());
         project.setClient(client);
         project.setProjectType(projectType);
-        project.setBillingModel(resolveBillingModel(req.billingModelId(), project.getBillingModel()));
         project.setStatus(status);
         project.setPm(resolveLead(req.pmId(), project.getPm()));
         project.setProjectManager(resolveProjectManager(req.projectManagerId(), project.getProjectManager()));
@@ -156,28 +149,6 @@ public class ProjectService {
 
         Project saved = projectRepository.save(project);
         return ProjectFullDto.from(saved, (int) allocationRepository.countByProjectIdAndEmployeeRole(saved.getId(), AppUser.Role.EMPLOYEE));
-    }
-
-    /**
-     * Resolves the project's billing model from the Organization Master. Mandatory since V53, so a
-     * null id is a validation failure ({@code @NotNull} on the request) rather than "unset".
-     *
-     * <p>An inactive model can't be newly assigned, but {@code current} — the project's existing
-     * model on update — is always allowed through, so deactivating a model doesn't block edits to
-     * projects already on it. Same grandfathering as {@link #resolveLead}.
-     */
-    private BillingModel resolveBillingModel(Long billingModelId, BillingModel current) {
-        if (current != null && current.getId().equals(billingModelId)) {
-            return current;
-        }
-        BillingModel model = billingModelRepository.findById(billingModelId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Billing model not found"));
-        if (!model.isActive()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "That billing model is inactive");
-        }
-        return model;
     }
 
     /**
@@ -256,7 +227,7 @@ public class ProjectService {
      *
      * <p>An inactive type can't be newly assigned, but {@code current} — the project's existing type
      * on update — passes through, so deactivating a type doesn't block edits to projects already on
-     * it. Same grandfathering as {@link #resolveBillingModel} and {@link #resolveLead}.
+     * it. Same grandfathering as {@link #resolveLead}.
      */
     private ProjectType resolveProjectType(Long projectTypeId, ProjectType current) {
         if (current != null && current.getId().equals(projectTypeId)) {

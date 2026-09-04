@@ -9,7 +9,6 @@ export interface EodByEmployeeEntryDto {
   projectCode: string | null;
   categoryName: string | null;
   hours: number;
-  billable: boolean;
   /** Belongs to the DAY, so every task row of that day repeats it; the UI prints it once. */
   timeAdjustmentType: string | null;
   timeAdjustmentMinutes: number | null;
@@ -26,7 +25,6 @@ export interface EodByEmployeeRowDto {
   status: 'SUBMITTED' | 'LATE' | 'MISSING';
   entryCount: number;
   totalHours: number;
-  billableHours: number;
   entries: EodByEmployeeEntryDto[];
 }
 
@@ -44,7 +42,6 @@ export interface EodByEmployeeFilterParams {
   client?: string;
   teamManagerId?: number;
   status?: string;
-  billable?: string;
   employeeQuery?: string;
 }
 

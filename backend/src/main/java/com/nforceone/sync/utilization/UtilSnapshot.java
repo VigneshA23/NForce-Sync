@@ -31,12 +31,6 @@ public class UtilSnapshot {
     @Column(name = "approved_productive_hours", nullable = false, precision = 5, scale = 2)
     private BigDecimal approvedProductiveHours;
 
-    @Column(name = "billable_hours", nullable = false, precision = 5, scale = 2)
-    private BigDecimal billableHours;
-
-    @Column(name = "non_billable_hours", nullable = false, precision = 5, scale = 2)
-    private BigDecimal nonBillableHours;
-
     @Column(name = "bench_hours", nullable = false, precision = 5, scale = 2)
     private BigDecimal benchHours;
 

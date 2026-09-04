@@ -8,10 +8,9 @@ import java.time.LocalDateTime;
 /**
  * An admin-managed project type (Client, Internal, …).
  *
- * <p>Shaped like {@link BillingModel}, plus two behaviour flags. Those flags exist because project
- * type used to gate real rules through the literal string {@code "CLIENT"}: whether a client name is
- * required, and whether EOD time may be billable. Keying the rules off the flags instead means a
- * Super Admin can rename or add a type without silently changing billing.
+ * <p>Carries a behaviour flag because project type used to gate a real rule through the literal
+ * string {@code "CLIENT"}: whether a client name is required. Keying the rule off the flag instead
+ * means a Super Admin can rename or add a type without silently changing that requirement.
  */
 @Entity
 @Table(name = "project_type")
@@ -33,11 +32,6 @@ public class ProjectType {
     @Column(name = "requires_client", nullable = false)
     @Builder.Default
     private boolean requiresClient = false;
-
-    /** When true, EOD tasks on such a project may be flagged billable (billing model permitting). */
-    @Column(name = "billable_allowed", nullable = false)
-    @Builder.Default
-    private boolean billableAllowed = false;
 
     @Column(name = "is_active", nullable = false)
     @Builder.Default

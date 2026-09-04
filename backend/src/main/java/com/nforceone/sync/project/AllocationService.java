@@ -166,7 +166,7 @@ public class AllocationService {
      * <p>The Team Lead half is what keeps Approvals answerable. An employee's EOD project list is
      * built from their allocation rows, so allocating across teams lets them log tasks against a
      * project their own Team Lead does not lead — that Lead then gets the entry in their queue with
-     * no way to judge whether the work was billable, and cannot honestly approve or reject it.
+     * no visibility into that project's work, and cannot honestly approve or reject it.
      *
      * <p>The ACTIVE half was previously only enforced by the form, which left a direct API call
      * free to staff someone onto completed or on-hold work they could never book against.

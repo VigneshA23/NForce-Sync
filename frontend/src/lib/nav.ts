@@ -8,6 +8,23 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { Role } from './types';
 
+/**
+ * A searchable sub-heading within a nav item's page — a status filter, a section of a
+ * long-scrolling dashboard, etc. Deliberately nested under NavItem rather than tracked in a
+ * parallel list, so Global Search (and anything else that walks NAV) picks these up for free
+ * and can never drift out of sync with what a role can actually reach.
+ *
+ * Exactly one of `query`/`anchor` should be set: `query` deep-links a page that already reads
+ * the param on mount (e.g. EodHistory's `?status=`), `anchor` scrolls to a DOM id on a page
+ * that renders every section at once (e.g. the Dashboard's "Month Overview" heading).
+ */
+export interface NavSubItem {
+  key: string;
+  label: string;
+  query?: Record<string, string>;
+  anchor?: string;
+}
+
 export interface NavItem {
   key: string;
   label: string;
@@ -15,6 +32,14 @@ export interface NavItem {
   icon: LucideIcon;
   badge?: number;
   phase?: 2 | 3 | 4;
+  subItems?: NavSubItem[];
+}
+
+/** Builds the URL a NavSubItem's search result should navigate to. */
+export function navSubItemPath(item: NavItem, sub: NavSubItem): string {
+  if (sub.query) return `${item.path}?${new URLSearchParams(sub.query).toString()}`;
+  if (sub.anchor) return `${item.path}#${sub.anchor}`;
+  return item.path;
 }
 
 export interface NavSection {
@@ -55,19 +80,63 @@ export const NAV: Record<Role, RoleNav> = {
     {
       section: 'Work',
       items: [
-        { key: 'emp-dash',    label: 'My Dashboard',   path: '/dashboard',   icon: LayoutDashboard },
+        {
+          key: 'emp-dash', label: 'My Dashboard', path: '/dashboard', icon: LayoutDashboard,
+          subItems: [
+            { key: 'month-overview',    label: 'Month Overview',    anchor: 'month-overview' },
+            { key: 'assigned-projects', label: 'Assigned Projects', anchor: 'assigned-projects' },
+            { key: 'holiday-calendar',  label: 'Holiday Calendar',  anchor: 'holiday-calendar' },
+            { key: 'dashboard-blockers', label: 'My Blockers',      anchor: 'dashboard-blockers' },
+            { key: 'recent-entries',    label: 'Recent Entries',    anchor: 'recent-entries' },
+            { key: 'monthly-activity',  label: 'Monthly Activity',  anchor: 'monthly-activity' },
+          ],
+        },
         { key: 'my-projects', label: 'My Projects',     path: '/my-projects', icon: FolderKanban },
         { key: 'my-blockers', label: 'My Blockers',     path: '/blockers',    icon: AlertOctagon },
         { key: 'eod-submit',  label: 'Submit EOD',      path: '/eod/submit',  icon: ClipboardList },
-        { key: 'eod-history', label: 'My EOD History',  path: '/eod/history', icon: BarChart3 },
-        { key: 'my-util',     label: 'My Utilization',  path: '/utilization', icon: Activity },
+        {
+          key: 'eod-history', label: 'My EOD History', path: '/eod/history', icon: BarChart3,
+          // Query values match EodHistory.tsx's STATUS_FILTERS exactly — that page already reads
+          // ?status= on mount, so these are plain links, not new page behavior.
+          subItems: [
+            { key: 'eod-submitted', label: 'Submitted', query: { status: 'SUBMITTED' } },
+            { key: 'eod-approved',  label: 'Approved',  query: { status: 'APPROVED' } },
+            { key: 'eod-rejected',  label: 'Rejected',  query: { status: 'REJECTED' } },
+            { key: 'eod-draft',     label: 'Draft',     query: { status: 'DRAFT' } },
+            { key: 'eod-missing',   label: 'Missing',   query: { status: 'MISSED' } },
+          ],
+        },
+        {
+          key: 'my-util', label: 'My Utilization', path: '/utilization', icon: Activity,
+          subItems: [
+            { key: 'util-weekly-trend',    label: 'Weekly Trend',    anchor: 'weekly-trend' },
+            { key: 'util-period-summary',  label: 'Period Summary',  anchor: 'period-summary' },
+            { key: 'util-hours-breakdown', label: 'Hours Breakdown', anchor: 'hours-breakdown' },
+            { key: 'util-daily-history',   label: 'Daily History',   anchor: 'daily-history' },
+          ],
+        },
       ],
     },
     {
       section: 'Account',
       items: [
-        { key: 'notifications', label: 'Notifications', path: '/notifications', icon: Bell },
-        { key: 'profile',       label: 'Profile',        path: '/profile',       icon: User },
+        {
+          key: 'notifications', label: 'Notifications', path: '/notifications', icon: Bell,
+          // Query values match Notifications.tsx's StatusFilter ('all' | 'unread' | 'read').
+          subItems: [
+            { key: 'notif-unread', label: 'Unread notifications', query: { status: 'unread' } },
+            { key: 'notif-read',   label: 'Read notifications',   query: { status: 'read' } },
+          ],
+        },
+        {
+          key: 'profile', label: 'Profile', path: '/profile', icon: User,
+          subItems: [
+            { key: 'profile-personal',    label: 'Personal Information', anchor: 'personal-information' },
+            { key: 'profile-employment',  label: 'Employment',           anchor: 'employment' },
+            { key: 'profile-emergency',   label: 'Emergency Contact',    anchor: 'emergency-contact' },
+            { key: 'profile-security',    label: 'Security',             anchor: 'security' },
+          ],
+        },
       ],
     },
   ],

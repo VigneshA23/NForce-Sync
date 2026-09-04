@@ -4,7 +4,6 @@ import com.nforceone.sync.approval.dto.ApprovalActionDto;
 import com.nforceone.sync.approval.dto.ApproveRequest;
 import com.nforceone.sync.approval.dto.BatchApproveRequest;
 import com.nforceone.sync.approval.dto.RejectRequest;
-import com.nforceone.sync.approval.dto.SetTaskBillableRequest;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.dto.EodEntryDto;
 import jakarta.validation.Valid;
@@ -54,15 +53,8 @@ public class ApprovalController {
     @PostMapping("/{entryId}/approve")
     public EodEntryDto approve(@PathVariable Long entryId,
                                @RequestBody(required = false) ApproveRequest request) {
-        Boolean override = request != null ? request.billableOverride() : null;
-        String  comment  = request != null ? request.comment()  : null;
-        return approvalService.approve(entryId, actingEmail(), override, comment);
-    }
-
-    @PatchMapping("/{entryId}/tasks/{taskId}/billable")
-    public EodEntryDto setTaskBillable(@PathVariable Long entryId, @PathVariable Long taskId,
-                                       @Valid @RequestBody SetTaskBillableRequest request) {
-        return approvalService.setTaskBillable(entryId, taskId, actingEmail(), request.isBillable());
+        String comment = request != null ? request.comment() : null;
+        return approvalService.approve(entryId, actingEmail(), comment);
     }
 
     @PostMapping("/{entryId}/reject")

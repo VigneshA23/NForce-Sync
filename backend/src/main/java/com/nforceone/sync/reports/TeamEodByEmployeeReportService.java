@@ -94,7 +94,7 @@ public class TeamEodByEmployeeReportService {
 
     public EodByEmployeeReportDto getReport(String actingEmail, LocalDate from, LocalDate to,
                                              Long projectId, String client,
-                                             String status, String billable, String employeeQuery) {
+                                             String status, String employeeQuery) {
         if (to.isBefore(from)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "'to' cannot be before 'from'");
         }
@@ -186,7 +186,6 @@ public class TeamEodByEmployeeReportService {
 
             List<EodByEmployeeEntryDto> entryDtos = new ArrayList<>();
             BigDecimal totalHours = BigDecimal.ZERO;
-            BigDecimal billableHours = BigDecimal.ZERO;
             boolean anyLate = false;
 
             for (EodEntry entry : empEntries) {
@@ -196,13 +195,11 @@ public class TeamEodByEmployeeReportService {
                 for (EodTask task : entry.getTasks()) {
                     BigDecimal hours = task.getHours() != null ? task.getHours() : BigDecimal.ZERO;
                     totalHours = totalHours.add(hours);
-                    boolean taskBillable = Boolean.TRUE.equals(task.getIsBillable());
-                    if (taskBillable) billableHours = billableHours.add(hours);
                     entryDtos.add(new EodByEmployeeEntryDto(
                             entry.getId(), entry.getEntryDate(),
                             task.getProject() != null ? task.getProject().getCode() : null,
                             task.getTaskCategory() != null ? task.getTaskCategory().getName() : null,
-                            hours, taskBillable,
+                            hours,
                             entry.getTimeAdjustmentType() != null
                                     ? entry.getTimeAdjustmentType().name() : null,
                             entry.getTimeAdjustmentMinutes()));
@@ -211,13 +208,6 @@ public class TeamEodByEmployeeReportService {
 
             String empStatus = empEntries.isEmpty() ? "MISSING" : anyLate ? "LATE" : "SUBMITTED";
             if (status != null && !status.isBlank() && !status.equalsIgnoreCase(empStatus)) continue;
-
-            boolean hasBillableTask = entryDtos.stream().anyMatch(EodByEmployeeEntryDto::billable);
-            boolean hasInternalTask = entryDtos.stream().anyMatch(e -> !e.billable());
-            if (billable != null && !billable.isBlank()) {
-                boolean wantsBillable = billable.equalsIgnoreCase("BILLABLE");
-                if (!(wantsBillable ? hasBillableTask : hasInternalTask)) continue;
-            }
 
             Designation designation = null;
             if (emp.getDesignationId() != null) {
@@ -237,7 +227,7 @@ public class TeamEodByEmployeeReportService {
                     projectCodes,
                     primaryProject != null ? primaryProject.getClient() : null,
                     emp.getManager() != null ? emp.getManager().getFullName() : null,
-                    empStatus, entryDtos.size(), totalHours, billableHours, entryDtos));
+                    empStatus, entryDtos.size(), totalHours, entryDtos));
 
             totalEntryCount += entryDtos.size();
             totalHoursAll = totalHoursAll.add(totalHours);

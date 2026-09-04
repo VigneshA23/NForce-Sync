@@ -23,9 +23,6 @@ public class TaskCategory {
     @Column(name = "is_productive", nullable = false)
     private Boolean isProductive;
 
-    @Column(name = "is_billable_default", nullable = false)
-    private Boolean isBillableDefault;
-
     @Column(nullable = false)
     private Boolean active;
 }

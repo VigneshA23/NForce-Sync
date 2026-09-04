@@ -8,8 +8,6 @@ public record DashboardSummaryCardsDto(
         int onHoldProjects,
         int completedProjects,
         BigDecimal overallUtilizationPct,
-        BigDecimal billableUtilizationPct,
-        BigDecimal nonBillableUtilizationPct,
         BigDecimal plannedUtilizationPct,
         BigDecimal actualUtilizationPct,
         int missingEodCount,
@@ -17,8 +15,6 @@ public record DashboardSummaryCardsDto(
         // data to compare against (e.g. a PM whose portfolio has no prior activity). ──────────────
         BigDecimal overallUtilizationDeltaPct,
         BigDecimal actualUtilizationDeltaPct,
-        BigDecimal billableUtilizationDeltaPct,
-        BigDecimal nonBillableUtilizationDeltaPct,
         /** Active-project-count delta uses distinct-projects-with-approved-hours as a proxy for
          *  both periods, since Project.status has no history to compare against directly. */
         Integer activeProjectsDelta

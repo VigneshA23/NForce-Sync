@@ -9,13 +9,8 @@ export interface EodTaskDto {
   description: string | null;
   hours: number | null;
   taskStatus: string;
-  isBillable: boolean;
   blockerReason: string | null;
   supportNeeded: string | null;
-  /** Whether this task's project allows a billable flag at all (server-computed, mirrors ProjectDto.billableAllowed). */
-  billableAllowed: boolean;
-  /** Whether a Team Lead has explicitly decided this task's billable status (as opposed to it carrying isBillable's default). */
-  billableDecided: boolean;
 }
 
 export interface EodEntryDto {
@@ -58,7 +53,6 @@ export interface SaveTaskRequest {
   hours: number | null;
   /** Null while the employee hasn't chosen one — '' would fail enum parsing server-side. */
   taskStatus: string | null;
-  isBillable: boolean;
   blockerReason: string | null;
   supportNeeded: string | null;
 }

@@ -6,6 +6,7 @@ import { fetchProfile, updateProfile, uploadPhoto, deletePhoto, type ProfileDto,
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import { Modal } from '../components/Modal';
+import { useHashScroll } from '../lib/useHashScroll';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -33,9 +34,16 @@ const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
+// Matches nav.ts's employee "Profile" subItem anchors exactly (personal-information, employment,
+// emergency-contact, security) — deriving the id from the title keeps them in sync automatically
+// instead of needing a parallel id passed at every call site.
+function sectionId(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
 function SectionHeader({ title, badge }: { title: string; badge?: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+    <div id={sectionId(title)} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18, scrollMarginTop: 72 }}>
       <h2 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--txt)', fontFamily: '"Space Grotesk", sans-serif', textTransform: 'uppercase', letterSpacing: '.06em' }}>
         {title}
       </h2>
@@ -101,6 +109,7 @@ export default function Profile() {
     staleTime: 300_000,
     enabled: !!authUser,
   });
+  useHashScroll(!isLoading);
 
   const saveMutation = useMutation({
     mutationFn: updateProfile,

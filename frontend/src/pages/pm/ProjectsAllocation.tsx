@@ -8,7 +8,7 @@ import { StrictDateInput } from '../../components/StrictDateInput';
 import { useToast } from '../../lib/toast';
 import { todayISO } from '../../lib/date';
 import { useQuery } from '@tanstack/react-query';
-import { extractApiError, listBillingModels, listProjectTypes } from '../../api/admin';
+import { extractApiError, listProjectTypes } from '../../api/admin';
 import {
   useAllProjects, useAllocations, useAssignableEmployees,
   useCreateProject, useUpdateProject, useCreateAllocation, useUpdateAllocation, useDeleteAllocation,
@@ -215,8 +215,6 @@ interface ProjectFormState {
   client: string;
   /** Project Type id from the Organization Master, as a string for the <select>. */
   projectTypeId: string;
-  /** Billing Model id from the Organization Master, as a string for the <select>. */
-  billingModelId: string;
   status: ProjectFullDto['status'];
   startDate: string;
   endDate: string;
@@ -344,7 +342,7 @@ function dayAfterISO(iso: string): string | undefined {
 }
 
 const EMPTY_PROJECT_FORM: ProjectFormState = {
-  code: '', name: '', client: '', projectTypeId: '', billingModelId: '',
+  code: '', name: '', client: '', projectTypeId: '',
   status: 'ACTIVE', startDate: todayISO(), endDate: '', pmId: '', projectManagerId: '',
 };
 
@@ -364,10 +362,6 @@ function ProjectModal({ open, onClose, editing }: {
   const updateMutation = useUpdateProject();
   const { data: leads } = useAssignableLeads();
   const { data: projectManagers } = useAssignableProjectManagers();
-  const { data: billingModels } = useQuery({
-    queryKey: ['org', 'billing-models'],
-    queryFn: listBillingModels,
-  });
   const { data: projectTypes } = useQuery({
     queryKey: ['org', 'project-types'],
     queryFn: listProjectTypes,
@@ -389,7 +383,6 @@ function ProjectModal({ open, onClose, editing }: {
       name: editing.name,
       client: editing.client ?? '',
       projectTypeId: editing.projectTypeId != null ? String(editing.projectTypeId) : '',
-      billingModelId: editing.billingModelId != null ? String(editing.billingModelId) : '',
       status: editing.status,
       startDate: editing.startDate ?? '',
       endDate: editing.endDate ?? '',
@@ -416,12 +409,6 @@ function ProjectModal({ open, onClose, editing }: {
   const currentManagerMissing = editing?.projectManagerId != null
     && !managerOptions.some(m => m.id === editing.projectManagerId);
 
-  // Only active models are offered; a project already on a deactivated one keeps it (see the option
-  // rendered below), which matches how the server grandfathers an unchanged value.
-  const activeBillingModels = (billingModels ?? []).filter(b => b.active);
-  const currentBillingModelMissing = editing?.billingModelId != null
-    && !activeBillingModels.some(b => b.id === editing.billingModelId);
-
   // Project types come from the Organization Master; a project already on a deactivated one keeps
   // it (option rendered below), matching the server's grandfathering.
   const activeProjectTypes = (projectTypes ?? []).filter(t => t.active);
@@ -445,7 +432,6 @@ function ProjectModal({ open, onClose, editing }: {
   if (form.name.trim() === '')       fieldErrors.name = 'Name is required.';
   if (form.projectTypeId === '')     fieldErrors.projectTypeId = 'Select a project type.';
   if (showClient && form.client.trim() === '') fieldErrors.client = 'Client name is required for this project type.';
-  if (form.billingModelId === '')    fieldErrors.billingModelId = 'Select a billing model.';
   if (form.pmId === '')              fieldErrors.pmId = 'Select a team lead.';
   if (form.projectManagerId === '')  fieldErrors.projectManagerId = 'Select a project manager.';
   if (form.startDate === '')         fieldErrors.startDate = 'Start date is required.';
@@ -503,7 +489,6 @@ function ProjectModal({ open, onClose, editing }: {
             // Server also nulls this for a type without requiresClient; sent as null so the two agree.
             client: showClient ? form.client.trim() : null,
             projectTypeId: Number(form.projectTypeId),
-            billingModelId: Number(form.billingModelId),
             status: form.status,
             startDate: form.startDate,
             endDate: form.endDate || null,
@@ -518,7 +503,6 @@ function ProjectModal({ open, onClose, editing }: {
           name: form.name.trim(),
           client: showClient ? form.client.trim() : null,
           projectTypeId: Number(form.projectTypeId),
-          billingModelId: Number(form.billingModelId),
           startDate: form.startDate,
           endDate: form.endDate || null,
           pmId: Number(form.pmId),
@@ -594,26 +578,8 @@ function ProjectModal({ open, onClose, editing }: {
             </div>
           )}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: editing ? '1fr 1fr' : '1fr', gap: 14, marginBottom: 14 }}>
-          <div>
-            {/* Maintained by a Super Admin in Organization Masters → Billing Models. */}
-            <label style={labelStyle}>Billing Model *</label>
-            <select style={inputStyle} value={form.billingModelId}
-              onChange={e => setForm(f => ({ ...f, billingModelId: e.target.value }))}>
-              {/* Placeholder rather than a blank "no model" choice — mandatory since V53, but it
-                  must not default to whichever model happens to sort first. */}
-              <option value="">Select Billing Model…</option>
-              {/* An inactive model is hidden, but keep the project's own so editing can't clear it. */}
-              {currentBillingModelMissing && (
-                <option value={String(editing!.billingModelId)}>{editing!.billingModel} (inactive)</option>
-              )}
-              {activeBillingModels.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-            <FieldError msg={errorFor('billingModelId')} />
-          </div>
-          {editing && (
+        {editing && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14, marginBottom: 14 }}>
             <div>
               <label style={labelStyle}>Status</label>
               <select style={inputStyle} value={form.status}
@@ -624,8 +590,8 @@ function ProjectModal({ open, onClose, editing }: {
                 <option value="INACTIVE">Inactive</option>
               </select>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Two distinct roles: the Team Lead decides this project's EOD entries, while the Project
             Manager oversees it — that is what puts the project in their Approvals queue, Project
@@ -873,7 +839,7 @@ function ProjectsTab() {
         <div className="nf-r-scroll">
         {/* minWidth stays under the 1074px desktop content width (1366 − 236
             sidebar − 56 gutter) so this never scrolls on an approved desktop
-            size; below that the 10 columns swipe sideways instead of
+            size; below that the 9 columns swipe sideways instead of
             squeezing. */}
         <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '980px' } as React.CSSProperties}>
           <thead>
@@ -882,7 +848,6 @@ function ProjectsTab() {
               <th style={thStyle}>Project Name</th>
               <th style={thStyle}>Project Type</th>
               <th style={thStyle}>Client</th>
-              <th style={thStyle}>Billing Model</th>
               <th style={thStyle}>Timeline</th>
               <th style={thStyle}>Team Lead</th>
               <th style={thStyle}>Headcount</th>
@@ -893,7 +858,7 @@ function ProjectsTab() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                <td colSpan={9} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
                   {filtersActive
                     ? 'No projects match your search or filter.'
                     : 'No projects yet. Create one above.'}
@@ -908,8 +873,6 @@ function ProjectsTab() {
                   <td style={tdStyle}>{p.projectType ?? '-'}</td>
                   {/* A type without requiresClient has no client by design — the server forces it null. */}
                   <td style={tdStyle}>{p.client ?? '-'}</td>
-                  {/* Optional on a project, so unset is normal rather than an error. */}
-                  <td style={tdStyle}>{p.billingModel ?? '-'}</td>
                   {/* Derived, never stored: a recorded end date always wins; with none, the status
                       supplies the word. Labels come straight from STATUS_CFG, so this reads
                       "On Hold" rather than ON_HOLD and a new status needs no change here. */}
@@ -1005,9 +968,9 @@ function AllocationModal({ open, onClose, projects }: {
    * Narrowed again to the projects the employee's own reporting manager leads.
    *
    * Their EOD project list comes from these allocations, so staffing them across teams lets them
-   * log tasks against a project their Team Lead does not lead — that Lead then cannot tell whether
-   * the work was billable and cannot responsibly act on it in Approvals. `pmId` IS the Team Lead
-   * despite the name (see ProjectFullDto); the Projects tab's own lead filter keys off it too.
+   * log tasks against a project their Team Lead does not lead — that Lead then cannot responsibly
+   * act on it in Approvals. `pmId` IS the Team Lead despite the name (see ProjectFullDto); the
+   * Projects tab's own lead filter keys off it too.
    *
    * The server repeats this check and is the authority — see AllocationService
    * .requireAllocatableToEmployee. Filtering here just keeps unusable options out of the list.

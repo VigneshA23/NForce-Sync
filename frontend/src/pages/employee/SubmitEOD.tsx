@@ -124,7 +124,6 @@ interface TaskRow {
   description: string;
   hours: string;
   taskStatus: string;
-  isBillable: boolean;
   blockerReason: string;
   supportNeeded: string;
 }
@@ -141,7 +140,6 @@ function newRow(): TaskRow {
     description:      '',
     hours:            '',
     taskStatus:       '', // no default — the employee must pick one
-    isBillable:       true,
     blockerReason:    '',
     supportNeeded:    '',
   };
@@ -157,7 +155,6 @@ function rowFromDto(dto: EodTaskDto): TaskRow {
     description:      dto.description ?? '',
     hours:            dto.hours != null ? String(dto.hours) : '',
     taskStatus:       dto.taskStatus ?? 'COMPLETED',
-    isBillable:       dto.isBillable ?? true,
     blockerReason:    dto.blockerReason ?? '',
     supportNeeded:    dto.supportNeeded ?? '',
   };
@@ -554,8 +551,8 @@ export default function SubmitEOD() {
       // Status now defaults to blank, so it has to be chosen. A leave row is forced to COMPLETED
       // and its select is disabled, so it never trips this.
       if (!t.taskStatus) errs.push(`Task ${n}: status is required.`);
-      if (leaveRow && (t.projectId || t.isBillable || t.taskStatus !== 'COMPLETED')) {
-        errs.push(`Row #${n}: Leave rows cannot have a project or billable flag set.`);
+      if (leaveRow && (t.projectId || t.taskStatus !== 'COMPLETED')) {
+        errs.push(`Row #${n}: Leave rows cannot have a project set.`);
       }
       if (t.hours === '' || isNaN(parseFloat(t.hours))) errs.push(`Task ${n}: hours are required.`);
       if (parseFloat(t.hours) < 0) errs.push(`Task ${n}: hours cannot be negative.`);
@@ -625,7 +622,6 @@ export default function SubmitEOD() {
         description:    t.description || null,
         hours:          parseFloat(t.hours) || 0,
         taskStatus:     t.taskStatus || null, // '' would fail enum parsing server-side
-        isBillable:     t.isBillable,
         blockerReason:  t.blockerReason || null,
         supportNeeded:  t.supportNeeded || null,
       })),
@@ -674,12 +670,10 @@ export default function SubmitEOD() {
     updateTask(localId, {
       taskCategoryId:   id,
       categoryName:     cat?.name ?? null,
-      // Billable is not visible/editable by the employee (server-derived from project
-      // eligibility), so changing category otherwise leaves it alone. Leave is the one
-      // exception: it is not project work, so no project, never billable, always complete.
-      // Mirrored server-side in EodService.buildTask, which is what actually enforces it.
+      // Leave is not project work, so no project and always complete. Mirrored server-side
+      // in EodService.buildTask, which is what actually enforces it.
       ...(isLeave
-        ? { projectId: null, projectCode: null, isBillable: false, taskStatus: 'COMPLETED' }
+        ? { projectId: null, projectCode: null, taskStatus: 'COMPLETED' }
         : {}),
       // Leave rows now carry real hours (8 full day, 4 half day), so no longer forced to 0.
       hours: '',
@@ -1181,8 +1175,8 @@ function PageHeader({
 interface TaskCardProps {
   task: TaskRow;
   index: number;
-  projects: { id: number; code: string; name: string; client: string | null; billableAllowed: boolean }[];
-  categories: { id: number; name: string; isProductive: boolean; isBillableDefault: boolean }[];
+  projects: { id: number; code: string; name: string; client: string | null }[];
+  categories: { id: number; name: string; isProductive: boolean }[];
   isReadOnly: boolean;
   onUpdate: (patch: Partial<TaskRow>) => void;
   onRemove: () => void;
@@ -1191,8 +1185,8 @@ interface TaskCardProps {
 }
 
 function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onRemove, onCategoryChange, canRemove }: TaskCardProps) {
-  // A leave row has no project, is never billable, and is always Completed — those three
-  // fields are locked. Hours stay editable (8 full day, 4 half day).
+  // A leave row has no project and is always Completed — those two fields are locked.
+  // Hours stay editable (8 full day, 4 half day).
   const isLeave   = task.categoryName === LEAVE;
   const isBlocked = task.taskStatus === 'BLOCKED';
 
@@ -1227,12 +1221,7 @@ function TaskCard({ task, index, projects, categories, isReadOnly, onUpdate, onR
                 value={isLeave ? '' : (task.projectId ?? '')}
                 onChange={e => {
                   const nextId = e.target.value ? Number(e.target.value) : null;
-                  const next = projects.find(p => p.id === nextId);
-                  // Clear billable when switching to a project that can't carry it, so the value
-                  // sent matches the (now disabled, unticked) checkbox rather than a stale true.
-                  onUpdate(next && !next.billableAllowed
-                    ? { projectId: nextId, isBillable: false }
-                    : { projectId: nextId });
+                  onUpdate({ projectId: nextId });
                 }}
                 disabled={isLeave}
               >

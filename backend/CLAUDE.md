@@ -86,8 +86,11 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 - Seed: superadmin@nforceone.com / ChangeMe123! (bcrypt) as SUPERADMIN
 
 ## Project & allocation tables (V3 migration)
-- project: id, code (UNIQUE), name, client, project_type, billing_model,
+- project: id, code (UNIQUE), name, client, project_type_id (FK project_type),
   status (ACTIVE/INACTIVE/COMPLETED/ON_HOLD), pm_id (FK app_user), start_date, end_date, created_at
+  billing_model / billing_model_id and the Billing Model org master (V49/V53) were dropped
+  entirely, along with project_type.billable_allowed, when the Billable/Non-Billable
+  classification was removed application-wide — see the Vxx migrations after V66.
 - allocation: id, employee_id (FK app_user), project_id (FK project),
   effective_from DATE, effective_to DATE NULL (null = open-ended), created_at
   A plain assignment: this employee is on this project for this period. V29 dropped
@@ -95,10 +98,11 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   and therefore NO capacity ceiling. Nothing currently stops the same employee being allocated
   to unlimited overlapping projects, or to the same project twice; a unique employee+project
   guard over overlapping dates is the open follow-up.
-- task_category: id, name (UNIQUE), is_productive BOOLEAN, is_billable_default BOOLEAN, active BOOLEAN
+- task_category: id, name (UNIQUE), is_productive BOOLEAN, active BOOLEAN
   Seeded with 19 PRD categories. NOT productive: "Leave", "Bench Activity". All others productive.
   "Leave / Holiday" was renamed to "Leave" in V35 (same id 19, no rows repointed) once Holiday
-  became a day type rather than a category.
+  became a day type rather than a category. is_billable_default was dropped with the
+  Billable/Non-Billable classification removal (it was write-only, never read).
 - Seed: Priya Nair (id=2, MANAGER) set as manager_id for employees id=3,4,5
 
 ## EOD tables (V4 migration)
@@ -109,16 +113,19 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   work_location, next_day_plan, remarks, submitted_at, created_at, updated_at
   UNIQUE (employee_id, entry_date)
 - eod_task: id, eod_entry_id FK ON DELETE CASCADE, project_id FK NULL, task_category_id FK NULL,
-  description, hours NUMERIC(5,2), task_status (COMPLETED/IN_PROGRESS/BLOCKED/NOT_STARTED), is_billable,
+  description, hours NUMERIC(5,2), task_status (COMPLETED/IN_PROGRESS/BLOCKED/NOT_STARTED),
   blocker_reason, support_needed
   CHECK: blocked tasks must have blocker_reason
+  is_billable and billable_decided (V52/V56/V64) were dropped with the Billable/Non-Billable
+  classification removal, along with the approval gate that used to require a per-task billable
+  decision before an entry could be approved.
 - Status uppercase to match existing conventions (ACTIVE, SUPERADMIN pattern)
 - Business rules: submitted entries are immutable; edit only allowed in REJECTED or
   CHANGES_REQUESTED status
 - Day type (V35) drives validation in EodService:
   HOLIDAY  → work_location forced NULL, zero task rows persisted, all task/hours checks skipped
-  LEAVE    → rows with category "Leave" have project/is_billable/task_status forced to
-             NULL/false/COMPLETED in buildTask, so a raw API call cannot set them
+  LEAVE    → rows with category "Leave" have project/task_status forced to NULL/COMPLETED in
+             buildTask, so a raw API call cannot set them
   The old "Leave / Holiday must have hours=0" rule is GONE — leave rows now carry real hours
   (8 full day, 4 + 4 half day).
 - Time adjustment (V36) — a partial-day schedule shift on a WORKING_DAY, not an absence:
@@ -141,8 +148,11 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 
 ## Utilization snapshot (V6 migration)
 - util_snapshot: id, employee_id FK, snapshot_date DATE, available_hours, approved_productive_hours,
-  billable_hours, non_billable_hours, bench_hours, idle_hours, utilization_pct NULLABLE, computed_at
+  bench_hours, idle_hours, utilization_pct NULLABLE, computed_at
   UNIQUE (employee_id, snapshot_date)
+  billable_hours / non_billable_hours were dropped with the Billable/Non-Billable classification
+  removal — approved_productive_hours (and everything below) is unaffected, it was never split by
+  billable status in the first place.
 - THE SPINE (absolute): available==0 → utilizationPct=NULL (never 0.0). 0 approved + available>0 → 0.0.
   Uncapped (>100 allowed). Only APPROVED hours count. Written on approval only, never retroactively.
 - UtilizationCalculator (package-private): computeAvailableHours (weekend→0, weekday→8),
@@ -152,11 +162,11 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 
 ## Approval table (V5 migration)
 - approval_action: id, eod_entry_id FK, actor_id FK, action (APPROVE/REJECT/REQUEST_CHANGES),
-  comment TEXT NULL, billable_override BOOLEAN NULL, acted_at TIMESTAMPTZ
+  comment TEXT NULL, acted_at TIMESTAMPTZ
 - State machine: SUBMITTED → APPROVED | REJECTED | CHANGES_REQUESTED only. Illegal transitions throw CONFLICT.
 - Authorization: actor must be the employee's direct manager (manager_id FK) OR SUPERADMIN.
   No manager assigned → only SUPERADMIN can act.
-- billable_override: stored on approval_action, does NOT mutate eod_task records; applied at billing calc time.
+- billable_override was dropped with the Billable/Non-Billable classification removal.
 
 ## Module structure (module-by-feature)
 ```

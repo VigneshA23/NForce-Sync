@@ -46,23 +46,21 @@ export function UtilPctDonut({ pct, size = 92 }: UtilPctDonutProps) {
   );
 }
 
-// ── CategoryDonut — billable / non-billable / bench breakdown ──────────────────
+// ── CategoryDonut — productive / bench breakdown ────────────────────────────────
 
-const CATEGORY_COLORS = ['var(--ok)', 'var(--info)', 'var(--txt-dim)'];
+const CATEGORY_COLORS = ['var(--ok)', 'var(--txt-dim)'];
 
 interface CategoryDonutProps {
-  billableHours: number;
-  nonBillableHours: number;
+  productiveHours: number;
   benchHours: number;
   size?: number;
 }
 
-export function CategoryDonut({ billableHours, nonBillableHours, benchHours, size = 100 }: CategoryDonutProps) {
-  const total = billableHours + nonBillableHours + benchHours;
+export function CategoryDonut({ productiveHours, benchHours, size = 100 }: CategoryDonutProps) {
+  const total = productiveHours + benchHours;
   const data = [
-    { name: 'Billable',     value: billableHours },
-    { name: 'Non-billable', value: nonBillableHours },
-    { name: 'Bench',        value: benchHours },
+    { name: 'Productive', value: productiveHours },
+    { name: 'Bench',      value: benchHours },
   ].filter(d => d.value > 0);
 
   return (
@@ -71,7 +69,7 @@ export function CategoryDonut({ billableHours, nonBillableHours, benchHours, siz
         fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)',
         textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left',
       }}>
-        Billable vs Non-Billable
+        Productive vs Bench
       </span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <div style={{ width: size, height: size, flexShrink: 0 }}>
@@ -85,7 +83,7 @@ export function CategoryDonut({ billableHours, nonBillableHours, benchHours, siz
                   strokeWidth={0} isAnimationActive={false}
                 >
                   {data.map((entry) => {
-                    const colorIdx = ['Billable', 'Non-billable', 'Bench'].indexOf(entry.name);
+                    const colorIdx = ['Productive', 'Bench'].indexOf(entry.name);
                     return <Cell key={entry.name} fill={CATEGORY_COLORS[colorIdx]} />;
                   })}
                 </Pie>
@@ -104,12 +102,7 @@ export function CategoryDonut({ billableHours, nonBillableHours, benchHours, siz
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span><span style={{ color: 'var(--ok)' }}>●</span>{' '}
             <span style={{ fontSize: 10, color: 'var(--txt-mut)' }}>
-              Billable {billableHours.toFixed(1)}h ({total > 0 ? Math.round(billableHours / total * 100) : 0}%)
-            </span>
-          </span>
-          <span><span style={{ color: 'var(--info)' }}>●</span>{' '}
-            <span style={{ fontSize: 10, color: 'var(--txt-mut)' }}>
-              Non-billable {nonBillableHours.toFixed(1)}h ({total > 0 ? Math.round(nonBillableHours / total * 100) : 0}%)
+              Productive {productiveHours.toFixed(1)}h ({total > 0 ? Math.round(productiveHours / total * 100) : 0}%)
             </span>
           </span>
           <span><span style={{ color: 'var(--txt-dim)' }}>●</span>{' '}

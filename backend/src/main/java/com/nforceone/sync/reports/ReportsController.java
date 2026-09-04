@@ -103,12 +103,11 @@ public class ReportsController {
             @RequestParam(required = false) String client,
             @RequestParam(required = false) Long teamManagerId,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String billable,
             @RequestParam(required = false) String employeeQuery) {
         LocalDate effectiveFrom = effectiveFrom(from);
         LocalDate effectiveTo = effectiveTo(to);
         return eodByEmployeeReportService.getReport(
-                actingEmail(), effectiveFrom, effectiveTo, projectId, client, teamManagerId, status, billable, employeeQuery);
+                actingEmail(), effectiveFrom, effectiveTo, projectId, client, teamManagerId, status, employeeQuery);
     }
 
     /**
@@ -125,14 +124,13 @@ public class ReportsController {
             @RequestParam(required = false) String client,
             @RequestParam(required = false) Long teamManagerId,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String billable,
             @RequestParam(required = false) String employeeQuery,
             @RequestParam(required = false) List<Long> employeeIds,
             @RequestParam String format) {
         LocalDate effectiveFrom = effectiveFrom(from);
         LocalDate effectiveTo = effectiveTo(to);
         EodByEmployeeReportDto report = eodByEmployeeReportService.getReport(
-                actingEmail(), effectiveFrom, effectiveTo, projectId, client, teamManagerId, status, billable, employeeQuery);
+                actingEmail(), effectiveFrom, effectiveTo, projectId, client, teamManagerId, status, employeeQuery);
 
         if (employeeIds != null && !employeeIds.isEmpty()) {
             Set<Long> wanted = Set.copyOf(employeeIds);

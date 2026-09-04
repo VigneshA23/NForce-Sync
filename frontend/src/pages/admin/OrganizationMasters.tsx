@@ -5,12 +5,11 @@ import {
   listDepartments, createDepartment, toggleDepartment, deleteDepartment,
   listDesignations, createDesignation, toggleDesignation, deleteDesignation,
   listLocations, createLocation, toggleLocation, deleteLocation,
-  listBillingModels, createBillingModel, toggleBillingModel, deleteBillingModel,
   listProjectTypes, createProjectType, toggleProjectType, deleteProjectType,
   extractApiError, isHttpStatus,
 } from '../../api/admin';
 import type {
-  DepartmentDto, DesignationDto, OrgLocationDto, BillingModelDto,
+  DepartmentDto, DesignationDto, OrgLocationDto,
   ProjectTypeDto, CreateProjectTypePayload,
 } from '../../api/admin';
 import { Modal } from '../../components/Modal';
@@ -56,7 +55,7 @@ const tdStyle: React.CSSProperties = {
   borderBottom: '1px solid var(--line)',
 };
 
-type Tab = 'departments' | 'designations' | 'locations' | 'project-types' | 'billing-models';
+type Tab = 'departments' | 'designations' | 'locations' | 'project-types';
 
 // ── Status pill ────────────────────────────────────────────────────────────────
 
@@ -353,7 +352,7 @@ interface OrgTableProps<T extends { id: number; active: boolean }> {
   isTogglePending: boolean;
   onDelete: (item: T) => void;
   isDeletePending: boolean;
-  /** Supply both to render an extra numeric column (used by Billing Models for its headcount). */
+  /** Supply both to render an extra numeric column (used by Project Types for its headcount). */
   countKey?: keyof T;
   countLabel?: string;
 }
@@ -553,19 +552,18 @@ function AddProjectTypeModal({ open, onClose, onSubmit, isPending, error }: {
 }) {
   const [name, setName] = useState('');
   const [requiresClient, setRequiresClient] = useState(false);
-  const [billableAllowed, setBillableAllowed] = useState(false);
   const fieldId = useId();
 
   function handleClose() {
-    setName(''); setRequiresClient(false); setBillableAllowed(false);
+    setName(''); setRequiresClient(false);
     onClose();
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    await onSubmit({ name: name.trim(), requiresClient, billableAllowed });
-    setName(''); setRequiresClient(false); setBillableAllowed(false);
+    await onSubmit({ name: name.trim(), requiresClient });
+    setName(''); setRequiresClient(false);
   }
 
   const checkboxRow: React.CSSProperties = {
@@ -593,23 +591,14 @@ function AddProjectTypeModal({ open, onClose, onSubmit, isPending, error }: {
           />
         </div>
 
-        {/* These two decide real behaviour, so they are set deliberately at creation. */}
-        <label style={checkboxRow}>
+        {/* Decides real behaviour, so it is set deliberately at creation. */}
+        <label style={{ ...checkboxRow, marginBottom: 20 }}>
           <input type="checkbox" checked={requiresClient}
             onChange={(e) => setRequiresClient(e.target.checked)}
             style={{ accentColor: 'var(--brand-bright)', width: 15, height: 15, marginTop: 1, cursor: 'pointer' }} />
           <span>
             <b style={{ color: 'var(--txt)' }}>Requires a client</b><br />
             Projects of this type must name a client. Otherwise the client field is hidden and cleared.
-          </span>
-        </label>
-        <label style={{ ...checkboxRow, marginBottom: 20 }}>
-          <input type="checkbox" checked={billableAllowed}
-            onChange={(e) => setBillableAllowed(e.target.checked)}
-            style={{ accentColor: 'var(--brand-bright)', width: 15, height: 15, marginTop: 1, cursor: 'pointer' }} />
-          <span>
-            <b style={{ color: 'var(--txt)' }}>Billable allowed</b><br />
-            EOD time on such a project may be marked billable, provided its billing model is active.
           </span>
         </label>
 
@@ -742,137 +731,6 @@ function ProjectTypesTab() {
         onClose={() => setConfirmToggleItem(null)}
         onConfirm={() => { if (confirmToggleItem) toggleMutation.mutate(confirmToggleItem.id); }}
         title={confirmToggleItem?.active ? 'Deactivate Project Type' : 'Activate Project Type'}
-        message={confirmToggleItem?.active
-          ? <>Deactivating <b style={{ color: 'var(--txt)' }}>{confirmToggleItem?.name}</b> hides it from the Project form. Projects already on it keep it and stay editable.</>
-          : <>Reactivate <b style={{ color: 'var(--txt)' }}>{confirmToggleItem?.name}</b>?</>}
-        confirmLabel={confirmToggleItem?.active ? 'Deactivate' : 'Activate'}
-        danger={confirmToggleItem?.active}
-        isPending={toggleMutation.isPending}
-      />
-
-      <DeleteConfirmModal
-        open={confirmDeleteItem != null}
-        onClose={() => { setConfirmDeleteItem(null); setDeleteError(null); }}
-        onConfirm={() => { if (confirmDeleteItem) deleteMutation.mutate(confirmDeleteItem.id); }}
-        itemName={confirmDeleteItem?.name ?? ''}
-        isPending={deleteMutation.isPending}
-        error={deleteError}
-      />
-    </div>
-  );
-}
-
-// ── Billing models tab ─────────────────────────────────────────────────────────
-
-function BillingModelsTab() {
-  const toast = useToast();
-  const queryClient = useQueryClient();
-  const [addOpen, setAddOpen] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
-  const [confirmToggleItem, setConfirmToggleItem] = useState<BillingModelDto | null>(null);
-  const [confirmDeleteItem, setConfirmDeleteItem] = useState<BillingModelDto | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  const { data, isPending, isError, refetch } = useQuery({
-    queryKey: ['org', 'billing-models'],
-    queryFn: listBillingModels,
-  });
-
-  const addMutation = useMutation({
-    mutationFn: createBillingModel,
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['org', 'billing-models'] });
-      toast.showToast('success', `Billing model "${result.name}" added`);
-      setAddOpen(false);
-      setAddError(null);
-    },
-    onError: (err) => {
-      if (isHttpStatus(err, 409)) {
-        setAddError('A billing model with this name already exists.');
-        return;
-      }
-      const msg = extractApiError(err, 'Failed to add billing model.');
-      setAddError(msg);
-      toast.showToast('error', msg);
-    },
-  });
-
-  const toggleMutation = useMutation({
-    mutationFn: toggleBillingModel,
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['org', 'billing-models'] });
-      toast.showToast('success', `"${result.name}" ${result.active ? 'activated' : 'deactivated'}`);
-      setConfirmToggleItem(null);
-    },
-    onError: (err) => {
-      const msg = extractApiError(err, 'Failed to update billing model.');
-      toast.showToast('error', msg);
-      setConfirmToggleItem(null);
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteBillingModel,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['org', 'billing-models'] });
-      toast.showToast('success', `Billing model "${confirmDeleteItem?.name}" deleted`);
-      setConfirmDeleteItem(null);
-      setDeleteError(null);
-    },
-    onError: (err) => {
-      // The server returns 409 naming the project count when the model is still referenced.
-      const msg = extractApiError(err, 'Failed to delete billing model.');
-      setDeleteError(msg);
-      toast.showToast('error', msg);
-    },
-  });
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-        <button
-          onClick={() => { setAddError(null); setAddOpen(true); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', background: 'var(--brand)', border: 'none',
-            borderRadius: 7, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-          }}
-        >
-          <Plus size={13} aria-hidden="true" />
-          Add Billing Model
-        </button>
-      </div>
-
-      <OrgTable<BillingModelDto>
-        data={data}
-        isPending={isPending}
-        isError={isError}
-        onRefetch={refetch}
-        nameKey="name"
-        countKey="employeeCount"
-        countLabel="Employees"
-        onToggle={(item) => setConfirmToggleItem(item)}
-        isTogglePending={toggleMutation.isPending}
-        onDelete={(item) => { setDeleteError(null); setConfirmDeleteItem(item); }}
-        isDeletePending={deleteMutation.isPending}
-      />
-
-      <AddModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        title="Add Billing Model"
-        fieldLabel="Billing Model Name"
-        placeholder="e.g. Retainer"
-        onSubmit={(name) => addMutation.mutateAsync(name)}
-        isPending={addMutation.isPending}
-        error={addError}
-      />
-
-      <ConfirmModal
-        open={confirmToggleItem != null}
-        onClose={() => setConfirmToggleItem(null)}
-        onConfirm={() => { if (confirmToggleItem) toggleMutation.mutate(confirmToggleItem.id); }}
-        title={confirmToggleItem?.active ? 'Deactivate Billing Model' : 'Activate Billing Model'}
         message={confirmToggleItem?.active
           ? <>Deactivating <b style={{ color: 'var(--txt)' }}>{confirmToggleItem?.name}</b> hides it from the Project form. Projects already on it keep it and stay editable.</>
           : <>Reactivate <b style={{ color: 'var(--txt)' }}>{confirmToggleItem?.name}</b>?</>}
@@ -1286,7 +1144,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'designations', label: 'Designations' },
   { key: 'locations',    label: 'Locations' },
   { key: 'project-types',  label: 'Project Types' },
-  { key: 'billing-models', label: 'Billing Models' },
 ];
 
 export default function OrganizationMasters() {
@@ -1307,7 +1164,7 @@ export default function OrganizationMasters() {
           Organization Masters
         </h1>
         <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-          Manage departments, designations, locations, project types, and billing models used across the platform.
+          Manage departments, designations, locations, and project types used across the platform.
         </p>
       </div>
 
@@ -1348,7 +1205,6 @@ export default function OrganizationMasters() {
       {activeTab === 'designations' && <DesignationsTab />}
       {activeTab === 'locations'    && <LocationsTab />}
       {activeTab === 'project-types'  && <ProjectTypesTab />}
-      {activeTab === 'billing-models' && <BillingModelsTab />}
     </div>
   );
 }

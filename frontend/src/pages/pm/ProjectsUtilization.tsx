@@ -3,7 +3,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
-  TrendingUp, TrendingDown, Activity, DollarSign, Clock, RefreshCw, Layers,
+  TrendingUp, TrendingDown, Activity, RefreshCw, Layers,
   Calendar, Download, Lightbulb, AlertTriangle, Users, ArrowUp, ArrowDown, Minus,
   CheckCircle2, Award, FolderKanban, ChevronLeft, ChevronRight,
 } from 'lucide-react';
@@ -11,7 +11,7 @@ import { UtilBar } from '../../components/UtilBar';
 import { SegmentDonut } from '../../components/UtilizationDonut';
 import { fmtPct, utilColor, utilState, RULES } from '../../lib/rules';
 import { todayISO, toLocalISODate } from '../../lib/date';
-import { totalHours, roundHours } from '../../lib/hoursBreakdown';
+import { roundHours } from '../../lib/hoursBreakdown';
 import {
   useProjectDashboardFilters,
   useProjectDashboardSummary,
@@ -107,7 +107,7 @@ function MiniSparkline({ values, color, width = 60, height = 20 }: { values: num
 
 // ── delta chip — contextual up/down color, not hardcoded green=up ──────────────
 // goodDirection='up' (default): an increase is favorable (green), a decrease is not (red).
-// goodDirection='down': the inverse — used for Non-billable, where a rise is the unwelcome trend.
+// goodDirection='down': the inverse — for metrics where a rise is the unwelcome trend.
 
 function DeltaChip({ value, suffix = 'pt', goodDirection = 'up' }: {
   value: number | null; suffix?: string; goodDirection?: 'up' | 'down';
@@ -172,9 +172,7 @@ function KpiTile({
 // ── utilization trend chart (3 series) ──────────────────────────────────────────
 
 const TREND_SERIES = [
-  { key: 'overall',    label: 'Overall',      color: 'var(--brand)' },
-  { key: 'billable',   label: 'Billable',     color: 'var(--info)' },
-  { key: 'nonBillable', label: 'Non-billable', color: 'var(--warn)' },
+  { key: 'overall', label: 'Overall', color: 'var(--brand)' },
 ] as const;
 
 function UtilizationTrendChart({ points }: { points: UtilizationTrendPointDto[] }) {
@@ -185,8 +183,6 @@ function UtilizationTrendChart({ points }: { points: UtilizationTrendPointDto[] 
   const data = points.map(p => ({
     day: fmtChartDay(p.date),
     overall: Math.round(p.overallPct),
-    billable: Math.round(p.billablePct),
-    nonBillable: Math.round(p.nonBillablePct),
   }));
 
   // Recharts' category XAxis auto-thins ticks to avoid overlap whenever `interval` is left as a
@@ -270,7 +266,7 @@ function UtilizationTrendChart({ points }: { points: UtilizationTrendPointDto[] 
   );
 }
 
-// ── donut legend (shared by Billable Split + Utilization Distribution) ─────────
+// ── donut legend (shared by donut charts on this page) ─────────
 
 function DonutLegend({ items }: { items: { label: string; valueLabel: string; pct: number; color: string }[] }) {
   return (
@@ -336,7 +332,7 @@ interface ProjectTableRow extends ProjectUtilizationRowDto {
 }
 
 const PROJECT_PAGE_SIZE = 8;
-const PROJECT_TABLE_COLUMNS = '1.4fr 90px 100px 90px 90px 1.3fr 130px';
+const PROJECT_TABLE_COLUMNS = '1.4fr 90px 100px 90px 1.3fr 130px';
 
 function ProjectTable({ rows }: { rows: ProjectTableRow[] }) {
   const [page, setPage] = useState(0);
@@ -360,7 +356,6 @@ function ProjectTable({ rows }: { rows: ProjectTableRow[] }) {
           <span>Project</span>
           <span style={{ textAlign: 'center' }}>Util %</span>
           <span style={{ textAlign: 'center' }}>Approved</span>
-          <span style={{ textAlign: 'center' }}>Billable %</span>
           <span style={{ textAlign: 'center' }}>Employees</span>
           <span style={{ textAlign: 'center' }}>Top Contributor</span>
           <span style={{ textAlign: 'center' }}>Status</span>
@@ -381,9 +376,6 @@ function ProjectTable({ rows }: { rows: ProjectTableRow[] }) {
             </span>
             <span style={{ fontSize: 12, textAlign: 'center', color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
               {row.actualHours.toFixed(0)}h
-            </span>
-            <span style={{ fontSize: 12, textAlign: 'center', color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
-              {fmtPct(row.billablePct)}
             </span>
             <span style={{ fontSize: 12, textAlign: 'center', color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
               {row.employees}
@@ -585,7 +577,7 @@ function TopContributorsPanel({ resourceRows }: { resourceRows: ResourceUtilizat
 
 interface Insight { icon: React.ComponentType<{ size?: number }>; headline: string; subtext: string; color: string; }
 
-function buildInsights(cards: DashboardSummaryCardsDto, projectRows: ProjectUtilizationRowDto[], resourceRows: ResourceUtilizationRowDto[]): Insight[] {
+function buildInsights(projectRows: ProjectUtilizationRowDto[], resourceRows: ResourceUtilizationRowDto[]): Insight[] {
   const overCount = projectRows.filter(r => utilState(r.utilizationPct) === 'over').length;
   const underCount = projectRows.filter(r => utilState(r.utilizationPct) === 'under').length;
   const lowEmpCount = resourceRows.filter(r => utilState(r.utilizationPct) === 'under').length;
@@ -603,13 +595,6 @@ function buildInsights(cards: DashboardSummaryCardsDto, projectRows: ProjectUtil
       icon: TrendingDown, color: 'var(--warn)',
       headline: `${underCount} project${underCount > 1 ? 's are' : ' is'} under-utilized`,
       subtext: `Utilization below ${RULES.util.under}% — capacity may be under-allocated.`,
-    });
-  }
-  if (cards.nonBillableUtilizationDeltaPct != null && cards.nonBillableUtilizationDeltaPct > 0.5) {
-    insights.push({
-      icon: Clock, color: 'var(--warn)',
-      headline: `Non-billable utilization rose ${Math.abs(Math.round(cards.nonBillableUtilizationDeltaPct))} pts`,
-      subtext: 'vs last month — review non-billable task allocation.',
     });
   }
   if (lowEmpCount > 0) {
@@ -1039,7 +1024,7 @@ export default function ProjectsUtilization() {
     );
   }
 
-  const { cards, projectUtilization, resourceUtilization, billableSplit, taskCategoryBreakdown, utilizationTrend, plannedVsActual } = data!;
+  const { cards, projectUtilization, resourceUtilization, taskCategoryBreakdown, utilizationTrend, plannedVsActual } = data!;
 
   // Employees + top contributor per project, derived client-side from resourceUtilization (joined
   // by projectName — the only key ResourceUtilizationRowDto carries — same convention CategoryTable
@@ -1057,17 +1042,13 @@ export default function ProjectsUtilization() {
   });
 
   const overallSparkline = utilizationTrend.map(p => p.overallPct);
-  const billableSparkline = utilizationTrend.map(p => p.billablePct);
-  const nonBillableSparkline = utilizationTrend.map(p => p.nonBillablePct);
 
   const healthyCount = projectUtilization.filter(r => utilState(r.utilizationPct) === 'healthy').length;
   const underCount = projectUtilization.filter(r => utilState(r.utilizationPct) === 'under').length;
   const overCount = projectUtilization.filter(r => utilState(r.utilizationPct) === 'over').length;
   const totalProjects = projectUtilization.length;
 
-  const totalBillableHours = totalHours(billableSplit.billableHours, billableSplit.nonBillableHours, 0);
-
-  const insights = buildInsights(cards, projectUtilization, resourceUtilization);
+  const insights = buildInsights(projectUtilization, resourceUtilization);
 
   return (
     <div className="pm-util-page">
@@ -1162,27 +1143,6 @@ export default function ProjectsUtilization() {
           sparkline={overallSparkline}
         />
         <KpiTile
-          icon={<DollarSign size={16} />}
-          label="Billable Utilization"
-          value={fmtPct(cards.billableUtilizationPct)}
-          sub={`${billableSplit.billableHours.toFixed(0)}h billable`}
-          accent="var(--info)"
-          delta={cards.billableUtilizationDeltaPct}
-          deltaSuffix="%"
-          sparkline={billableSparkline}
-        />
-        <KpiTile
-          icon={<Clock size={16} />}
-          label="Non-billable Utilization"
-          value={fmtPct(cards.nonBillableUtilizationPct)}
-          sub={`${billableSplit.nonBillableHours.toFixed(0)}h non-billable`}
-          accent="var(--warn)"
-          delta={cards.nonBillableUtilizationDeltaPct}
-          deltaSuffix="%"
-          goodDirection="down"
-          sparkline={nonBillableSparkline}
-        />
-        <KpiTile
           icon={<FolderKanban size={16} />}
           label="Active Projects"
           value={String(cards.activeProjects)}
@@ -1193,30 +1153,12 @@ export default function ProjectsUtilization() {
         />
       </div>
 
-      {/* Utilization Trend + Billable Split + Distribution + Insights — one row on desktop,
-          Trend given a double-width column since it holds the line chart. */}
-      <div className="pm-util-trend-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 16, marginBottom: 16, alignItems: 'stretch' }}>
+      {/* Utilization Trend + Distribution + Insights — one row on desktop, Trend given a
+          double-width column since it holds the line chart. */}
+      <div className="pm-util-trend-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 16, marginBottom: 16, alignItems: 'stretch' }}>
         <Card>
           <SectionLabel><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><TrendingUp size={12} />Utilization Trend</span></SectionLabel>
           <UtilizationTrendChart points={utilizationTrend} />
-        </Card>
-
-        <Card>
-          <SectionLabel>Billable Split</SectionLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-            <SegmentDonut
-              segments={[
-                { label: 'Billable', value: billableSplit.billableHours, color: 'var(--ok)' },
-                { label: 'Non-Billable', value: billableSplit.nonBillableHours, color: 'var(--info)' },
-              ]}
-              centerValue={`${totalBillableHours.toFixed(1)}h`}
-              size={130}
-            />
-            <DonutLegend items={[
-              { label: 'Billable', valueLabel: `${billableSplit.billableHours.toFixed(1)}h`, pct: totalBillableHours > 0 ? (billableSplit.billableHours / totalBillableHours) * 100 : 0, color: 'var(--ok)' },
-              { label: 'Non-Billable', valueLabel: `${billableSplit.nonBillableHours.toFixed(1)}h`, pct: totalBillableHours > 0 ? (billableSplit.nonBillableHours / totalBillableHours) * 100 : 0, color: 'var(--info)' },
-            ]} />
-          </div>
         </Card>
 
         <Card>

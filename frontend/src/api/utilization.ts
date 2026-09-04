@@ -7,8 +7,6 @@ export interface UtilSnapshotDto {
   snapshotDate: string;
   availableHours: number;
   approvedProductiveHours: number;
-  billableHours: number;
-  nonBillableHours: number;
   benchHours: number;
   idleHours: number;
   utilizationPct: number | null;

@@ -12,7 +12,6 @@ public record SaveEodTaskRequest(
         @Size(max = 300)  String description,
         BigDecimal        hours,
         EodTask.TaskStatus taskStatus,
-        Boolean           isBillable,
         @Size(max = 300)  String blockerReason,
         String            supportNeeded
 ) {}

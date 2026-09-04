@@ -13,6 +13,7 @@ import { UtilBar, UtilLegend } from '../../components/UtilBar';
 import { RULES, utilColor, utilState, fmtPct } from '../../lib/rules';
 import { todayISO, toLocalISODate } from '../../lib/date';
 import { totalHours } from '../../lib/hoursBreakdown';
+import { useHashScroll } from '../../lib/useHashScroll';
 
 // ── Date range helpers ─────────────────────────────────────────────────────────
 
@@ -48,13 +49,14 @@ function Card({
 }
 
 function SectionLabel({
-  children, icon,
-}: { children: React.ReactNode; icon?: React.ReactNode }) {
+  children, icon, id,
+}: { children: React.ReactNode; icon?: React.ReactNode; id?: string }) {
   return (
-    <div style={{
+    <div id={id} style={{
       display: 'flex', alignItems: 'center', gap: 6,
       fontSize: 11, fontWeight: 700, color: 'var(--txt-dim)',
       textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14,
+      scrollMarginTop: 72,
     }}>
       {icon}
       {children}
@@ -192,16 +194,15 @@ function TrendChart({ weeks }: { weeks: WeekTrend[] }) {
 
 // ── Donut chart ────────────────────────────────────────────────────────────────
 
-const DONUT_COLORS = ['var(--ok)', 'var(--warn)', 'var(--txt-dim)'];
+const DONUT_COLORS = ['var(--ok)', 'var(--txt-dim)'];
 
-function DonutChart({ billable, nonBillable, bench }: {
-  billable: number; nonBillable: number; bench: number;
+function DonutChart({ productive, bench }: {
+  productive: number; bench: number;
 }) {
-  const total = totalHours(billable, nonBillable, bench);
+  const total = totalHours(productive, bench);
   const data = [
-    { name: 'Billable',     value: billable },
-    { name: 'Non-Billable', value: nonBillable },
-    { name: 'Bench',        value: bench },
+    { name: 'Productive', value: productive },
+    { name: 'Bench',      value: bench },
   ].filter(d => d.value > 0);
 
   if (total === 0) {
@@ -215,7 +216,7 @@ function DonutChart({ billable, nonBillable, bench }: {
   // Stacked layout (donut centered above, legend rows spanning the full card
   // width below) rather than side-by-side — the card sits in a narrow fixed
   // column, and a row layout left too little width for the legend text,
-  // pushing Billable / Non-Billable / Bench past the card boundary.
+  // pushing Productive / Bench past the card boundary.
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, minWidth: 0 }}>
       <div style={{ position: 'relative', width: 140, height: 140, flexShrink: 0 }}>
@@ -228,7 +229,7 @@ function DonutChart({ billable, nonBillable, bench }: {
               strokeWidth={0}
             >
               {data.map((entry, idx) => {
-                const colorIdx = ['Billable', 'Non-Billable', 'Bench'].indexOf(entry.name);
+                const colorIdx = ['Productive', 'Bench'].indexOf(entry.name);
                 return <Cell key={entry.name} fill={DONUT_COLORS[colorIdx < 0 ? idx : colorIdx]} />;
               })}
             </Pie>
@@ -252,9 +253,8 @@ function DonutChart({ billable, nonBillable, bench }: {
 
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
         {[
-          { label: 'Billable',     value: billable,    color: DONUT_COLORS[0] },
-          { label: 'Non-Billable', value: nonBillable, color: DONUT_COLORS[1] },
-          { label: 'Bench',        value: bench,        color: DONUT_COLORS[2] },
+          { label: 'Productive', value: productive, color: DONUT_COLORS[0] },
+          { label: 'Bench',      value: bench,       color: DONUT_COLORS[1] },
         ].map(({ label, value, color }) => (
           <div key={label} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -310,7 +310,7 @@ function HistoryTable({ rows }: { rows: HistoryDay[] }) {
       <div style={{ minWidth: 560 }}>
       {/* Column headers */}
       <div style={{
-        display: 'grid', gridTemplateColumns: '130px 80px 90px 90px 90px 1fr',
+        display: 'grid', gridTemplateColumns: '130px 80px 90px 1fr',
         gap: 8, padding: '6px 0 8px',
         borderBottom: '1px solid var(--line)',
         fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)',
@@ -319,8 +319,6 @@ function HistoryTable({ rows }: { rows: HistoryDay[] }) {
         <span>Date</span>
         <span style={{ textAlign: 'right' }}>Available</span>
         <span style={{ textAlign: 'right' }}>Approved</span>
-        <span style={{ textAlign: 'right' }}>Billable</span>
-        <span style={{ textAlign: 'right' }}>Non-Bill.</span>
         <span>Utilization</span>
       </div>
 
@@ -331,7 +329,7 @@ function HistoryTable({ rows }: { rows: HistoryDay[] }) {
         const color = utilColor(row.utilizationPct ?? null);
         return (
           <div key={row.date} className="nf-util-hist-row" style={{
-            display: 'grid', gridTemplateColumns: '130px 80px 90px 90px 90px 1fr',
+            display: 'grid', gridTemplateColumns: '130px 80px 90px 1fr',
             gap: 8, padding: '9px 6px',
             margin: '0 -6px',
             borderRadius: 6,
@@ -352,18 +350,6 @@ function HistoryTable({ rows }: { rows: HistoryDay[] }) {
               fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums',
             }}>
               {row.approvedHours.toFixed(1)}h
-            </span>
-            <span style={{
-              fontSize: 11, textAlign: 'right', color: 'var(--txt-mut)',
-              fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums',
-            }}>
-              {row.billableHours.toFixed(1)}h
-            </span>
-            <span style={{
-              fontSize: 11, textAlign: 'right', color: 'var(--txt-mut)',
-              fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums',
-            }}>
-              {row.nonBillableHours.toFixed(1)}h
             </span>
             <UtilBar pct={row.utilizationPct ?? null} />
           </div>
@@ -520,6 +506,7 @@ export default function MyUtilization() {
   const today = todayISO();
   const from  = RANGES[rangeIdx].from();
   const { data, isPending, isError, refetch } = useUtilizationDetail(from, today);
+  useHashScroll(!isPending);
 
   if (isPending) return <LoadingSkeleton />;
 
@@ -553,7 +540,7 @@ export default function MyUtilization() {
   const fromLabel = new Date(from + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   const toLabel   = new Date(today + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
-  const totalCatHours = categoryBreakdown.billableHours + categoryBreakdown.nonBillableHours + categoryBreakdown.benchHours;
+  const totalCatHours = categoryBreakdown.productiveHours + categoryBreakdown.benchHours;
   const catPct = (n: number) => totalCatHours > 0 ? `${Math.round((n / totalCatHours) * 100)}% of hours` : undefined;
 
   return (
@@ -612,17 +599,10 @@ export default function MyUtilization() {
         />
         <KpiTile
           icon={<CheckCircle2 size={16} />}
-          label="Billable hours"
-          value={`${categoryBreakdown.billableHours.toFixed(1)}h`}
-          sub={catPct(categoryBreakdown.billableHours)}
+          label="Productive hours"
+          value={`${categoryBreakdown.productiveHours.toFixed(1)}h`}
+          sub={catPct(categoryBreakdown.productiveHours)}
           accent="var(--ok)"
-        />
-        <KpiTile
-          icon={<Clock size={16} />}
-          label="Non-billable hours"
-          value={`${categoryBreakdown.nonBillableHours.toFixed(1)}h`}
-          sub={catPct(categoryBreakdown.nonBillableHours)}
-          accent="var(--info)"
         />
         <KpiTile
           icon={<Activity size={16} />}
@@ -637,7 +617,7 @@ export default function MyUtilization() {
       <div className="nf-util-trend-row" style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, marginBottom: 16 }}>
         <Card className="nf-util-card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
-            <SectionLabel icon={<TrendingUp size={13} color="var(--txt-mut)" />}>Weekly Trend</SectionLabel>
+            <SectionLabel id="weekly-trend" icon={<TrendingUp size={13} color="var(--txt-mut)" />}>Weekly Trend</SectionLabel>
             <div style={{ display: 'flex', gap: 16, fontSize: 10, color: 'var(--txt-dim)' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ display: 'inline-block', width: 24, height: 1, borderTop: '2px dashed var(--warn)', verticalAlign: 'middle' }} />
@@ -653,7 +633,7 @@ export default function MyUtilization() {
         </Card>
 
         <Card className="nf-util-card">
-          <SectionLabel icon={<CalendarRange size={13} color="var(--txt-mut)" />}>Period Summary</SectionLabel>
+          <SectionLabel id="period-summary" icon={<CalendarRange size={13} color="var(--txt-mut)" />}>Period Summary</SectionLabel>
           <CurrentPeriodCard
             avgUtilPct={currentPeriod.avgUtilPct}
             totalApproved={currentPeriod.totalApproved}
@@ -667,17 +647,16 @@ export default function MyUtilization() {
       {/* Donut + history */}
       <div className="nf-util-breakdown-row" style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, marginBottom: 0 }}>
         <Card className="nf-util-card">
-          <SectionLabel icon={<Activity size={13} color="var(--txt-mut)" />}>Hours Breakdown</SectionLabel>
+          <SectionLabel id="hours-breakdown" icon={<Activity size={13} color="var(--txt-mut)" />}>Hours Breakdown</SectionLabel>
           <DonutChart
-            billable={categoryBreakdown.billableHours}
-            nonBillable={categoryBreakdown.nonBillableHours}
+            productive={categoryBreakdown.productiveHours}
             bench={categoryBreakdown.benchHours}
           />
         </Card>
 
         <Card className="nf-util-card" pad={0}>
           <div style={{ padding: '14px 20px 10px' }}>
-            <SectionLabel icon={<Clock size={13} color="var(--txt-mut)" />}>Daily History</SectionLabel>
+            <SectionLabel id="daily-history" icon={<Clock size={13} color="var(--txt-mut)" />}>Daily History</SectionLabel>
           </div>
           <div style={{ padding: '0 20px 16px' }}>
             <HistoryTable rows={history} />

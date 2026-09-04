@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import {
-  useApprovalHistory, useApprove, useReject, usePatchTaskBillable,
+  useApprovalHistory, useApprove, useReject,
 } from '../../api/approvals';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../lib/toast';
@@ -9,10 +9,9 @@ import { formatDateTime } from '../../lib/date';
 import { formatDate as fmtDate, formatDurationMinutes } from '../../lib/date';
 import type { EodEntryDto, EodTaskDto } from '../../api/eod';
 
-// Shared between the Team Lead's and the Project Manager's Approvals pages — the billable-gate
-// logic and the submission detail modal are correctness-sensitive (they decide whether an entry
-// can be approved) and must not fork between the two roles, so both pages import from here
-// rather than keeping their own copies.
+// Shared between the Team Lead's and the Project Manager's Approvals pages — the submission
+// detail modal is correctness-sensitive and must not fork between the two roles, so both pages
+// import from here rather than keeping their own copies.
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -33,18 +32,6 @@ export function entryProjects(e: EodEntryDto): string[] {
 export function entryCategories(e: EodEntryDto): string[] {
   return [...new Set(e.tasks.map(t => t.categoryName).filter((c): c is string => !!c))];
 }
-
-/** A task only requires a billable decision if its project is billable-eligible at all. */
-export function isTaskGated(t: EodTaskDto): boolean {
-  return t.billableAllowed === true;
-}
-
-/** True once every billable-eligible task on the entry has an explicit billable decision. */
-export function isEntryFullyDecided(entry: EodEntryDto): boolean {
-  return entry.tasks.filter(isTaskGated).every(t => t.billableDecided === true);
-}
-
-export const APPROVE_GATE_TOOLTIP = 'Set Billable on every eligible task before approving.';
 
 /**
  * One plain-language summary of the day: leave taken, hours worked, and how much of that was
@@ -325,8 +312,6 @@ export function SubmissionDetailModal({
   approveBusy: boolean;
   rejectBusy?: boolean;
 }) {
-  const patchBillable = usePatchTaskBillable();
-  const { show } = useToast();
   // Rejecting happens in place: the first Reject click reveals the reason box below Remarks, the
   // second submits it. A separate confirm dialog used to hide the work being judged.
   const [rejecting, setRejecting] = useState(false);
@@ -338,18 +323,8 @@ export function SubmissionDetailModal({
     setReason('');
   }, [entry?.id]);
 
-  const decided = entry ? isEntryFullyDecided(entry) : true;
   const editable = entry?.status === 'SUBMITTED';
   const reasonEmpty = reason.trim() === '';
-
-  async function toggleBillable(taskId: number, next: boolean) {
-    if (!entry) return;
-    try {
-      await patchBillable.mutateAsync({ entryId: entry.id, taskId, isBillable: next });
-    } catch (err) {
-      show(extractError(err), 'error');
-    }
-  }
 
   return (
     <Modal
@@ -376,8 +351,7 @@ export function SubmissionDetailModal({
             <Btn
               variant="success"
               onClick={() => onApprove(entry.id)}
-              disabled={!decided || approveBusy}
-              title={!decided ? APPROVE_GATE_TOOLTIP : undefined}
+              disabled={approveBusy}
             >
               {approveBusy ? 'Approving…' : <><Check size={12} aria-hidden="true" /> Approve</>}
             </Btn>
@@ -388,47 +362,20 @@ export function SubmissionDetailModal({
       {entry && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <FieldLabel>Tasks</FieldLabel>
-          {entry.tasks.map(t => {
-            const gated = isTaskGated(t);
-            // Scoped to this row only — an in-flight toggle on one task must not disable every
-            // other task's checkbox in the modal while it resolves.
-            const rowBusy = patchBillable.isPending && patchBillable.variables?.taskId === t.id;
-            return (
-              <div key={t.id} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '12px 14px' }}>
-                <div className="nf-r-pairs" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 70px 110px', gap: 10, marginBottom: 8 }}>
-                  <div><FieldLabel>Project</FieldLabel><div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)' }}>{t.projectCode ?? '—'}</div></div>
-                  <div><FieldLabel>Category</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.categoryName ?? '—'}</div></div>
-                  <div><FieldLabel>Hours</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.hours != null ? `${hrs(Number(t.hours))}h` : '—'}</div></div>
-                  <div><FieldLabel>Status</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.taskStatus}</div></div>
-                </div>
-                <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', marginBottom: 8 }}>{t.description || '—'}</div>
-                {t.taskStatus === 'BLOCKED' && t.blockerReason && (
-                  <div style={{ fontSize: 11.5, color: 'var(--risk)', marginBottom: 8 }}>Blocker: {t.blockerReason}</div>
-                )}
-                <label style={{
-                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--txt-mut)',
-                  borderTop: '1px solid var(--line)', paddingTop: 8,
-                  cursor: gated && editable && !rowBusy ? 'pointer' : 'not-allowed',
-                  opacity: rowBusy ? 0.6 : 1,
-                  transition: 'opacity 0.12s',
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={gated ? t.isBillable : false}
-                    disabled={!gated || !editable || rowBusy}
-                    onChange={e => toggleBillable(t.id, e.target.checked)}
-                    style={{ accentColor: 'var(--brand-bright)' }}
-                  />
-                  Billable
-                </label>
-                {!gated && (
-                  <div style={{ fontSize: 11, color: 'var(--warn)', marginTop: 4 }}>
-                    This project is Non-Billable — task cannot be marked billable.
-                  </div>
-                )}
+          {entry.tasks.map(t => (
+            <div key={t.id} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '12px 14px' }}>
+              <div className="nf-r-pairs" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 70px 110px', gap: 10, marginBottom: 8 }}>
+                <div><FieldLabel>Project</FieldLabel><div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)' }}>{t.projectCode ?? '—'}</div></div>
+                <div><FieldLabel>Category</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.categoryName ?? '—'}</div></div>
+                <div><FieldLabel>Hours</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.hours != null ? `${hrs(Number(t.hours))}h` : '—'}</div></div>
+                <div><FieldLabel>Status</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.taskStatus}</div></div>
               </div>
-            );
-          })}
+              <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{t.description || '—'}</div>
+              {t.taskStatus === 'BLOCKED' && t.blockerReason && (
+                <div style={{ fontSize: 11.5, color: 'var(--risk)', marginTop: 8 }}>Blocker: {t.blockerReason}</div>
+              )}
+            </div>
+          ))}
 
           <div>
             <FieldLabel>Next-day plan</FieldLabel>

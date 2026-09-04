@@ -9,12 +9,11 @@ public record ProjectTypeDto(
         Long id,
         String name,
         boolean requiresClient,
-        boolean billableAllowed,
         boolean active,
         long employeeCount
 ) {
     public static ProjectTypeDto from(ProjectType t, long employeeCount) {
         return new ProjectTypeDto(t.getId(), t.getName(), t.isRequiresClient(),
-                t.isBillableAllowed(), t.isActive(), employeeCount);
+                t.isActive(), employeeCount);
     }
 }

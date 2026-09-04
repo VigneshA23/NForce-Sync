@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Bell, CheckCheck, Loader2, AlertCircle, ChevronLeft, ChevronRight, Check,
   UserPlus, KeyRound, ClipboardCheck, XCircle, RefreshCcw, Info, Clock,
@@ -426,7 +426,14 @@ export default function Notifications() {
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  // Deep link support for Global Search's "Unread notifications" / "Read notifications" results
+  // (see nav.ts's employee "notifications" subItems) — read once on mount, same pattern as
+  // EodHistory's ?status=.
+  const [searchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+    const requested = searchParams.get('status');
+    return requested === 'unread' || requested === 'read' ? requested : 'all';
+  });
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const qc = useQueryClient();
   const isWide = useIsWide(900);

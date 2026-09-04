@@ -32,8 +32,7 @@ public record UtilizationDetailDto(
     ) {}
 
     public record CategoryBreakdown(
-            BigDecimal billableHours,
-            BigDecimal nonBillableHours,
+            BigDecimal productiveHours,
             BigDecimal benchHours,
             BigDecimal totalApproved
     ) {}
@@ -42,8 +41,6 @@ public record UtilizationDetailDto(
             LocalDate date,
             BigDecimal availableHours,
             BigDecimal approvedHours,
-            BigDecimal billableHours,
-            BigDecimal nonBillableHours,
             BigDecimal benchHours,
             BigDecimal utilizationPct
     ) {}

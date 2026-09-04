@@ -42,15 +42,6 @@ public class EodTask {
     @Column(name = "task_status", nullable = false, length = 30)
     private TaskStatus taskStatus;
 
-    @Column(name = "is_billable", nullable = false)
-    private Boolean isBillable;
-
-    // Set true once a Team Lead has explicitly toggled this task's billable status during
-    // approval (see ApprovalService.setTaskBillable) — distinct from isBillable's default value,
-    // which the approval gate must not silently accept as a decision.
-    @Column(name = "billable_decided", nullable = false)
-    private Boolean billableDecided = Boolean.FALSE;
-
     @Column(name = "blocker_reason", columnDefinition = "TEXT")
     private String blockerReason;
 
