@@ -4,14 +4,16 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Pure validation rules for an EOD attachment upload — no DB/Spring dependency, so it's directly
- * unit-testable the same way UtilizationCalculator is. EodAttachmentService is the only caller;
- * it owns everything that needs a repository (counts, ownership) or config (@Value limits).
+ * Pure validation rules for an attachment upload — no DB/Spring dependency, so it's directly
+ * unit-testable the same way UtilizationCalculator is. Shared by EodAttachmentService and
+ * BlockerConversationService (same package); each owns everything that needs a repository
+ * (counts, ownership, its own storage-total sum) or config (@Value limits).
  */
 final class EodAttachmentValidation {
     private EodAttachmentValidation() {}
 
-    // Kept in sync with ALLOWED_ATTACHMENT_TYPES in the frontend (SubmitEOD.tsx).
+    // Kept in sync with ALLOWED_ATTACHMENT_TYPES in the frontend (eodAttachments.ts, used by both
+    // SubmitEOD.tsx and BlockerThread.tsx).
     static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
             "image/png", "image/jpeg", "image/webp", "application/pdf",
             "application/msword",

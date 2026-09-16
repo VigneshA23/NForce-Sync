@@ -14,4 +14,11 @@ public interface BlockerReplyAttachmentRepository extends JpaRepository<BlockerR
     @Query("select new com.nforceone.sync.eod.dto.BlockerAttachmentDto(a.id, a.fileName, a.contentType, a.fileSize, a.reply.id) " +
            "from BlockerReplyAttachment a where a.reply.id in :replyIds")
     List<BlockerAttachmentDto> findMetaByReplyIds(@Param("replyIds") List<Long> replyIds);
+
+    // App-wide total across every blocker reply attachment — backs the storage-capacity guard in
+    // BlockerConversationService.saveReply, mirroring EodAttachmentRepository.sumFileSize. COALESCE
+    // covers the empty-table case: SUM over zero rows is SQL NULL, which would otherwise unbox to
+    // a NullPointerException here.
+    @Query("SELECT COALESCE(SUM(a.fileSize), 0) FROM BlockerReplyAttachment a")
+    long sumFileSize();
 }

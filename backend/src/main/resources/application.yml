@@ -40,12 +40,14 @@ spring:
 
   servlet:
     multipart:
-      # Sized for the larger of the two attachment features: EOD attachments cap at 10 MB/file
-      # (app.eod-attachment.max-file-size-bytes below); Blocker replies still enforce their own
-      # 5 MB/file, 4 files/reply. Headroom here just needs to be >= the largest of those so
-      # Spring's own limit is never hit before either feature's own validation runs.
+      # Both attachment features share the same per-file cap now (app.eod-attachment.max-file-size-bytes
+      # below — EOD attachments and Blocker reply attachments alike). EOD uploads one file per
+      # request, but a Blocker reply can carry up to 4 files (see MAX_ATTACHMENTS_PER_REPLY in
+      # BlockerConversationService/BlockerThread.tsx) — max-request-size must cover that worst case
+      # (4 * 10 MB) with headroom, or Spring's own limit would reject a valid 4-large-file reply
+      # before either feature's own validation even runs.
       max-file-size: 10MB
-      max-request-size: 25MB
+      max-request-size: 45MB
 
 server:
   port: 8080
@@ -66,18 +68,23 @@ app:
     allowed-origins: ${FRONTEND_URL:http://localhost:5173,https://nforce-sync-git-dev-nforce-one.vercel.app}
   # EOD Supporting Attachments — change these to retune limits, no code change needed.
   # Mirrored on the frontend in lib/eodAttachments.ts's own constants; keep both sides in sync.
+  # max-file-size-bytes and max-total-storage-bytes are also reused as-is by Blocker reply
+  # attachments (BlockerConversationService) so file-size/storage governance stays consistent
+  # app-wide — only max-attachments-per-entry/per-task are EOD-specific (Blockers has its own
+  # separate per-reply count cap, MAX_ATTACHMENTS_PER_REPLY, not read from here).
   eod-attachment:
-    max-file-size-bytes: 10485760      # 10 MB per file
+    max-file-size-bytes: 10485760      # 10 MB per file — EOD attachments AND Blocker replies
     max-attachments-per-entry: 10      # EOD-level cap
     max-attachments-per-task: 5        # per-task cap
-    # App-wide circuit breaker on TOTAL bytes stored across every EOD attachment row (a plain
-    # bytea column — see EodAttachment.data), independent of the per-file/per-entry caps above,
-    # which only bound one upload at a time and do nothing to stop unbounded growth across every
-    # employee over months of use. 2 GB is a starting guess, not a measured quota: comfortably
-    # above what routine EOD attachment usage (occasional screenshots/PDFs, capped at 10 MB each)
-    # should accumulate even across a full team over months, while still acting as a real backstop
-    # protecting the shared Postgres instance from runaway growth. Re-tune from real usage once
-    # this has been live a while — see EodAttachmentService.assertStorageAvailable.
+    # App-wide circuit breaker on TOTAL bytes stored, independent of the per-file/per-entry caps
+    # above, which only bound one upload at a time and do nothing to stop unbounded growth across
+    # every employee over months of use. Enforced separately per feature (EodAttachmentRepository
+    # vs BlockerReplyAttachmentRepository each sum their own table), both against this same 2 GB
+    # ceiling. 2 GB is a starting guess, not a measured quota: comfortably above what routine usage
+    # (occasional screenshots/PDFs/docs, capped at 10 MB each) should accumulate even across a full
+    # team over months, while still acting as a real backstop protecting the shared Postgres
+    # instance from runaway growth. Re-tune from real usage once this has been live a while — see
+    # EodAttachmentService.assertStorageAvailable / BlockerConversationService.saveReply.
     max-total-storage-bytes: 2147483648   # 2 GB
 
 resend:

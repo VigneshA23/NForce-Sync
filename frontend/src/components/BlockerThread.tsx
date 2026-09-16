@@ -6,6 +6,9 @@ import {
 } from '../api/blockerConversation';
 import type { DateRange } from '../api/teamLead';
 import { useToast } from '../lib/toast';
+import {
+  ALLOWED_ATTACHMENT_TYPES, ALLOWED_ATTACHMENT_TYPES_LABEL, MAX_ATTACHMENT_BYTES, validateAttachmentFile,
+} from '../lib/eodAttachments';
 
 /** Matches the extractError helper duplicated in SubmitEOD.tsx / approvals/shared.tsx. */
 function extractError(err: unknown): string {
@@ -13,17 +16,15 @@ function extractError(err: unknown): string {
   return e?.response?.data?.error ?? e?.response?.data?.message ?? 'Failed to send reply. Please try again.';
 }
 
-// Kept in sync with BlockerConversationService's server-side limits — the server is the
-// real guarantee, this is just for immediate feedback before a doomed upload is attempted.
-const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+// Type allowlist and per-file size cap are the same shared limits as EOD attachments (see
+// eodAttachments.ts — mirrored server-side by EodAttachmentValidation and configured via
+// application.yml's app.eod-attachment.*), reused here rather than a separate hardcoded set so
+// size/type governance stays consistent app-wide. Only the per-reply attachment count is a
+// Blockers-specific limit.
 const MAX_ATTACHMENTS_PER_REPLY = 4;
-// Kept in sync with BlockerConversationService.ALLOWED_CONTENT_TYPES. Images only — chosen to
-// match what the server actually accepts, not the other way around.
-const ALLOWED_ATTACHMENT_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
-const ALLOWED_ATTACHMENT_TYPES_LABEL = 'PNG, JPG/JPEG, or WEBP';
 /** Passed to the file input's `accept` so the OS picker itself filters — a courtesy, not the
  *  guarantee: browsers only enforce `accept` loosely, so handleFilesSelected re-checks `file.type`. */
-const ATTACHMENT_ACCEPT = 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp';
+const ATTACHMENT_ACCEPT = ALLOWED_ATTACHMENT_TYPES.join(',');
 
 function fmtFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -229,26 +230,23 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
     e.target.value = '';
     if (picked.length === 0) return;
 
-    // Checked first — a wrong-type file is worth naming on its own rather than folding into a
-    // generic failure, and `accept` on the input is only advisory (drag-and-drop and some OS
-    // pickers ignore it), so this is the real gate.
-    const unsupported = picked.find(f => !ALLOWED_ATTACHMENT_TYPES.includes(f.type));
-    if (unsupported) {
-      setAttachError(`"${unsupported.name}" is not a supported file type. Only ${ALLOWED_ATTACHMENT_TYPES_LABEL} images can be attached.`);
-      return;
+    // Same shared validateAttachmentFile used by SubmitEOD.tsx — type, then size, then count
+    // against the running total (existing pending files plus whatever's already been accepted
+    // from this same batch), so a multi-file pick that would push past the per-reply cap is
+    // caught the same way a single over-cap pick already is.
+    const accepted: File[] = [];
+    let error: string | null = null;
+    for (const file of picked) {
+      const err = validateAttachmentFile(file, pendingFiles.length + accepted.length, MAX_ATTACHMENTS_PER_REPLY);
+      if (err) { error = err; break; }
+      accepted.push(file);
     }
-    const combined = [...pendingFiles, ...picked];
-    if (combined.length > MAX_ATTACHMENTS_PER_REPLY) {
-      setAttachError(`You can attach up to ${MAX_ATTACHMENTS_PER_REPLY} files per reply`);
-      return;
-    }
-    const tooBig = picked.find(f => f.size > MAX_ATTACHMENT_BYTES);
-    if (tooBig) {
-      setAttachError(`"${tooBig.name}" exceeds the 5 MB attachment limit`);
+    if (error) {
+      setAttachError(error);
       return;
     }
     setAttachError(null);
-    setPendingFiles(combined);
+    setPendingFiles([...pendingFiles, ...accepted]);
   }
 
   function removePendingFile(index: number) {
@@ -367,7 +365,7 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
               type="button"
               onClick={() => fileInputRef.current?.click()}
               aria-label="Attach file"
-              title={`Attach an image (${ALLOWED_ATTACHMENT_TYPES_LABEL} — up to ${MAX_ATTACHMENTS_PER_REPLY}, 5 MB each)`}
+              title={`Attach a file (${ALLOWED_ATTACHMENT_TYPES_LABEL} — up to ${MAX_ATTACHMENTS_PER_REPLY}, ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB each)`}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28,
                 background: 'none', border: 'none', borderRadius: 6, color: 'inherit', cursor: 'pointer',

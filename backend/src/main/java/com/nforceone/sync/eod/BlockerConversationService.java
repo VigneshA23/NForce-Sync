@@ -5,6 +5,7 @@ import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.eod.dto.BlockerAttachmentDto;
 import com.nforceone.sync.eod.dto.BlockerReplyDto;
 import com.nforceone.sync.notification.NotificationService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,13 +31,14 @@ import java.util.stream.Collectors;
 @Transactional
 public class BlockerConversationService {
 
-    // Kept in sync with the client-side limits in BlockerThread.tsx (5 MB / 4 files) —
-    // the frontend check is for immediate feedback, this one is the actual guarantee.
-    private static final long MAX_ATTACHMENT_BYTES = 5L * 1024 * 1024;
+    // Per-reply attachment count is Blockers-specific; file type allowlist and per-file/total
+    // storage limits are the same config-driven values EodAttachmentService uses (see
+    // EodAttachmentValidation and application.yml's app.eod-attachment.*) — reused here rather
+    // than a separate hardcoded set so size/type governance stays consistent app-wide.
     private static final int MAX_ATTACHMENTS_PER_REPLY = 4;
-    // Kept in sync with ALLOWED_ATTACHMENT_TYPES in BlockerThread.tsx — images only.
-    private static final java.util.Set<String> ALLOWED_CONTENT_TYPES =
-            java.util.Set.of("image/png", "image/jpeg", "image/webp");
+
+    private final long maxFileSizeBytes;
+    private final long maxTotalStorageBytes;
 
     private final BlockerReplyRepository replyRepository;
     private final BlockerReplyAttachmentRepository attachmentRepository;
@@ -44,11 +46,15 @@ public class BlockerConversationService {
     private final AppUserRepository userRepository;
     private final NotificationService notificationService;
 
-    public BlockerConversationService(BlockerReplyRepository replyRepository,
+    public BlockerConversationService(@Value("${app.eod-attachment.max-file-size-bytes}") long maxFileSizeBytes,
+                                       @Value("${app.eod-attachment.max-total-storage-bytes}") long maxTotalStorageBytes,
+                                       BlockerReplyRepository replyRepository,
                                        BlockerReplyAttachmentRepository attachmentRepository,
                                        EodTaskRepository taskRepository,
                                        AppUserRepository userRepository,
                                        NotificationService notificationService) {
+        this.maxFileSizeBytes = maxFileSizeBytes;
+        this.maxTotalStorageBytes = maxTotalStorageBytes;
         this.replyRepository = replyRepository;
         this.attachmentRepository = attachmentRepository;
         this.taskRepository = taskRepository;
@@ -167,21 +173,23 @@ public class BlockerConversationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "At most " + MAX_ATTACHMENTS_PER_REPLY + " attachments per reply");
         }
+        // Type/size validation and the storage-capacity guard below reuse EodAttachmentValidation
+        // (same allowlist, same configured limits) rather than duplicating the checks — see that
+        // class for the exact rules. `used` is read once and advanced per accepted file so a
+        // multi-file reply can't slip several individually-fine files past the total cap in one
+        // request (mirrors EodAttachmentService.assertStorageAvailable's soft-backstop semantics).
+        long used = attachmentRepository.sumFileSize();
         for (MultipartFile file : attachments) {
-            // Checked before size — a wrong-type file is worth its own message rather than
-            // folding into a generic rejection. The browser-supplied contentType is advisory
-            // (an unset/spoofed type is possible), so an absent or unrecognized value is
-            // rejected the same as an explicitly disallowed one — never trusted through.
-            String contentType = file.getContentType();
-            if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase(java.util.Locale.ROOT))) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "\"" + file.getOriginalFilename() + "\" is not a supported file type. "
-                                + "Only PNG, JPG/JPEG, and WEBP images are allowed.");
+            String validationError = EodAttachmentValidation.validate(
+                    file.getOriginalFilename(), file.getContentType(), file.getSize(), maxFileSizeBytes);
+            if (validationError != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, validationError);
             }
-            if (file.getSize() > MAX_ATTACHMENT_BYTES) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "\"" + file.getOriginalFilename() + "\" exceeds the 5 MB attachment limit");
+            if (EodAttachmentValidation.exceedsStorageCap(used, file.getSize(), maxTotalStorageBytes)) {
+                throw new ResponseStatusException(HttpStatus.INSUFFICIENT_STORAGE,
+                        "Attachment storage is full. Contact your administrator to free up space or raise the limit.");
             }
+            used += file.getSize();
         }
 
         BlockerReply reply = new BlockerReply();
