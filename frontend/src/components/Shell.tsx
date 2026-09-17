@@ -469,7 +469,6 @@ function NavGroupRow({ label, icon: Icon, expanded, onToggle }: {
         fontWeight: 450,
         lineHeight: 'normal',
         textAlign: 'left',
-color: 'inherit',
         fontFamily: 'inherit',
       }}
     >

@@ -373,7 +373,6 @@ public class ExecutiveDashboardService {
 
         // Reuses TeamMissingEodReportService's existing AT_RISK classification (BusinessRuleConfig
         // .atRiskMissingPct) rather than inventing a new project health score.
-        Map<String, AppUser> pmByProjectName = new HashMap<>();
         Map<String, Project> projectByName = new HashMap<>();
         for (Project p : allProjects) projectByName.putIfAbsent(p.getName(), p);
 

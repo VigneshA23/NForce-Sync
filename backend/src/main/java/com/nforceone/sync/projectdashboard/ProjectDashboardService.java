@@ -486,10 +486,6 @@ public class ProjectDashboardService {
         return user;
     }
 
-    private List<Project> scopedProjects(AppUser pm) {
-        return scopedProjects(pm, null);
-    }
-
     /**
      * {@code pmId} lets a Super Admin narrow the system-wide project list to one specific
      * Project Manager's portfolio (Super Admin Reportee Views enhancement) — ignored for a
