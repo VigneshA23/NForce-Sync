@@ -47,6 +47,19 @@ public final class AuditLogSpecs {
     }
 
     /**
+     * Splits the STATUS_CHANGE action into Activate/Deactivate for the Audit Log's Action filter
+     * and KPI strip — STATUS_CHANGE itself doesn't say which direction, only after_value's
+     * {@code status} field does (see UserService/BusinessRuleService's writeAudit calls).
+     */
+    public static Specification<AuditLog> afterStatusIs(String status) {
+        return (root, query, cb) -> {
+            if (status == null || status.isBlank()) return null;
+            var afterStatus = cb.function("jsonb_extract_path_text", String.class, root.get("afterValue"), cb.literal("status"));
+            return cb.equal(afterStatus, status);
+        };
+    }
+
+    /**
      * Matches audit rows whose before/after JSON carries a "name" field equal to one of the given
      * values — the {@code {"name": ..., "value": ...}} shape written by BusinessRuleService's
      * ruleSnapshot(). Lets a caller (e.g. one Business Rules section) ask for its own latest audit
