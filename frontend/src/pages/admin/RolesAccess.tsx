@@ -35,7 +35,7 @@ interface PermGroup {
 
 const GROUPS: PermGroup[] = [
   {
-    label: 'Authenticated — all roles',
+    label: 'Authenticated: all roles',
     rows: [
       { label: 'Submit & view own EOD',       endpoint: 'POST /api/eod, GET /api/eod',           roles: ['EMPLOYEE','TEAMLEAD','PM','DM','FINANCE','LEADERSHIP','ADMIN','SUPERADMIN'], tier: 'api' },
       { label: 'View / approve EOD entries',  endpoint: 'GET /api/approvals/pending',             roles: ['EMPLOYEE','TEAMLEAD','PM','DM','FINANCE','LEADERSHIP','ADMIN','SUPERADMIN'], tier: 'api' },
@@ -44,7 +44,7 @@ const GROUPS: PermGroup[] = [
     ],
   },
   {
-    label: 'Project management — PM + Super Admin',
+    label: 'Project management: PM + Super Admin',
     rows: [
       { label: 'List & create projects',      endpoint: 'GET/POST /api/projects',                 roles: ['PM','SUPERADMIN'], tier: 'api' },
       { label: 'Update projects',             endpoint: 'PUT /api/projects/:id',                  roles: ['PM','SUPERADMIN'], tier: 'api' },
@@ -52,7 +52,7 @@ const GROUPS: PermGroup[] = [
     ],
   },
   {
-    label: 'User administration — Admin only',
+    label: 'User administration: Admin only',
     rows: [
       { label: 'User management (CRUD)',       endpoint: 'GET/POST/PATCH/DELETE /api/users',       roles: ['ADMIN'], tier: 'api' },
       { label: 'Audit log (read all)',         endpoint: 'GET /api/audit',                         roles: ['ADMIN'], tier: 'api' },
@@ -63,19 +63,19 @@ const GROUPS: PermGroup[] = [
     ],
   },
   {
-    label: 'Executive oversight — Super Admin only',
+    label: 'Executive oversight: Super Admin only',
     rows: [
       { label: 'Executive Dashboard',          endpoint: 'GET /api/executive/dashboard',           roles: ['SUPERADMIN'], tier: 'api' },
     ],
   },
   {
-    label: 'System configuration — Super Admin only',
+    label: 'System configuration: Super Admin only',
     rows: [
       { label: 'Business rules config',        endpoint: 'GET/PUT /api/admin/business-rules/*',    roles: ['SUPERADMIN'], tier: 'api' },
     ],
   },
   {
-    label: 'Navigation — UI routing only (not backend-enforced)',
+    label: 'Navigation: UI routing only (not backend-enforced)',
     rows: [
       { label: 'Team dashboard & approvals',  endpoint: '/team/*', roles: ['TEAMLEAD','SUPERADMIN'], tier: 'ui' },
       { label: 'Delivery management',         endpoint: '/dm/*',   roles: ['DM','SUPERADMIN'],       tier: 'ui' },
@@ -150,13 +150,13 @@ export default function RolesAccess() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--txt-mut)' }}>
           <ShieldCheck size={13} style={{ color: 'var(--ok)' }} />
-          <strong style={{ color: 'var(--txt)' }}>API-enforced</strong>
-          — checked by Spring Security <code style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, background: 'var(--raised2)', padding: '1px 5px', borderRadius: 3 }}>@PreAuthorize</code>; cannot be bypassed
+          <strong style={{ color: 'var(--txt)' }}>API-enforced:</strong>
+          checked by Spring Security <code style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, background: 'var(--raised2)', padding: '1px 5px', borderRadius: 3 }}>@PreAuthorize</code>; cannot be bypassed
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--txt-mut)' }}>
           <Monitor size={13} style={{ color: 'var(--info)' }} />
-          <strong style={{ color: 'var(--txt)' }}>UI-only</strong>
-          — enforced by frontend routing; backend accepts any authenticated call to these paths
+          <strong style={{ color: 'var(--txt)' }}>UI-only:</strong>
+          enforced by frontend routing; backend accepts any authenticated call to these paths
         </div>
       </div>
 

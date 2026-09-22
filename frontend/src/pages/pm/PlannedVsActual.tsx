@@ -538,7 +538,7 @@ function ResourceTable({ rows }: { rows: PlannedVsActualResourceRowDto[] }) {
       <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>Resource / Project Breakdown</div>
-          <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 2 }}>Per employee, per project — planned vs. approved actual hours</div>
+          <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 2 }}>Per employee, per project, planned vs. approved actual hours</div>
         </div>
         <input
           type="search"

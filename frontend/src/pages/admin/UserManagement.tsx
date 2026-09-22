@@ -660,9 +660,9 @@ function AddModal({
               borderRadius: 8, padding: 14,
             }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--risk)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                Temp password — share once, store nowhere
+                Temp password: share once, store nowhere
               </div>
-              <code style={{ fontSize: 14, color: 'var(--txt)', fontFamily: 'monospace', userSelect: 'all' }}>
+              <code style={{ fontSize: 14, color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace', userSelect: 'all' }}>
                 {created.tempPassword}
               </code>
             </div>
@@ -1002,7 +1002,7 @@ function EditModal({
   // Fix 1: Use the real Modal component (AnimatePresence + backdrop click + Escape)
   // instead of a raw div with hidden attribute (display:flex overrides hidden, so X never worked)
   return (
-    <Modal open={open} title={user ? `Edit — ${user.fullName}` : 'Edit User'} onClose={onClose} width={580}>
+    <Modal open={open} title={user ? `Edit: ${user.fullName}` : 'Edit User'} onClose={onClose} width={580}>
       {user && (
         <form onSubmit={handleSave} className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           {error && <div style={{ gridColumn: '1/-1' }}><ErrorBanner message={error} /></div>}
@@ -1257,7 +1257,7 @@ function TempPasswordModal({
     <Modal open={open} title={context === 'created' ? 'User Created' : 'Password Reset'} onClose={onClose} width={440}>
       <div>
         <p style={{ fontSize: 12, color: 'var(--txt-mut)', marginBottom: 16, lineHeight: 1.6 }}>
-          Share this temporary password with the user — it will not be shown again.
+          Share this temporary password with the user. It will not be shown again.
           The user will be required to change it on first login.
         </p>
         <div style={{
@@ -1432,7 +1432,7 @@ function DeleteModal({
             spellCheck={false}
           />
           <p style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 20, marginTop: 4 }}>
-            Must match exactly: <code style={{ fontFamily: 'monospace', color: 'var(--txt-mut)' }}>{user.email}</code>
+            Must match exactly: <code style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-mut)' }}>{user.email}</code>
           </p>
           {error && <div style={{ color: 'var(--risk)', marginBottom: 12, fontSize: 13 }}>{error}</div>}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>

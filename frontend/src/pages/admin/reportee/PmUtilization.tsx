@@ -8,7 +8,7 @@ import { ReporteeViewBanner } from '../../../components/ReporteeViewBanner';
 export default function ReporteePmUtilization() {
   return (
     <div>
-      <ReporteeViewBanner label="Project Manager Views — Utilization" />
+      <ReporteeViewBanner label="Project Manager Views: Utilization" />
       <ProjectsUtilization />
     </div>
   );

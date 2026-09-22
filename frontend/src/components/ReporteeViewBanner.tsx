@@ -14,7 +14,7 @@ export function ReporteeViewBanner({ label }: { label: string }) {
     }}>
       <Shield size={15} aria-hidden="true" style={{ color: 'var(--txt-dim)', flexShrink: 0 }} />
       <span style={{ fontSize: 12.5, color: 'var(--txt-dim)', fontWeight: 600 }}>
-        Super Admin — {label} (read-only, system-wide)
+        Super Admin: {label} (read-only, system-wide)
       </span>
     </div>
   );

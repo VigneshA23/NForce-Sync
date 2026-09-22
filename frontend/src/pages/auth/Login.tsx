@@ -236,7 +236,7 @@ export default function Login() {
           <button
             type="button"
             disabled
-            aria-label="Microsoft SSO — coming soon"
+            aria-label="Microsoft SSO, coming soon"
             style={{
               width: '100%',
               display: 'flex',
@@ -452,7 +452,7 @@ export default function Login() {
               })}
             >
               {isLocked
-                ? `Locked — ${formatCountdown(lockRemaining)}`
+                ? `Locked: ${formatCountdown(lockRemaining)}`
                 : submitting ? 'Signing in…' : 'Sign in'}
             </button>
           </motion.div>

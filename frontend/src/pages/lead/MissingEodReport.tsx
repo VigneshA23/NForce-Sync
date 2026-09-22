@@ -339,7 +339,7 @@ function GapsCalendar({ days, selected, onToggle }: {
               return (
                 <div
                   key={day.date}
-                  title={`${formatDate(day.date)} — ${cfg.label}`}
+                  title={`${formatDate(day.date)}: ${cfg.label}`}
                   onClick={() => clickable && onToggle(day.date)}
                   style={{
                     width: CELL_PX, height: CELL_PX, borderRadius: 6,
@@ -412,9 +412,9 @@ function GapsModal({ row, onClose, filters }: {
 
   return (
     <>
-      <Modal open title={`${emp.employeeName} — missing EOD gaps`} onClose={onClose} width={420}>
+      <Modal open title={`${emp.employeeName}: missing EOD gaps`} onClose={onClose} width={420}>
         <div style={{ marginBottom: 12, fontSize: 12.5, color: 'var(--txt-mut)' }}>
-          {emp.missingCount} missing of {emp.totalWorkingDays} working days ({emp.missingPct.toFixed(0)}%). Click a red day to select it, or use Select all missing — a reminder is only sent for the days you pick.
+          {emp.missingCount} missing of {emp.totalWorkingDays} working days ({emp.missingPct.toFixed(0)}%). Click a red day to select it, or use Select all missing. A reminder is only sent for the days you pick.
         </div>
         <GapsCalendar days={emp.days} selected={selected} onToggle={toggle} />
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>

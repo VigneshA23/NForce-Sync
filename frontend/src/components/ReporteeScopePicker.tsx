@@ -32,7 +32,7 @@ export function ReporteeScopePicker({ role, label, value, onChange }: {
     }}>
       <Shield size={15} aria-hidden="true" style={{ color: 'var(--txt-dim)', flexShrink: 0 }} />
       <span style={{ fontSize: 12.5, color: 'var(--txt-dim)', fontWeight: 600 }}>
-        Super Admin Reportee View —
+        Super Admin Reportee View:
       </span>
       <select
         aria-label={`Filter by ${label}`}
@@ -50,7 +50,7 @@ export function ReporteeScopePicker({ role, label, value, onChange }: {
         ))}
       </select>
       <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>
-        Read-only visibility — does not change who owns or approves this data.
+        Read-only visibility. It does not change who owns or approves this data.
       </span>
     </div>
   );

@@ -13,7 +13,7 @@ export default function ReportsDashboard({ initialTab }: { initialTab?: Tab } = 
         <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
           Reports
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>Employee-wise EOD exports and compliance — scoped to your projects</p>
+        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>Employee-wise EOD exports and compliance, scoped to your projects</p>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>

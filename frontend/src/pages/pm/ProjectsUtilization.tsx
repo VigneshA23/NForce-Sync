@@ -584,14 +584,14 @@ function buildInsights(projectRows: ProjectUtilizationRowDto[], resourceRows: Re
     insights.push({
       icon: AlertTriangle, color: 'var(--risk)',
       headline: `${overCount} project${overCount > 1 ? 's are' : ' is'} over-utilized`,
-      subtext: `Utilization above ${RULES.util.over}% — consider redistributing workload.`,
+      subtext: `Utilization above ${RULES.util.over}%. Consider redistributing workload.`,
     });
   }
   if (underCount > 0) {
     insights.push({
       icon: TrendingDown, color: 'var(--warn)',
       headline: `${underCount} project${underCount > 1 ? 's are' : ' is'} under-utilized`,
-      subtext: `Utilization below ${RULES.util.under}% — capacity may be under-allocated.`,
+      subtext: `Utilization below ${RULES.util.under}%. Capacity may be under-allocated.`,
     });
   }
   if (lowEmpCount > 0) {

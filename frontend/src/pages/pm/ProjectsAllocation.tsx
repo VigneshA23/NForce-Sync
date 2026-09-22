@@ -100,8 +100,8 @@ function SortableTh({ label, dir, onToggle }: {
       <button
         type="button"
         onClick={onToggle}
-        title={dir === 'asc' ? 'Sorted A–Z — click for Z–A'
-          : dir === 'desc' ? 'Sorted Z–A — click for A–Z'
+        title={dir === 'asc' ? 'Sorted A–Z, click for Z–A'
+          : dir === 'desc' ? 'Sorted Z–A, click for A–Z'
             : `Sort by ${label.toLowerCase()} A–Z`}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -1109,7 +1109,7 @@ function AllocationModal({ open, onClose, projects }: {
           >
             <option value="">{projectPlaceholder}</option>
             {allocatableProjects.map(p => (
-              <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+              <option key={p.id} value={p.id}>{p.code}: {p.name}</option>
             ))}
           </select>
           <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 5 }}>
@@ -1336,7 +1336,7 @@ function EditAllocationModal({ allocation, onClose, projects }: {
             <div>
               <div style={labelStyle}>Project</div>
               <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
-                {allocation.projectCode} — {allocation.projectName}
+                {allocation.projectCode}: {allocation.projectName}
               </div>
             </div>
           </div>
@@ -1557,7 +1557,7 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
           >
             <option value="">All projects</option>
             {projects?.map(p => (
-              <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+              <option key={p.id} value={p.id}>{p.code}: {p.name}</option>
             ))}
           </select>
           <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
@@ -1658,7 +1658,7 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
               filtered.map(a => (
                 <tr key={a.id}>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{a.employeeName} <span style={{ color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>{a.employeeCode}</span></td>
-                  <td style={tdStyle}>{a.projectCode} — {a.projectName}</td>
+                  <td style={tdStyle}>{a.projectCode}: {a.projectName}</td>
                   <td style={{ ...tdStyle, fontFamily: '"JetBrains Mono", monospace' }}>{a.allocationPct}%</td>
                   <td style={tdStyle}>{fmtDateDMY(a.effectiveFrom)}</td>
                   <td style={tdStyle}>{fmtDateDMY(a.effectiveTo)}</td>

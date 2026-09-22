@@ -88,7 +88,7 @@ export default function Reset() {
             Set new password
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
-            Almost done — set your new password below.
+            Almost done. Set your new password below.
           </p>
         </motion.div>
 
@@ -154,7 +154,7 @@ export default function Reset() {
                   </div>
                   <span style={{ fontSize: 11, color: strength.color }}>
                     {strength.label}
-                    {strength.level < 2 && ' — use at least 8 characters with mixed case and numbers'}
+                    {strength.level < 2 && ', use at least 8 characters with mixed case and numbers'}
                   </span>
                 </div>
               )}
