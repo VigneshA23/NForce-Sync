@@ -91,14 +91,13 @@ export default function ForceChangePassword() {
   return (
     <AuthLayout
       leftHeadline="Secure your account before continuing."
-      leftSubtext="Your administrator has assigned you a temporary password. Set a new password to access the platform."
     >
       <div>
         {/* Title */}
         <div style={{ marginBottom: 28 }}>
           <h1
             style={{
-              fontFamily: '"Space Grotesk", sans-serif',
+              fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
               fontSize: 26,
               fontWeight: 700,
               letterSpacing: '-0.01em',

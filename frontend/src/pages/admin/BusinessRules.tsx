@@ -13,6 +13,7 @@ import { formatRelative } from '../../lib/auditLog';
 import { formatDate, formatTime12h } from '../../lib/date';
 import { capitalizeFirst } from '../../lib/strings';
 import { Modal } from '../../components/Modal';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { DropdownMenu } from '../../components/DropdownMenu';
 import { TimeStepperInput } from '../../components/TimeStepperInput';
 import { useToast } from '../../lib/toast';
@@ -112,7 +113,7 @@ function RuleCard({ title, description, icon, accent, children, footer }: RuleCa
         <SectionIcon icon={icon} accent={accent} />
         <div>
           <h2 style={{
-            fontFamily: '"Space Grotesk", sans-serif',
+            fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
             fontSize: 14, fontWeight: 600, color: 'var(--txt)', margin: '0 0 3px',
           }}>
             {title}
@@ -552,7 +553,7 @@ export default function BusinessRules() {
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{
-          fontFamily: '"Space Grotesk", sans-serif',
+          fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
           fontSize: 24, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em',
         }}>
           Business Rules
@@ -894,9 +895,7 @@ function ShiftTable({ data, isPending, isError, onEdit, onToggle, isTogglePendin
   return (
     <div style={{ background: 'var(--shell)', border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden' }}>
       {isPending && (
-        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[...Array(2)].map((_, i) => <div key={i} className="skeleton" style={{ height: 40, borderRadius: 6 }} />)}
-        </div>
+        <GlobalLoader fullScreen={false} compact label="Loading shifts..." />
       )}
       {isError && <div style={{ padding: '24px 20px', textAlign: 'center', fontSize: 13, color: 'var(--risk)' }}>Failed to load shifts.</div>}
       {data && (
@@ -971,9 +970,7 @@ function HolidayTable({ data, isPending, isError, onEdit, onDelete, openMenuId, 
   return (
     <div style={{ background: 'var(--shell)', border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden' }}>
       {isPending && (
-        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[...Array(2)].map((_, i) => <div key={i} className="skeleton" style={{ height: 40, borderRadius: 6 }} />)}
-        </div>
+        <GlobalLoader fullScreen={false} compact label="Loading holidays..." />
       )}
       {isError && <div style={{ padding: '24px 20px', textAlign: 'center', fontSize: 13, color: 'var(--risk)' }}>Failed to load holidays.</div>}
       {data && (

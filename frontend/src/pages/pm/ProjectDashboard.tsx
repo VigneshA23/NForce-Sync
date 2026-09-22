@@ -9,6 +9,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 import { KpiCard } from '../../components/KpiCard';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { useIsPhone } from '../../lib/useMediaQuery';
 import { useAuth } from '../../lib/auth';
 import { searchUsers } from '../../api/admin';
@@ -52,9 +53,6 @@ const tdStyle: React.CSSProperties = {
   color: 'var(--txt)',
 };
 
-function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
-  return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
-}
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
@@ -927,26 +925,14 @@ export default function ProjectDashboard() {
   }, dateFilterStatus !== 'invalid');
 
   if (isPending) {
-    return (
-      <div>
-        <div style={{ marginBottom: 20 }}>
-          <Skel h={26} w={220} />
-          <div style={{ marginTop: 8 }}><Skel h={14} w={300} /></div>
-        </div>
-        <Card style={{ padding: 16, marginBottom: 20 }}><Skel h={38} /></Card>
-        <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16, marginBottom: 20 }}>
-          {[0, 1, 2, 3, 4].map(i => <Card key={i} style={{ padding: 18 }}><Skel h={28} w={60} /><div style={{ marginTop: 8 }}><Skel h={12} w={80} /></div></Card>)}
-        </div>
-        <Card style={{ padding: 20 }}><Skel h={240} /></Card>
-      </div>
-    );
+    return <GlobalLoader fullScreen={false} />;
   }
 
   if (isError || !data) {
     return (
       <div>
         <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Project Dashboard</h1>
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Project Dashboard</h1>
         </div>
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load dashboard.</div>
@@ -973,7 +959,7 @@ export default function ProjectDashboard() {
     <div>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
           Project Dashboard
         </h1>
         <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>

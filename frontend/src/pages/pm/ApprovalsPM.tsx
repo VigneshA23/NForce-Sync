@@ -13,8 +13,9 @@ import type { EodEntryDto } from '../../api/eod';
 import {
   sumHours, hrs, entryProjects, entryCategories,
   daySummary, timeAdjustmentLabel, formatRelative, extractError, initials,
-  Skel, Card, Btn, Chip, AuditTrail, SubmissionDetailModal,
+  Card, Btn, Chip, AuditTrail, SubmissionDetailModal,
 } from '../approvals/shared';
+import { GlobalLoader } from '../../components/GlobalLoader';
 
 // This page deliberately shares its submission detail modal with the Team Lead's Approvals
 // page (../Approvals.tsx) via ../approvals/shared — see that module's header comment.
@@ -306,7 +307,7 @@ export default function ApprovalsPM() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 14, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
             Approvals
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>Review and act on your projects' EOD submissions — across every team touching them</p>
@@ -407,11 +408,7 @@ export default function ApprovalsPM() {
       {/* List */}
       {isLoading ? (
         <Card>
-          {[0, 1, 2].map(i => (
-            <div key={i} style={{ padding: 16, borderBottom: '1px solid var(--line)', display: 'flex', gap: 12 }}>
-              <Skel h={14} w="30%" /><Skel h={14} w="20%" /><Skel h={14} w="15%" />
-            </div>
-          ))}
+          <GlobalLoader fullScreen={false} compact label="Loading approvals..." />
         </Card>
       ) : visible.length === 0 ? (
         <Card style={{ textAlign: 'center', padding: '48px 20px' }}>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { RefreshCw, AlertTriangle, Search, X } from 'lucide-react';
 import type { ProjectFullDto } from '../../api/projects';
+import { GlobalLoader } from '../GlobalLoader';
 
 // ── Shared "My Projects" building blocks ─────────────────────────────────────────
 // Extracted from pages/lead/MyProjects.tsx so the Employee "My Projects" page (and any
@@ -314,11 +315,7 @@ export function ProjectsPanel({
       )}
 
       {isPending && (
-        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="skeleton" style={{ height: 40, borderRadius: 6 }} />
-          ))}
-        </div>
+        <GlobalLoader fullScreen={false} compact label="Loading projects..." />
       )}
 
       {isError && (

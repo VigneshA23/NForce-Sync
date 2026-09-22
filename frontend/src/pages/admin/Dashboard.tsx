@@ -6,6 +6,7 @@ import { getAdminStats } from '../../api/admin';
 import { toRole } from '../../api/auth';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 import { describeAuditEvent, formatRelative, AUDIT_CATEGORY_ICONS, AUDIT_CATEGORY_LABELS } from '../../lib/auditLog';
+import { GlobalLoader } from '../../components/GlobalLoader';
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
@@ -13,7 +14,7 @@ function PageHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div style={{ marginBottom: 28 }}>
       <h1 style={{
-        fontFamily: '"Space Grotesk", sans-serif',
+        fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
         fontSize: 24,
         fontWeight: 700,
         color: 'var(--txt)',
@@ -27,15 +28,29 @@ function PageHeader({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+function Card({ children, style, onClick, onMouseEnter, onMouseLeave }: {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+  onClick?: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+}) {
   return (
-    <div style={{
-      background: 'var(--panel)',
-      border: '1px solid var(--line)',
-      borderRadius: 10,
-      padding: '20px',
-      ...style,
-    }}>
+    <div
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      style={{
+        background: 'var(--panel)',
+        border: '1px solid var(--line)',
+        borderRadius: 10,
+        padding: '20px',
+        ...style,
+      }}
+    >
       {children}
     </div>
   );
@@ -48,11 +63,23 @@ interface KpiProps {
   label: string;
   value: number | string;
   accent?: string;
+  onClick?: () => void;
 }
 
-function KpiCard({ icon, label, value, accent = 'var(--txt)' }: KpiProps) {
+function KpiCard({ icon, label, value, accent = 'var(--txt)', onClick }: KpiProps) {
+  const [hover, setHover] = useState(false);
   return (
-    <Card>
+    <Card
+      onClick={onClick}
+      onMouseEnter={onClick ? () => setHover(true) : undefined}
+      onMouseLeave={onClick ? () => setHover(false) : undefined}
+      style={onClick ? {
+        cursor: 'pointer',
+        borderColor: hover ? 'var(--txt-dim)' : 'var(--line)',
+        background: hover ? 'var(--raised2)' : 'var(--panel)',
+        transition: 'border-color 0.14s, background 0.14s',
+      } : undefined}
+    >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{
           width: 36,
@@ -66,9 +93,14 @@ function KpiCard({ icon, label, value, accent = 'var(--txt)' }: KpiProps) {
         }}>
           {icon}
         </div>
+        {/* Signals the tile is clickable — otherwise nothing here reads as a button on
+            first glance, only on hover, which a touch/first-time user would never see. */}
+        {onClick && (
+          <ArrowRight size={14} aria-hidden="true" style={{ color: 'var(--txt-dim)', marginTop: 3, flexShrink: 0 }} />
+        )}
       </div>
       <div style={{
-        fontFamily: '"Space Grotesk", sans-serif',
+        fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
         fontSize: 28,
         fontWeight: 700,
         color: accent,
@@ -81,59 +113,6 @@ function KpiCard({ icon, label, value, accent = 'var(--txt)' }: KpiProps) {
       </div>
       <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontWeight: 500 }}>{label}</div>
     </Card>
-  );
-}
-
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-
-function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
-  return (
-    <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />
-  );
-}
-
-// ── Inactive users tile — hover popover ────────────────────────────────────────
-
-// `names` is defaulted, not required: an older backend build omits inactiveUserNames from
-// /api/admin/stats entirely, and an undefined .map() here took down the whole app.
-function InactiveUsersTile({ count, names = [] }: { count: number; names?: string[] }) {
-  const [hover, setHover] = useState(false);
-  return (
-    <div
-      style={{ position: 'relative' }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onFocus={() => setHover(true)}
-      onBlur={() => setHover(false)}
-      tabIndex={0}
-    >
-      <KpiCard icon={<UserX size={18} />} label="Inactive Users" value={count} accent="var(--txt-dim)" />
-      {hover && (
-        <div
-          role="tooltip"
-          className="nf-r-popover"
-          style={{
-            position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50,
-            minWidth: 200, maxWidth: 280,
-            background: 'var(--raised)', border: '1px solid var(--line2)',
-            borderRadius: 8, padding: '10px 12px',
-            boxShadow: '0 8px 24px rgba(0,0,0,.35)',
-            fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.6,
-          }}
-        >
-          {count === 0 ? (
-            <span>No inactive users</span>
-          ) : (
-            <>
-              <div style={{ fontWeight: 600, color: 'var(--txt)', marginBottom: 4 }}>
-                {count} Inactive:
-              </div>
-              {names.map((name) => <div key={name}>{name}</div>)}
-            </>
-          )}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -177,19 +156,7 @@ export default function AdminDashboard() {
     return (
       <div>
         <PageHeader title="Admin Dashboard" subtitle="Platform health at a glance." />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
-          {[0,1,2,3].map(i => (
-            <Card key={i}>
-              <Skel h={36} w={36} /><br />
-              <Skel h={28} w="60%" /><br />
-              <Skel h={12} w="40%" />
-            </Card>
-          ))}
-        </div>
-        <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <Card><Skel h={200} /></Card>
-          <Card><Skel h={200} /></Card>
-        </div>
+        <GlobalLoader fullScreen={false} />
       </div>
     );
   }
@@ -211,8 +178,8 @@ export default function AdminDashboard() {
     );
   }
 
-  // Both defaulted for the same reason as InactiveUsersTile: a partial stats payload should
-  // degrade to an empty section, not blank the page.
+  // Both defaulted: a partial stats payload should degrade to an empty section, not blank
+  // the page.
   const roleEntries = Object.entries(stats.usersByRole ?? {}).filter(([, v]) => v > 0);
   const recentEvents = stats.recentAuditEvents ?? [];
 
@@ -220,12 +187,20 @@ export default function AdminDashboard() {
     <div>
       <PageHeader title="Admin Dashboard" subtitle="Platform health at a glance." />
 
-      {/* KPI row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
-        <KpiCard icon={<Users size={18} />}    label="Total Users"          value={stats.totalUsers}         accent="var(--txt)" />
-        <KpiCard icon={<UserCheck size={18} />} label="Active Users"      value={stats.activeUsers}        accent="var(--ok)" />
-        <InactiveUsersTile count={stats.inactiveUsers} names={stats.inactiveUserNames} />
-        <KpiCard icon={<Activity size={18} />} label="Audit Events (24h)" value={stats.auditEventsLast24h} accent="var(--info)" />
+      {/* KPI row — auto-fit (not auto-fill) so the 4 cards always stretch to fill the full
+          row width; auto-fill would keep reserving empty track slots at wide viewports,
+          leaving the cards bunched to the left instead of spanning edge-to-edge like the
+          two-column row below. With exactly 4 equal cards over 2 equal columns below, the
+          middle gap naturally lines up with the row-below split by symmetry. */}
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
+        <KpiCard icon={<Users size={18} />}    label="Total Users"          value={stats.totalUsers}         accent="var(--txt)"
+          onClick={() => navigate('/admin/users?status=ALL')} />
+        <KpiCard icon={<UserCheck size={18} />} label="Active Users"      value={stats.activeUsers}        accent="var(--ok)"
+          onClick={() => navigate('/admin/users?status=ACTIVE')} />
+        <KpiCard icon={<UserX size={18} />} label="Inactive Users" value={stats.inactiveUsers} accent="var(--txt-dim)"
+          onClick={() => navigate('/admin/users?status=INACTIVE')} />
+        <KpiCard icon={<Activity size={18} />} label="Audit Events (24h)" value={stats.auditEventsLast24h} accent="var(--info)"
+          onClick={() => navigate(`/admin/audit?from=${encodeURIComponent(since24h)}`)} />
       </div>
 
       <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 24 }}>
@@ -239,41 +214,48 @@ export default function AdminDashboard() {
             ))}
         </Card>
 
-        {/* Recent audit events — admin/config-level only, see AdminStatsController */}
-        <Card>
+        {/* Recent audit events — admin/config-level only, see AdminStatsController.
+            height:100% + flex column so the list fills whatever height the grid row
+            stretched this card to (matching the taller Users by Role card) instead of
+            capping at a fixed maxHeight and leaving blank space above "View all". */}
+        <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 16 }}>Recent Activity</div>
           {recentEvents.length === 0
             ? <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>No recent activity</div>
-            : recentEvents.map((event) => {
-              const { message, category } = describeAuditEvent(event);
-              const Icon = AUDIT_CATEGORY_ICONS[category];
-              return (
-                <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 12, gap: 10 }}>
-                  <div
-                    title={AUDIT_CATEGORY_LABELS[category]}
-                    aria-label={AUDIT_CATEGORY_LABELS[category]}
-                    style={{
-                      width: 24, height: 24, borderRadius: 6, flexShrink: 0,
-                      background: 'var(--raised2)', color: 'var(--txt-dim)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1,
-                    }}
-                  >
-                    <Icon size={13} aria-hidden="true" />
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5, flex: 1, minWidth: 0 }}>
-                    {message}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    {formatRelative(event.occurredAt)}
-                  </div>
-                </div>
-              );
-            })}
+            : (
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: 10 }}>
+                {recentEvents.map((event) => {
+                  const { message, category } = describeAuditEvent(event);
+                  const Icon = AUDIT_CATEGORY_ICONS[category];
+                  return (
+                    <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 12, gap: 10 }}>
+                      <div
+                        title={AUDIT_CATEGORY_LABELS[category]}
+                        aria-label={AUDIT_CATEGORY_LABELS[category]}
+                        style={{
+                          width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+                          background: 'var(--raised2)', color: 'var(--txt-dim)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1,
+                        }}
+                      >
+                        <Icon size={13} aria-hidden="true" />
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5, flex: 1, minWidth: 0 }}>
+                        {message}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                        {formatRelative(event.occurredAt)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           <Link
             to={`/admin/audit?from=${encodeURIComponent(since24h)}`}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              marginTop: 4, fontSize: 12, fontWeight: 500,
+              display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
+              marginTop: 'auto', paddingTop: 12, fontSize: 12, fontWeight: 500,
               color: 'var(--info)', textDecoration: 'none',
             }}
           >
@@ -281,42 +263,6 @@ export default function AdminDashboard() {
           </Link>
         </Card>
       </div>
-
-      {/* Quick actions */}
-      <Card>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 14 }}>Quick Actions</div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {[
-            { label: 'User Management', path: '/admin/users' },
-            { label: 'Audit Log',       path: '/admin/audit' },
-            { label: 'Roles & Access',  path: '/admin/roles' },
-          ].map(({ label, path }) => (
-            <button
-              key={path}
-              onClick={() => navigate(path)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '9px 14px',
-                background: 'var(--raised2)',
-                border: '1px solid var(--line2)',
-                borderRadius: 7,
-                color: 'var(--txt)',
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'border-color 0.14s, background 0.14s',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--txt-dim)'; e.currentTarget.style.background = 'var(--raised)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--line2)'; e.currentTarget.style.background = 'var(--raised2)'; }}
-            >
-              {label}
-              <ArrowRight size={12} aria-hidden="true" />
-            </button>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }

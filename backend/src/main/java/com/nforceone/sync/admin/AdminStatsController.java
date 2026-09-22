@@ -60,7 +60,7 @@ public class AdminStatsController {
         // Admin/config-level events only — routine EOD approvals are high-volume and
         // are excluded from this summary widget (see AuditLogRepository for rationale).
         List<AuditLogDto> recentEvents = auditLogRepository
-                .findTop10ByEntityTypeNotOrderByOccurredAtDesc("EOD_ENTRY")
+                .findTop20ByEntityTypeNotOrderByOccurredAtDesc("EOD_ENTRY")
                 .stream()
                 .map(AuditLogDto::from)
                 .toList();

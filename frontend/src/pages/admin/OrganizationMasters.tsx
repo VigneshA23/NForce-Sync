@@ -13,6 +13,7 @@ import type {
   ProjectTypeDto, CreateProjectTypePayload,
 } from '../../api/admin';
 import { Modal } from '../../components/Modal';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { useToast } from '../../lib/toast';
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -403,11 +404,7 @@ function OrgTable<T extends { id: number; active: boolean }>({
       </div>
 
       {isPending && (
-        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="skeleton" style={{ height: 44, borderRadius: 6 }} />
-          ))}
-        </div>
+        <GlobalLoader fullScreen={false} compact label="Loading..." />
       )}
 
       {isError && (
@@ -1154,7 +1151,7 @@ export default function OrganizationMasters() {
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{
-          fontFamily: '"Space Grotesk", sans-serif',
+          fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
           fontSize: 24,
           fontWeight: 700,
           color: 'var(--txt)',

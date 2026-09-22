@@ -63,7 +63,7 @@ export default function Locked() {
 
         <h1
           style={{
-            fontFamily: '"Space Grotesk", sans-serif',
+            fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
             fontSize: 24,
             fontWeight: 700,
             letterSpacing: '-0.01em',

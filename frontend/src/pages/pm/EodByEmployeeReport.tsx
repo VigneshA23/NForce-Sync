@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Download, RefreshCw, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { FilterSelect } from '../../components/FilterSelect';
 import { TimeAdjustmentBadge } from '../../components/TimeAdjustmentBadge';
 import { formatDate, todayISO } from '../../lib/date';
@@ -38,10 +39,6 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
       {children}
     </div>
   );
-}
-
-function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
-  return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
 }
 
 function StatusChip({ status }: { status: string }) {
@@ -477,7 +474,7 @@ function RosterFlow({
           </div>
         )}
         {isLoading ? (
-          <div style={{ padding: 16 }}>{[0, 1, 2].map(i => <div key={i} style={{ marginBottom: 10 }}><Skel h={14} /></div>)}</div>
+          <GlobalLoader fullScreen={false} compact label="Loading employees..." />
         ) : pageRows.length === 0 ? (
           <div style={{ padding: '32px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>No employees match the current filters.</div>
         ) : (
@@ -674,7 +671,7 @@ function TeamFlow({
       </div>
 
       {isLoading ? (
-        <div style={{ padding: 16 }}>{[0, 1, 2].map(i => <div key={i} style={{ marginBottom: 10 }}><Skel h={14} /></div>)}</div>
+        <GlobalLoader fullScreen={false} compact label="Loading entries..." />
       ) : pageRows.length === 0 ? (
         <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>No EOD entries match these filters. Widen the date range or clear a filter.</div>
       ) : (

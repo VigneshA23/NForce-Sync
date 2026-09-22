@@ -34,7 +34,8 @@ public record ProfileDto(
         String address,
         String emergencyContactName,
         String emergencyContactPhone,
-        String photoDataUrl
+        String photoDataUrl,
+        String bannerDataUrl
 ) {
     public static ProfileDto from(AppUser u,
                                    String managerName,
@@ -69,7 +70,8 @@ public record ProfileDto(
                 u.getAddress(),
                 u.getEmergencyContactName(),
                 u.getEmergencyContactPhone(),
-                u.getPhotoData()
+                u.getPhotoData(),
+                u.getBannerData()
         );
     }
 }

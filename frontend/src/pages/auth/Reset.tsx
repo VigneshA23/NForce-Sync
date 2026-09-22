@@ -68,7 +68,6 @@ export default function Reset() {
   return (
     <AuthLayout
       leftHeadline="Choose a strong new password."
-      leftSubtext="Use at least 10 characters with a mix of letters, numbers, and symbols."
     >
       <motion.div
         variants={reduced ? undefined : containerVariants}
@@ -78,7 +77,7 @@ export default function Reset() {
         <motion.div variants={reduced ? undefined : itemVariants} style={{ marginBottom: 28 }}>
           <h1
             style={{
-              fontFamily: '"Space Grotesk", sans-serif',
+              fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
               fontSize: 26,
               fontWeight: 700,
               letterSpacing: '-0.01em',

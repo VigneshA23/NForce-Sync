@@ -104,7 +104,7 @@ export default function ChangePassword() {
 
       {/* Page header */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, marginBottom: 4, fontSize: 20, fontWeight: 700, color: 'var(--txt)', fontFamily: '"Space Grotesk", sans-serif' }}>Change Password</h1>
+        <h1 style={{ margin: 0, marginBottom: 4, fontSize: 20, fontWeight: 700, color: 'var(--txt)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif' }}>Change Password</h1>
         <p style={{ margin: 0, fontSize: 13, color: 'var(--txt-mut)' }}>Update your account password. You will remain signed in.</p>
       </div>
 

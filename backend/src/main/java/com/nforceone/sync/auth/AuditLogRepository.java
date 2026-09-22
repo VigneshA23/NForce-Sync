@@ -33,5 +33,12 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long>, JpaSp
     @EntityGraph(attributePaths = {"actor"})
     List<AuditLog> findTop10ByEntityTypeNotOrderByOccurredAtDesc(String entityType);
 
+    // Admin Dashboard's "Recent Activity" widget only — 20 rather than 10 so a busy day (the
+    // "Audit Events (24h)" KPI routinely runs into the teens) isn't silently truncated below
+    // what "View all N" advertises. ExecutiveDashboardService keeps the Top10 variant above;
+    // its panel wasn't part of this fix.
+    @EntityGraph(attributePaths = {"actor"})
+    List<AuditLog> findTop20ByEntityTypeNotOrderByOccurredAtDesc(String entityType);
+
     long countByOccurredAtAfterAndEntityTypeNot(OffsetDateTime since, String entityType);
 }

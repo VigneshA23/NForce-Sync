@@ -1,6 +1,8 @@
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Check, Minus, ShieldCheck, Monitor } from 'lucide-react';
 import { listRoles } from '../../api/admin';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { toRole } from '../../api/auth';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 
@@ -96,6 +98,24 @@ export default function RolesAccess() {
     queryFn: listRoles,
   });
 
+  // Same fix as UserManagement's table: measures the actual space left below this element
+  // on screen so the horizontal scrollbar for this wide (11-column) permissions matrix sits
+  // at a fixed, always-visible spot near the top of the viewport, on any screen size —
+  // instead of the table growing the whole page and hiding it below the fold.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [tableMaxHeight, setTableMaxHeight] = useState<number | null>(null);
+  useEffect(() => {
+    function recompute() {
+      const el = scrollRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      setTableMaxHeight(Math.max(200, window.innerHeight - top - 16));
+    }
+    recompute();
+    window.addEventListener('resize', recompute);
+    return () => window.removeEventListener('resize', recompute);
+  });
+
   const roleMeta = (roles ?? []).reduce<Record<string, { color: string; label: string }>>((acc, r) => {
     const frontendRole = toRole(r.key);
     acc[r.key] = {
@@ -110,7 +130,7 @@ export default function RolesAccess() {
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{
-          fontFamily: '"Space Grotesk", sans-serif',
+          fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
           fontSize: 24, fontWeight: 700,
           color: 'var(--txt)', margin: '0 0 4px',
           letterSpacing: '-0.01em',
@@ -141,10 +161,8 @@ export default function RolesAccess() {
       </div>
 
       {isPending && (
-        <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
-          {[...Array(8)].map((_, i) => (
-            <div key={i} className="skeleton" style={{ height: 44, margin: '1px 0', borderRadius: 0 }} />
-          ))}
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10 }}>
+          <GlobalLoader fullScreen={false} compact label="Loading roles..." />
         </div>
       )}
 
@@ -161,7 +179,18 @@ export default function RolesAccess() {
         <>
           {/* Role name strip */}
           <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '10px 10px 0 0', overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto' }}>
+            {/* tableMaxHeight (measured above) bounds this so its own scrollbars — both the
+                horizontal one for the 11-column matrix and the vertical one for however many
+                permission rows there are — sit at a fixed, always-visible spot on screen
+                rather than requiring a scroll to the bottom of a long page to discover them. */}
+            <div
+              ref={scrollRef}
+              className="nf-scroll-shadow-x"
+              style={{
+                overflowX: 'auto', overflowY: 'auto',
+                maxHeight: tableMaxHeight != null ? tableMaxHeight : 'calc(100vh - var(--nf-table-chrome))',
+              }}
+            >
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 740 }}>
                 <thead>
                   <tr style={{ background: 'var(--raised)', borderBottom: '2px solid var(--line)' }}>
@@ -307,11 +336,16 @@ export default function RolesAccess() {
   );
 }
 
+// position:sticky + top:0 pins the header row to the top of the scroll container (see
+// RolesAccess's scrollRef div) instead of it scrolling away with the permission rows below
+// it. Needs its own opaque background (not just the parent <tr>'s) so scrolled-under rows
+// don't show through once the header detaches into its stuck position.
 const thLeft: React.CSSProperties = {
   padding: '10px 16px', fontSize: 10, fontWeight: 700,
   color: 'var(--txt-dim)', textAlign: 'left',
   letterSpacing: '0.06em', textTransform: 'uppercase',
   whiteSpace: 'nowrap', minWidth: 160,
+  position: 'sticky', top: 0, zIndex: 1, background: 'var(--raised)',
 };
 
 const thCenter: React.CSSProperties = {

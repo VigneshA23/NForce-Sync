@@ -35,8 +35,8 @@
         "message": "Raw px value — use a design-system spacing token via var()."
       },
       {
-        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Montserrat|Anton|Great Vibes|JetBrains Mono))/i]",
-        "message": "Font not provided by the design system. Available: Montserrat, Anton, Great Vibes, JetBrains Mono."
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Inter|JetBrains Mono))/i]",
+        "message": "Font not provided by the design system. Available: Inter, JetBrains Mono."
       },
       {
         "selector": "JSXOpeningElement[name.name='CTA'] > JSXAttribute > JSXIdentifier[name!=/^(?:variant|size|href|key|ref|className|style|children)$/]",
@@ -362,10 +362,8 @@
       "--dur-slow": "other"
     },
     "fontFamilies": [
-      "Anton",
-      "Great Vibes",
-      "JetBrains Mono",
-      "Montserrat"
+      "Inter",
+      "JetBrains Mono"
     ]
   }
 }

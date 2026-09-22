@@ -131,7 +131,7 @@ export function Modal({ open, title, onClose, children, width = 440, height, foo
               <h2
                 id="modal-title"
                 style={{
-                  fontFamily: '"Space Grotesk", sans-serif',
+                  fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
                   fontSize: 15,
                   fontWeight: 600,
                   color: 'var(--txt)',

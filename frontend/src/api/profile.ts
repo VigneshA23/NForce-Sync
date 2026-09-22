@@ -31,6 +31,7 @@ export interface ProfileDto {
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
   photoDataUrl: string | null;
+  bannerDataUrl: string | null;
 }
 
 export interface UpdateProfilePayload {
@@ -64,6 +65,21 @@ export async function uploadPhoto(file: File): Promise<ProfileDto> {
   const form = new FormData();
   form.append("file", file);
   const { data } = await apiClient.post<ProfileDto>("/profile/photo", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+/** Clears the banner so the cover falls back to the default gradient. Returns the refreshed profile. */
+export async function deleteBanner(): Promise<ProfileDto> {
+  const { data } = await apiClient.delete<ProfileDto>("/profile/banner");
+  return data;
+}
+
+export async function uploadBanner(file: File): Promise<ProfileDto> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await apiClient.post<ProfileDto>("/profile/banner", form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
   return data;

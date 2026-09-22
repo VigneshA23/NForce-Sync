@@ -51,7 +51,7 @@ export function NotAuthorized() {
         <h1
           id="not-auth-title"
           style={{
-            fontFamily: '"Space Grotesk", sans-serif',
+            fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
             fontSize: 22,
             fontWeight: 700,
             color: 'var(--txt)',

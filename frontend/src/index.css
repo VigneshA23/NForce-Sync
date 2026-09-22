@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -59,6 +59,17 @@
   /* Native form-control glyphs (e.g. the date-input calendar icon) render dark
      by default; invert them to read against our dark surfaces. */
   --icon-invert: 1;
+
+  /* Monthly Activity calendar — day-status palette (dark). Same hue identity as the
+     light palette below, darkened to sit on our dark surfaces with light-on-dark text
+     instead of the light theme's dark-on-light pairing. */
+  --day-approved-bg:  #1E3A24; --day-approved-text: #8FD9A0;
+  --day-pending-bg:   #1B3350; --day-pending-text:  #8EC2F2;
+  --day-rejected-bg:  #4A3316; --day-rejected-text: #F0C77A;
+  --day-missed-bg:    #4A1E1E; --day-missed-text:   #F0A0A0;
+  --day-holiday-bg:   #332B57; --day-holiday-text:  #C3B8F5;
+  --day-weekend-bg:   #263039; --day-weekend-text:  #AEC3D2;
+  --day-empty-bg:     #262A32; --day-empty-text:    #9CA3AF;
 }
 
 /* ─── Design tokens — light ────────────────────────────────────── */
@@ -114,6 +125,18 @@
 
   /* Native glyph is already dark, which reads fine on our light surfaces. */
   --icon-invert: 0;
+
+  /* Monthly Activity calendar — day-status palette (light). Saturated enough to read
+     clearly against --day-empty-bg (the "No entry" neutral most cells fall back to) —
+     the original pastel tints were too close to that neutral to tell apart at a glance.
+     See dark block for the matching dark-theme pairing. */
+  --day-approved-bg:  #CFE8B8; --day-approved-text: #2E5D0F;
+  --day-pending-bg:   #C3E0F7; --day-pending-text:  #0F4C86;
+  --day-rejected-bg:  #F6DFA8; --day-rejected-text: #7A4B0A;
+  --day-missed-bg:    #F6C2C2; --day-missed-text:   #8C2020;
+  --day-holiday-bg:   #DAD3FA; --day-holiday-text:  #45389C;
+  --day-weekend-bg:   #D3DEE7; --day-weekend-text:  #33495C;
+  --day-empty-bg:     #F1EFE8; --day-empty-text:    #5F5E5A;
 }
 
 /* ─── Smooth theme transition (only during the swap) ───────────── */
@@ -332,11 +355,12 @@ textarea:-webkit-autofill:focus {
   color: #FFFFFF !important;
 }
 .nf-sidebar-item[aria-current="page"] {
-  background: linear-gradient(90deg, rgba(177,17,22,.22), rgba(177,17,22,.05));
+  background: var(--brand);
   color: #FFFFFF;
 }
 .nf-sidebar-item[aria-current="page"]:hover {
-  background: linear-gradient(90deg, rgba(177,17,22,.30), rgba(177,17,22,.09)) !important;
+  background: var(--brand) !important;
+  color: #FFFFFF !important;
 }
 
 /* ─── Topbar items — always dark frame ─────────────────────────── */
@@ -443,8 +467,10 @@ textarea:-webkit-autofill:focus {
 
 /* KPI tile rows. Pairs from tablet-landscape down: the rows hold 3–5 tiles,
    and 2-up never strands a lone tile on its own row the way 3-up does with 4.
-   The inline template is also converted to auto-fit (see Phase 2 in the
-   plan), which handles the 1024–1366 laptop band on its own. */
+   Above 1024px the inline template mirrors the calendar/right-rail row below
+   it (3 flexible tiles + one fixed-width tile matching the rail), so the last
+   tile's edges line up with the Pending Corrections card instead of drifting
+   out of alignment the way an independent auto-fit track would. */
 @media (max-width: 1024px) {
   .nf-r-kpis { grid-template-columns: repeat(2, 1fr) !important; }
 }
@@ -453,15 +479,9 @@ textarea:-webkit-autofill:focus {
 }
 
 /* ─── Calendar heatmap ──────────────────────────────────────────── */
-/* One variable drives the cells, the nav bar, the day headers and the legend,
-   so they shrink together and can't drift apart. 52px × 7 + gaps = 394px,
-   which overflows a 375px phone before card and page padding. */
-@media (max-width: 560px) {
-  .nf-cal { --nf-cal-cell: 40px; }
-}
-@media (max-width: 400px) {
-  .nf-cal { --nf-cal-cell: 36px; }
-}
+/* --nf-cal-cell is set inline as a clamp() on the calendar itself (see
+   CalendarHeatmap in Dashboard.tsx), so it scales continuously with viewport
+   width instead of needing stepped breakpoint overrides here. */
 @media (max-width: 560px) {
   .nf-cal-skel { grid-template-columns: repeat(7, 1fr) !important; }
 }
@@ -508,6 +528,47 @@ textarea:-webkit-autofill:focus {
   .nf-r-scroll-inner { min-width: var(--nf-r-min); }
 }
 
+/* ─── Horizontal scroll affordance ("scroll shadow") ────────────── */
+/* A first-time user has no reason to expect a wide table scrolls sideways —
+   the native scrollbar for it sits at the BOTTOM of the table's own content,
+   which on a tall page (many rows) can be hundreds of pixels below the fold,
+   invisible without scrolling the whole page down first. This paints a soft
+   edge shadow directly on the scrollable element instead, using layered
+   backgrounds pinned to the content (`local`) so each shadow only shows when
+   there is actually more to scroll to in that direction, and a couple of
+   backgrounds pinned to the viewport (`scroll`) so the shadow appears above
+   the content instead of just fading in from nothing. Pure CSS — no JS scroll
+   listener needed, and it re-evaluates itself on resize automatically, so it
+   works "dynamically based on screen size" at any width without extra code. */
+.nf-scroll-shadow-x {
+  background:
+    linear-gradient(to right, var(--panel) 30%, transparent),
+    linear-gradient(to right, transparent, var(--panel) 70%) 100% 0,
+    linear-gradient(to right, rgba(0, 0, 0, .22), transparent),
+    linear-gradient(to left, rgba(0, 0, 0, .22), transparent) 100% 0;
+  background-repeat: no-repeat;
+  background-color: var(--panel);
+  background-size: 32px 100%, 32px 100%, 12px 100%, 12px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* ─── Bounded-height data table row count ───────────────────────── */
+/* The User Management table caps its scroll container at `calc(100vh -
+   var(--nf-table-chrome))` so the horizontal scrollbar stays near the top of
+   the viewport (see UserManagement.tsx). A fixed subtraction eats a much
+   bigger share of a short laptop viewport than a tall monitor one — the
+   page header/toolbar/filter chrome above the table is a constant ~360px
+   regardless of screen height, so a laptop was left with only ~4 visible
+   rows against a monitor's ~9. Below 900px of viewport HEIGHT (typical
+   laptop panel, especially with visible bookmarks/tab bars eating into it)
+   the same chrome is budgeted tighter — tuned to land on 5 visible rows. */
+:root {
+  --nf-table-chrome: 360px;
+}
+@media (max-height: 900px) {
+  :root { --nf-table-chrome: 270px; }
+}
+
 /* ─── Toolbars & filter rows ────────────────────────────────────── */
 @media (max-width: 900px) {
   .nf-r-toolbar { flex-wrap: wrap !important; }
@@ -548,6 +609,36 @@ textarea:-webkit-autofill:focus {
     width: 18px;
     height: 18px;
   }
+}
+
+/* ─── Profile page — cover banner header ────────────────────────── */
+/* The avatar overlaps the banner's bottom-left corner at a fixed offset
+   tuned for its 88px desktop size (top: -44, exactly half its height, left:
+   24 matching the content padding) — shrinking the avatar without shrinking
+   that offset would leave it floating above the banner instead of sitting
+   on its edge, so avatar size, position and the details block's clearing
+   padding-top all move together at each step down. */
+@media (max-width: 640px) {
+  .nf-r-profile-details { flex-direction: column !important; align-items: flex-start !important; }
+  .nf-r-profile-actions { width: 100%; }
+  .nf-r-profile-actions > button { flex: 1; }
+}
+@media (max-width: 480px) {
+  .nf-r-profile-content { padding: 0 16px 16px !important; }
+  .nf-r-profile-banner { height: 88px !important; }
+  .nf-r-profile-avatar { top: -32px !important; left: 16px !important; }
+  .nf-r-profile-avatar-img { width: 64px !important; height: 64px !important; }
+  .nf-r-profile-details { padding-top: 40px !important; }
+}
+/* Quick-facts contact chips — own breakpoints rather than reusing
+   .nf-r-stack-sm, since 3 columns of icon+label+value chips need a tablet
+   step (2-up) before collapsing fully, unlike the plain 2-col field grids
+   that class already serves elsewhere. */
+@media (max-width: 1024px) {
+  .nf-r-profile-contacts { grid-template-columns: repeat(2, 1fr) !important; }
+}
+@media (max-width: 480px) {
+  .nf-r-profile-contacts { grid-template-columns: 1fr !important; }
 }
 
 /* ─── Donut + legend rows ───────────────────────────────────────── */

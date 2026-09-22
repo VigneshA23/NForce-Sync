@@ -37,7 +37,7 @@ export function KpiCard({ icon, label, value, accent = 'var(--txt)' }: KpiProps)
         </div>
       </div>
       <div style={{
-        fontFamily: '"Space Grotesk", sans-serif',
+        fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
         fontSize: 28,
         fontWeight: 700,
         color: accent,

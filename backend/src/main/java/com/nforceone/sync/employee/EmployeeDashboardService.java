@@ -4,6 +4,8 @@ import com.nforceone.sync.approval.ApprovalAction;
 import com.nforceone.sync.approval.ApprovalActionRepository;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.businessrules.BusinessRuleConfig;
+import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.businessrules.HolidayDto;
 import com.nforceone.sync.businessrules.HolidayRepository;
 import com.nforceone.sync.employee.dto.EmployeeDashboardStatsDto;
@@ -12,6 +14,7 @@ import com.nforceone.sync.employee.dto.PendingCorrectionDto;
 import com.nforceone.sync.employee.dto.TodayStatusDto;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
+import com.nforceone.sync.project.Allocation;
 import com.nforceone.sync.project.AllocationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -37,17 +40,22 @@ public class EmployeeDashboardService {
     private final ApprovalActionRepository actionRepository;
     private final AllocationRepository     allocationRepository;
     private final HolidayRepository        holidayRepository;
+    private final BusinessRuleConfigRepository configRepository;
+
+    private static final long BUSINESS_RULE_CONFIG_ID = 1L;
 
     public EmployeeDashboardService(AppUserRepository userRepository,
                                     EodEntryRepository entryRepository,
                                     ApprovalActionRepository actionRepository,
                                     AllocationRepository allocationRepository,
-                                    HolidayRepository holidayRepository) {
+                                    HolidayRepository holidayRepository,
+                                    BusinessRuleConfigRepository configRepository) {
         this.userRepository       = userRepository;
         this.entryRepository     = entryRepository;
         this.actionRepository    = actionRepository;
         this.allocationRepository = allocationRepository;
         this.holidayRepository   = holidayRepository;
+        this.configRepository    = configRepository;
     }
 
     public EmployeeDashboardStatsDto getDashboardStats(Long employeeId, String actingEmail) {
@@ -64,11 +72,25 @@ public class EmployeeDashboardService {
                 .findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(
                         employeeId, today.minusDays(30), today);
 
-        List<PendingCorrectionDto> pendingCorrections = recent.stream()
+        List<EodEntry> corrections = recent.stream()
                 .filter(e -> CORRECTION_STATUSES.contains(e.getStatus()))
+                .toList();
+
+        // One batch query for all corrections instead of one findByEodEntryId per entry (N+1) —
+        // same fix EmployeeService already applies elsewhere; see
+        // ApprovalActionRepository.findReviewerCommentsByEntryIds.
+        java.util.Map<Long, String> reviewerCommentByEntryId = actionRepository
+                .findReviewerCommentsByEntryIds(corrections.stream().map(EodEntry::getId).toList())
+                .stream()
+                .collect(Collectors.toMap(
+                        a -> a.getEodEntry().getId(),
+                        ApprovalAction::getComment,
+                        (first, later) -> first));
+
+        List<PendingCorrectionDto> pendingCorrections = corrections.stream()
                 .map(e -> new PendingCorrectionDto(
                         e.getId(), e.getEntryDate(), e.getStatus().name(),
-                        latestReviewerComment(e), e.getUpdatedAt()))
+                        reviewerCommentByEntryId.get(e.getId()), e.getUpdatedAt()))
                 .toList();
 
         LocalDate monthStart = today.withDayOfMonth(1);
@@ -108,11 +130,21 @@ public class EmployeeDashboardService {
     // is closed, so an employee must not have to submit an empty report just to clear a count.
     // Submitting on a holiday (or a weekend) stays fully available for anyone who does work —
     // this only decides what counts as MISSING, never what is allowed.
+    //
+    // Also skips any day the employee held no project allocation — same "project allocation is
+    // the test for owing an EOD" rule the reminder scheduler and Missing EOD report use, and the
+    // same rule EmployeeService's calendar heatmap applies for its MISSED vs EMPTY cells, so this
+    // count agrees with what the calendar shows.
+    //
+    // A Draft that was saved but never submitted does NOT count as covered here — once its day
+    // is in the past (guaranteed by the loop below, which never reaches today) a stale Draft is
+    // the same outcome as no entry at all, matching EmployeeService's calendar heatmap.
     private List<LocalDate> computeMissedDates(Long employeeId, LocalDate monthStart, LocalDate today) {
         List<EodEntry> monthEntries = entryRepository
                 .findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(
                         employeeId, monthStart, today.minusDays(1));
         Set<LocalDate> coveredDates = monthEntries.stream()
+                .filter(e -> e.getStatus() != EodEntry.Status.DRAFT)
                 .map(EodEntry::getEntryDate)
                 .collect(Collectors.toSet());
 
@@ -120,15 +152,35 @@ public class EmployeeDashboardService {
                 .map(h -> h.getHolidayDate())
                 .collect(Collectors.toSet());
 
+        List<Allocation> allocations = allocationRepository.findByEmployeeId(employeeId);
+
         List<LocalDate> missed = new ArrayList<>();
         for (LocalDate d = monthStart; d.isBefore(today); d = d.plusDays(1)) {
-            DayOfWeek dow = d.getDayOfWeek();
-            if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) continue;
+            if (isWeekend(d)) continue;
             if (holidays.contains(d)) continue;
             if (coveredDates.contains(d)) continue;
+            if (!isAllocatedOn(allocations, d)) continue;
             missed.add(d);
         }
         return missed;
+    }
+
+    private boolean isAllocatedOn(List<Allocation> allocations, LocalDate date) {
+        return allocations.stream().anyMatch(a ->
+                !a.getEffectiveFrom().isAfter(date)
+                        && (a.getEffectiveTo() == null || !a.getEffectiveTo().isBefore(date)));
+    }
+
+    /** Sunday is always off; Saturday only counts under the admin-configured SAT_SUN rule. */
+    private boolean isWeekend(LocalDate date) {
+        DayOfWeek dow = date.getDayOfWeek();
+        if (dow == DayOfWeek.SUNDAY) return true;
+        if (dow != DayOfWeek.SATURDAY) return false;
+        BusinessRuleConfig config = configRepository.findById(BUSINESS_RULE_CONFIG_ID).orElse(null);
+        BusinessRuleConfig.WeekendRule rule = config != null && config.getWeekendRule() != null
+                ? config.getWeekendRule()
+                : BusinessRuleConfig.WeekendRule.SAT_SUN;
+        return rule == BusinessRuleConfig.WeekendRule.SAT_SUN;
     }
 
     private void requireSelfOrSuperadmin(Long employeeId, String actingEmail) {
@@ -138,15 +190,5 @@ public class EmployeeDashboardService {
         if (actor.getRole() != AppUser.Role.SUPERADMIN && !actor.getId().equals(employeeId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
-    }
-
-    private String latestReviewerComment(EodEntry entry) {
-        return actionRepository.findByEodEntryIdOrderByActedAtDesc(entry.getId())
-                .stream()
-                .filter(a -> a.getAction() == ApprovalAction.Action.REJECT
-                          || a.getAction() == ApprovalAction.Action.REQUEST_CHANGES)
-                .findFirst()
-                .map(ApprovalAction::getComment)
-                .orElse(null);
     }
 }

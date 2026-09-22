@@ -68,7 +68,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div style={{ width: '100%', maxWidth: 720 }}>
           <h1
             style={{
-              fontFamily: '"Space Grotesk", sans-serif',
+              fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
               fontSize: 22,
               fontWeight: 700,
               letterSpacing: '-0.01em',

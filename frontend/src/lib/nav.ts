@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, ClipboardList, BarChart3, Activity,
-  Bell, User, ClipboardCheck, AlertOctagon,
+  ClipboardCheck, AlertOctagon,
   FolderKanban, Users, TrendingUp, Map,
   AlertTriangle, DollarSign, Trophy,
   Lock, Settings, Plug, Bot, ScrollText, Building2,
@@ -96,7 +96,10 @@ export const ALL_ROLES: Role[] = [
 export const NAV: Record<Role, RoleNav> = {
   employee: [
     {
-      section: 'Work',
+      // Employee has only this one section now (Account was removed once Notifications/Profile
+      // dropped off the sidebar), so a "Work" heading no longer distinguishes anything — see
+      // Shell.tsx's SidebarContent, which skips rendering an empty section label.
+      section: '',
       items: [
         {
           key: 'emp-dash', label: 'My Dashboard', path: '/dashboard', icon: LayoutDashboard,
@@ -135,28 +138,6 @@ export const NAV: Record<Role, RoleNav> = {
         },
       ],
     },
-    {
-      section: 'Account',
-      items: [
-        {
-          key: 'notifications', label: 'Notifications', path: '/notifications', icon: Bell,
-          // Query values match Notifications.tsx's StatusFilter ('all' | 'unread' | 'read').
-          subItems: [
-            { key: 'notif-unread', label: 'Unread notifications', query: { status: 'unread' } },
-            { key: 'notif-read',   label: 'Read notifications',   query: { status: 'read' } },
-          ],
-        },
-        {
-          key: 'profile', label: 'Profile', path: '/profile', icon: User,
-          subItems: [
-            { key: 'profile-personal',    label: 'Personal Information', anchor: 'personal-information' },
-            { key: 'profile-employment',  label: 'Employment',           anchor: 'employment' },
-            { key: 'profile-emergency',   label: 'Emergency Contact',    anchor: 'emergency-contact' },
-            { key: 'profile-security',    label: 'Security',             anchor: 'security' },
-          ],
-        },
-      ],
-    },
   ],
 
   lead: [
@@ -175,8 +156,6 @@ export const NAV: Record<Role, RoleNav> = {
       items: [
         { key: 'eod-submit',    label: 'Submit EOD',     path: '/eod/submit',    icon: ClipboardList },
         { key: 'reports',       label: 'Reports',         path: '/team/reports',  icon: BarChart3 },
-        { key: 'notifications', label: 'Notifications',  path: '/notifications', icon: Bell },
-        { key: 'profile',       label: 'Profile',         path: '/profile',       icon: User },
       ],
     },
   ],
@@ -188,7 +167,7 @@ export const NAV: Record<Role, RoleNav> = {
         { key: 'pm-dash',        label: 'Project Dashboard', path: '/projects/dashboard',     icon: LayoutDashboard },
         { key: 'projects',       label: 'Projects & Allocation', path: '/projects',               icon: FolderKanban },
         { key: 'pm-util',        label: 'Projects Utilization', path: '/projects/utilization',  icon: Activity },
-        { key: 'planned-actual', label: 'Planned vs Actual',  path: '/projects/planned-actual', icon: TrendingUp, phase: 2 },
+        { key: 'planned-actual', label: 'Planned vs Actual',  path: '/projects/planned-actual', icon: TrendingUp },
         { key: 'blockers',       label: 'Blockers',           path: '/projects/blockers',       icon: AlertOctagon },
       ],
     },
@@ -197,8 +176,6 @@ export const NAV: Record<Role, RoleNav> = {
       items: [
         { key: 'approvals',     label: 'Approvals',      path: '/projects/approvals', icon: ClipboardCheck },
         { key: 'reports',       label: 'Reports',         path: '/projects/reports',   icon: BarChart3 },
-        { key: 'notifications', label: 'Notifications',  path: '/notifications',       icon: Bell },
-        { key: 'profile',       label: 'Profile',         path: '/profile',             icon: User },
       ],
     },
   ],
@@ -219,8 +196,6 @@ export const NAV: Record<Role, RoleNav> = {
       section: 'More',
       items: [
         { key: 'reports',       label: 'Reports',        path: '/dm/reports',    icon: BarChart3 },
-        { key: 'notifications', label: 'Notifications', path: '/notifications', icon: Bell },
-        { key: 'profile',       label: 'Profile',        path: '/profile',       icon: User },
       ],
     },
   ],
@@ -238,8 +213,6 @@ export const NAV: Record<Role, RoleNav> = {
       section: 'More',
       items: [
         { key: 'reports',       label: 'Reports',        path: '/finance/reports', icon: BarChart3 },
-        { key: 'notifications', label: 'Notifications', path: '/notifications',   icon: Bell },
-        { key: 'profile',       label: 'Profile',        path: '/profile',         icon: User },
       ],
     },
   ],
@@ -257,7 +230,6 @@ export const NAV: Record<Role, RoleNav> = {
       section: 'More',
       items: [
         { key: 'reports', label: 'Reports', path: '/leadership/reports', icon: BarChart3 },
-        { key: 'profile', label: 'Profile', path: '/profile',             icon: User },
       ],
     },
   ],
@@ -281,13 +253,6 @@ export const NAV: Record<Role, RoleNav> = {
         { key: 'business-rules', label: 'Business Rules',       path: '/admin/rules',        icon: Settings },
         { key: 'role-mgmt',      label: 'Roles & Access',       path: '/admin/roles',        icon: Lock },
         { key: 'audit',          label: 'Audit Log',            path: '/admin/audit',        icon: ScrollText },
-      ],
-    },
-    {
-      section: 'More',
-      items: [
-        { key: 'notifications', label: 'Notifications', path: '/notifications', icon: Bell },
-        { key: 'profile',       label: 'Profile',        path: '/profile',       icon: User },
       ],
     },
   ],
@@ -338,13 +303,6 @@ export const NAV: Record<Role, RoleNav> = {
             { key: 'ro-pm-util',     label: 'Utilization',          path: '/admin/reportee/pm/utilization', icon: Activity },
           ],
         },
-      ],
-    },
-    {
-      section: 'More',
-      items: [
-        { key: 'notifications', label: 'Notifications', path: '/notifications', icon: Bell },
-        { key: 'profile',       label: 'Profile',        path: '/profile',       icon: User },
       ],
     },
   ],

@@ -54,7 +54,7 @@ export function Placeholder({ title }: PlaceholderProps) {
         </div>
         <h1
           style={{
-            fontFamily: '"Space Grotesk", sans-serif',
+            fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
             fontSize: 26,
             fontWeight: 700,
             color: 'var(--txt)',

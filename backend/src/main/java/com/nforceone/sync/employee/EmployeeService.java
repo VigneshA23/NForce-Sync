@@ -2,6 +2,8 @@ package com.nforceone.sync.employee;
 
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.businessrules.BusinessRuleConfig;
+import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.businessrules.Holiday;
 import com.nforceone.sync.businessrules.HolidayRepository;
 import com.nforceone.sync.businessrules.ShiftDefinition;
@@ -13,6 +15,8 @@ import com.nforceone.sync.eod.EodTask;
 import com.nforceone.sync.eod.EodTaskRepository;
 import com.nforceone.sync.employee.dto.DashboardSummaryDto;
 import com.nforceone.sync.employee.dto.UtilizationDetailDto;
+import com.nforceone.sync.project.Allocation;
+import com.nforceone.sync.project.AllocationRepository;
 import com.nforceone.sync.utilization.UtilSnapshot;
 import com.nforceone.sync.utilization.UtilSnapshotRepository;
 import com.nforceone.sync.utilization.UtilizationService;
@@ -42,6 +46,10 @@ public class EmployeeService {
     private final AppUserRepository         userRepository;
     private final ShiftDefinitionRepository shiftRepository;
     private final HolidayRepository         holidayRepository;
+    private final BusinessRuleConfigRepository configRepository;
+    private final AllocationRepository      allocationRepository;
+
+    private static final long BUSINESS_RULE_CONFIG_ID = 1L;
 
     public EmployeeService(EodEntryRepository entryRepository,
                            EodTaskRepository taskRepository,
@@ -49,7 +57,9 @@ public class EmployeeService {
                            UtilizationService utilizationService,
                            AppUserRepository userRepository,
                            ShiftDefinitionRepository shiftRepository,
-                           HolidayRepository holidayRepository) {
+                           HolidayRepository holidayRepository,
+                           BusinessRuleConfigRepository configRepository,
+                           AllocationRepository allocationRepository) {
         this.entryRepository  = entryRepository;
         this.taskRepository   = taskRepository;
         this.snapshotRepository = snapshotRepository;
@@ -57,6 +67,8 @@ public class EmployeeService {
         this.userRepository   = userRepository;
         this.shiftRepository  = shiftRepository;
         this.holidayRepository = holidayRepository;
+        this.configRepository = configRepository;
+        this.allocationRepository = allocationRepository;
     }
 
     @Transactional(readOnly = true)
@@ -353,6 +365,12 @@ public class EmployeeService {
         Map<LocalDate, String> holidayMap = holidayRepository.findByHolidayDateBetween(gridStart, gridEnd).stream()
                 .collect(Collectors.toMap(Holiday::getHolidayDate, Holiday::getName));
 
+        // Only a day the employee was actually staffed on counts as MISSED when no entry was
+        // filed — same "project allocation is the test for owing an EOD" rule the reminder
+        // scheduler and Missing EOD report use. An unallocated employee reads as EMPTY (No
+        // entry), not MISSED, since nothing was ever owed for that day.
+        List<Allocation> allocations = allocationRepository.findByEmployeeId(employeeId);
+
         List<DashboardSummaryDto.CalendarDay> days = new ArrayList<>();
         LocalDate cursor = gridStart;
         while (!cursor.isAfter(gridEnd)) {
@@ -364,7 +382,18 @@ public class EmployeeService {
             if (weekend) status = "WEEKEND";
             else if (holiday) status = "HOLIDAY";
             else if (future) status = "FUTURE";
-            else if (status == null) status = "EMPTY";
+            else if (status == null) {
+                // Today isn't past its cutoff yet just because the loop has reached it — leave
+                // it EMPTY rather than prematurely flagging it MISSED.
+                status = (cursor.isBefore(realToday) && isAllocatedOn(allocations, cursor))
+                        ? "MISSED" : "EMPTY";
+            }
+            // A Draft was saved but never submitted — once its day is in the past that's the
+            // same outcome as no entry at all, so it reads as MISSED rather than as an
+            // in-progress Draft that's actually gone stale.
+            else if ("DRAFT".equals(status) && cursor.isBefore(realToday)) {
+                status = "MISSED";
+            }
             BigDecimal util = utilMap.get(cursor);
             days.add(new DashboardSummaryDto.CalendarDay(cursor, status, util, weekend, future, holiday, holidayName));
             cursor = cursor.plusDays(1);
@@ -446,9 +475,22 @@ public class EmployeeService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    private boolean isAllocatedOn(List<Allocation> allocations, LocalDate date) {
+        return allocations.stream().anyMatch(a ->
+                !a.getEffectiveFrom().isAfter(date)
+                        && (a.getEffectiveTo() == null || !a.getEffectiveTo().isBefore(date)));
+    }
+
+    /** Sunday is always off; Saturday only counts under the admin-configured SAT_SUN rule. */
     private boolean isWeekend(LocalDate date) {
         DayOfWeek dow = date.getDayOfWeek();
-        return dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY;
+        if (dow == DayOfWeek.SUNDAY) return true;
+        if (dow != DayOfWeek.SATURDAY) return false;
+        BusinessRuleConfig config = configRepository.findById(BUSINESS_RULE_CONFIG_ID).orElse(null);
+        BusinessRuleConfig.WeekendRule rule = config != null && config.getWeekendRule() != null
+                ? config.getWeekendRule()
+                : BusinessRuleConfig.WeekendRule.SAT_SUN;
+        return rule == BusinessRuleConfig.WeekendRule.SAT_SUN;
     }
 
     private LocalDate previousWeekday(LocalDate date) {

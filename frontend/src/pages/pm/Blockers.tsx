@@ -6,6 +6,7 @@ import {
   ChevronLeft, ChevronRight, Calendar, Download,
 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { Avatar, avatarColor } from '../../components/BlockerThread';
 import { FilterDropdown, SortDropdown, toggleFilterVal } from '../../components/FilterDropdown';
 import { usePmBlockers, usePmBlockersFilters, type PmBlockerDto } from '../../api/pmBlockers';
@@ -293,7 +294,7 @@ function StatCard({ icon, label, value, caption, accent, loading }: {
             </>
           ) : (
             <>
-              <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
                 {value}
               </div>
               <div style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{caption}</div>
@@ -596,22 +597,14 @@ export default function PmBlockers() {
   };
 
   if (isPending) {
-    return (
-      <div>
-        <div style={{ marginBottom: 24 }}><Skel h={24} w={160} /><div style={{ marginTop: 8 }}><Skel h={14} w={280} /></div></div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
-          {[0, 1, 2, 3, 4].map(i => <Card key={i}><Skel h={60} /></Card>)}
-        </div>
-        <Card style={{ padding: 20 }}><Skel h={320} /></Card>
-      </div>
-    );
+    return <GlobalLoader fullScreen={false} />;
   }
 
   if (isError) {
     return (
       <div>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Blockers</h1>
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Blockers</h1>
         </div>
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load blockers.</div>
@@ -632,7 +625,7 @@ export default function PmBlockers() {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+            <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
               Blockers
             </h1>
             <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>

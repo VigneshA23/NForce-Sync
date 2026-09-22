@@ -8,6 +8,7 @@ import {
   Search, Filter, ArrowUp, ArrowDown, Download,
 } from 'lucide-react';
 import { api } from '../../api/client';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { formatDate, formatTime12h } from '../../lib/date';
 import {
   listUsers, createUser, updateUser, setUserStatus, resetPassword,
@@ -218,7 +219,7 @@ function ModalHeader({ title, onClose }: { title: string; onClose: () => void })
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '16px 20px', borderBottom: '1px solid var(--line)',
     }}>
-      <span style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: 15, color: 'var(--txt)' }}>
+      <span style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontWeight: 700, fontSize: 15, color: 'var(--txt)' }}>
         {title}
       </span>
       <button onClick={onClose} style={{
@@ -1697,6 +1698,26 @@ function exportUsersCsv(
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function UserManagement() {
+  // Measures the exact space left below the table's scroll-position on screen (rather than
+  // guessing a fixed "chrome above the table" offset per breakpoint, which under- or
+  // over-shoots depending on the browser's own toolbar/bookmarks-bar height, zoom level,
+  // etc. — a monitor with a shorter browser chrome than assumed was left with an unfilled
+  // gap below the table). Recomputed on mount, on resize, and whenever the row count
+  // changes (filtering can shift the table's own top offset via reflow above it).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [tableMaxHeight, setTableMaxHeight] = useState<number | null>(null);
+  useEffect(() => {
+    function recompute() {
+      const el = scrollRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      setTableMaxHeight(Math.max(200, window.innerHeight - top - 16));
+    }
+    recompute();
+    window.addEventListener('resize', recompute);
+    return () => window.removeEventListener('resize', recompute);
+  });
+
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: users, isPending, isError, refetch } = useQuery({
     queryKey: ['admin', 'users'],
@@ -1789,10 +1810,28 @@ export default function UserManagement() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [users, searchParams]);
 
+  // Deep link from the Admin Dashboard's Total/Active/Inactive Users tiles (?status=…) —
+  // pre-applies the matching status chip so the filter carries over instead of landing
+  // on the unfiltered list.
+  useEffect(() => {
+    const status = searchParams.get('status');
+    if (!status) return;
+    if (status === 'ALL' || status === 'ACTIVE' || status === 'INACTIVE') {
+      setStatusFilter(status);
+    }
+    setSearchParams((prev) => { prev.delete('status'); return prev; }, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // position:sticky + top:0 pins the header row to the top of the scroll container below
+  // (rather than the table just growing the whole page), so the horizontal scrollbar at
+  // that container's own bottom edge always sits near the top of the viewport, not
+  // hundreds of pixels down past 56 rows.
   const thStyle: React.CSSProperties = {
     padding: '10px 16px', fontSize: 11, fontWeight: 600, color: 'var(--txt-dim)',
     textAlign: 'left', letterSpacing: '0.06em', textTransform: 'uppercase',
     background: 'var(--raised)', borderBottom: '1px solid var(--line)', whiteSpace: 'nowrap',
+    position: 'sticky', top: 0, zIndex: 2,
   };
   const tdStyle: React.CSSProperties = {
     padding: '12px 16px', verticalAlign: 'middle', borderBottom: '1px solid var(--line)',
@@ -1817,7 +1856,7 @@ export default function UserManagement() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
         <div>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0, letterSpacing: '-0.01em' }}>
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0, letterSpacing: '-0.01em' }}>
             User Management
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', marginTop: 4, margin: '4px 0 0' }}>
@@ -1926,11 +1965,7 @@ export default function UserManagement() {
         </div>
 
         {isPending && (
-          <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="skeleton" style={{ height: 52, borderRadius: 6 }} />
-            ))}
-          </div>
+          <GlobalLoader fullScreen={false} compact label="Loading users..." />
         )}
 
         {isError && (
@@ -1943,7 +1978,24 @@ export default function UserManagement() {
         )}
 
         {filteredUsers && (
-          <div style={{ overflowX: 'auto' }}>
+          // Bounded height (rather than letting the table grow the whole page) so this
+          // scroll container's own horizontal scrollbar sits at a fixed, always-visible
+          // spot near the top of the viewport instead of below however many of the 56
+          // rows happen to be rendered — a first-time user shouldn't have to scroll to
+          // the bottom of the page to discover the table scrolls sideways at all. The
+          // sticky header (see thStyle) stays pinned while these rows scroll vertically.
+          // tableMaxHeight is measured from this element's actual on-screen position (see
+          // the effect above), so it fills exactly whatever room is left on THIS browser/
+          // screen instead of guessing a fixed offset — the CSS var is only a same-frame
+          // fallback for the instant before that measurement effect first runs.
+          <div
+            ref={scrollRef}
+            className="nf-scroll-shadow-x"
+            style={{
+              overflowX: 'auto', overflowY: 'auto',
+              maxHeight: tableMaxHeight != null ? tableMaxHeight : 'calc(100vh - var(--nf-table-chrome))',
+            }}
+          >
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
               <thead>
                 <tr>
@@ -1974,7 +2026,10 @@ export default function UserManagement() {
                   </th>
                   <th style={thStyle}>Reporting Manager</th>
                   <th style={thStyle}>Status</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                  {/* Sticky to the scroll container's right edge — on a laptop-width viewport the
+                      table is wider than the visible area, and without this the 4 action icons
+                      scroll off past the right edge with no visual cue that they exist. */}
+                  <th style={{ ...thStyle, textAlign: 'right', right: 0, zIndex: 3, boxShadow: '-6px 0 6px -6px rgba(0,0,0,.25)' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -2004,8 +2059,19 @@ export default function UserManagement() {
                     <tr
                       key={user.id}
                       style={{ opacity: user.status === 'ACTIVE' ? 1 : 0.65, transition: 'background 0.1s' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--raised)'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = ''; }}
+                      onMouseEnter={e => {
+                        (e.currentTarget as HTMLTableRowElement).style.background = 'var(--raised)';
+                        // The sticky Actions cell needs its own opaque background (so scrolled-
+                        // under columns don't bleed through) — kept in sync with the row's hover
+                        // tint here since a <td> background otherwise paints over the <tr>'s.
+                        const sticky = e.currentTarget.querySelector<HTMLElement>('[data-sticky-actions]');
+                        if (sticky) sticky.style.background = 'var(--raised)';
+                      }}
+                      onMouseLeave={e => {
+                        (e.currentTarget as HTMLTableRowElement).style.background = '';
+                        const sticky = e.currentTarget.querySelector<HTMLElement>('[data-sticky-actions]');
+                        if (sticky) sticky.style.background = 'var(--panel)';
+                      }}
                     >
                       <td style={tdStyle}>
                         <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
@@ -2041,7 +2107,15 @@ export default function UserManagement() {
                       <td style={tdStyle}>
                         <StatusBadge status={user.status} />
                       </td>
-                      <td style={{ ...tdStyle, textAlign: 'right' }}>
+                      <td
+                        data-sticky-actions
+                        style={{
+                          ...tdStyle, textAlign: 'right',
+                          position: 'sticky', right: 0, zIndex: 1,
+                          background: 'var(--panel)',
+                          boxShadow: '-6px 0 6px -6px rgba(0,0,0,.25)',
+                        }}
+                      >
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                           <ActionBtn icon={<Pencil size={13} />} label="Edit user" onClick={() => handleEditOpen(user)} />
                           <ActionBtn
