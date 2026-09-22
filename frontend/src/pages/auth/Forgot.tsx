@@ -58,7 +58,6 @@ export default function Forgot() {
   return (
     <AuthLayout
       leftHeadline="Forgot your password?"
-      leftSubtext="Enter your company email. If an account exists, we'll send a temporary password to sign in with."
     >
       <motion.div
         variants={reduced ? undefined : containerVariants}
@@ -68,7 +67,7 @@ export default function Forgot() {
         <motion.div variants={reduced ? undefined : itemVariants} style={{ marginBottom: 28 }}>
           <h1
             style={{
-              fontFamily: '"Space Grotesk", sans-serif',
+              fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
               fontSize: 26,
               fontWeight: 700,
               letterSpacing: '-0.01em',

@@ -6,6 +6,7 @@ import {
 } from '../api/blockerConversation';
 import type { DateRange } from '../api/teamLead';
 import { useToast } from '../lib/toast';
+import { GlobalLoader } from './GlobalLoader';
 import {
   ALLOWED_ATTACHMENT_TYPES, ALLOWED_ATTACHMENT_TYPES_LABEL, MAX_ATTACHMENT_BYTES, validateAttachmentFile,
 } from '../lib/eodAttachments';
@@ -278,7 +279,7 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <div ref={messageListRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
         {isPending ? (
-          <div style={{ fontSize: 12.5, color: 'var(--txt-dim)' }}>Loading conversation…</div>
+          <GlobalLoader fullScreen={false} compact label="Loading conversation..." />
         ) : (messages ?? []).length === 0 ? (
           <div style={{ fontSize: 12.5, color: 'var(--txt-dim)' }}>No messages yet.</div>
         ) : (

@@ -90,6 +90,40 @@ public class ProfileController {
         return buildDto(user);
     }
 
+    // Banner is stricter than the photo upload above: JPEG only (no PNG), same 2 MB ceiling.
+    // Both checked here since (unlike photo) the browser <input accept> is not a security
+    // boundary — a caller can still send any content-type via the raw API.
+    @PostMapping("/banner")
+    @Transactional
+    public ProfileDto uploadBanner(@RequestParam("file") MultipartFile file) throws IOException {
+        if (file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No file provided");
+        }
+        long maxSize = 2L * 1024 * 1024; // 2 MB limit
+        if (file.getSize() > maxSize) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Banner image must be smaller than 2 MB");
+        }
+        String mediaType = file.getContentType();
+        if (!"image/jpeg".equals(mediaType) && !"image/jpg".equals(mediaType) && !"image/png".equals(mediaType)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Banner image must be a JPEG (.jpg/.jpeg) or PNG (.png) file");
+        }
+        AppUser user = requireCurrentUser();
+        String dataUrl = "data:" + mediaType + ";base64," + Base64.getEncoder().encodeToString(file.getBytes());
+        user.setBannerData(dataUrl);
+        userRepository.save(user);
+        return buildDto(user);
+    }
+
+    /** Clears the banner, returning the caller to the default gradient cover. Idempotent. */
+    @DeleteMapping("/banner")
+    @Transactional
+    public ProfileDto deleteBanner() {
+        AppUser user = requireCurrentUser();
+        user.setBannerData(null);
+        userRepository.save(user);
+        return buildDto(user);
+    }
+
     private AppUser requireCurrentUser() {
         String email = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return userRepository.findByEmailAndDeletedAtIsNull(email)

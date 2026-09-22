@@ -14,15 +14,13 @@ import type {
 } from '../../api/employee';
 import { useAuth } from '../../lib/auth';
 import { UtilPctDonut, CategoryDonut, SegmentDonut } from '../../components/UtilizationDonut';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { utilColor, fmtPct } from '../../lib/rules';
 import { formatDate, formatDateTime, formatTime12h, toLocalISODate, todayISO } from '../../lib/date';
 import { useHashScroll } from '../../lib/useHashScroll';
 
 // ── Primitives ─────────────────────────────────────────────────────────────────
 
-function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
-  return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
-}
 
 function Card({
   children, style, pad = 20,
@@ -52,70 +50,92 @@ function SectionLabel({ children, style, id }: { children: React.ReactNode; styl
 
 // ── Calendar cell helpers ──────────────────────────────────────────────────────
 
+// Palette for the Monthly Activity calendar — matches the EOD lifecycle stages
+// (Approved → Pending → Rejected/Missed) plus the non-working day types. Each status
+// resolves through a themed CSS variable (index.css) so the tint stays a legible,
+// theme-appropriate shade in both light and dark mode rather than a fixed hex.
+const DAY_COLORS = {
+  APPROVED:  { bg: 'var(--day-approved-bg)', text: 'var(--day-approved-text)' },
+  SUBMITTED: { bg: 'var(--day-pending-bg)',  text: 'var(--day-pending-text)' },
+  REJECTED:  { bg: 'var(--day-rejected-bg)', text: 'var(--day-rejected-text)' },
+  MISSED:    { bg: 'var(--day-missed-bg)',   text: 'var(--day-missed-text)' },
+  HOLIDAY:   { bg: 'var(--day-holiday-bg)',  text: 'var(--day-holiday-text)' },
+  WEEKEND:   { bg: 'var(--day-weekend-bg)',  text: 'var(--day-weekend-text)' },
+  EMPTY:     { bg: 'var(--day-empty-bg)',    text: 'var(--day-empty-text)' },
+} as const;
+
 function cellTint(day: CalendarDay): string {
-  // Checked before the weekend/future/empty fallback so a holiday still reads as a holiday
-  // even when it falls on a not-yet-arrived date (backend never sets HOLIDAY on a weekend).
-  if (day.status === 'HOLIDAY') return 'color-mix(in srgb, var(--accent2) 30%, var(--raised2))';
-  if (day.isWeekend || day.isFuture || day.status === 'EMPTY') return 'var(--raised2)';
+  // Checked before the future/empty fallback so a holiday or weekend still reads as a
+  // non-working day even when it falls on a not-yet-arrived date.
+  if (day.status === 'HOLIDAY') return DAY_COLORS.HOLIDAY.bg;
+  if (day.isWeekend) return DAY_COLORS.WEEKEND.bg;
+  // Future days get a blank/unfilled look — distinct from "No entry", which flags a
+  // past working day that's actually missing a submission.
+  if (day.isFuture) return 'var(--raised)';
+  if (day.status === 'EMPTY') return DAY_COLORS.EMPTY.bg;
   switch (day.status) {
-    case 'APPROVED': {
-      const pct = day.utilizationPct ?? 0;
-      if (pct >= 100) return 'color-mix(in srgb, var(--ok) 60%, var(--raised2))';
-      if (pct >= 60)  return 'color-mix(in srgb, var(--ok) 35%, var(--raised2))';
-      return             'color-mix(in srgb, var(--ok) 16%, var(--raised2))';
-    }
-    case 'SUBMITTED':         return 'color-mix(in srgb, var(--info) 28%, var(--raised2))';
-    case 'DRAFT':             return 'color-mix(in srgb, var(--txt-dim) 18%, var(--raised2))';
-    case 'REJECTED':          return 'color-mix(in srgb, var(--risk) 32%, var(--raised2))';
-    case 'MISSED':            return 'color-mix(in srgb, var(--risk) 50%, var(--raised2))';
-    default:                  return 'var(--raised2)';
+    case 'APPROVED':  return DAY_COLORS.APPROVED.bg;
+    case 'SUBMITTED': return DAY_COLORS.SUBMITTED.bg;
+    case 'DRAFT':      return 'color-mix(in srgb, var(--txt-dim) 18%, var(--raised2))';
+    case 'REJECTED':  return DAY_COLORS.REJECTED.bg;
+    case 'MISSED':    return DAY_COLORS.MISSED.bg;
+    default:          return DAY_COLORS.EMPTY.bg;
   }
 }
 
 function cellBorderColor(day: CalendarDay, isToday: boolean): string {
   if (isToday) return 'color-mix(in srgb, var(--txt) 55%, transparent)';
-  if (day.status === 'HOLIDAY') return 'color-mix(in srgb, var(--accent2) 45%, transparent)';
-  if (day.status === 'SUBMITTED') return 'color-mix(in srgb, var(--info) 40%, transparent)';
+  if (day.status === 'HOLIDAY') return `color-mix(in srgb, ${DAY_COLORS.HOLIDAY.text} 40%, transparent)`;
+  if (day.isWeekend) return `color-mix(in srgb, ${DAY_COLORS.WEEKEND.text} 40%, transparent)`;
+  if (day.isFuture) return 'var(--line)';
+  if (day.status === 'SUBMITTED') return `color-mix(in srgb, ${DAY_COLORS.SUBMITTED.text} 40%, transparent)`;
   return 'transparent';
 }
 
 function cellTextColor(day: CalendarDay): string {
-  if (day.status === 'HOLIDAY') return 'var(--txt)';
-  if (day.isWeekend || day.isFuture || day.status === 'EMPTY') return 'var(--txt-dim)';
-  if (day.status === 'APPROVED' && (day.utilizationPct ?? 0) >= 60) return 'rgba(255,255,255,0.85)';
-  if (day.status === 'MISSED') return 'rgba(255,255,255,0.75)';
-  return 'var(--txt-mut)';
+  if (day.status === 'HOLIDAY') return DAY_COLORS.HOLIDAY.text;
+  if (day.isWeekend) return DAY_COLORS.WEEKEND.text;
+  if (day.isFuture) return 'var(--txt-dim)';
+  if (day.status === 'EMPTY') return DAY_COLORS.EMPTY.text;
+  switch (day.status) {
+    case 'APPROVED':  return DAY_COLORS.APPROVED.text;
+    case 'SUBMITTED': return DAY_COLORS.SUBMITTED.text;
+    case 'REJECTED':  return DAY_COLORS.REJECTED.text;
+    case 'MISSED':    return DAY_COLORS.MISSED.text;
+    default:          return 'var(--txt-mut)';
+  }
 }
 
 function cellDotColor(day: CalendarDay): string {
+  if (day.status === 'HOLIDAY') return DAY_COLORS.HOLIDAY.text;
+  if (day.isWeekend) return DAY_COLORS.WEEKEND.text;
   switch (day.status) {
-    case 'APPROVED':          return 'rgba(255,255,255,0.45)';
-    case 'SUBMITTED':         return 'var(--info)';
-    case 'DRAFT':             return 'var(--txt-dim)';
-    case 'MISSED':            return 'rgba(255,255,255,0.55)';
-    case 'REJECTED':          return 'var(--risk)';
-    case 'HOLIDAY':           return 'var(--accent2)';
-    default:                  return 'transparent';
+    case 'APPROVED':  return DAY_COLORS.APPROVED.text;
+    case 'SUBMITTED': return DAY_COLORS.SUBMITTED.text;
+    case 'DRAFT':      return 'var(--txt-dim)';
+    case 'MISSED':    return DAY_COLORS.MISSED.text;
+    case 'REJECTED':  return DAY_COLORS.REJECTED.text;
+    default:          return 'transparent';
   }
 }
 
 function calendarTooltip(day: CalendarDay): string {
   const d = new Date(day.date + 'T12:00:00');
   const label = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-  if (day.status === 'HOLIDAY') return `${label} — Holiday${day.holidayName ? `: ${day.holidayName}` : ''}`;
-  if (day.isWeekend) return `${label} — Weekend`;
-  if (day.isFuture)  return `${label} — Future`;
-  if (day.status === 'EMPTY') return `${label} — No entry`;
+  if (day.status === 'HOLIDAY') return `${label} - Holiday${day.holidayName ? `: ${day.holidayName}` : ''}`;
+  if (day.isWeekend) return `${label} - Weekend`;
+  if (day.isFuture)  return `${label} - Future`;
+  if (day.status === 'EMPTY') return `${label} - No entry`;
   if (day.status === 'APPROVED') {
-    return `${label} — Approved · ${fmtPct(day.utilizationPct ?? null)}`;
+    return `${label} - Approved · ${fmtPct(day.utilizationPct ?? null)}`;
   }
   const labels: Record<string, string> = {
     SUBMITTED: 'Submitted (pending review)',
-    DRAFT: 'Draft — not submitted',
+    DRAFT: 'Draft - not submitted',
     MISSED: 'Missed',
-    REJECTED: 'Rejected — needs resubmission',
+    REJECTED: 'Rejected - needs resubmission',
   };
-  return `${label} — ${labels[day.status] ?? day.status}`;
+  return `${label} - ${labels[day.status] ?? day.status}`;
 }
 
 // ── Status badge ───────────────────────────────────────────────────────────────
@@ -165,7 +185,7 @@ function KpiTile({
         </div>
       </div>
       <div style={{
-        fontFamily: '"Space Grotesk", sans-serif',
+        fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
         fontSize: 26, fontWeight: 700, color: accent,
         letterSpacing: '-0.02em', lineHeight: 1,
         fontVariantNumeric: 'tabular-nums', marginBottom: 6,
@@ -197,13 +217,14 @@ function navBtnStyle(disabled: boolean): React.CSSProperties {
 }
 
 function CalendarHeatmap({
-  days, monthOffset, onPrev, onNext, maxOffset, todayStr,
+  days, monthOffset, onPrev, onNext, maxOffset, minOffset, todayStr,
 }: {
   days: CalendarDay[];
   monthOffset: number;
   onPrev: () => void;
   onNext: () => void;
   maxOffset: number;
+  minOffset: number;
   todayStr: string;
 }) {
   const firstDate  = days[0]?.date;
@@ -225,14 +246,17 @@ function CalendarHeatmap({
   // value and is never recomputed.
   const gridWidth = 'var(--nf-cal-width)';
   const prevDisabled = monthOffset >= maxOffset;
-  const nextDisabled = monthOffset === 0;
+  const nextDisabled = monthOffset <= minOffset;
 
   return (
     <div
       className="nf-cal"
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        '--nf-cal-cell': `${CELL_PX}px`,
+        // Fluid instead of stepped: the cell (and everything keyed to it — nav bar, day
+        // headers, legend) scales continuously with viewport width rather than jumping at
+        // two fixed breakpoints, so it always fits the space it's actually given.
+        '--nf-cal-cell': `clamp(34px, 7vw, ${CELL_PX}px)`,
         '--nf-cal-width': `calc(var(--nf-cal-cell) * 7 + ${CELL_GAP * 6}px)`,
       } as React.CSSProperties}
     >
@@ -244,7 +268,7 @@ function CalendarHeatmap({
         <span style={{
           flex: 1, textAlign: 'center',
           fontSize: 14, fontWeight: 700, color: 'var(--txt)',
-          fontFamily: '"Space Grotesk", sans-serif', letterSpacing: '-0.01em',
+          fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', letterSpacing: '-0.01em',
         }}>
           {monthLabel}
         </span>
@@ -282,7 +306,7 @@ function CalendarHeatmap({
         {days.map((day) => {
           const isToday = day.date === todayStr;
           const dayNum  = new Date(day.date + 'T12:00:00').getDate();
-          const showDot = day.status === 'HOLIDAY' || (!day.isWeekend && !day.isFuture && day.status !== 'EMPTY');
+          const showDot = day.status === 'HOLIDAY' || day.isWeekend || (!day.isFuture && day.status !== 'EMPTY');
           return (
             <div
               key={day.date}
@@ -327,14 +351,13 @@ function CalendarHeatmap({
         fontSize: 9, color: 'var(--txt-dim)', width: gridWidth,
       }}>
         {[
-          { bg: 'color-mix(in srgb, var(--ok) 60%, var(--raised2))',   label: 'Healthy ≥100%' },
-          { bg: 'color-mix(in srgb, var(--ok) 35%, var(--raised2))',   label: 'On track 60–99%' },
-          { bg: 'color-mix(in srgb, var(--ok) 16%, var(--raised2))',   label: 'Under <60%' },
-          { bg: 'color-mix(in srgb, var(--risk) 50%, var(--raised2))', label: 'Missed' },
-          { bg: 'color-mix(in srgb, var(--warn) 32%, var(--raised2))', label: 'CR / Rejected' },
-          { bg: 'color-mix(in srgb, var(--info) 28%, var(--raised2))', label: 'Pending' },
-          { bg: 'color-mix(in srgb, var(--accent2) 30%, var(--raised2))', label: 'Holiday' },
-          { bg: 'var(--raised2)', label: 'No entry', border: '1px solid var(--line)' },
+          { bg: DAY_COLORS.APPROVED.bg,  label: 'Approved' },
+          { bg: DAY_COLORS.SUBMITTED.bg, label: 'Pending' },
+          { bg: DAY_COLORS.REJECTED.bg,  label: 'Rejected' },
+          { bg: DAY_COLORS.MISSED.bg,    label: 'Missed' },
+          { bg: DAY_COLORS.HOLIDAY.bg,   label: 'Holiday' },
+          { bg: DAY_COLORS.WEEKEND.bg,   label: 'Weekly off' },
+          { bg: DAY_COLORS.EMPTY.bg,     label: 'No entry', border: '1px solid var(--line)' },
         ].map(({ bg, label, border }) => (
           <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{
@@ -398,13 +421,13 @@ function MonthStatsPanel({ days }: { days: CalendarDay[] }) {
           { color: 'var(--info)',    count: submitted,   label: 'Pending review' },
           { color: 'var(--warn)',    count: needsAction, label: 'Needs action' },
           { color: 'var(--risk)',    count: missed,      label: 'Missed' },
-          { color: 'var(--accent2)', count: holiday,     label: 'Holiday' },
+          { color: 'var(--cat-4)', count: holiday,     label: 'Holiday' },
           { color: 'var(--txt-dim)', count: empty,       label: 'Not submitted' },
           { color: 'var(--line2)',   count: upcoming,    label: 'Upcoming' },
         ] as { color: string; count: number; label: string }[]).map(({ color, count, label }) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
-            <span style={{ flex: 1, fontSize: 12, color: 'var(--txt-mut)' }}>{label}</span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--txt-mut)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
             <span style={{
               fontSize: 12, fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums',
               color: count === 0 ? 'var(--txt-dim)' : 'var(--txt)', fontWeight: count > 0 ? 600 : 400,
@@ -449,8 +472,8 @@ function PendingCorrectionsPanel({ corrections }: { corrections: PendingCorrecti
           Nothing needs correction
         </div>
       ) : (
-        corrections.slice(0, 4).map(c => {
-          return (
+        <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+          {corrections.map(c => (
             <div key={c.entryId} style={{
               padding: '9px 16px', borderTop: '1px solid var(--line)',
               display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -480,8 +503,8 @@ function PendingCorrectionsPanel({ corrections }: { corrections: PendingCorrecti
                 Resubmit →
               </Link>
             </div>
-          );
-        })
+          ))}
+        </div>
       )}
     </Card>
   );
@@ -492,7 +515,6 @@ function PendingCorrectionsPanel({ corrections }: { corrections: PendingCorrecti
 function MissedSubmissionsPanel({ dates, count }: { dates: string[]; count: number }) {
   const severity = count === 0 ? 'ok' : count <= 2 ? 'warn' : 'risk';
   const severityColor = severity === 'ok' ? 'var(--ok)' : severity === 'warn' ? 'var(--warn)' : 'var(--risk)';
-  const shown = dates.slice(0, 4);
 
   return (
     <Card pad={0}>
@@ -518,8 +540,8 @@ function MissedSubmissionsPanel({ dates, count }: { dates: string[]; count: numb
           No missed days this month
         </div>
       ) : (
-        <>
-          {shown.map(date => (
+        <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+          {dates.map(date => (
             <div key={date} style={{
               padding: '9px 16px', borderTop: '1px solid var(--line)',
               display: 'flex', alignItems: 'center', gap: 10,
@@ -538,12 +560,7 @@ function MissedSubmissionsPanel({ dates, count }: { dates: string[]; count: numb
               </Link>
             </div>
           ))}
-          {count > shown.length && (
-            <div style={{ padding: '7px 16px 10px', fontSize: 11, color: 'var(--txt-dim)', borderTop: '1px solid var(--line)' }}>
-              +{count - shown.length} more this month
-            </div>
-          )}
-        </>
+        </div>
       )}
     </Card>
   );
@@ -578,34 +595,36 @@ function AssignedProjectsPanel({ projects }: { projects: EmployeeProjectDto[] })
           No active project assignments
         </div>
       ) : (
-        projects.map(p => (
-          <div key={p.projectId} style={{
-            padding: '9px 16px', borderTop: '1px solid var(--line)',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500, marginBottom: 2 }}>
-                {p.projectName}
-                <span style={{ fontSize: 10, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', marginLeft: 6 }}>
-                  {p.projectCode}
-                </span>
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--txt-dim)' }}>
-                {p.pmName ? `Team Lead: ${p.pmName} · ` : ''}
-                {formatDate(p.assignedFrom)} – {p.assignedTo ? formatDate(p.assignedTo) : 'Ongoing'}
-              </div>
-            </div>
-            <span style={{
-              fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
-              padding: '2px 7px', borderRadius: 4, flexShrink: 0,
-              color: projectStatusColor(p.projectStatus),
-              background: `color-mix(in srgb, ${projectStatusColor(p.projectStatus)} 12%, transparent)`,
-              border: `1px solid color-mix(in srgb, ${projectStatusColor(p.projectStatus)} 30%, transparent)`,
+        <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+          {projects.map(p => (
+            <div key={p.projectId} style={{
+              padding: '9px 16px', borderTop: '1px solid var(--line)',
+              display: 'flex', alignItems: 'center', gap: 10,
             }}>
-              {p.projectStatus}
-            </span>
-          </div>
-        ))
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500, marginBottom: 2 }}>
+                  {p.projectName}
+                  <span style={{ fontSize: 10, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', marginLeft: 6 }}>
+                    {p.projectCode}
+                  </span>
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--txt-dim)' }}>
+                  {p.pmName ? `Team Lead: ${p.pmName} · ` : ''}
+                  {formatDate(p.assignedFrom)} – {p.assignedTo ? formatDate(p.assignedTo) : 'Ongoing'}
+                </div>
+              </div>
+              <span style={{
+                fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
+                padding: '2px 7px', borderRadius: 4, flexShrink: 0,
+                color: projectStatusColor(p.projectStatus),
+                background: `color-mix(in srgb, ${projectStatusColor(p.projectStatus)} 12%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${projectStatusColor(p.projectStatus)} 30%, transparent)`,
+              }}>
+                {p.projectStatus}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
     </Card>
   );
@@ -621,7 +640,7 @@ function HolidaysPanel({ holidays, year }: { holidays: HolidayDto[]; year: numbe
     <Card pad={0}>
       <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <CalendarDays size={13} color="var(--txt-mut)" style={{ flexShrink: 0 }} />
-        <SectionLabel id="holiday-calendar" style={{ marginBottom: 0 }}>Holiday Calendar &mdash; {year}</SectionLabel>
+        <SectionLabel id="holiday-calendar" style={{ marginBottom: 0 }}>Holiday Calendar - {year}</SectionLabel>
         {holidays.length > 0 && (
           <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
             {holidays.length}
@@ -633,7 +652,7 @@ function HolidaysPanel({ holidays, year }: { holidays: HolidayDto[]; year: numbe
           No holidays configured for {year}
         </div>
       ) : (
-        <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+        <div style={{ maxHeight: 240, overflowY: 'auto' }}>
           {holidays.map(h => {
             const d = new Date(h.holidayDate + 'T12:00:00');
             const dayOfWeek = d.toLocaleDateString('en-GB', { weekday: 'short' });
@@ -754,7 +773,7 @@ function CutoffBanner({
         <AlertCircle size={16} color="var(--risk)" style={{ flexShrink: 0 }} />
         <div style={{ flex: 1 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--risk)' }}>
-            {"Cutoff passed — EOD not submitted."}
+            {"Cutoff passed - EOD not submitted."}
           </span>
           <span style={{ fontSize: 12, color: 'var(--txt-mut)', marginLeft: 8 }}>
             This day may be marked as missed.
@@ -776,7 +795,7 @@ function CutoffBanner({
       <div style={{ flex: 1 }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--warn)' }}>
           {status === 'DRAFT'
-            ? "Draft saved — remember to submit."
+            ? "Draft saved - remember to submit."
             : "Today's EOD not yet submitted."}
         </span>
         <span style={{ fontSize: 12, color: 'var(--txt-mut)', marginLeft: 8 }}>
@@ -803,7 +822,7 @@ function CutoffBanner({
 function BlockersPanel({ tasks, onSelect }: { tasks: BlockedTask[]; onSelect: (t: BlockedTask) => void }) {
   if (tasks.length === 0) {
     return (
-      <Card>
+      <Card style={{ height: '100%' }}>
         <SectionLabel id="dashboard-blockers">My Blockers</SectionLabel>
         <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 12, color: 'var(--txt-dim)' }}>
           <CheckCircle2 size={24} style={{ color: 'var(--ok)', display: 'block', margin: '0 auto 8px' }} />
@@ -814,7 +833,7 @@ function BlockersPanel({ tasks, onSelect }: { tasks: BlockedTask[]; onSelect: (t
   }
 
   return (
-    <Card pad={0}>
+    <Card pad={0} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <SectionLabel id="dashboard-blockers" style={{ marginBottom: 0 }}>My Blockers</SectionLabel>
         <Link
@@ -827,44 +846,49 @@ function BlockersPanel({ tasks, onSelect }: { tasks: BlockedTask[]; onSelect: (t
           View all <ArrowRight size={11} />
         </Link>
       </div>
-      {tasks.map((t, i) => {
-        const d = new Date(t.entryDate + 'T12:00:00');
-        const dateLabel = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-        return (
-          <div
-            key={`${t.taskId}-${i}`}
-            onClick={() => onSelect(t)}
-            style={{
-              padding: '9px 16px', borderTop: '1px solid var(--line)', cursor: 'pointer',
-              display: 'flex', gap: 10, alignItems: 'flex-start',
-            }}
-          >
-            <div style={{
-              width: 6, height: 6, borderRadius: 3,
-              background: t.acknowledged ? 'var(--ok)' : 'var(--risk)', marginTop: 5, flexShrink: 0,
-            }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: 'var(--txt)', lineHeight: 1.4, marginBottom: 3 }}>
-                {t.description}
-              </div>
-              {t.blockerReason && (
-                <div style={{ fontSize: 10, color: 'var(--txt-mut)', lineHeight: 1.4, marginBottom: 3 }}>
-                  {t.blockerReason}
+      {/* flex:1 + minHeight:0 lets this list absorb whatever vertical space is left in the
+          right rail (rather than a fixed cap), so the rail's total height tracks the
+          calendar card next to it instead of falling short or overflowing it. */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {tasks.map((t, i) => {
+          const d = new Date(t.entryDate + 'T12:00:00');
+          const dateLabel = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+          return (
+            <div
+              key={`${t.taskId}-${i}`}
+              onClick={() => onSelect(t)}
+              style={{
+                padding: '9px 16px', borderTop: '1px solid var(--line)', cursor: 'pointer',
+                display: 'flex', gap: 10, alignItems: 'flex-start',
+              }}
+            >
+              <div style={{
+                width: 6, height: 6, borderRadius: 3,
+                background: t.acknowledged ? 'var(--ok)' : 'var(--risk)', marginTop: 5, flexShrink: 0,
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: 'var(--txt)', lineHeight: 1.4, marginBottom: 3 }}>
+                  {t.description}
                 </div>
-              )}
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 10, color: 'var(--txt-dim)' }}>
-                <span style={{ padding: '1px 5px', borderRadius: 3, background: 'var(--raised2)', color: 'var(--txt-mut)' }}>
-                  {t.projectName}
-                </span>
-                <span>{dateLabel}</span>
-                {t.acknowledged && (
-                  <span style={{ color: 'var(--ok)', fontWeight: 600 }}>Team Lead replied</span>
+                {t.blockerReason && (
+                  <div style={{ fontSize: 10, color: 'var(--txt-mut)', lineHeight: 1.4, marginBottom: 3 }}>
+                    {t.blockerReason}
+                  </div>
                 )}
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 10, color: 'var(--txt-dim)' }}>
+                  <span style={{ padding: '1px 5px', borderRadius: 3, background: 'var(--raised2)', color: 'var(--txt-mut)' }}>
+                    {t.projectName}
+                  </span>
+                  <span>{dateLabel}</span>
+                  {t.acknowledged && (
+                    <span style={{ color: 'var(--ok)', fontWeight: 600 }}>Team Lead replied</span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </Card>
   );
 }
@@ -982,7 +1006,7 @@ function TodayStatusCard({
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
             Today's EOD Status
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: meta.color, fontFamily: '"Space Grotesk", sans-serif' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: meta.color, fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif' }}>
             {meta.label}
           </div>
         </div>
@@ -992,7 +1016,7 @@ function TodayStatusCard({
             Submitted At
           </div>
           <div style={{ fontSize: 13, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
-            {submittedAt ? formatDateTime(submittedAt) : isWeekend ? 'Weekend — not required' : cutoffLabel}
+            {submittedAt ? formatDateTime(submittedAt) : isWeekend ? 'Weekend - not required' : cutoffLabel}
           </div>
         </div>
 
@@ -1011,50 +1035,22 @@ function TodayStatusCard({
   );
 }
 
-// ── Loading skeleton ───────────────────────────────────────────────────────────
-
-function LoadingSkeleton() {
-  return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <Skel h={28} w={200} />
-        <div style={{ marginTop: 6 }}><Skel h={14} w={280} /></div>
-      </div>
-      <Skel h={48} />
-      <div style={{ height: 16 }} />
-      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 20 }}>
-        {[0, 1, 2, 3].map(i => (
-          <div key={i} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
-            <Skel h={36} w={36} /><div style={{ marginTop: 12 }} />
-            <Skel h={28} w="55%" /><div style={{ marginTop: 8 }} />
-            <Skel h={12} w="45%" />
-          </div>
-        ))}
-      </div>
-      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, marginBottom: 16 }}>
-        <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
-          <Skel h={32} w={200} />
-          {/* Loading placeholder for the calendar — reflows with the same rule
-              as the real grid so the skeleton can't overflow where it won't. */}
-          <div className="nf-cal-skel" style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(7, 44px)', gap: 5 }}>
-            {Array.from({ length: 35 }).map((_, i) => <Skel key={i} h={44} />)}
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {[0, 1, 2].map(i => (
-            <div key={i} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 16 }}>
-              <Skel h={14} w={100} /><div style={{ marginTop: 12 }} /><Skel h={48} />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 const MAX_MONTH_OFFSET = 12;
+
+// How far the Next button can go into the future — through December of the CURRENT
+// calendar year (e.g. viewed from any month in 2026, Next stops at Dec 2026; once
+// 1 Jan 2027 arrives, it stops at Dec 2027 instead) — rather than stopping dead at the
+// present month the way it used to. Computed from today's real date, not hardcoded, so
+// it stays correct as the year turns over.
+function minMonthOffsetToYearEnd(): number {
+  const now = new Date();
+  const nowIndex    = now.getFullYear() * 12 + now.getMonth();
+  const targetIndex = now.getFullYear() * 12 + 11; // December, current year
+  return -(targetIndex - nowIndex);
+}
 
 // Monday-start week, matching the backend's WeekTrend.weekStart convention.
 function currentWeekStartISO(): string {
@@ -1073,7 +1069,10 @@ function currentMonthStartISO(): string {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  // Plain useState with no URL/localStorage persistence — a refresh always remounts this
+  // at 0 (the present month), which is the intended behavior.
   const [monthOffset, setMonthOffset] = useState(0);
+  const minMonthOffset = useMemo(() => minMonthOffsetToYearEnd(), []);
 
   // Compute first and last day of the displayed month
   const { calendarFrom, calendarTo } = useMemo(() => {
@@ -1099,13 +1098,13 @@ export default function Dashboard() {
   const { data: projects }    = useEmployeeProjects(user?.id);
   const { data: holidays }    = useHolidaysForYear(holidayYear);
 
-  if (isPending) return <LoadingSkeleton />;
+  if (isPending) return <GlobalLoader fullScreen={false} />;
 
   if (isError) {
     return (
       <div>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>
             My Dashboard
           </h1>
         </div>
@@ -1132,7 +1131,9 @@ export default function Dashboard() {
 
   const today      = new Date(cutoffStatus.today + 'T12:00:00');
   const todayLabel = today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-  const isWeekend  = today.getDay() === 0 || today.getDay() === 6;
+  // Trusts the API's isWeekend flag (honors the admin-configured weekend rule) rather than
+  // recomputing Sat/Sun locally.
+  const isWeekend  = calendarData.find(d => d.date === cutoffStatus.today)?.isWeekend ?? false;
 
   const streakLabel = quickStats.streak === 0
     ? 'No streak'
@@ -1150,7 +1151,7 @@ export default function Dashboard() {
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{
-          fontFamily: '"Space Grotesk", sans-serif',
+          fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
           fontSize: 22, fontWeight: 700, color: 'var(--txt)',
           margin: '0 0 4px', letterSpacing: '-0.01em',
         }}>
@@ -1177,8 +1178,10 @@ export default function Dashboard() {
         />
       )}
 
-      {/* KPI tiles */}
-      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 20 }}>
+      {/* KPI tiles — same track widths as the calendar/right-rail row below (3 flexible
+          tiles matching the calendar's width, then one fixed-width tile matching the
+          Pending Corrections rail), so the last tile's edges line up with it. */}
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr)) minmax(280px, 340px)', gap: 16, marginBottom: 20 }}>
         <KpiTile
           icon={<Clock size={18} />}
           label="This week approved"
@@ -1211,7 +1214,7 @@ export default function Dashboard() {
       </div>
 
       {/* Calendar card + Right panel */}
-      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, marginBottom: 16 }}>
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 340px)', gap: 16, marginBottom: 16 }}>
         {/* Single card: calendar left + stats right */}
         <Card>
           {/* Card header */}
@@ -1238,8 +1241,9 @@ export default function Dashboard() {
                 days={calendarData}
                 monthOffset={monthOffset}
                 onPrev={() => setMonthOffset(o => Math.min(o + 1, MAX_MONTH_OFFSET))}
-                onNext={() => setMonthOffset(o => Math.max(o - 1, 0))}
+                onNext={() => setMonthOffset(o => Math.max(o - 1, minMonthOffset))}
                 maxOffset={MAX_MONTH_OFFSET}
+                minOffset={minMonthOffset}
                 todayStr={cutoffStatus.today}
               />
             </div>
@@ -1248,17 +1252,25 @@ export default function Dashboard() {
             <div style={{ width: 1, background: 'var(--line)', alignSelf: 'stretch', flexShrink: 0 }} />
 
             {/* Month stats */}
-            <div style={{ flex: 1, paddingTop: 4 }}>
+            {/* minWidth: 0 overrides the flex-item default of min-width: auto — without it,
+                this column refuses to shrink below its content's natural width and instead
+                overflows past the card's right edge on narrower windows. */}
+            <div style={{ flex: 1, minWidth: 0, paddingTop: 4 }}>
               <MonthStatsPanel days={calendarData} />
             </div>
           </div>
         </Card>
 
-        {/* Right: Pending corrections + Missed submissions + Blockers */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Right: Pending corrections + Missed submissions + Blockers. The column stretches
+            to the calendar card's height (grid default), and Blockers — the last panel —
+            grows to fill whatever's left, so the rail's bottom edge lines up with the
+            calendar card's instead of stopping short or overflowing it. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
           <PendingCorrectionsPanel corrections={dashStats?.pendingCorrections ?? []} />
           <MissedSubmissionsPanel dates={dashStats?.missedDates ?? []} count={dashStats?.missedCount ?? 0} />
-          <BlockersPanel tasks={blockedTasks} onSelect={(t) => navigate(`/blockers?highlight=${t.taskId}`)} />
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <BlockersPanel tasks={blockedTasks} onSelect={(t) => navigate(`/blockers?highlight=${t.taskId}`)} />
+          </div>
         </div>
       </div>
 

@@ -110,6 +110,9 @@ public class AppUser {
     @Column(name = "photo_data", columnDefinition = "TEXT")
     private String photoData;
 
+    @Column(name = "banner_data", columnDefinition = "TEXT")
+    private String bannerData;
+
     public enum Role {
         EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN
     }

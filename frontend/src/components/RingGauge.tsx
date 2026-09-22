@@ -39,7 +39,7 @@ export function RingGauge({
         position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
       }}>
-        <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)' }}>
+        <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)' }}>
           {Math.round(pct)}%
         </div>
         <div style={{ fontSize: 10.5, color: 'var(--txt-dim)', marginTop: 2 }}>{label}</div>

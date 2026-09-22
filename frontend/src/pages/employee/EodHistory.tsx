@@ -6,6 +6,7 @@ import {
   Search, ArrowUp, ArrowDown, ChevronLeft, Calendar as CalendarIcon,
 } from 'lucide-react';
 import { listEntries } from '../../api/eod';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import type { EodHistoryEntryDto } from '../../api/eod';
 import { formatDate as formatDateDDMMYYYY, formatDateTime } from '../../lib/date';
 import { timeAdjustmentLabel } from '../approvals/shared';
@@ -170,7 +171,7 @@ export default function EodHistory() {
 
   const projectSummary = (entry: EodHistoryEntryDto): string => {
     const codes = Array.from(new Set(entry.tasks.map(t => t.projectCode).filter(Boolean))) as string[];
-    if (codes.length === 0) return '—';
+    if (codes.length === 0) return '-';
     return codes.length === 1 ? codes[0] : `${codes[0]} +${codes.length - 1}`;
   };
 
@@ -178,7 +179,7 @@ export default function EodHistory() {
     if (entry.tasks.length === 0) {
       return entry.dayType !== 'WORKING_DAY'
         ? (DAY_TYPE_LABELS[entry.dayType] ?? entry.dayType.replace('_', ' '))
-        : '—';
+        : '-';
     }
     const labels = entry.tasks.map(t => t.categoryName || t.description || 'Task');
     return labels.length === 1 ? labels[0] : `${labels[0]} +${labels.length - 1} more`;
@@ -338,7 +339,7 @@ export default function EodHistory() {
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4C8DD6', flexShrink: 0 }} />
           <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-mut)', letterSpacing: '0.04em' }}>Employee</span>
         </div>
-        <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', margin: 0, letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', margin: 0, letterSpacing: '-0.01em' }}>
           My EOD History
         </h1>
         <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--txt-mut)' }}>
@@ -489,11 +490,7 @@ export default function EodHistory() {
           onClear={clearAllFilters}
         />
       ) : isLoading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {[100, 85, 90, 78].map((w, i) => (
-            <div key={i} className="skeleton" style={{ height: 56, width: `${w}%`, borderRadius: 8 }} />
-          ))}
-        </div>
+        <GlobalLoader fullScreen={false} compact label="Loading history..." />
       ) : isError ? (
         <div style={{
           padding: '20px 24px', borderRadius: 8,
@@ -537,8 +534,8 @@ export default function EodHistory() {
                   // Back to page 1, as the other filters do: reversing the order while deep in
                   // the pages would otherwise land the reader on an unrelated slice.
                   onClick={() => { setSortDir(d => d === 'desc' ? 'asc' : 'desc'); setPage(0); }}
-                  aria-label={`Sort by date, ${asc ? 'oldest' : 'newest'} first — click to reverse`}
-                  title={asc ? 'Oldest first — click for newest first' : 'Newest first — click for oldest first'}
+                  aria-label={`Sort by date, ${asc ? 'oldest' : 'newest'} first - click to reverse`}
+                  title={asc ? 'Oldest first - click for newest first' : 'Newest first - click for oldest first'}
                   style={{
                     ...headerStyle, display: 'flex', alignItems: 'center', gap: 4,
                     background: 'none', border: 'none', padding: 0, cursor: 'pointer',
@@ -603,7 +600,7 @@ export default function EodHistory() {
               </div>
               <div><StatusBadge status={entry.status} /></div>
               <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, color: 'var(--txt-dim)' }}>
-                {entry.submittedAt ? formatDateTime(entry.submittedAt) : '—'}
+                {entry.submittedAt ? formatDateTime(entry.submittedAt) : '-'}
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <ChevronRight size={14} style={{ color: 'var(--txt-dim)' }} aria-hidden />

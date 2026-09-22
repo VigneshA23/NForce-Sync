@@ -5,6 +5,7 @@ import {
   X, Folder, Clock, CalendarDays, Calendar,
 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { BlockerThreadView } from '../../components/BlockerThread';
 import { useEmployeeBlockers, useEmployeeBlocker, type BlockedTask } from '../../api/employee';
 import type { DateRange } from '../../api/teamLead';
@@ -263,7 +264,7 @@ function StatCard({ icon, label, value, caption, accent }: {
         </div>
         <div>
           <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', fontWeight: 600, marginBottom: 2 }}>{label}</div>
-          <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
+          <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
             {value}
           </div>
           <div style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{caption}</div>
@@ -324,11 +325,11 @@ function BlockerRow({ b, selected, onClick }: {
         </div>
         <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
           <span style={{ color: 'var(--txt-dim)' }}>Description: </span>
-          {b.description || '—'}
+          {b.description || '-'}
         </div>
         <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           <span style={{ color: 'var(--txt-dim)' }}>Reason: </span>
-          {b.blockerReason ?? '—'}
+          {b.blockerReason ?? '-'}
         </div>
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{b.projectName}</div>
@@ -428,10 +429,6 @@ function DetailPanel({ b, onClose }: { b: BlockedTask; onClose: () => void }) {
 
 // ── skeleton / error ──────────────────────────────────────────────────────────────
 
-function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
-  return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
-}
-
 const PAGE_SIZE = 10;
 
 // ── main ───────────────────────────────────────────────────────────────────────────
@@ -517,22 +514,14 @@ export default function MyBlockers() {
   const acknowledgedCount = (blockers ?? []).filter(b => b.acknowledged).length;
 
   if (isPending) {
-    return (
-      <div>
-        <div style={{ marginBottom: 24 }}><Skel h={24} w={160} /><div style={{ marginTop: 8 }}><Skel h={14} w={280} /></div></div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
-          {[0, 1, 2].map(i => <Card key={i}><Skel h={60} /></Card>)}
-        </div>
-        <Card style={{ padding: 20 }}><Skel h={320} /></Card>
-      </div>
-    );
+    return <GlobalLoader fullScreen={false} />;
   }
 
   if (isError) {
     return (
       <div>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>My Blockers</h1>
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>My Blockers</h1>
         </div>
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load blockers.</div>
@@ -553,7 +542,7 @@ export default function MyBlockers() {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+            <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
               My Blockers
             </h1>
             <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>

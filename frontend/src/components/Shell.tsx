@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Menu, X, Search, Bell, LogOut, Sun, Moon, UserCircle2, HelpCircle, Shield, FolderKanban, ChevronDown } from 'lucide-react';
+import { Menu, X, Search, Bell, LogOut, Sun, Moon, UserCircle2, HelpCircle, Shield, FolderKanban, ChevronDown, KeyRound } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { NAV, ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, navSubItemPath, isNavGroup } from '../lib/nav';
 import type { NavItem } from '../lib/nav';
@@ -380,21 +380,6 @@ function NavLinkItem({ item, isActive, badge, indent, onNavClick }: {
       }}
       onClick={onNavClick}
     >
-      {isActive && (
-        <span
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            left: -8,
-            top: 6,
-            bottom: 6,
-            width: 3,
-            background: '#E4373D',
-            borderRadius: '0 3px 3px 0',
-          }}
-        />
-      )}
-
       <Icon size={indent ? 15 : 17} style={{ flex: 'none', opacity: isActive ? 1 : 0.8 }} aria-hidden="true" />
       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {item.label}
@@ -487,7 +472,6 @@ function NavGroupRow({ label, icon: Icon, expanded, onToggle }: {
 
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const { user } = useAuth();
-  const photo = useProfilePhoto();
   const location = useLocation();
 
   const role = user!.role;
@@ -517,10 +501,6 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   // Shared by both roles that have an Approvals page (Team Lead and Project Manager) —
   // the query itself resolves "pending for me" differently server-side per role.
   const pendingApprovalsCount = usePendingApprovalsCount(role === 'lead' || role === 'pm');
-
-  // Sidebar Notifications badge — same live query that feeds the topbar bell
-  // and the Notifications page header, so all three stay in sync. See api/notifications.ts.
-  const unreadNotificationsCount = useUnreadNotificationsCount();
 
   // Sidebar Blockers badge — same "today" summary query (and cache key) as the Team
   // Dashboard's "Open Blockers" KPI fallback, warmed by prefetchTeamLeadLanding right
@@ -564,7 +544,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         <BrandMark size="sm" />
         <div>
           <div style={{
-            fontFamily: '"Space Grotesk", sans-serif',
+            fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
             fontWeight: 700,
             fontSize: 14,
             letterSpacing: '0.04em',
@@ -586,31 +566,33 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 
       {/* Scrollable nav sections */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0 8px' }}>
-        {navSections.map((section) => (
-          <div key={section.section}>
-            {/* FIX 7: all sections labeled — matches OneHR's labeled-section pattern */}
-            <div style={{
-              padding: '12px 10px 5px',
-              fontSize: 10,
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              color: '#6B7280',
-              fontWeight: 500,
-            }}>
-              {section.section}
-            </div>
+        {navSections.map((section, i) => (
+          <div key={section.section || i}>
+            {/* FIX 7: all sections labeled — matches OneHR's labeled-section pattern.
+                A blank section name (single-section roles with nothing left to distinguish, e.g.
+                Employee) skips the heading entirely rather than rendering an empty label row. */}
+            {section.section && (
+              <div style={{
+                padding: '12px 10px 5px',
+                fontSize: 10,
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                color: '#6B7280',
+                fontWeight: 500,
+              }}>
+                {section.section}
+              </div>
+            )}
 
             {section.items.map((entry) => {
               function badgeFor(item: NavItem): number | undefined {
                 return (role === 'lead' || role === 'pm') && item.key === 'approvals'
                   ? pendingApprovalsCount
-                  : item.key === 'notifications'
-                    ? unreadNotificationsCount
-                    : role === 'lead' && item.key === 'blockers'
-                      ? openBlockersCount
-                      : role === 'pm' && item.key === 'blockers'
-                        ? pmOpenBlockersCount
-                        : item.badge;
+                  : role === 'lead' && item.key === 'blockers'
+                    ? openBlockersCount
+                    : role === 'pm' && item.key === 'blockers'
+                      ? pmOpenBlockersCount
+                      : item.badge;
               }
 
               if (isNavGroup(entry)) {
@@ -651,51 +633,6 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         ))}
       </div>
 
-      {/* Footer: user identity only — FIX 5: sign-out moved to topbar avatar dropdown */}
-      <div style={{ borderTop: '1px solid #2A2E37', padding: '10px 8px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px' }}>
-          <span
-            aria-hidden="true"
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              background: '#B11116',   /* FIX 4: brand red, not role color */
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 11,
-              fontWeight: 600,
-              color: '#fff',
-              flexShrink: 0,
-              fontFamily: 'Inter, sans-serif',
-            }}
-          >
-            <AvatarContent photo={photo} initials={user!.initials} />
-          </span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              fontSize: 12,
-              fontWeight: 500,
-              color: '#E8EAED',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}>
-              {user!.name}
-            </div>
-            <div style={{
-              fontSize: 10,
-              color: '#6B7280',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}>
-              {ROLE_LABELS[role]}
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -718,11 +655,18 @@ export function Shell() {
   const allowedPaths = getNavPaths(role);
   const isAllowed    = allowedPaths.includes(location.pathname)
     || location.pathname === '/'
-    || location.pathname === '/change-password';
+    || location.pathname === '/change-password'
+    // Notifications and Profile have no sidebar entry (reachable only via the topbar bell /
+    // avatar dropdown), but every role must still be able to open them.
+    || location.pathname === '/notifications'
+    || location.pathname === '/profile';
 
   // FIX 4: derive breadcrumb label from nav map
   const navInfo  = getNavItem(role, location.pathname);
-  const pageLabel = navInfo?.item.label ?? 'Home';
+  const pageLabel = navInfo?.item.label
+    ?? (location.pathname === '/notifications' ? 'Notifications'
+      : location.pathname === '/profile' ? 'Profile'
+      : 'Home');
 
   const bellBadge = useUnreadNotificationsCount();
 
@@ -1143,6 +1087,38 @@ export function Shell() {
                       Help & Guidance
                     </Link>
 
+                    {/* Change Password */}
+                    <Link
+                      to="/change-password"
+                      role="menuitem"
+                      onClick={() => setProfileOpen(false)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        width: '100%',
+                        padding: '9px 10px',
+                        borderRadius: 6,
+                        textDecoration: 'none',
+                        color: '#9BA1AC',
+                        fontSize: 13,
+                        fontWeight: 500,
+                        fontFamily: 'Inter, sans-serif',
+                        transition: 'background 120ms, color 120ms',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,.05)';
+                        e.currentTarget.style.color = '#E8EAED';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = '#9BA1AC';
+                      }}
+                    >
+                      <KeyRound size={14} aria-hidden="true" />
+                      Change Password
+                    </Link>
+
                     {/* Divider before destructive action */}
                     <div style={{ height: 1, background: '#2A2E37', margin: '4px 2px' }} />
 
@@ -1160,7 +1136,7 @@ export function Shell() {
                         border: 'none',
                         borderRadius: 6,
                         cursor: 'pointer',
-                        color: '#9BA1AC',
+                        color: '#E4373D',
                         fontSize: 13,
                         fontWeight: 500,
                         fontFamily: 'Inter, sans-serif',
@@ -1173,7 +1149,7 @@ export function Shell() {
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.background = 'transparent';
-                        e.currentTarget.style.color = '#9BA1AC';
+                        e.currentTarget.style.color = '#E4373D';
                       }}
                     >
                       <LogOut size={14} aria-hidden="true" />

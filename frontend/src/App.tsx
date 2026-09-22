@@ -8,6 +8,7 @@ import { todayISO } from './lib/date';
 import { prefetchTeamLeadLanding } from './api/teamLead';
 import { Shell } from './components/Shell';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { GlobalLoader } from './components/GlobalLoader';
 import { NotAuthorized } from './pages/NotAuthorized';
 import { Placeholder } from './pages/Placeholder';
 import Login               from './pages/auth/Login';
@@ -58,16 +59,6 @@ const ReporteePmUtilization = lazy(() => import('./pages/admin/reportee/PmUtiliz
 const Profile             = lazy(() => import('./pages/Profile'));
 const Notifications       = lazy(() => import('./pages/Notifications'));
 const ChangePassword      = lazy(() => import('./pages/ChangePassword'));
-
-function PageFallback() {
-  return (
-    <div style={{ padding: '32px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {[300, 220, 180].map((w) => (
-        <div key={w} className="skeleton" style={{ height: 14, width: w, borderRadius: 4 }} />
-      ))}
-    </div>
-  );
-}
 
 // Eagerly trigger dynamic imports for the chunks a role will commonly visit.
 // Runs once after login; by the time the user navigates, the chunk is cached.
@@ -182,7 +173,7 @@ function AppRoutes() {
           <Route index element={<RoleLanding />} />
 
           {/* All feature routes wrapped in a single Suspense boundary for lazy chunks */}
-          <Route element={<Suspense fallback={<PageFallback />}><Outlet /></Suspense>}>
+          <Route element={<Suspense fallback={<GlobalLoader fullScreen={false} />}><Outlet /></Suspense>}>
 
             {/* ── Employee ───────────────────────────── */}
             <Route path="/dashboard"    element={<EmployeeDashboard />} />

@@ -22,7 +22,7 @@ export default {
         info:           'var(--info)',
       },
       fontFamily: {
-        heading: ['"Space Grotesk"', 'sans-serif'],
+        heading: ['Inter', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
         body:    ['Inter', 'sans-serif'],
         mono:    ['"JetBrains Mono"', 'monospace'],
       },

@@ -7,6 +7,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 import { KpiCard } from '../../components/KpiCard';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { todayISO } from '../../lib/date';
 import { useProjectDashboardFilters } from '../../api/projectDashboard';
 import {
@@ -50,10 +51,6 @@ const tdStyle: React.CSSProperties = {
   fontSize: 13,
   color: 'var(--txt)',
 };
-
-function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
-  return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
-}
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
@@ -636,7 +633,7 @@ export default function PlannedVsActual() {
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
           Planned vs Actual Utilization
         </h1>
         <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
@@ -660,7 +657,7 @@ export default function PlannedVsActual() {
           </div>
         </Card>
       ) : isPending ? (
-        <PageSkeleton />
+        <GlobalLoader fullScreen={false} compact label="Loading data..." />
       ) : isError || !data ? (
         <Card style={{ padding: '48px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 13, color: 'var(--txt-mut)', marginBottom: 14 }}>Failed to load Planned vs Actual data.</div>
@@ -674,18 +671,6 @@ export default function PlannedVsActual() {
       ) : (
         <PageContent data={data} />
       )}
-    </div>
-  );
-}
-
-function PageSkeleton() {
-  return (
-    <div>
-      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16, marginBottom: 20 }}>
-        {[0, 1, 2, 3].map(i => <Card key={i} style={{ padding: 18 }}><Skel h={28} w={70} /><div style={{ marginTop: 8 }}><Skel h={12} w={90} /></div></Card>)}
-      </div>
-      <Card style={{ padding: 20, marginBottom: 20 }}><Skel h={220} /></Card>
-      <Card style={{ padding: 20 }}><Skel h={240} /></Card>
     </div>
   );
 }

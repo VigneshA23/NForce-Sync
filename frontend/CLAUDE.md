@@ -33,7 +33,7 @@ Crimson reserved for brand moments + primary actions ONLY. Never decorative.
 --txt #E8EAED | --txt-mut #9BA1AC | --txt-dim #6B7280
 --ok #2FB67C | --warn #E0A93B | --risk #E4373D | --info #4C8DD6
 
-Fonts: Space Grotesk (headings, KPI values) · Inter (body/UI) · JetBrains Mono (hours, %, timestamps — tabular-nums so columns align)
+Fonts: Inter (headings, body/UI, KPI value labels) · JetBrains Mono (hours, %, timestamps — tabular-nums so columns align)
 
 ## THE LOGO — important
 File: src/assets/nforce-logo.png (512×512 PNG, black circular badge, white NF monogram, pure-red slash).

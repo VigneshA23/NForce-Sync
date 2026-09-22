@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, RefreshCw, ChevronLeft, ChevronRight } from 'lu
 import { listAuditLog } from '../../api/admin';
 import type { AuditLogDto, AuditFilters } from '../../api/admin';
 import { formatAuditDate, auditActionBadgeStyle } from '../../lib/auditLog';
+import { GlobalLoader } from '../../components/GlobalLoader';
 
 const ENTITY_TYPES = ['APP_USER', 'EOD_ENTRY', 'PASSWORD_RESET_TOKEN'];
 const ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'ACTIVATE', 'DEACTIVATE', 'APPROVE', 'REJECT', 'CHANGES_REQUESTED', 'PASSWORD_RESET'];
@@ -157,7 +158,7 @@ export default function AuditLog() {
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{
-          fontFamily: '"Space Grotesk", sans-serif',
+          fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
           fontSize: 24, fontWeight: 700, color: 'var(--txt)',
           margin: '0 0 4px', letterSpacing: '-0.01em',
         }}>
@@ -240,11 +241,7 @@ export default function AuditLog() {
       {/* Table */}
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
         {isPending && (
-          <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="skeleton" style={{ height: 44, borderRadius: 6 }} />
-            ))}
-          </div>
+          <GlobalLoader fullScreen={false} compact label="Loading audit log..." />
         )}
 
         {isError && (

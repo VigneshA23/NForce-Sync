@@ -9,6 +9,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { Card, KpiCard } from '../../components/KpiCard';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { DatePicker } from '../../components/DatePicker';
 import { toLocalISODate, todayISO, formatDate } from '../../lib/date';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
@@ -33,7 +34,7 @@ function PageHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div style={{ marginBottom: 20, display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'space-between', alignItems: 'flex-end' }}>
       <div>
-        <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 24, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 24, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
           {title}
         </h1>
         <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>{subtitle}</p>
@@ -48,10 +49,6 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function EmptyNote({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>{children}</div>;
-}
-
-function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
-  return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
 }
 
 function fmtPct(v: number | null | undefined): string {
@@ -106,7 +103,7 @@ function CenterDonut({ segments, centerValue, centerLabel }: {
           </PieChart>
         </ResponsiveContainer>
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-          <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)' }}>{centerValue}</div>
+          <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)' }}>{centerValue}</div>
           <div style={{ fontSize: 10, color: 'var(--txt-dim)' }}>{centerLabel}</div>
         </div>
       </div>
@@ -192,6 +189,7 @@ export default function ExecutiveDashboard() {
     queryFn: () => getExecutiveDashboard(from, to),
     enabled: !dateError,
     staleTime: 60 * 1000,
+    placeholderData: (prev) => prev,
   });
 
   const insights = useMemo(() => {
@@ -238,11 +236,7 @@ export default function ExecutiveDashboard() {
       </Card>
 
       {isPending && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16, marginBottom: 24 }}>
-          {[0, 1, 2, 3].map(i => (
-            <Card key={i}><Skel h={36} w={36} /><br /><Skel h={28} w="60%" /><br /><Skel h={12} w="40%" /></Card>
-          ))}
-        </div>
+        <GlobalLoader fullScreen={false} compact label="Loading dashboard..." />
       )}
 
       {isError && !isPending && (
@@ -325,17 +319,17 @@ export default function ExecutiveDashboard() {
               <SectionTitle>Resource Allocation Overview</SectionTitle>
               <div style={{ display: 'flex', gap: 24, marginBottom: 18 }}>
                 <div>
-                  <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)' }}>{data.allocation.totalAllocatedResources}</div>
+                  <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)' }}>{data.allocation.totalAllocatedResources}</div>
                   <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>Allocated resources</div>
                 </div>
                 <div>
-                  <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt-dim)' }}>{data.allocation.resourcesWithNoActiveAllocation}</div>
+                  <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt-dim)' }}>{data.allocation.resourcesWithNoActiveAllocation}</div>
                   <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>No active allocation</div>
                 </div>
               </div>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-dim)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>By Project</div>
               {data.allocation.byProject.length === 0 ? <EmptyNote>No active allocations for this period.</EmptyNote> : (
-                <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+                <div style={{ maxHeight: 180, overflowY: 'auto', paddingRight: 10 }}>
                   {data.allocation.byProject.map((p: ProjectAllocationDto) => (
                     <div key={p.projectId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
                       <span style={{ color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{p.projectName}</span>
@@ -363,11 +357,15 @@ export default function ExecutiveDashboard() {
           <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 16 }}>
             <Card>
               <SectionTitle>Highest Utilized Resources</SectionTitle>
-              <UtilList title="" rows={data.utilization.topUtilized} accent="var(--risk)" />
+              <div style={{ maxHeight: 180, overflowY: 'auto', paddingRight: 10 }}>
+                <UtilList title="" rows={data.utilization.topUtilized} accent="var(--risk)" />
+              </div>
             </Card>
             <Card>
               <SectionTitle>Lowest Utilized Resources</SectionTitle>
-              <UtilList title="" rows={data.utilization.bottomUtilized} accent="var(--warn)" />
+              <div style={{ maxHeight: 180, overflowY: 'auto', paddingRight: 10 }}>
+                <UtilList title="" rows={data.utilization.bottomUtilized} accent="var(--warn)" />
+              </div>
             </Card>
           </div>
 
@@ -407,7 +405,7 @@ export default function ExecutiveDashboard() {
             <Card>
               <SectionTitle>Executive Insights</SectionTitle>
               {insights.length === 0 ? <EmptyNote>No insights available for this period.</EmptyNote> : (
-                <ul style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <ul style={{ margin: 0, padding: '0 10px 0 18px', display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 180, overflowY: 'auto' }}>
                   {insights.map((line, i) => (
                     <li key={i} style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5 }}>{line}</li>
                   ))}
@@ -416,25 +414,29 @@ export default function ExecutiveDashboard() {
             </Card>
             <Card>
               <SectionTitle>Recent Activity</SectionTitle>
-              {data.recentActivity.length === 0 ? <EmptyNote>No recent activity</EmptyNote> : data.recentActivity.map((event) => {
-                const { message, category } = describeAuditEvent(event);
-                const Icon = AUDIT_CATEGORY_ICONS[category];
-                return (
-                  <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 12, gap: 10 }}>
-                    <div
-                      title={AUDIT_CATEGORY_LABELS[category]}
-                      aria-label={AUDIT_CATEGORY_LABELS[category]}
-                      style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, background: 'var(--raised2)', color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}
-                    >
-                      <Icon size={13} aria-hidden="true" />
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5, flex: 1, minWidth: 0 }}>{message}</div>
-                    <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                      {formatRelative(event.occurredAt)}
-                    </div>
-                  </div>
-                );
-              })}
+              {data.recentActivity.length === 0 ? <EmptyNote>No recent activity</EmptyNote> : (
+                <div style={{ maxHeight: 180, overflowY: 'auto', paddingRight: 10 }}>
+                  {data.recentActivity.map((event) => {
+                    const { message, category } = describeAuditEvent(event);
+                    const Icon = AUDIT_CATEGORY_ICONS[category];
+                    return (
+                      <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 12, gap: 10 }}>
+                        <div
+                          title={AUDIT_CATEGORY_LABELS[category]}
+                          aria-label={AUDIT_CATEGORY_LABELS[category]}
+                          style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, background: 'var(--raised2)', color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}
+                        >
+                          <Icon size={13} aria-hidden="true" />
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5, flex: 1, minWidth: 0 }}>{message}</div>
+                        <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                          {formatRelative(event.occurredAt)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </Card>
           </div>
         </>

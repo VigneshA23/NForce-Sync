@@ -8,6 +8,7 @@ import {
   CheckCircle2, Award, FolderKanban, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { UtilBar } from '../../components/UtilBar';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { SegmentDonut } from '../../components/UtilizationDonut';
 import { fmtPct, utilColor, utilState, RULES } from '../../lib/rules';
 import { todayISO, toLocalISODate } from '../../lib/date';
@@ -51,10 +52,6 @@ function initials(name: string): string {
 }
 
 // ── primitives ─────────────────────────────────────────────────────────────────
-
-function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
-  return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
-}
 
 function Card({
   children, style, pad = 20, className,
@@ -150,7 +147,7 @@ function KpiTile({
         {sparkline && sparkline.length >= 2 && <MiniSparkline values={sparkline} color={accent} />}
       </div>
       <div style={{
-        fontFamily: '"Space Grotesk", sans-serif',
+        fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
         fontSize: 24, fontWeight: 700, color: accent,
         letterSpacing: '-0.02em', lineHeight: 1,
         fontVariantNumeric: 'tabular-nums', marginBottom: 6,
@@ -763,7 +760,7 @@ function CategoryStatTile({ label, value, sub, accent = 'var(--txt)' }: { label:
         {label}
       </div>
       <div style={{
-        fontFamily: '"Space Grotesk", sans-serif', fontSize: 19, fontWeight: 700,
+        fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 19, fontWeight: 700,
         color: accent, letterSpacing: '-0.01em', lineHeight: 1.15,
         fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
@@ -935,44 +932,6 @@ function CalendarRangePopover({ from, to, onApply }: { from: string; to: string;
   );
 }
 
-// ── loading skeleton ───────────────────────────────────────────────────────────
-
-function LoadingSkeleton() {
-  return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <Skel h={28} w={240} /><div style={{ marginTop: 6 }} /><Skel h={14} w={200} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 16 }}>
-        {[0, 1, 2, 3, 4].map(i => (
-          <div key={i} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 16 }}>
-            <Skel h={32} w={32} /><div style={{ marginTop: 12 }} />
-            <Skel h={24} w="60%" /><div style={{ marginTop: 8 }} /><Skel h={11} w="45%" />
-          </div>
-        ))}
-      </div>
-      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20, marginBottom: 16 }}>
-        <Skel h={14} w={160} /><div style={{ marginTop: 14 }} /><Skel h={220} />
-      </div>
-      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 16, marginBottom: 16 }}>
-        <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
-          <Skel h={14} w={140} /><div style={{ marginTop: 14 }} />
-          {[0, 1, 2, 3].map(i => <div key={i} style={{ marginBottom: 10 }}><Skel h={36} /></div>)}
-        </div>
-        <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
-          <Skel h={14} w={120} /><div style={{ marginTop: 16 }} />
-          <Skel h={130} /><div style={{ marginTop: 16 }} />
-          {[0, 1].map(i => <div key={i} style={{ marginBottom: 8 }}><Skel h={14} /></div>)}
-        </div>
-      </div>
-      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 20 }}>
-        <Skel h={14} w={160} /><div style={{ marginTop: 14 }} />
-        {[0, 1, 2, 3, 4].map(i => <div key={i} style={{ marginBottom: 10 }}><Skel h={36} /></div>)}
-      </div>
-    </div>
-  );
-}
-
 // ── main ───────────────────────────────────────────────────────────────────────
 
 export default function ProjectsUtilization() {
@@ -1001,13 +960,13 @@ export default function ProjectsUtilization() {
   const fromLabel = new Date(from + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   const toLabel   = new Date(to + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
-  if (isPending) return <LoadingSkeleton />;
+  if (isPending) return <GlobalLoader fullScreen={false} />;
 
   if (isError) {
     return (
       <div>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>
             Projects Utilization
           </h1>
         </div>
@@ -1055,7 +1014,7 @@ export default function ProjectsUtilization() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
             Projects Utilization
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>

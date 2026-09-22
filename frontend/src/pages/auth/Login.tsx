@@ -150,14 +150,13 @@ export default function Login() {
     return (
       <AuthLayout
         leftHeadline="Centralized Work & Utilization Management"
-        leftSubtext="Submit EOD updates, track approved hours, monitor utilization, and give leadership real-time insights all from one centralized platform."
         showStats
       >
         <div>
           <div style={{ marginBottom: 28 }}>
             <h1
               style={{
-                fontFamily: '"Space Grotesk", sans-serif',
+                fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
                 fontSize: 26,
                 fontWeight: 700,
                 letterSpacing: '-0.01em',
@@ -206,7 +205,6 @@ export default function Login() {
   return (
     <AuthLayout
       leftHeadline="Centralized Work & Utilization Management"
-      leftSubtext="Submit EOD updates, track approved hours, monitor utilization, and give leadership real-time insights all from one centralized platform."
       showStats
     >
       <motion.div
@@ -218,7 +216,7 @@ export default function Login() {
         <motion.div variants={reduced ? undefined : itemVariants} style={{ marginBottom: 28 }}>
           <h1
             style={{
-              fontFamily: '"Space Grotesk", sans-serif',
+              fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
               fontSize: 26,
               fontWeight: 700,
               letterSpacing: '-0.01em',
@@ -247,13 +245,13 @@ export default function Login() {
               gap: 10,
               padding: '12px 16px',
               background: 'var(--brand)',
-              color: 'rgba(255,255,255,.45)',
+              color: 'rgba(255,255,255,.9)',
               border: 'none',
               borderRadius: 8,
               fontSize: 14,
               fontWeight: 600,
               cursor: 'not-allowed',
-              opacity: 0.55,
+              opacity: 0.75,
               marginBottom: 4,
             }}
           >
@@ -269,7 +267,7 @@ export default function Login() {
               display: 'flex',
               alignItems: 'center',
               gap: 12,
-              color: 'var(--txt-dim)',
+              color: '#D6D9DE',
               fontSize: 12,
               margin: '20px 0',
             }}
@@ -521,10 +519,10 @@ const submitButtonStyle: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   padding: '11px 16px',
-  background: 'transparent',
-  border: '1px solid var(--line2)',
+  background: 'var(--brand)',
+  border: '1px solid var(--brand)',
   borderRadius: 8,
-  color: 'var(--txt)',
+  color: '#fff',
   fontSize: 14,
   fontWeight: 550,
   cursor: 'pointer',
@@ -534,6 +532,6 @@ const submitButtonStyle: React.CSSProperties = {
 
 const submitButtonHoverStyle: React.CSSProperties = {
   ...submitButtonStyle,
-  borderColor: 'var(--txt-mut)',
-  background: 'var(--raised)',
+  borderColor: 'var(--brand-bright)',
+  background: 'var(--brand-bright)',
 };

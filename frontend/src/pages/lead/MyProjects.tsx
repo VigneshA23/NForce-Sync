@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw, Pencil, Trash2 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { DropdownMenu } from '../../components/DropdownMenu';
 import { ReporteeScopePicker } from '../../components/ReporteeScopePicker';
 import { useAuth } from '../../lib/auth';
@@ -358,11 +359,7 @@ function CategoryPanel({ readOnly = false }: { readOnly?: boolean }) {
       )}
 
       {isPending && (
-        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="skeleton" style={{ height: 40, borderRadius: 6 }} />
-          ))}
-        </div>
+        <GlobalLoader fullScreen={false} compact label="Loading categories..." />
       )}
 
       {isError && (
@@ -602,7 +599,7 @@ export default function MyProjects() {
         <ReporteeScopePicker role="MANAGER" label="Team Lead" value={teamLeadId} onChange={setTeamLeadId} />
       )}
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
           {activeSection === 'projects' ? 'My Projects' : 'Category Management'}
         </h1>
         <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>

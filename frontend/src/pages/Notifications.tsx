@@ -16,6 +16,7 @@ import {
 } from '../api/notifications';
 import { formatDate, formatDateTime, formatTime12h, toLocalISODate, todayISO, yesterdayISO } from '../lib/date';
 import { resolveNotificationPriority, type NotificationPriority } from '../lib/notificationPriority';
+import { GlobalLoader } from '../components/GlobalLoader';
 
 // ── Notification metadata ───────────────────────────────────────────────────
 // Category/generated-by are derived client-side from `type` — the backend
@@ -350,7 +351,7 @@ function NotificationDetailPane({ n }: { n: NotificationDto | null }) {
       </div>
 
       <h2 style={{
-        fontFamily: '"Space Grotesk", sans-serif',
+        fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
         fontSize: 19, fontWeight: 700, color: 'var(--txt)',
         margin: '0 0 6px', lineHeight: 1.35, overflowWrap: 'break-word',
       }}>
@@ -383,24 +384,6 @@ function NotificationDetailPane({ n }: { n: NotificationDto | null }) {
           Open related page <ArrowUpRight size={14} aria-hidden="true" />
         </Link>
       )}
-    </div>
-  );
-}
-
-// ── Skeleton (master pane) ──────────────────────────────────────────────────
-
-function SkeletonRow() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 11px', marginBottom: 4 }}>
-      <div className="skeleton" style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0 }} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 1 }}>
-        <div className="skeleton" style={{ height: 12, width: '55%', borderRadius: 4 }} />
-        <div className="skeleton" style={{ height: 10, width: '80%', borderRadius: 4 }} />
-        <div style={{ display: 'flex', gap: 6 }}>
-          <div className="skeleton" style={{ height: 14, width: 46, borderRadius: 20 }} />
-          <div className="skeleton" style={{ height: 14, width: 40, borderRadius: 20 }} />
-        </div>
-      </div>
     </div>
   );
 }
@@ -502,7 +485,7 @@ export default function Notifications() {
       <div style={{ marginBottom: 14, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{
-            fontFamily: '"Space Grotesk", sans-serif',
+            fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
             fontSize: 22, fontWeight: 700, color: 'var(--txt)',
             margin: '0 0 4px', letterSpacing: '-0.01em',
             display: 'flex', alignItems: 'center', gap: 10,
@@ -614,8 +597,8 @@ export default function Notifications() {
 
       {/* Master-detail body */}
       {isLoading ? (
-        <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px' }}>
-          <SkeletonRow /><SkeletonRow /><SkeletonRow /><SkeletonRow />
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10 }}>
+          <GlobalLoader fullScreen={false} compact label="Loading notifications..." />
         </div>
       ) : error ? (
         <div style={{

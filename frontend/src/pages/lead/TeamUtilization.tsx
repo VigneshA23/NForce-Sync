@@ -16,6 +16,7 @@ import {
 } from '../../api/teamLead';
 import { useMyLeadProjects } from '../../api/teamLeadProjects';
 import { RingGauge } from '../../components/RingGauge';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { ReporteeScopePicker } from '../../components/ReporteeScopePicker';
 
 // ── status derivation ───────────────────────────────────────────────────────────
@@ -165,7 +166,7 @@ function StatCard({ icon, label, value, color }: { icon: IconType; label: string
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--txt-dim)', fontSize: 11.5, marginBottom: 8 }}>
         <IconBadge icon={icon} color={color} size={22} /> {label}
       </div>
-      <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 19, fontWeight: 700, color: 'var(--txt)' }}>{value}</div>
+      <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 19, fontWeight: 700, color: 'var(--txt)' }}>{value}</div>
     </div>
   );
 }
@@ -477,7 +478,7 @@ function DetailPanel({ member, dateISO, teamLeadId }: { member: MergedMember; da
       <div style={{ display: 'flex', alignItems: 'center', gap: 20, paddingBottom: 18, borderBottom: '1px solid var(--line)', marginBottom: 18 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 12, color: 'var(--txt-dim)', marginBottom: 6 }}>Today's Utilization</div>
-          <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 34, fontWeight: 700, color, marginBottom: 10 }}>
+          <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 34, fontWeight: 700, color, marginBottom: 10 }}>
             {member.pct == null ? '—' : `${Math.round(member.pct)}%`}
           </div>
           <ProgressBar pct={member.pct} color={color} />
@@ -655,28 +656,14 @@ export default function TeamUtilization() {
   }, [members]);
 
   if (isPending) {
-    return (
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24 }}>
-          <div><Skel h={24} w={200} /><div style={{ marginTop: 8 }}><Skel h={14} w={280} /></div></div>
-          <Skel h={36} w={240} />
-        </div>
-        <Card style={{ padding: 16 }}>
-          {[0, 1, 2, 3].map(i => (
-            <div key={i} style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-              <Skel h={32} w={32} /><Skel h={32} />
-            </div>
-          ))}
-        </Card>
-      </div>
-    );
+    return <GlobalLoader fullScreen={false} />;
   }
 
   if (isError) {
     return (
       <div>
         <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Team Utilization</h1>
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Team Utilization</h1>
         </div>
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load utilization data.</div>
@@ -699,7 +686,7 @@ export default function TeamUtilization() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 14, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
             Team Utilization
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>

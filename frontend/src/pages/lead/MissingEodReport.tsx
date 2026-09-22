@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bell, ChevronLeft, ChevronRight, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { FilterSelect } from '../../components/FilterSelect';
 import { Modal } from '../../components/Modal';
 import { formatDate, todayISO } from '../../lib/date';
@@ -47,9 +48,6 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
   );
 }
 
-function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
-  return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
-}
 
 function Chip({ status }: { status: string }) {
   const cfg = STATUS_CFG[status] ?? { label: status, color: 'var(--txt-dim)' };
@@ -603,7 +601,7 @@ export default function LeadMissingEodReport() {
             <div>Employee</div><div>Project</div><div>Missing</div><div>Status</div><div />
           </div>
           {isLoading ? (
-            <div style={{ padding: 16 }}>{[0, 1, 2].map(i => <div key={i} style={{ marginBottom: 10 }}><Skel h={14} /></div>)}</div>
+            <GlobalLoader fullScreen={false} compact label="Loading..." />
           ) : pageRows.length === 0 ? (
             <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>No missing EOD entries match these filters.</div>
           ) : (

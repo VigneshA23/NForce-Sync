@@ -155,7 +155,7 @@ export function SegmentDonut({ segments, centerValue, size = 92 }: SegmentDonutP
           alignItems: 'center', justifyContent: 'center',
         }}>
           <span style={{
-            fontFamily: '"Space Grotesk", sans-serif', fontSize: size * 0.19,
+            fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: size * 0.19,
             fontWeight: 700, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums',
           }}>
             {centerValue}

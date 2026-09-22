@@ -12,6 +12,7 @@ import {
   uploadEodAttachment, deleteEodAttachment, getEodAttachmentDataUrl,
 } from '../../api/eod';
 import { DatePicker } from '../../components/DatePicker';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import type { EodEntryDto, EodTaskDto, EodAttachmentDto } from '../../api/eod';
 import {
   ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_TASK,
@@ -939,7 +940,7 @@ export default function SubmitEOD() {
     const requiredMinHours = isHalfLeave ? halfDayHoursCap : MIN_HOURS_PER_DAY;
     if (!isWeekend && effectiveLoggedHours < requiredMinHours - 0.001) {
       errs.push(isHalfLeave
-        ? `Minimum ${requiredMinHours.toFixed(1)} hours required for ${HALF_LEAVE_LABELS[dayType]} — you've logged ${effectiveLoggedHours.toFixed(2)} hours.`
+        ? `Minimum ${requiredMinHours.toFixed(1)} hours required for ${HALF_LEAVE_LABELS[dayType]} - you've logged ${effectiveLoggedHours.toFixed(2)} hours.`
         : `Total hours (${effectiveLoggedHours.toFixed(2)}) must be at least ${MIN_HOURS_PER_DAY} for a single day.`);
     }
     if (effectiveLoggedHours > MAX_HOURS_PER_DAY + 0.001) {
@@ -971,7 +972,7 @@ export default function SubmitEOD() {
     // mirrors EodService.validateTimeAdjustment.
     if (adjMins > adjRemaining) {
       errs.push(
-        `${label} of ${minutesLabel(adjMins)} exceeds your monthly time adjustment budget — `
+        `${label} of ${minutesLabel(adjMins)} exceeds your monthly time adjustment budget - `
         + `${minutesLabel(adjRemaining)} of ${minutesLabel(adjBudget)} left this month.`,
       );
     }
@@ -1083,11 +1084,7 @@ export default function SubmitEOD() {
     return (
       <div style={{ maxWidth: 860 }}>
         <PageHeader selectedDate={selectedDate} onDateChange={handleDateChange} entryStatus={null} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 24 }}>
-          {[100, 80, 92].map((w, i) => (
-            <div key={i} className="skeleton" style={{ height: 56, width: `${w}%`, borderRadius: 8 }} />
-          ))}
-        </div>
+        <GlobalLoader fullScreen={false} label="Loading EOD form..." />
       </div>
     );
   }
@@ -1160,11 +1157,7 @@ export default function SubmitEOD() {
 
       {/* Loading entry spinner */}
       {formLoading && (
-        <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {[100, 75].map((w, i) => (
-            <div key={i} className="skeleton" style={{ height: 40, width: `${w}%`, borderRadius: 6 }} />
-          ))}
-        </div>
+        <GlobalLoader fullScreen={false} compact label="Loading entry..." />
       )}
 
       {/* Form body */}
@@ -1202,7 +1195,7 @@ export default function SubmitEOD() {
                   work location, so the asterisk would be a lie there. */}
               <Label>Work location {!workLocDisabled && <Req />}</Label>
               {isReadOnly ? (
-                <div style={{ ...inputStyle, opacity: 0.7 }}>{workLocation || '—'}</div>
+                <div style={{ ...inputStyle, opacity: 0.7 }}>{workLocation || '-'}</div>
               ) : (
                 <Sel
                   value={workLocDisabled ? '' : workLocation}
@@ -1236,7 +1229,7 @@ export default function SubmitEOD() {
               {/* Says out loud that the adjustment counts toward logged hours, not toward a
                   bigger target — the target itself never moves for an adjustment. */}
               <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 4 }}>
-                {minutesLabel(adjMins)} counted toward this day's logged hours — the {expectedHrs.toFixed(1)}h target is unchanged.
+                {minutesLabel(adjMins)} counted toward this day's logged hours - the {expectedHrs.toFixed(1)}h target is unchanged.
               </div>
             </div>
           )}
@@ -1270,7 +1263,7 @@ export default function SubmitEOD() {
                   <div style={{ fontSize: 13, color: 'var(--txt)', marginBottom: 4, fontFamily: '"JetBrains Mono", monospace' }}>
                     {adjContext?.shiftStart && adjContext?.shiftEnd
                       ? `${formatTime12h(adjContext.shiftStart)} – ${formatTime12h(adjContext.shiftEnd)}`
-                      : '—'}
+                      : '-'}
                     {adjContext?.shiftName && (
                       <span style={{ color: 'var(--txt-dim)', fontFamily: 'inherit' }}> · {adjContext.shiftName}</span>
                     )}
@@ -1329,7 +1322,7 @@ export default function SubmitEOD() {
                       {/* The shortest adjustment is 30 minutes, so a smaller remainder buys nothing. */}
                       {adjRemaining < MIN_ADJ_MINUTES && !adjExhausted && (
                         <div style={{ fontSize: 11, color: 'var(--warn)', marginTop: 6 }}>
-                          Only {minutesLabel(adjRemaining)} left this month — below the {MIN_ADJ_MINUTES}-minute minimum.
+                          Only {minutesLabel(adjRemaining)} left this month - below the {MIN_ADJ_MINUTES}-minute minimum.
                         </div>
                       )}
                     </div>
@@ -1483,7 +1476,7 @@ export default function SubmitEOD() {
           <div style={{ marginTop: 24 }}>
             <Label>Next-day plan {!isWeekend && <Req />}</Label>
             {isReadOnly
-              ? <div style={{ ...inputStyle, opacity: 0.7, minHeight: 60, lineHeight: 1.5 }}>{nextDayPlan || '—'}</div>
+              ? <div style={{ ...inputStyle, opacity: 0.7, minHeight: 60, lineHeight: 1.5 }}>{nextDayPlan || '-'}</div>
               : <>
                   <Txt value={nextDayPlan} onChange={e => setNextDayPlan(e.target.value)} placeholder="What are you planning to work on tomorrow?" rows={3} maxLength={MAX_TEXT_LEN} />
                   <CharCount value={nextDayPlan} />
@@ -1494,7 +1487,7 @@ export default function SubmitEOD() {
           <div style={{ marginTop: 16 }}>
             <Label>Remarks</Label>
             {isReadOnly
-              ? <div style={{ ...inputStyle, opacity: 0.7, minHeight: 50, lineHeight: 1.5 }}>{remarks || '—'}</div>
+              ? <div style={{ ...inputStyle, opacity: 0.7, minHeight: 50, lineHeight: 1.5 }}>{remarks || '-'}</div>
               : <>
                   <Txt value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Any blockers, dependencies, or context for your manager?" rows={2} maxLength={MAX_TEXT_LEN} />
                   <CharCount value={remarks} />
@@ -1563,7 +1556,7 @@ function PageHeader({
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4C8DD6', flexShrink: 0 }} />
           <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-mut)', letterSpacing: '0.04em' }}>Employee</span>
         </div>
-        <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', margin: 0, letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', margin: 0, letterSpacing: '-0.01em' }}>
           End-of-Day Report
         </h1>
         <div style={{ marginTop: 4, fontSize: 13, color: 'var(--txt-mut)' }}>{formatted}</div>
@@ -1623,7 +1616,7 @@ function TaskCard({
             <Label>Project</Label>
             {isReadOnly ? (
               <div style={{ ...inputStyle, fontSize: 12 }}>
-                {task.projectCode ?? projects.find(p => p.id === task.projectId)?.code ?? '—'}
+                {task.projectCode ?? projects.find(p => p.id === task.projectId)?.code ?? '-'}
               </div>
             ) : (
               <Sel
@@ -1636,7 +1629,7 @@ function TaskCard({
               >
                 <option value="">Project</option>
                 {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                  <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
                 ))}
                 {/* Saved project that is no longer in this user's allocations — keep it selectable
                     so reopening a draft doesn't silently blank the field on the next save. */}
@@ -1652,7 +1645,7 @@ function TaskCard({
           <div>
             <Label>Category</Label>
             {isReadOnly ? (
-              <div style={{ ...inputStyle, fontSize: 12 }}>{task.categoryName ?? '—'}</div>
+              <div style={{ ...inputStyle, fontSize: 12 }}>{task.categoryName ?? '-'}</div>
             ) : (
               <Sel value={task.taskCategoryId ?? ''} onChange={e => onCategoryChange(e.target.value)}>
                 <option value="">Category</option>
@@ -1717,7 +1710,7 @@ function TaskCard({
       <div style={{ marginBottom: isBlocked ? 10 : 0 }}>
         <Label>Description</Label>
         {isReadOnly
-          ? <div style={{ ...inputStyle, opacity: 0.7, lineHeight: 1.5 }}>{task.description || '—'}</div>
+          ? <div style={{ ...inputStyle, opacity: 0.7, lineHeight: 1.5 }}>{task.description || '-'}</div>
           : <>
               <Txt value={task.description} onChange={e => onUpdate({ description: e.target.value })} rows={2} placeholder="What did you work on?" maxLength={MAX_TEXT_LEN} style={{ minHeight: 54 }} />
               <CharCount value={task.description} />
@@ -1771,7 +1764,7 @@ function TaskCard({
             <span style={{ color: '#E4373D', marginLeft: 3 }}>*</span>
           </Label>
           {isReadOnly
-            ? <div style={{ ...inputStyle, opacity: 0.7, lineHeight: 1.5, borderColor: 'rgba(228,55,61,.3)' }}>{task.blockerReason || '—'}</div>
+            ? <div style={{ ...inputStyle, opacity: 0.7, lineHeight: 1.5, borderColor: 'rgba(228,55,61,.3)' }}>{task.blockerReason || '-'}</div>
             : <>
                 <Txt
                   value={task.blockerReason}

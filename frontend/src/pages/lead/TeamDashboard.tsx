@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
-  LineChart, Line, ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts';
 import { todayISO as localTodayISO } from '../../lib/date';
@@ -21,6 +21,7 @@ import {
   type TrendPointDto,
 } from '../../api/teamLead';
 import { ReporteeScopePicker } from '../../components/ReporteeScopePicker';
+import { GlobalLoader } from '../../components/GlobalLoader';
 
 // ── status config ──────────────────────────────────────────────────────────────
 // SUBMITTED here means the entry has been through review and is APPROVED (backend
@@ -83,7 +84,7 @@ function Avatar({ name, color }: { name: string; color: string }) {
       width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
       background: `color-mix(in srgb, ${color} 22%, var(--raised2))`,
       color, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 11, fontWeight: 700, fontFamily: '"Space Grotesk", sans-serif',
+      fontSize: 11, fontWeight: 700, fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
     }}>
       {initials}
     </div>
@@ -104,51 +105,33 @@ function StatusPill({ status }: { status: MemberEodStatus }) {
   );
 }
 
-// ── KPI card w/ sparkline ─────────────────────────────────────────────────────────
-
-function KpiSparkline({ points, color }: { points: (number | null)[]; color: string }) {
-  const data = points.map((v, i) => ({ i, v }));
-  return (
-    <div style={{ width: 84, height: 42 }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 4, right: 2, bottom: 2, left: 2 }}>
-          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={1.75} dot={false} connectNulls isAnimationActive={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
+// ── KPI card ─────────────────────────────────────────────────────────────────────
 
 function KpiCard({
-  icon: Icon, accent, label, value, deltaIcon: DeltaIcon, deltaText, deltaColor, sparkline,
+  icon: Icon, accent, label, value, deltaIcon: DeltaIcon, deltaText, deltaColor,
 }: {
   icon: LucideIcon; accent: string; label: string; value: React.ReactNode;
-  deltaIcon: LucideIcon; deltaText: string; deltaColor: string; sparkline: (number | null)[];
+  deltaIcon: LucideIcon; deltaText: string; deltaColor: string;
 }) {
   return (
     <Card style={{ padding: '1rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{
-            width: 30, height: 30, borderRadius: 7, marginBottom: 12,
-            background: `color-mix(in srgb, ${accent} 18%, transparent)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
-          }}>
-            <Icon size={15} aria-hidden="true" />
-          </div>
-          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, whiteSpace: 'nowrap' }}>
-            {label}
-          </div>
-          <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 25, fontWeight: 700, color: 'var(--txt)', letterSpacing: '-0.02em', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
-            {value}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: deltaColor, whiteSpace: 'nowrap' }}>
-            <DeltaIcon size={11} aria-hidden="true" />
-            {deltaText}
-          </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{
+          width: 30, height: 30, borderRadius: 7, marginBottom: 12,
+          background: `color-mix(in srgb, ${accent} 18%, transparent)`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
+        }}>
+          <Icon size={15} aria-hidden="true" />
         </div>
-        <div style={{ flexShrink: 0, marginTop: 2 }}>
-          <KpiSparkline points={sparkline} color={accent} />
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, whiteSpace: 'nowrap' }}>
+          {label}
+        </div>
+        <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 25, fontWeight: 700, color: 'var(--txt)', letterSpacing: '-0.02em', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
+          {value}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: deltaColor, whiteSpace: 'nowrap' }}>
+          <DeltaIcon size={11} aria-hidden="true" />
+          {deltaText}
         </div>
       </div>
     </Card>
@@ -425,7 +408,7 @@ function StatusDistributionDonut({ summary }: { summary: TeamLeadSummaryDto }) {
           position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
         }}>
-          <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>{total}</div>
+          <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>{total}</div>
           <div style={{ fontSize: 10, color: 'var(--txt-dim)' }}>Total</div>
         </div>
       </div>
@@ -486,7 +469,7 @@ function UtilizationOverviewRing({ summary }: { summary: TeamLeadSummaryDto }) {
           position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
         }}>
-          <div style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>{fmtPct(avg)}</div>
+          <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 24, fontWeight: 700, color: 'var(--txt)' }}>{fmtPct(avg)}</div>
           <div style={{ fontSize: 10, color: 'var(--txt-dim)' }}>Avg Utilization</div>
         </div>
       </div>
@@ -669,31 +652,14 @@ export default function TeamDashboard() {
   const isRefreshing = !isPending && (summaryFetching || membersFetching || blockersFetching);
 
   if (isPending) {
-    return (
-      <div>
-        <div style={{ marginBottom: 24 }}>
-          <Skel h={24} w={220} />
-          <div style={{ marginTop: 8 }}><Skel h={14} w={280} /></div>
-        </div>
-        <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
-          {[0, 1, 2, 3, 4].map(i => (
-            <Card key={i} style={{ padding: '1rem' }}>
-              <Skel h={30} w={30} />
-              <div style={{ marginTop: 12 }}><Skel h={22} w={60} /></div>
-              <div style={{ marginTop: 8 }}><Skel h={12} w={90} /></div>
-            </Card>
-          ))}
-        </div>
-        <Card style={{ padding: 20 }}><Skel h={260} /></Card>
-      </div>
-    );
+    return <GlobalLoader fullScreen={false} />;
   }
 
   if (isError || !summary) {
     return (
       <div>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Team Lead Dashboard</h1>
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0 }}>Team Lead Dashboard</h1>
         </div>
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load dashboard.</div>
@@ -729,7 +695,6 @@ export default function TeamDashboard() {
   const utilDelta = delta(trend?.avgUtilization);
   const pendingDelta = delta(trend?.pendingApprovalCount);
   const blockersDelta = delta(trend?.blockersCount);
-  const sparklineFor = (series: TrendPointDto[] | undefined) => (series ?? []).map(p => p.value);
 
   return (
     <div>
@@ -739,7 +704,7 @@ export default function TeamDashboard() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
             Team Lead Dashboard
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
@@ -852,44 +817,41 @@ export default function TeamDashboard() {
         </div>
       </div>
 
-      {/* KPI row — 5 cards */}
-      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
-        <KpiCard
-          icon={Gauge} accent="var(--warn)" label="Team Utilization" value={avgUtilLabel}
-          deltaIcon={utilDelta !== null && utilDelta < 0 ? ArrowDown : ArrowUp}
-          deltaText={utilDelta === null ? 'vs yesterday: —' : `${utilDelta >= 0 ? '+' : ''}${utilDelta} pts vs yesterday`}
-          deltaColor="var(--warn)"
-          sparkline={trendPending ? [] : sparklineFor(trend?.avgUtilization)}
-        />
-        <KpiCard
-          icon={ClipboardCheck} accent="var(--warn)" label="Submitted Today" value={submittedTodayValue}
-          deltaIcon={ArrowDown}
-          deltaText={`${summary.missingCount} missing`}
-          deltaColor="var(--risk)"
-          sparkline={trendPending ? [] : sparklineFor(trend?.submittedCount)}
-        />
-        <KpiCard
-          icon={Hourglass} accent="var(--risk)" label="Pending Approval" value={pendingApprovalsCount}
-          deltaIcon={pendingDelta !== null && pendingDelta < 0 ? ArrowDown : ArrowUp}
-          deltaText={pendingDelta === null ? '—' : `${pendingDelta >= 0 ? '+' : ''}${pendingDelta}`}
-          deltaColor="var(--risk)"
-          sparkline={trendPending ? [] : sparklineFor(trend?.pendingApprovalCount)}
-        />
-        <KpiCard
-          icon={Scale} accent="var(--ok)" label="Over-allocated" value={summary.overloadedCount}
-          deltaIcon={ArrowUp}
-          deltaText={topOverloaded ? `${topOverloaded.fullName.split(' ')[0]} ${fmtPct(topOverloaded.utilizationPct)}` : 'None'}
-          deltaColor="var(--ok)"
-          // TODO(backend): no trend series exists for overloaded-member-count over time
-          // (DashboardTrendDto has no such field) — placeholder flat sparkline until it does.
-          sparkline={[summary.overloadedCount, summary.overloadedCount, summary.overloadedCount, summary.overloadedCount, summary.overloadedCount, summary.overloadedCount, summary.overloadedCount]}
-        />
+      {/* KPI row — 5 cards, split across the same 1.7fr/1fr columns as the Team Status row
+          below (first 4 cards in the left zone, the 5th in the right rail zone) so both
+          rows' edges line up instead of drifting apart at different screen widths. */}
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 16, marginBottom: 16 }}>
+        <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+          <KpiCard
+            icon={Gauge} accent="var(--warn)" label="Team Utilization" value={avgUtilLabel}
+            deltaIcon={utilDelta !== null && utilDelta < 0 ? ArrowDown : ArrowUp}
+            deltaText={utilDelta === null ? 'vs yesterday: -' : `${utilDelta >= 0 ? '+' : ''}${utilDelta} pts vs yesterday`}
+            deltaColor="var(--warn)"
+          />
+          <KpiCard
+            icon={ClipboardCheck} accent="var(--warn)" label="Submitted Today" value={submittedTodayValue}
+            deltaIcon={ArrowDown}
+            deltaText={`${summary.missingCount} missing`}
+            deltaColor="var(--risk)"
+          />
+          <KpiCard
+            icon={Hourglass} accent="var(--risk)" label="Pending Approval" value={pendingApprovalsCount}
+            deltaIcon={pendingDelta !== null && pendingDelta < 0 ? ArrowDown : ArrowUp}
+            deltaText={pendingDelta === null ? '-' : `${pendingDelta >= 0 ? '+' : ''}${pendingDelta}`}
+            deltaColor="var(--risk)"
+          />
+          <KpiCard
+            icon={Scale} accent="var(--ok)" label="Over-allocated" value={summary.overloadedCount}
+            deltaIcon={ArrowUp}
+            deltaText={topOverloaded ? `${topOverloaded.fullName.split(' ')[0]} ${fmtPct(topOverloaded.utilizationPct)}` : 'None'}
+            deltaColor="var(--ok)"
+          />
+        </div>
         <KpiCard
           icon={Ban} accent="var(--info)" label="Open Blockers" value={blockers ? blockers.length : summary.activeBlockersCount}
           deltaIcon={blockersDelta !== null && blockersDelta > 0 ? ArrowUp : ArrowDown}
-          deltaText={blockersDelta === null ? '—' : `${blockersDelta >= 0 ? '+' : ''}${blockersDelta}`}
+          deltaText={blockersDelta === null ? '-' : `${blockersDelta >= 0 ? '+' : ''}${blockersDelta}`}
           deltaColor="var(--info)"
-          sparkline={trendPending ? [] : sparklineFor(trend?.blockersCount)}
         />
       </div>
 

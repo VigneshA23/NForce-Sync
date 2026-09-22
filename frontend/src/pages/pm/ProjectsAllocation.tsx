@@ -4,6 +4,7 @@ import {
   ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
+import { GlobalLoader } from '../../components/GlobalLoader';
 import { StrictDateInput } from '../../components/StrictDateInput';
 import { useToast } from '../../lib/toast';
 import { todayISO } from '../../lib/date';
@@ -851,11 +852,7 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
         isRefreshing={isFetching} onAdd={openCreate} addLabel="New Project" filters={projectFilters} hideAdd={readOnly} />
 
       {isPending && (
-        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="skeleton" style={{ height: 44, borderRadius: 6 }} />
-          ))}
-        </div>
+        <GlobalLoader fullScreen={false} compact label="Loading projects..." />
       )}
 
       {isError && (
@@ -1617,11 +1614,7 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
       </div>
 
       {isPending && (
-        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="skeleton" style={{ height: 44, borderRadius: 6 }} />
-          ))}
-        </div>
+        <GlobalLoader fullScreen={false} compact label="Loading allocations..." />
       )}
 
       {isError && (
@@ -1705,7 +1698,7 @@ export default function ProjectsAllocation({ initialTab, readOnly = false }: { i
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+        <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
           Projects & Allocation
         </h1>
         <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>

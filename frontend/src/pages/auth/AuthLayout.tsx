@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { ClipboardCheck, ScrollText, CalendarOff } from 'lucide-react';
 import { BrandMark } from '../../components/BrandMark';
+import loginIllustration from '../../assets/login_screen.png';
 
 interface StreakDef {
   top: string;
@@ -32,7 +33,7 @@ function SpeedStreaks() {
 
   if (reduced) {
     return (
-      <div aria-hidden="true" style={{ position: 'absolute', inset: 0 }}>
+      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: 1, gridColumn: '1 / -1' }}>
         {STREAKS.map((s, i) => (
           <div
             key={i}
@@ -53,7 +54,7 @@ function SpeedStreaks() {
   }
 
   return (
-    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 1, gridColumn: '1 / -1' }}>
       {STREAKS.map((s, i) => (
         <motion.div
           key={i}
@@ -89,7 +90,6 @@ const CAPABILITIES = [
 
 interface AuthLayoutProps {
   leftHeadline?: string;
-  leftSubtext?: string;
   showStats?: boolean;
   children: React.ReactNode;
 }
@@ -99,39 +99,59 @@ const panelGradient = [
   'linear-gradient(160deg, #0a0b0e 0%, #12141a 100%)',
 ].join(', ');
 
-export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, children }: AuthLayoutProps) {
+export function AuthLayout({ leftHeadline, showStats = false, children }: AuthLayoutProps) {
+  const reduced = useReducedMotion();
+  const headlineWords = leftHeadline ? leftHeadline.split(' ') : [];
+
   return (
     <div
       data-theme="dark"
       style={{
+        position: 'relative',
         display: 'grid',
         gridTemplateColumns: '55fr 45fr',
         minHeight: '100dvh',
       }}
       className="nf-auth-grid"
     >
+      {/* Speed streaks — span the full screen, behind all panel content but above both
+          panels' plain backgrounds/imagery (z-index 1 vs their auto/0). */}
+      <SpeedStreaks />
+
       {/* ── LEFT PANEL ─────────────────────────────────── */}
       <div
         className="nf-auth-left"
         style={{
           position: 'relative',
           overflow: 'hidden',
-          background: panelGradient,
+          background: '#0a0b0e',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
           padding: '44px 48px',
         }}
       >
-        <SpeedStreaks />
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 0,
+            backgroundImage: `url(${loginIllustration})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            opacity: 0.3,
+          }}
+        />
 
         {/* Brand row */}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 14 }}>
           <BrandMark size="lg" />
           <div>
             <div
               style={{
-                fontFamily: '"Space Grotesk", sans-serif',
+                fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
                 fontWeight: 700,
                 fontSize: 18,
                 letterSpacing: '0.04em',
@@ -154,42 +174,12 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
           </div>
         </div>
 
-        {/* Headline + subtext */}
-        {leftHeadline && (
-          <div style={{ position: 'relative', maxWidth: 420 }}>
-            <h2
-              style={{
-                fontFamily: '"Space Grotesk", sans-serif',
-                fontSize: 36,
-                fontWeight: 700,
-                lineHeight: 1.1,
-                letterSpacing: '-0.02em',
-                color: 'var(--txt)',
-                marginBottom: 16,
-              }}
-            >
-              {leftHeadline}
-            </h2>
-            {leftSubtext && (
-              <p
-                style={{
-                  fontSize: 14,
-                  lineHeight: 1.65,
-                  color: 'var(--txt-mut)',
-                  maxWidth: 380,
-                }}
-              >
-                {leftSubtext}
-              </p>
-            )}
-          </div>
-        )}
-
         {/* Capability tags */}
         {showStats ? (
           <div
             style={{
               position: 'relative',
+              zIndex: 2,
               display: 'flex',
               alignItems: 'center',
               flexWrap: 'wrap',
@@ -231,20 +221,36 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
 
       {/* ── RIGHT PANEL ────────────────────────────────── */}
       <div
+        className="nf-auth-right"
         style={{
-          background: 'var(--panel)',
+          position: 'relative',
+          overflow: 'hidden',
+          background: '#0a0b0e',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           padding: '40px 32px',
           minHeight: '100dvh',
         }}
       >
+        {/* Faint depth behind the card — echoes the left panel's brand-red glow, much softer */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 0,
+            background: 'radial-gradient(70% 55% at 50% 40%, rgba(228,55,61,.07) 0%, transparent 70%)',
+          }}
+        />
+
         {/* Mobile brand strip — only visible <900px */}
         <div
           className="nf-auth-brandstrip"
           style={{
             position: 'absolute',
+            zIndex: 2,
             top: 0,
             left: 0,
             right: 0,
@@ -259,7 +265,7 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
           <BrandMark size="sm" />
           <span
             style={{
-              fontFamily: '"Space Grotesk", sans-serif',
+              fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
               fontWeight: 700,
               fontSize: 15,
               letterSpacing: '0.03em',
@@ -269,14 +275,99 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
           </span>
         </div>
 
-        <div
-          className="nf-auth-form"
-          style={{
-            width: '100%',
-            maxWidth: 440,
-          }}
-        >
-          {children}
+        {/* Headline — sized off the panel's own width (container query units) so the
+            phrase always fits on one line instead of wrapping or overflowing. */}
+        {leftHeadline && (
+          <motion.h2
+            className="nf-auth-headline"
+            initial={reduced ? undefined : { opacity: 0, x: -60 }}
+            animate={reduced ? undefined : { opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
+            style={{
+              position: 'relative',
+              zIndex: 2,
+              width: '100%',
+              fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
+              fontWeight: 700,
+              lineHeight: 1.15,
+              letterSpacing: '-0.01em',
+              textAlign: 'center',
+              whiteSpace: 'nowrap',
+              marginBottom: 20,
+            }}
+          >
+            {headlineWords.map((word, i) => (
+              <span key={i} style={{ color: i % 2 === 0 ? 'var(--txt)' : 'var(--brand-bright)' }}>
+                {word}
+                {i < headlineWords.length - 1 ? ' ' : ''}
+              </span>
+            ))}
+          </motion.h2>
+        )}
+
+        <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: 440 }}>
+          <div
+            className="nf-auth-form"
+            style={{
+              position: 'relative',
+              overflow: 'hidden',
+              background: 'linear-gradient(155deg, #262a32 0%, #14161a 100%)',
+              border: '1px solid rgba(255,255,255,.08)',
+              borderRadius: 20,
+              padding: '44px 40px',
+              boxShadow: [
+                '0 28px 70px -20px rgba(0,0,0,.65)',
+                '0 1px 0 0 rgba(255,255,255,.06) inset',
+              ].join(', '),
+            }}
+          >
+            {/* Brand accent strip along each edge of the card */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 2,
+                background: 'linear-gradient(90deg, transparent, var(--brand-bright), transparent)',
+              }}
+            />
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 2,
+                background: 'linear-gradient(90deg, transparent, var(--brand-bright), transparent)',
+              }}
+            />
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: 0,
+                width: 2,
+                background: 'linear-gradient(180deg, transparent, var(--brand-bright), transparent)',
+              }}
+            />
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                right: 0,
+                width: 2,
+                background: 'linear-gradient(180deg, transparent, var(--brand-bright), transparent)',
+              }}
+            />
+            {children}
+          </div>
         </div>
       </div>
 
@@ -293,14 +384,28 @@ export function AuthLayout({ leftHeadline, leftSubtext, showStats = false, child
         desktop split is untouched. The one base rule below only restates what
         Tailwind's `hidden` was already doing to the mobile brand strip, so the
         desktop rendering is identical either way.
+
+        The headline uses container query units (cqw), sized off `.nf-auth-right`'s
+        own content width via `container-type: inline-size`. That's what keeps
+        "Centralized Work & Utilization Management" on one line at any window
+        size — cqw scales with the actual space available in the right panel,
+        not the viewport, so it stays proportional whether the left marketing
+        panel is showing (900px+) or hidden (mobile, right panel goes full width).
       */}
       <style>{`
+        .nf-auth-grid {
+          --txt: #FFFFFF;
+          --txt-mut: #C7CBD1;
+          --txt-dim: #B7BCC4;
+        }
         .nf-auth-brandstrip { display: none; }
+        .nf-auth-right { container-type: inline-size; container-name: nf-auth-right; }
+        .nf-auth-headline { font-size: clamp(13px, 3.6cqw, 30px); }
         @media (max-width: 900px) {
           .nf-auth-grid      { grid-template-columns: 1fr !important; }
           .nf-auth-left      { display: none !important; }
           .nf-auth-brandstrip { display: flex; }
-          .nf-auth-form      { margin-top: 80px; }
+          .nf-auth-form      { margin-top: 80px; padding: 32px 24px !important; }
         }
       `}</style>
     </div>

@@ -1,0 +1,13 @@
+{
+  "name": "nforce-sync",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "cd backend && ./mvnw.cmd spring-boot:run",
+    "dev:all": "concurrently -n frontend,backend -c blue,green \"npm run dev:frontend\" \"npm run dev:backend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
