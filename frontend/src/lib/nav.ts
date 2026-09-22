@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, ClipboardList, BarChart3, Activity,
-  ClipboardCheck, AlertOctagon,
+  ClipboardCheck, AlertOctagon, Inbox,
   FolderKanban, Users, TrendingUp, Map,
   AlertTriangle, DollarSign, Trophy,
   Lock, Settings, Plug, Bot, ScrollText, Building2,
@@ -114,6 +114,7 @@ export const NAV: Record<Role, RoleNav> = {
         },
         { key: 'my-projects', label: 'My Projects',     path: '/my-projects', icon: FolderKanban },
         { key: 'my-blockers', label: 'My Blockers',     path: '/blockers',    icon: AlertOctagon },
+        { key: 'eod-inbox',   label: 'EOD Inbox',       path: '/employee/eod-inbox', icon: Inbox },
         { key: 'eod-submit',  label: 'Submit EOD',      path: '/eod/submit',  icon: ClipboardList },
         {
           key: 'eod-history', label: 'My EOD History', path: '/eod/history', icon: BarChart3,
@@ -149,6 +150,7 @@ export const NAV: Record<Role, RoleNav> = {
         { key: 'approvals',  label: 'Approvals',         path: '/team/approvals',   icon: ClipboardCheck },
         { key: 'team-util',  label: 'Team Utilization',  path: '/team/utilization', icon: Activity },
         { key: 'blockers',   label: 'Blockers',          path: '/team/blockers',    icon: AlertOctagon },
+        { key: 'eod-inbox',  label: 'EOD Inbox',         path: '/team/eod-inbox',   icon: Inbox },
       ],
     },
     {
@@ -169,6 +171,7 @@ export const NAV: Record<Role, RoleNav> = {
         { key: 'pm-util',        label: 'Projects Utilization', path: '/projects/utilization',  icon: Activity },
         { key: 'planned-actual', label: 'Planned vs Actual',  path: '/projects/planned-actual', icon: TrendingUp },
         { key: 'blockers',       label: 'Blockers',           path: '/projects/blockers',       icon: AlertOctagon },
+        { key: 'eod-inbox',      label: 'EOD Inbox',          path: '/projects/eod-inbox',      icon: Inbox },
       ],
     },
     {

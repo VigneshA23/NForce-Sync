@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, XCircle, Paperclip, X, Loader2 } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, XCircle, Paperclip, X, Loader2, MessageCircleQuestion } from 'lucide-react';
+import { useClarificationStatus } from '../../api/eodClarification';
 import { useToast } from '../../lib/toast';
 import { useAuth } from '../../lib/auth';
 import { todayISO, formatDate, formatTime12h } from '../../lib/date';
@@ -659,6 +660,13 @@ export default function SubmitEOD() {
   // the rest of the form stays editable. Kept separate from isReadOnly, whose dates must stay
   // navigable.
   const isDateLocked = entryStatus === 'REJECTED';
+  // A submitted entry is already fully locked by isReadOnly above (isEditable() on the backend
+  // only allows DRAFT/REJECTED) — a TL-requested clarification doesn't change that, it's purely
+  // an explanatory reason shown on top of the existing "submitted, awaiting review" lock.
+  const { data: clarificationStatus } = useClarificationStatus(
+    entryId ?? undefined, 'employee', entryStatus === 'SUBMITTED',
+  );
+  const hasOpenClarification = clarificationStatus?.open === true;
   const totalHours   = tasks.reduce((sum, t) => sum + (parseFloat(t.hours) || 0), 0);
   const catMap       = new Map(categories.map(c => [c.id, c]));
 
@@ -1119,22 +1127,40 @@ export default function SubmitEOD() {
         </div>
       )}
 
-      {/* Submitted/Approved banner */}
+      {/* Submitted/Approved banner — a clarification request gets its own explanatory variant,
+          same lock (isReadOnly), just a different reason shown. */}
       {isReadOnly && (
         <div style={{
           display: 'flex', gap: 10, alignItems: 'center',
           padding: '10px 16px', borderRadius: 8, marginTop: 20,
-          background: entryStatus === 'APPROVED' ? 'rgba(47,182,124,.08)' : 'rgba(76,141,214,.08)',
-          border: `1px solid ${entryStatus === 'APPROVED' ? 'rgba(47,182,124,.3)' : 'rgba(76,141,214,.3)'}`,
+          background: entryStatus === 'APPROVED' ? 'rgba(47,182,124,.08)'
+            : hasOpenClarification ? 'rgba(224,169,59,.08)' : 'rgba(76,141,214,.08)',
+          border: `1px solid ${entryStatus === 'APPROVED' ? 'rgba(47,182,124,.3)'
+            : hasOpenClarification ? 'rgba(224,169,59,.3)' : 'rgba(76,141,214,.3)'}`,
         }}>
           {entryStatus === 'APPROVED'
             ? <CheckCircle size={14} style={{ color: '#2FB67C', flexShrink: 0 }} aria-hidden />
-            : <Clock size={14} style={{ color: '#4C8DD6', flexShrink: 0 }} aria-hidden />}
+            : hasOpenClarification
+              ? <MessageCircleQuestion size={14} style={{ color: '#E0A93B', flexShrink: 0 }} aria-hidden />
+              : <Clock size={14} style={{ color: '#4C8DD6', flexShrink: 0 }} aria-hidden />}
           <span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
             {entryStatus === 'APPROVED'
               ? 'This report has been approved. No changes can be made.'
-              : 'This report has been submitted and is awaiting review.'}
+              : hasOpenClarification
+                ? `Your Team Lead requested clarification on this report — it can't be edited until resolved.`
+                : 'This report has been submitted and is awaiting review.'}
           </span>
+          {hasOpenClarification && entryId != null && (
+            <Link
+              to={`/employee/eod-inbox?highlight=${entryId}`}
+              style={{
+                marginLeft: 'auto', flexShrink: 0, fontSize: 12.5, fontWeight: 600,
+                color: '#E0A93B', textDecoration: 'none', whiteSpace: 'nowrap',
+              }}
+            >
+              Reply in EOD Inbox →
+            </Link>
+          )}
         </div>
       )}
 

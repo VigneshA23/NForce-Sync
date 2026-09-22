@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, X, Paperclip } from 'lucide-react';
+import { Check, X, Paperclip, MessageCircleQuestion } from 'lucide-react';
 import {
   useApprovalHistory, useApprove, useReject,
 } from '../../api/approvals';
@@ -10,6 +10,7 @@ import { formatDate as fmtDate, formatDurationMinutes } from '../../lib/date';
 import { getEodAttachmentDataUrl } from '../../api/eod';
 import type { EodEntryDto, EodTaskDto, EodAttachmentDto } from '../../api/eod';
 import { previewEodAttachment } from '../../lib/eodAttachments';
+import { useClarificationStatusForApprovals } from '../../api/eodClarification';
 
 // Shared between the Team Lead's and the Project Manager's Approvals pages — the submission
 // detail modal is correctness-sensitive and must not fork between the two roles, so both pages
@@ -50,7 +51,7 @@ export function entryCategories(e: EodEntryDto): string[] {
  * Returns null for an ordinary working day with no overtime — nothing to clarify there.
  */
 export function daySummary(entry: EodEntryDto): string | null {
-  if (entry.dayType === 'HOLIDAY') return 'Holiday — no tasks';
+  if (entry.dayType === 'HOLIDAY') return 'Holiday, no tasks';
 
   const leaveHours = sumHours(entry.tasks.filter(t => t.categoryName === LEAVE_CATEGORY));
   const worked = sumHours(entry.tasks.filter(t => t.categoryName !== LEAVE_CATEGORY));
@@ -344,10 +345,63 @@ function EodAttachmentChips({ attachments }: { attachments: EodAttachmentDto[] }
   );
 }
 
+// ── EOD entry body — Tasks / Next-day plan / Remarks / rejection-reason display ───
+// Pure read-only rendering of an EodEntryDto, extracted out of SubmissionDetailModal so it can
+// be reused wherever an entry's full detail needs to be shown without any Approve/Reject/Request-
+// Clarification affordances (e.g. EOD Inbox's "View EOD" panel) — nothing here is interactive, so
+// there's no separate read-only prop/mode to add, it's just the display half of the modal on its own.
+
+export function EodEntryBody({ entry }: { entry: EodEntryDto }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <FieldLabel>Tasks</FieldLabel>
+      {entry.tasks.map(t => (
+        <div key={t.id} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '12px 14px' }}>
+          <div className="nf-r-pairs" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 70px 110px', gap: 10, marginBottom: 8 }}>
+            <div><FieldLabel>Project</FieldLabel><div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)' }}>{t.projectCode ?? '—'}</div></div>
+            <div><FieldLabel>Category</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.categoryName ?? '—'}</div></div>
+            <div><FieldLabel>Hours</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.hours != null ? `${hrs(Number(t.hours))}h` : '—'}</div></div>
+            <div><FieldLabel>Status</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.taskStatus}</div></div>
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{t.description || '—'}</div>
+          {t.taskStatus === 'BLOCKED' && t.blockerReason && (
+            <div style={{ fontSize: 11.5, color: 'var(--risk)', marginTop: 8 }}>Blocker: {t.blockerReason}</div>
+          )}
+          <EodAttachmentChips attachments={t.attachments} />
+        </div>
+      ))}
+
+      <div>
+        <FieldLabel>Next-day plan</FieldLabel>
+        <div style={{ fontSize: 12.5, color: 'var(--txt)', background: 'var(--raised)', borderRadius: 6, padding: 10 }}>{entry.nextDayPlan || '—'}</div>
+      </div>
+      <div>
+        <FieldLabel>Remarks</FieldLabel>
+        <div style={{ fontSize: 12.5, color: 'var(--txt)', background: 'var(--raised)', borderRadius: 6, padding: 10 }}>{entry.remarks || '—'}</div>
+      </div>
+
+      {/* A rejected entry must always show why, not only in the expanded audit trail. */}
+      {entry.status === 'REJECTED' && entry.reviewerComment && (
+        <div>
+          <FieldLabel>Rejection reason</FieldLabel>
+          <div style={{
+            fontSize: 12.5, color: 'var(--txt)', borderRadius: 6, padding: 10,
+            background: 'color-mix(in srgb, var(--risk) 8%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--risk) 30%, transparent)',
+          }}>
+            {entry.reviewerComment}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── submission detail modal ─────────────────────────────────────────────────────
 
 export function SubmissionDetailModal({
   entry, onClose, onApprove, onReject, approveBusy, rejectBusy = false,
+  onRequestClarification, clarifyBusy = false,
 }: {
   entry: EodEntryDto | null;
   onClose: () => void;
@@ -356,6 +410,13 @@ export function SubmissionDetailModal({
   onReject: (entryId: number, reason: string) => void;
   approveBusy: boolean;
   rejectBusy?: boolean;
+  /** Team Lead only — omitted entirely by the PM's Approvals page, which hides the button rather
+   *  than disabling it (same wiring-omission pattern PM Blockers uses for its read-only view).
+   *  Fires immediately on click — no reason prompt, same as opening a Blocker conversation. The
+   *  caller opens the (empty) clarification round and navigates to EOD Inbox; the TL types the
+   *  actual question there as the thread's first message. */
+  onRequestClarification?: (entryId: number) => void;
+  clarifyBusy?: boolean;
 }) {
   // Rejecting happens in place: the first Reject click reveals the reason box below Remarks, the
   // second submits it. A separate confirm dialog used to hide the work being judged.
@@ -371,10 +432,19 @@ export function SubmissionDetailModal({
   const editable = entry?.status === 'SUBMITTED';
   const reasonEmpty = reason.trim() === '';
 
+  // Approve/Reject stay disabled whenever an open clarification exists (status NEEDS_RESPONSE or
+  // ACKNOWLEDGED — EodClarificationStatusDto.open covers both) — same gate
+  // ApprovalService.requireNoOpenClarification enforces server-side; they re-enable once status
+  // is RESOLVED. In practice an entry with one open never appears in this list at all (see
+  // EodEntryRepository's pending queries), so this mostly guards a stale-tab/notification-link
+  // race rather than the everyday path.
+  const { data: clarificationStatus } = useClarificationStatusForApprovals(entry?.id, entry != null);
+  const clarificationOpen = clarificationStatus?.open === true;
+
   return (
     <Modal
       open={entry != null}
-      title={entry ? `${entry.employeeName} — ${fmtDate(entry.entryDate)}` : 'Submission'}
+      title={entry ? `${entry.employeeName}, ${fmtDate(entry.entryDate)}` : 'Submission'}
       onClose={onClose}
       width={640}
       // Fixed outer size regardless of task count — a 1-task and a 5-task submission render at
@@ -395,46 +465,45 @@ export function SubmissionDetailModal({
             </Btn>
           </>
         ) : (
-          <>
-            <Btn variant="danger" onClick={() => setRejecting(true)}><X size={12} aria-hidden="true" /> Reject</Btn>
-            <Btn
-              variant="success"
-              onClick={() => onApprove(entry.id)}
-              disabled={approveBusy}
-            >
-              {approveBusy ? 'Approving…' : <><Check size={12} aria-hidden="true" /> Approve</>}
-            </Btn>
-          </>
+          // space-between: Reject+Approve grouped on the left, Request Clarification alone on
+          // the right — same single row, just reordered/regrouped (Modal's own footer container
+          // is a plain flex row with no justify-content, so that layout is set here instead).
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <Btn
+                variant="danger"
+                onClick={() => setRejecting(true)}
+                disabled={clarificationOpen}
+                title={clarificationOpen ? 'Resolve the open clarification before deciding this entry.' : undefined}
+              >
+                <X size={12} aria-hidden="true" /> Reject
+              </Btn>
+              <Btn
+                variant="success"
+                onClick={() => onApprove(entry.id)}
+                disabled={approveBusy || clarificationOpen}
+                title={clarificationOpen ? 'Resolve the open clarification before deciding this entry.' : undefined}
+              >
+                {approveBusy ? 'Approving…' : <><Check size={12} aria-hidden="true" /> Approve</>}
+              </Btn>
+            </div>
+            {onRequestClarification && (
+              <Btn
+                variant="warn"
+                onClick={() => onRequestClarification(entry.id)}
+                disabled={clarificationOpen || clarifyBusy}
+                title={clarificationOpen ? 'A clarification is already open on this entry.' : undefined}
+              >
+                {clarifyBusy ? 'Opening…' : <><MessageCircleQuestion size={12} aria-hidden="true" /> Request Clarification</>}
+              </Btn>
+            )}
+          </div>
         )
       ) : undefined}
     >
       {entry && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <FieldLabel>Tasks</FieldLabel>
-          {entry.tasks.map(t => (
-            <div key={t.id} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '12px 14px' }}>
-              <div className="nf-r-pairs" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 70px 110px', gap: 10, marginBottom: 8 }}>
-                <div><FieldLabel>Project</FieldLabel><div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)' }}>{t.projectCode ?? '—'}</div></div>
-                <div><FieldLabel>Category</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.categoryName ?? '—'}</div></div>
-                <div><FieldLabel>Hours</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.hours != null ? `${hrs(Number(t.hours))}h` : '—'}</div></div>
-                <div><FieldLabel>Status</FieldLabel><div style={{ fontSize: 12.5, color: 'var(--txt)' }}>{t.taskStatus}</div></div>
-              </div>
-              <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{t.description || '—'}</div>
-              {t.taskStatus === 'BLOCKED' && t.blockerReason && (
-                <div style={{ fontSize: 11.5, color: 'var(--risk)', marginTop: 8 }}>Blocker: {t.blockerReason}</div>
-              )}
-              <EodAttachmentChips attachments={t.attachments} />
-            </div>
-          ))}
-
-          <div>
-            <FieldLabel>Next-day plan</FieldLabel>
-            <div style={{ fontSize: 12.5, color: 'var(--txt)', background: 'var(--raised)', borderRadius: 6, padding: 10 }}>{entry.nextDayPlan || '—'}</div>
-          </div>
-          <div>
-            <FieldLabel>Remarks</FieldLabel>
-            <div style={{ fontSize: 12.5, color: 'var(--txt)', background: 'var(--raised)', borderRadius: 6, padding: 10 }}>{entry.remarks || '—'}</div>
-          </div>
+          <EodEntryBody entry={entry} />
 
           {/* Asked for right here, below Remarks, once Reject is clicked — the reviewer stays on the
               work they are judging while writing why. */}
@@ -456,20 +525,6 @@ export function SubmissionDetailModal({
               />
               <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 4 }}>
                 This reason is shared with the employee.
-              </div>
-            </div>
-          )}
-
-          {/* A rejected entry must always show why, not only in the expanded audit trail. */}
-          {entry.status === 'REJECTED' && entry.reviewerComment && (
-            <div>
-              <FieldLabel>Rejection reason</FieldLabel>
-              <div style={{
-                fontSize: 12.5, color: 'var(--txt)', borderRadius: 6, padding: 10,
-                background: 'color-mix(in srgb, var(--risk) 8%, transparent)',
-                border: '1px solid color-mix(in srgb, var(--risk) 30%, transparent)',
-              }}>
-                {entry.reviewerComment}
               </div>
             </div>
           )}

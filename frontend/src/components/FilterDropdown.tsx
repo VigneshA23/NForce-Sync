@@ -22,16 +22,20 @@ export function FilterDropdown({ label, options, selected, onToggle, onClear, ge
     <div style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen(o => !o)}
+        title={label}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 500,
           background: selected.size ? 'color-mix(in srgb, var(--brand) 10%, var(--raised2))' : 'var(--raised2)',
           border: `1px solid ${selected.size ? 'rgba(177,17,22,.5)' : 'var(--line2)'}`,
-          color: 'var(--txt)', cursor: 'pointer',
+          color: 'var(--txt)', cursor: 'pointer', whiteSpace: 'nowrap',
         }}
       >
         <ListFilter size={13} aria-hidden="true" />
-        {label} {selected.size > 0 && `(${selected.size})`}
+        {/* Hidden (not just visually collapsed) by a container query when this dropdown sits in
+            a narrow container — e.g. EodInboxFilterToolbar's 3-panel-squeezed toolbar — so the
+            button shrinks to icon+chevron instead of forcing the row to wrap. See index.css. */}
+        <span className="nf-fd-label">{label} {selected.size > 0 && `(${selected.size})`}</span>
         <ChevronDown size={12} aria-hidden="true" />
       </button>
       {open && (
@@ -93,15 +97,16 @@ export function SortDropdown<T extends string>({ label, options, value, onChange
     <div style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen(o => !o)}
+        title={`${label}: ${current?.label ?? ''}`}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 500,
           background: 'var(--raised2)', border: '1px solid var(--line2)',
-          color: 'var(--txt)', cursor: 'pointer',
+          color: 'var(--txt)', cursor: 'pointer', whiteSpace: 'nowrap',
         }}
       >
         <ArrowUpDown size={13} aria-hidden="true" />
-        {label}: {current?.label ?? ''}
+        <span className="nf-fd-label">{label}: {current?.label ?? ''}</span>
         <ChevronDown size={12} aria-hidden="true" />
       </button>
       {open && (

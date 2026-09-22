@@ -67,7 +67,11 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
                                                                    @Param("from") LocalDate from,
                                                                    @Param("to") LocalDate to);
 
-    // Pending approvals for a manager — custom JPQL with EntityGraph-equivalent JOIN FETCH
+    // Pending approvals for a manager — custom JPQL with EntityGraph-equivalent JOIN FETCH.
+    // An entry with an open EOD Clarification round stays in this list (does not move anywhere) —
+    // ApprovalsRow/EntryRow flags it with a "Clarification Requested" badge instead (see
+    // useEodInbox('lead', true) in Approvals.tsx), and ApprovalService still blocks the actual
+    // approve/reject call while one is open.
     @Query("""
         SELECT DISTINCT e FROM EodEntry e
         JOIN FETCH e.employee emp

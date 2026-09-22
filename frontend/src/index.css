@@ -660,6 +660,41 @@ textarea:-webkit-autofill:focus {
   }
 }
 
+/* ─── EOD Inbox — container-width-aware collapse ────────────────── */
+/* Everything above in this file keys off the VIEWPORT (@media). This block
+   is the one deliberate exception: EOD Inbox's list column can get squeezed
+   by its own 3-panel (list | conversation | EOD detail) layout at any
+   viewport width, including a wide desktop one — a @media rule can't see
+   that, only a container query (keyed off the element's own box) can.
+   Scoped to .eod-inbox-toolbar/.eod-inbox-table specifically so it never
+   touches Approvals'/Blockers' own toolbars or tables, which reuse the same
+   FilterDropdown/SortDropdown components and .nf-r-scroll table pattern but
+   are only ever squeezed by the viewport, which @media already covers there. */
+.eod-inbox-toolbar { container-type: inline-size; container-name: eod-toolbar; }
+.eod-inbox-table { container-type: inline-size; container-name: eod-table; }
+
+/* Icon-only "Clear all filters" — hidden by default, shown only once its
+   label is hidden below, so it doesn't take extra space at comfortable widths. */
+.nf-fd-icon-only { display: none; }
+
+@container eod-toolbar (max-width: 640px) {
+  /* Collapses Employee/Project/Category/Sort to icon+chevron and "Clear all
+     filters" to a bare X — shrinks the row instead of letting it wrap. */
+  .eod-inbox-toolbar .nf-fd-label { display: none; }
+  .eod-inbox-toolbar .nf-fd-icon-only { display: inline-flex; }
+}
+
+@container eod-table (max-width: 640px) {
+  /* Drops Replies and Last Reply rather than letting their content wrap and
+     desync row heights — both header and rows read the same --eod-table-cols
+     custom property, so they stay in lockstep without a second table markup. */
+  .eod-inbox-table { --eod-table-cols: 32px 2.4fr 1fr 1.1fr 1.2fr 1fr !important; }
+  .eod-inbox-table .eod-col-replies,
+  .eod-inbox-table .eod-col-lastreply {
+    display: none !important;
+  }
+}
+
 /* ─── Toasts ────────────────────────────────────────────────────── */
 /* The stack is `position: fixed; right: 1rem; width: 100%` capped at 380px.
    Below 380 + 2rem the width wins and the box starts off the left edge, so

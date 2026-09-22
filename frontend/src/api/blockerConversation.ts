@@ -34,12 +34,21 @@ function basePath(scope: ConversationScope): string {
 // as an object URL per attachment. Not explicitly revoked on cache eviction since another
 // mounted <img>/link may still reference the same cached URL; the per-session attachment
 // count on a single blocker thread is small enough that this isn't worth the complexity.
+//
+// Exported as a plain async function (not just the hook below) so BlockerThreadView can pass it
+// into the generic ThreadView's `fetchAttachmentUrl` prop directly — a prop can't be a *call* to
+// useBlockerAttachmentUrl itself (that would be a hook invoked inside a callback, which
+// react-hooks/rules-of-hooks correctly rejects); ThreadView's own GenericAttachmentView is what
+// actually calls useQuery, unconditionally, in its own body.
+export function fetchBlockerAttachmentUrl(scope: ConversationScope, attachmentId: number): Promise<string> {
+  return api.get(`${basePath(scope)}/attachments/${attachmentId}`, { responseType: 'blob' })
+    .then(r => URL.createObjectURL(r.data as Blob));
+}
+
 export function useBlockerAttachmentUrl(scope: ConversationScope, attachmentId: number) {
   return useQuery({
     queryKey: ['blocker-attachment-blob', scope, attachmentId],
-    queryFn: () =>
-      api.get(`${basePath(scope)}/attachments/${attachmentId}`, { responseType: 'blob' })
-        .then(r => URL.createObjectURL(r.data as Blob)),
+    queryFn: () => fetchBlockerAttachmentUrl(scope, attachmentId),
     staleTime: Infinity,
   });
 }

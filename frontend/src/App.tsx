@@ -28,6 +28,7 @@ const BusinessRules       = lazy(() => import('./pages/admin/BusinessRules'));
 const EmployeeDashboard   = lazy(() => import('./pages/employee/Dashboard'));
 const EmployeeMyProjects  = lazy(() => import('./pages/employee/MyProjects'));
 const MyBlockers          = lazy(() => import('./pages/employee/MyBlockers'));
+const EmployeeEodInbox    = lazy(() => import('./pages/employee/EodInbox'));
 const MyUtilization       = lazy(() => import('./pages/employee/MyUtilization'));
 const SubmitEOD           = lazy(() => import('./pages/employee/SubmitEOD'));
 const EodHistory          = lazy(() => import('./pages/employee/EodHistory'));
@@ -36,6 +37,7 @@ const MyProjects          = lazy(() => import('./pages/lead/MyProjects'));
 const Approvals           = lazy(() => import('./pages/Approvals'));
 const TeamUtilization     = lazy(() => import('./pages/lead/TeamUtilization'));
 const Blockers            = lazy(() => import('./pages/lead/Blockers'));
+const EodInbox            = lazy(() => import('./pages/lead/EodInbox'));
 const ProjectsAllocation  = lazy(() => import('./pages/pm/ProjectsAllocation'));
 const ProjectsUtilization = lazy(() => import('./pages/pm/ProjectsUtilization'));
 const PlannedVsActual     = lazy(() => import('./pages/pm/PlannedVsActual'));
@@ -44,6 +46,7 @@ const ProjectDashboard    = lazy(() => import('./pages/pm/ProjectDashboard'));
 const ReportsDashboard    = lazy(() => import('./pages/pm/ReportsDashboard'));
 const LeadReportsDashboard = lazy(() => import('./pages/lead/ReportsDashboard'));
 const PmBlockers          = lazy(() => import('./pages/pm/Blockers'));
+const PmEodInbox          = lazy(() => import('./pages/pm/EodInbox'));
 
 // Super Admin Reportee Views — Project Manager Views only (Team Lead Views was removed from
 // Super Admin's navigation/access; Team Lead's own navigation/permissions are unaffected).
@@ -78,6 +81,7 @@ function ChunkPrefetcher() {
     if (user.role === 'employee') {
       import('./pages/employee/Dashboard');
       import('./pages/employee/MyBlockers');
+      import('./pages/employee/EodInbox');
     } else if (user.role === 'admin') {
       import('./pages/admin/Dashboard');
       import('./pages/admin/UserManagement');
@@ -98,6 +102,7 @@ function ChunkPrefetcher() {
       import('./pages/Approvals');
       import('./pages/lead/TeamUtilization');
       import('./pages/lead/Blockers');
+      import('./pages/lead/EodInbox');
       // Also warm today's dashboard data in parallel with the chunk import, so the landing
       // page renders with data already in flight instead of waiting for chunk-load-then-fetch.
       prefetchTeamLeadLanding(queryClient, todayISO());
@@ -109,6 +114,7 @@ function ChunkPrefetcher() {
       import('./pages/pm/ProjectsUtilization');
       import('./pages/pm/PlannedVsActual');
       import('./pages/pm/Blockers');
+      import('./pages/pm/EodInbox');
       import('./pages/Approvals');
     }
   }, [user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -179,6 +185,7 @@ function AppRoutes() {
             <Route path="/dashboard"    element={<EmployeeDashboard />} />
             <Route path="/my-projects"  element={<EmployeeMyProjects />} />
             <Route path="/blockers"     element={<MyBlockers />} />
+            <Route path="/employee/eod-inbox" element={<EmployeeEodInbox />} />
             <Route path="/eod/submit"  element={<SubmitEOD />} />
             <Route path="/eod/history" element={<EodHistory />} />
             <Route path="/utilization" element={<MyUtilization />} />
@@ -189,6 +196,7 @@ function AppRoutes() {
             <Route path="/team/approvals"   element={<Approvals />} />
             <Route path="/team/utilization" element={<TeamUtilization />} />
             <Route path="/team/blockers"    element={<Blockers />} />
+            <Route path="/team/eod-inbox"   element={<EodInbox />} />
             <Route path="/team/reports"     element={<LeadReportsDashboard />} />
 
             {/* ── Project Manager ────────────────────── */}
@@ -198,6 +206,7 @@ function AppRoutes() {
             <Route path="/projects/utilization"     element={<ProjectsUtilization />} />
             <Route path="/projects/planned-actual" element={<PlannedVsActual />} />
             <Route path="/projects/blockers"       element={<PmBlockers />} />
+            <Route path="/projects/eod-inbox"      element={<PmEodInbox />} />
             <Route path="/projects/approvals"      element={<ApprovalsPM />} />
             <Route path="/projects/reports"        element={<ReportsDashboard />} />
 
