@@ -25,12 +25,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.nforceone.sync.config.Futures;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 /**
@@ -63,6 +67,7 @@ public class ProjectDashboardService {
     private final HolidayRepository holidayRepository;
     private final BusinessRuleConfigRepository configRepository;
     private final TaskCategoryRepository taskCategoryRepository;
+    private final Executor dashboardQueryExecutor;
 
     public ProjectDashboardService(AppUserRepository appUserRepository,
                                     ProjectRepository projectRepository,
@@ -71,7 +76,8 @@ public class ProjectDashboardService {
                                     EodEntryRepository eodEntryRepository,
                                     HolidayRepository holidayRepository,
                                     BusinessRuleConfigRepository configRepository,
-                                    TaskCategoryRepository taskCategoryRepository) {
+                                    TaskCategoryRepository taskCategoryRepository,
+                                    Executor dashboardQueryExecutor) {
         this.appUserRepository = appUserRepository;
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
@@ -80,6 +86,7 @@ public class ProjectDashboardService {
         this.holidayRepository = holidayRepository;
         this.configRepository = configRepository;
         this.taskCategoryRepository = taskCategoryRepository;
+        this.dashboardQueryExecutor = dashboardQueryExecutor;
     }
 
     public ProjectDashboardFiltersDto getFilters(String actingEmail) {
@@ -165,7 +172,39 @@ public class ProjectDashboardService {
         }
         Map<Long, Project> projectsById = projects.stream().collect(Collectors.toMap(Project::getId, p -> p));
 
+        // config/holidays fanned out onto worker threads while the main thread fetches
+        // allocations directly — see AsyncQueryConfig/EmployeeService for the general pattern,
+        // but allocations specifically must NOT run on a worker thread: Allocation.employee is
+        // eager-fetched, but AppUser.manager (touched much later, in computeMissingEod) is not,
+        // and once a worker thread's ad-hoc transaction closes, that lazy proxy can never be
+        // resolved again by ANY thread (the entity is fully detached) — not just "the wrong
+        // thread". Running this one on the request's own (still-open) transaction keeps it safe.
+        CompletableFuture<BusinessRuleConfig> configF =
+                CompletableFuture.supplyAsync(this::requireConfig, dashboardQueryExecutor);
+        // Unfiltered — the previous-period snapshot below needs holiday dates for a DIFFERENT
+        // range, and re-querying the same small table there (as it used to) is a fully redundant
+        // round trip; filtering per range happens in memory on both sides instead.
+        CompletableFuture<Set<LocalDate>> allHolidaysF = CompletableFuture.supplyAsync(() -> holidayRepository
+                .findAllByOrderByHolidayDateAsc().stream()
+                .map(Holiday::getHolidayDate)
+                .collect(Collectors.toSet()),
+                dashboardQueryExecutor);
+        // Was previously looked up late, inside computeMissingEod, adding its own round trip
+        // AFTER every other query had already finished — a fully independent static lookup with
+        // no reason not to overlap with everything else here.
+        CompletableFuture<Long> leaveCategoryIdF =
+                CompletableFuture.supplyAsync(this::leaveCategoryId, dashboardQueryExecutor);
+
         List<Allocation> allocations = allocationRepository.findActiveInRangeForProjects(projectIds, from, to);
+
+        CompletableFuture.allOf(configF, allHolidaysF, leaveCategoryIdF).join();
+        BusinessRuleConfig config = Futures.join(configF);
+        BigDecimal standardHours = config.getWorkingHoursPerDay();
+        Set<LocalDate> allHolidayDates = Futures.join(allHolidaysF);
+        Long leaveCategoryId = Futures.join(leaveCategoryIdF);
+        Set<LocalDate> holidayDates = allHolidayDates.stream()
+                .filter(d -> !d.isBefore(from) && !d.isAfter(to))
+                .collect(Collectors.toSet());
 
         if (employeeId != null) {
             Allocation match = allocations.stream().filter(a -> a.getEmployee().getId().equals(employeeId)).findFirst()
@@ -189,13 +228,9 @@ public class ProjectDashboardService {
         if (employeeIds.isEmpty()) {
             return emptySummary(totalAssignedProjects, activeProjects, onHoldProjects, completedProjects);
         }
-
-        BusinessRuleConfig config = requireConfig();
-        BigDecimal standardHours = config.getWorkingHoursPerDay();
-        Set<LocalDate> holidayDates = holidayRepository.findAllByOrderByHolidayDateAsc().stream()
-                .map(Holiday::getHolidayDate)
-                .filter(d -> !d.isBefore(from) && !d.isAfter(to))
-                .collect(Collectors.toSet());
+        // `allocations` is reassigned above by the employeeId/teamManagerId filters, so it isn't
+        // effectively final — capture a final reference for the parallel missingEodF lambda below.
+        List<Allocation> allocationsForMissingEod = allocations;
 
         // Planned hours per allocation, clipped to the overlap of the allocation's own effective
         // window and the requested range — an allocation that started mid-range should not be
@@ -215,27 +250,49 @@ public class ProjectDashboardService {
             plannedByProject.merge(a.getProject().getId(), planned, BigDecimal::add);
         }
 
-        List<ProjectHoursRow> actualByProjectRows =
-                eodTaskRepository.sumHoursByProject(projectIds, employeeIds, from, to);
-        Map<Long, BigDecimal> actualByProject = actualByProjectRows.stream()
-                .collect(Collectors.toMap(ProjectHoursRow::projectId, ProjectHoursRow::hours));
-
-        List<EmployeeProjectHoursRow> actualByEmpProjRows =
-                eodTaskRepository.sumHoursByEmployeeAndProject(projectIds, employeeIds, from, to);
-        Map<String, BigDecimal> actualByEmpProj = actualByEmpProjRows.stream()
-                .collect(Collectors.toMap(r -> r.employeeId() + ":" + r.projectId(), EmployeeProjectHoursRow::hours));
-
-        BigDecimal totalActualHours = actualByProject.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        List<CategoryHoursRow> categoryRows = eodTaskRepository.sumHoursByCategory(projectIds, employeeIds, from, to);
-
         // Previous period (same length, immediately preceding `from`) — used only for the "vs last
         // month" deltas on the KPI cards and the per-project trend sparkline; its raw rows are
         // never returned to the client, only these comparison values.
         long periodDays = ChronoUnit.DAYS.between(from, to) + 1;
         LocalDate prevTo = from.minusDays(1);
         LocalDate prevFrom = from.minusDays(periodDays);
-        PeriodSnapshot previous = computeSnapshot(projectIds, prevFrom, prevTo, config);
+
+        // Fanned out — none of these 6 depends on another's result, only on allocations/holidayDates
+        // already resolved above. See AsyncQueryConfig/EmployeeService.
+        CompletableFuture<List<ProjectHoursRow>> actualByProjectRowsF = CompletableFuture.supplyAsync(
+                () -> eodTaskRepository.sumHoursByProject(projectIds, employeeIds, from, to), dashboardQueryExecutor);
+        CompletableFuture<List<EmployeeProjectHoursRow>> actualByEmpProjRowsF = CompletableFuture.supplyAsync(
+                () -> eodTaskRepository.sumHoursByEmployeeAndProject(projectIds, employeeIds, from, to), dashboardQueryExecutor);
+        CompletableFuture<List<CategoryHoursRow>> categoryRowsF = CompletableFuture.supplyAsync(
+                () -> eodTaskRepository.sumHoursByCategory(projectIds, employeeIds, from, to), dashboardQueryExecutor);
+        CompletableFuture<List<DateHoursRow>> dailyRowsF = CompletableFuture.supplyAsync(
+                () -> eodTaskRepository.sumHoursByDate(projectIds, employeeIds, from, to), dashboardQueryExecutor);
+        CompletableFuture<PeriodSnapshot> previousF = CompletableFuture.supplyAsync(
+                () -> computeSnapshot(projectIds, prevFrom, prevTo, config, allHolidayDates), dashboardQueryExecutor);
+        // Only the query is fanned out here — computeMissingEod itself (below, after the join)
+        // touches Allocation.employee.manager, a lazy relation Hibernate can only resolve on the
+        // thread/session that owns the surrounding @Transactional, not on a worker thread.
+        List<Long> missingEodEmployeeIds = allocationsForMissingEod.stream()
+                .map(a -> a.getEmployee().getId()).distinct().toList();
+        CompletableFuture<List<EodEntry>> missingEodEntriesF = CompletableFuture.supplyAsync(
+                () -> eodEntryRepository.findWithTasksByEmployeeIdInAndEntryDateBetween(missingEodEmployeeIds, from, to),
+                dashboardQueryExecutor);
+
+        CompletableFuture.allOf(actualByProjectRowsF, actualByEmpProjRowsF, categoryRowsF,
+                dailyRowsF, previousF, missingEodEntriesF).join();
+
+        List<ProjectHoursRow> actualByProjectRows = Futures.join(actualByProjectRowsF);
+        Map<Long, BigDecimal> actualByProject = actualByProjectRows.stream()
+                .collect(Collectors.toMap(ProjectHoursRow::projectId, ProjectHoursRow::hours));
+
+        List<EmployeeProjectHoursRow> actualByEmpProjRows = Futures.join(actualByEmpProjRowsF);
+        Map<String, BigDecimal> actualByEmpProj = actualByEmpProjRows.stream()
+                .collect(Collectors.toMap(r -> r.employeeId() + ":" + r.projectId(), EmployeeProjectHoursRow::hours));
+
+        BigDecimal totalActualHours = actualByProject.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        List<CategoryHoursRow> categoryRows = Futures.join(categoryRowsF);
+        PeriodSnapshot previous = Futures.join(previousF);
 
         List<ProjectUtilizationRowDto> projectUtilization = projectIds.stream()
                 .map(pid -> {
@@ -269,7 +326,7 @@ public class ProjectDashboardService {
 
         // Daily trend series for the Utilization Trend chart / KPI sparklines — each day's actual
         // hours against that day's available capacity (standard hours × employees in scope).
-        List<DateHoursRow> dailyRows = eodTaskRepository.sumHoursByDate(projectIds, employeeIds, from, to);
+        List<DateHoursRow> dailyRows = Futures.join(dailyRowsF);
         Map<LocalDate, BigDecimal> dailyActual = new HashMap<>();
         for (DateHoursRow row : dailyRows) {
             dailyActual.merge(row.date(), row.hours(), BigDecimal::add);
@@ -293,7 +350,8 @@ public class ProjectDashboardService {
                 .sorted(Comparator.comparing(TaskCategoryUtilizationRowDto::hours).reversed())
                 .toList();
 
-        List<MissingEodRowDto> missingEod = computeMissingEod(allocations, from, to, holidayDates, config);
+        List<MissingEodRowDto> missingEod = computeMissingEod(
+                allocationsForMissingEod, Futures.join(missingEodEntriesF), from, to, holidayDates, config, leaveCategoryId);
 
         // Total available capacity across every distinct employee in scope — the denominator for
         // the "Planned Utilization %" and "Actual Utilization %" summary cards.
@@ -336,7 +394,8 @@ public class ProjectDashboardService {
     private static final PeriodSnapshot EMPTY_SNAPSHOT =
             new PeriodSnapshot(false, Map.of(), BigDecimal.ZERO, BigDecimal.ZERO, 0);
 
-    private PeriodSnapshot computeSnapshot(List<Long> projectIds, LocalDate from, LocalDate to, BusinessRuleConfig config) {
+    private PeriodSnapshot computeSnapshot(List<Long> projectIds, LocalDate from, LocalDate to,
+                                            BusinessRuleConfig config, Set<LocalDate> allHolidayDates) {
         if (projectIds.isEmpty()) return EMPTY_SNAPSHOT;
 
         List<Allocation> allocations = allocationRepository.findActiveInRangeForProjects(projectIds, from, to);
@@ -344,8 +403,7 @@ public class ProjectDashboardService {
         if (employeeIds.isEmpty()) return EMPTY_SNAPSHOT;
 
         BigDecimal standardHours = config.getWorkingHoursPerDay();
-        Set<LocalDate> holidayDates = holidayRepository.findAllByOrderByHolidayDateAsc().stream()
-                .map(Holiday::getHolidayDate)
+        Set<LocalDate> holidayDates = allHolidayDates.stream()
                 .filter(d -> !d.isBefore(from) && !d.isAfter(to))
                 .collect(Collectors.toSet());
 
@@ -386,8 +444,14 @@ public class ProjectDashboardService {
 
     // ── Missing EOD breakdown ────────────────────────────────────────────────
 
-    private List<MissingEodRowDto> computeMissingEod(List<Allocation> allocations, LocalDate from, LocalDate to,
-                                                       Set<LocalDate> holidayDates, BusinessRuleConfig config) {
+    // `entries` — with tasks/project/category eager-fetched, see EodEntryRepository — is fetched
+    // by the caller (in parallel, alongside the other independent reads below) rather than
+    // queried in here: isLeaveOnlyEntry below calls entry.getTasks() once per employee per
+    // working day, and doing that query here would mean it always runs on whatever thread calls
+    // this method, defeating the point of fetching it in parallel.
+    private List<MissingEodRowDto> computeMissingEod(List<Allocation> allocations, List<EodEntry> entries,
+                                                       LocalDate from, LocalDate to, Set<LocalDate> holidayDates,
+                                                       BusinessRuleConfig config, Long leaveCategoryId) {
         Map<Long, AppUser> employeesById = allocations.stream()
                 .map(Allocation::getEmployee)
                 .collect(Collectors.toMap(AppUser::getId, e -> e, (a, b) -> a));
@@ -400,12 +464,10 @@ public class ProjectDashboardService {
         }
 
         List<Long> employeeIds = new ArrayList<>(employeesById.keySet());
-        List<EodEntry> entries = eodEntryRepository.findByEmployeeIdInAndEntryDateBetween(employeeIds, from, to);
         Map<String, EodEntry> entryByEmpDate = entries.stream()
                 .collect(Collectors.toMap(e -> e.getEmployee().getId() + ":" + e.getEntryDate(), e -> e));
 
         BigDecimal atRiskThresholdPct = config.getAtRiskMissingPct();
-        Long leaveCategoryId = leaveCategoryId();
 
         List<MissingEodRowDto> rows = new ArrayList<>();
         for (Long empId : employeeIds) {

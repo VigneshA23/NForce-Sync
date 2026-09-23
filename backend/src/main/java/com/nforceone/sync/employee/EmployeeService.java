@@ -110,13 +110,6 @@ public class EmployeeService {
                                 EodEntryRepository.EntryDateStatusView::getStatus, (a, b) -> a)),
                 dashboardQueryExecutor);
 
-        // Blocked tasks (last 14 days) and recent entries (last 30) share this one entry fetch —
-        // the 14-day window is always a subset of the 30-day one — instead of each running its
-        // own separate, fully-redundant copy of the same query.
-        CompletableFuture<List<EodEntry>> last30DaysF = CompletableFuture.supplyAsync(
-                () -> entryRepository.findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(
-                        employeeId, lookback30, today),
-                dashboardQueryExecutor);
         CompletableFuture<Map<LocalDate, UtilSnapshot>> last30SnapMapF = CompletableFuture.supplyAsync(
                 () -> snapshotRepository
                         .findByEmployeeIdAndSnapshotDateBetweenOrderBySnapshotDateAsc(employeeId, lookback30, today)
@@ -127,13 +120,24 @@ public class EmployeeService {
         CompletableFuture<List<DashboardSummaryDto.CalendarDay>> calendarDataF = CompletableFuture.supplyAsync(
                 () -> buildCalendarData(employeeId, calendarFrom, calendarTo), dashboardQueryExecutor);
 
+        // Blocked tasks (last 14 days) and recent entries (last 30) share this one entry fetch —
+        // the 14-day window is always a subset of the 30-day one — instead of each running its
+        // own separate, fully-redundant copy of the same query. Run on THIS thread (not fanned
+        // out like the others above/below) rather than as a future: blockedTasksFrom later reads
+        // task.getAcknowledgedBy()/getResolvedBy(), lazy relations the @EntityGraph on this query
+        // doesn't cover, and once a worker thread's ad-hoc transaction closes those entities are
+        // permanently detached — no thread could resolve them afterward, not even this one. The
+        // futures above/below were already dispatched (they run concurrently on the executor
+        // while this query runs here), so this still overlaps with them in wall-clock time.
+        List<EodEntry> last30Days = entryRepository.findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(
+                employeeId, lookback30, today);
+
         CompletableFuture.allOf(cutoffStatusF, rangeSnapsF, statusByDateF,
-                last30DaysF, last30SnapMapF, calendarDataF).join();
+                last30SnapMapF, calendarDataF).join();
 
         DashboardSummaryDto.CutoffStatus cutoffStatus = Futures.join(cutoffStatusF);
         List<UtilSnapshotDto> rangeSnaps = Futures.join(rangeSnapsF);
         Map<LocalDate, EodEntry.Status> statusByDate = Futures.join(statusByDateF);
-        List<EodEntry> last30Days = Futures.join(last30DaysF);
         Map<LocalDate, UtilSnapshot> last30SnapMap = Futures.join(last30SnapMapF);
         List<DashboardSummaryDto.CalendarDay> calendarData = Futures.join(calendarDataF);
 

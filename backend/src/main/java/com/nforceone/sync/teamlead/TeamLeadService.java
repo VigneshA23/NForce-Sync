@@ -130,9 +130,14 @@ public class TeamLeadService {
                 CompletableFuture.supplyAsync(() -> entriesForMembersOnDate(memberIds, to), dashboardQueryExecutor);
         CompletableFuture<Map<Long, BigDecimal>> pctByMemberF = CompletableFuture.supplyAsync(
                 () -> utilizationService.resolveUtilizationPctForEmployees(memberIds, to), dashboardQueryExecutor);
+        // findBlockedByManagerIdAndDateRange, not findBlockedByManagerId — it eager-fetches
+        // eodEntry (JOIN FETCH) and narrows by date at the DB level. findBlockedByManagerId does
+        // neither: eodEntry is lazy on it, and a Hibernate session closes the instant a
+        // repository call returns (each is individually @Transactional) — touching
+        // t.getEodEntry() even one line later in this SAME lambda, on this worker thread, throws
+        // LazyInitializationException. This isn't a "wrong thread" fix, it's "wrong query".
         CompletableFuture<Integer> activeBlockersF = CompletableFuture.supplyAsync(() ->
-                (int) taskRepository.findBlockedByManagerId(leadId).stream()
-                        .filter(t -> inRange(t.getEodEntry().getEntryDate(), from, to))
+                (int) taskRepository.findBlockedByManagerIdAndDateRange(leadId, from, to).stream()
                         .filter(t -> t.getAcknowledgedAt() == null)
                         .count(),
                 dashboardQueryExecutor);
@@ -250,10 +255,6 @@ public class TeamLeadService {
         return tasks.stream()
                 .map(t -> TeamBlockerDto.from(t, repliesByTask.getOrDefault(t.getId(), List.of())))
                 .toList();
-    }
-
-    private boolean inRange(LocalDate d, LocalDate from, LocalDate to) {
-        return !d.isBefore(from) && !d.isAfter(to);
     }
 
     /** Fetches a single blocker by task id, regardless of the caller's selected date range —
@@ -374,8 +375,18 @@ public class TeamLeadService {
         // window length: one for every entry in range, one for every day's resolved utilization.
         // Fanned out — see AsyncQueryConfig/EmployeeService — since none of these 4 depends on
         // another's result.
-        CompletableFuture<List<EodTask>> allBlockedF =
-                CompletableFuture.supplyAsync(() -> taskRepository.findBlockedByManagerId(leadId), dashboardQueryExecutor);
+        // findBlockedByManagerIdAndDateRange (not findBlockedByManagerId) — eager-fetches
+        // eodEntry and narrows by date at the DB level, so grouping by t.getEodEntry().getEntryDate()
+        // right below is safe. findBlockedByManagerId leaves eodEntry lazy, and a Hibernate
+        // session closes the instant its repository call returns (each is individually
+        // @Transactional) — touching that lazy field even one line later in this same lambda
+        // throws LazyInitializationException. See the analogous fix on ProjectDashboardService's
+        // allocations fetch (a different flavor of the same "wrong query, not wrong thread" bug).
+        CompletableFuture<Map<LocalDate, Long>> blockedCountByDateF = CompletableFuture.supplyAsync(
+                () -> taskRepository.findBlockedByManagerIdAndDateRange(leadId, startDate, endDate).stream()
+                        .filter(t -> t.getAcknowledgedAt() == null)
+                        .collect(Collectors.groupingBy(t -> t.getEodEntry().getEntryDate(), Collectors.counting())),
+                dashboardQueryExecutor);
         CompletableFuture<Set<LocalDate>> holidaysF = CompletableFuture.supplyAsync(() -> holidayRepository
                 .findAllByOrderByHolidayDateAsc().stream().map(Holiday::getHolidayDate).collect(Collectors.toSet()),
                 dashboardQueryExecutor);
@@ -391,8 +402,8 @@ public class TeamLeadService {
                         : utilizationService.resolveUtilizationPctForEmployees(memberIds, startDate, endDate),
                 dashboardQueryExecutor);
 
-        CompletableFuture.allOf(allBlockedF, holidaysF, entriesByMemberAndDateF, pctByMemberAndDateF).join();
-        List<EodTask> allBlocked = Futures.join(allBlockedF);
+        CompletableFuture.allOf(blockedCountByDateF, holidaysF, entriesByMemberAndDateF, pctByMemberAndDateF).join();
+        Map<LocalDate, Long> blockedCountByDate = Futures.join(blockedCountByDateF);
         Set<LocalDate> holidays = Futures.join(holidaysF);
         Map<Long, Map<LocalDate, EodEntry>> entriesByMemberAndDate = Futures.join(entriesByMemberAndDateF);
         Map<Long, Map<LocalDate, BigDecimal>> pctByMemberAndDate = Futures.join(pctByMemberAndDateF);
@@ -431,10 +442,7 @@ public class TeamLeadService {
             Double avg = utilCount > 0
                     ? utilSum.divide(BigDecimal.valueOf(utilCount), 2, RoundingMode.HALF_UP).doubleValue()
                     : null;
-            long blockedCount = allBlocked.stream()
-                    .filter(t -> t.getEodEntry().getEntryDate().equals(date))
-                    .filter(t -> t.getAcknowledgedAt() == null)
-                    .count();
+            long blockedCount = blockedCountByDate.getOrDefault(date, 0L);
 
             avgUtil.add(new TrendPointDto(date, avg, workingDay));
             submitted.add(new TrendPointDto(date, (double) submittedCount, workingDay));

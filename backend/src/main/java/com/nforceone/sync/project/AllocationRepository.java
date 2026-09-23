@@ -101,7 +101,11 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
 
     // Project Dashboard: every allocation on one of a PM's projects whose effective window
     // overlaps the requested date range, with employee+project JOIN FETCHed to avoid N+1.
-    @Query("SELECT a FROM Allocation a JOIN FETCH a.employee JOIN FETCH a.project " +
+    // employee.manager is ALSO eager-fetched: ProjectDashboardService's teamManagerId filter and
+    // its Missing EOD breakdown (computeMissingEod, which reports each employee's manager name)
+    // both read it — without this, each was its own lazy-load round trip per employee, an N+1
+    // that (with several employees behind missing EODs) dominated the dashboard's own load time.
+    @Query("SELECT a FROM Allocation a JOIN FETCH a.employee emp LEFT JOIN FETCH emp.manager JOIN FETCH a.project " +
            "WHERE a.project.id IN :projectIds " +
            "AND a.effectiveFrom <= :to " +
            "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :from) " +
