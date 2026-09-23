@@ -399,7 +399,7 @@ export default function Profile() {
               )}
               <div style={{ fontSize: 12, color: 'var(--txt-mut)', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.email}</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'rgba(177,17,22,.18)', color: 'var(--brand-bright)' }}>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'color-mix(in srgb, var(--brand) 18%, transparent)', color: 'var(--brand-bright)' }}>
                   {ROLE_LABELS[profile.role] ?? profile.role}
                 </span>
                 <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: profile.active ? 'rgba(47,182,124,.15)' : 'rgba(107,114,128,.15)', color: profile.active ? 'var(--ok)' : 'var(--txt-dim)' }}>
@@ -604,7 +604,7 @@ export default function Profile() {
                 style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--line2)', display: 'block' }}
               />
             ) : (
-              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'var(--brand)', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 'clamp(38px, 14vw, 64px)', fontWeight: 700, border: '3px solid rgba(177,17,22,.4)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif' }}>
+              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'var(--brand)', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 'clamp(38px, 14vw, 64px)', fontWeight: 700, border: '3px solid color-mix(in srgb, var(--brand) 40%, transparent)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif' }}>
                 {initials}
               </div>
             )}

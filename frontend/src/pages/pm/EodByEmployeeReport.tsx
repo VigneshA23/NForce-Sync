@@ -456,7 +456,7 @@ function RosterFlow({
         {checked.size > 0 && (
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-            background: 'var(--raised)', borderBottom: '1px solid rgba(177,17,22,.4)', padding: '8px 16px',
+            background: 'var(--raised)', borderBottom: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)', padding: '8px 16px',
           }}>
             <span style={{ fontSize: 12.5, color: 'var(--txt)' }}>{checked.size} selected</span>
             <div style={{ display: 'flex', gap: 8 }}>

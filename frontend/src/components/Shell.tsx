@@ -858,7 +858,7 @@ export function Shell() {
         <header
           style={{
             height: 56,
-            background: 'linear-gradient(90deg, #050506 0%, var(--brand-deep) 40%, var(--brand) 100%)',
+            background: 'linear-gradient(90deg, #050506 0%, var(--brand-deep) 45%, var(--brand) 100%)',
             backdropFilter: 'blur(10px)',
             borderBottom: '1px solid color-mix(in srgb, var(--brand-bright) 22%, transparent)',
             position: 'sticky',
@@ -930,7 +930,7 @@ export function Shell() {
                     right: 3,
                     minWidth: 16,
                     height: 16,
-                    background: 'var(--risk)',
+                    background: 'var(--brand-bright)',
                     borderRadius: 8,
                     fontSize: 9,
                     fontWeight: 700,
@@ -1025,7 +1025,7 @@ export function Shell() {
                         width: 36,
                         height: 36,
                         borderRadius: '50%',
-                        background: 'var(--brand)',
+                        background: 'var(--brand)',   /* FIX 4: brand red */
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',

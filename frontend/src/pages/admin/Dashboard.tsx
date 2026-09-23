@@ -7,112 +7,34 @@ import { toRole } from '../../api/auth';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 import { describeAuditEvent, formatRelative, AUDIT_CATEGORY_ICONS, AUDIT_CATEGORY_LABELS } from '../../lib/auditLog';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { Card, KpiCard } from '../../components/KpiCard';
+import { HeroBanner } from '../../components/dashboard/HeroBanner';
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
-function PageHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div style={{ marginBottom: 28 }}>
-      <h1 style={{
-        fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-        fontSize: 24,
-        fontWeight: 700,
-        color: 'var(--txt)',
-        margin: '0 0 4px',
-        letterSpacing: '-0.01em',
-      }}>
-        {title}
-      </h1>
-      <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>{subtitle}</p>
-    </div>
-  );
-}
-
-function Card({ children, style, onClick, onMouseEnter, onMouseLeave }: {
-  children: React.ReactNode;
-  style?: React.CSSProperties;
-  onClick?: () => void;
-  onMouseEnter?: () => void;
-  onMouseLeave?: () => void;
-}) {
+// A thin clickable wrapper around the shared KpiCard — preserves the KPI tiles'
+// click-to-filter navigation (e.g. straight into Users pre-filtered by status)
+// without forking the shared component just to add an onClick prop it doesn't need
+// anywhere else.
+function ClickableKpi({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  const [hover, setHover] = useState(false);
   return (
     <div
       onClick={onClick}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
       style={{
-        background: 'var(--panel)',
-        border: '1px solid var(--line)',
+        cursor: 'pointer',
         borderRadius: 10,
-        padding: '20px',
-        ...style,
+        transition: 'transform 0.14s',
+        transform: hover ? 'translateY(-2px)' : undefined,
       }}
     >
       {children}
     </div>
-  );
-}
-
-// ── KPI card ─────────────────────────────────────────────────────────────────
-
-interface KpiProps {
-  icon: React.ReactNode;
-  label: string;
-  value: number | string;
-  accent?: string;
-  onClick?: () => void;
-}
-
-function KpiCard({ icon, label, value, accent = 'var(--txt)', onClick }: KpiProps) {
-  const [hover, setHover] = useState(false);
-  return (
-    <Card
-      onClick={onClick}
-      onMouseEnter={onClick ? () => setHover(true) : undefined}
-      onMouseLeave={onClick ? () => setHover(false) : undefined}
-      style={onClick ? {
-        cursor: 'pointer',
-        borderColor: hover ? 'var(--txt-dim)' : 'var(--line)',
-        background: hover ? 'var(--raised2)' : 'var(--panel)',
-        transition: 'border-color 0.14s, background 0.14s',
-      } : undefined}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{
-          width: 36,
-          height: 36,
-          borderRadius: 8,
-          background: 'var(--raised2)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: accent,
-        }}>
-          {icon}
-        </div>
-        {/* Signals the tile is clickable — otherwise nothing here reads as a button on
-            first glance, only on hover, which a touch/first-time user would never see. */}
-        {onClick && (
-          <ArrowRight size={14} aria-hidden="true" style={{ color: 'var(--txt-dim)', marginTop: 3, flexShrink: 0 }} />
-        )}
-      </div>
-      <div style={{
-        fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-        fontSize: 28,
-        fontWeight: 700,
-        color: accent,
-        letterSpacing: '-0.02em',
-        lineHeight: 1,
-        fontVariantNumeric: 'tabular-nums',
-        marginBottom: 6,
-      }}>
-        {value}
-      </div>
-      <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontWeight: 500 }}>{label}</div>
-    </Card>
   );
 }
 
@@ -155,7 +77,7 @@ export default function AdminDashboard() {
   if (isPending) {
     return (
       <div>
-        <PageHeader title="Admin Dashboard" subtitle="Platform health at a glance." />
+        <HeroBanner subtitle="Platform health at a glance." />
         <GlobalLoader fullScreen={false} />
       </div>
     );
@@ -164,7 +86,7 @@ export default function AdminDashboard() {
   if (isError) {
     return (
       <div>
-        <PageHeader title="Admin Dashboard" subtitle="Platform health at a glance." />
+        <HeroBanner subtitle="Platform health at a glance." />
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load dashboard stats.</div>
           <button
@@ -185,22 +107,24 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <PageHeader title="Admin Dashboard" subtitle="Platform health at a glance." />
+      <div style={{ marginBottom: 16 }}>
+        <HeroBanner subtitle="Platform health at a glance." />
+      </div>
 
-      {/* KPI row — auto-fit (not auto-fill) so the 4 cards always stretch to fill the full
-          row width; auto-fill would keep reserving empty track slots at wide viewports,
-          leaving the cards bunched to the left instead of spanning edge-to-edge like the
-          two-column row below. With exactly 4 equal cards over 2 equal columns below, the
-          middle gap naturally lines up with the row-below split by symmetry. */}
-      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
-        <KpiCard icon={<Users size={18} />}    label="Total Users"          value={stats.totalUsers}         accent="var(--txt)"
-          onClick={() => navigate('/admin/users?status=ALL')} />
-        <KpiCard icon={<UserCheck size={18} />} label="Active Users"      value={stats.activeUsers}        accent="var(--ok)"
-          onClick={() => navigate('/admin/users?status=ACTIVE')} />
-        <KpiCard icon={<UserX size={18} />} label="Inactive Users" value={stats.inactiveUsers} accent="var(--txt-dim)"
-          onClick={() => navigate('/admin/users?status=INACTIVE')} />
-        <KpiCard icon={<Activity size={18} />} label="Audit Events (24h)" value={stats.auditEventsLast24h} accent="var(--info)"
-          onClick={() => navigate(`/admin/audit?from=${encodeURIComponent(since24h)}`)} />
+      {/* KPI row — its own full-width row below the hero/quick-actions row. */}
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16, marginBottom: 24 }}>
+        <ClickableKpi onClick={() => navigate('/admin/users?status=ALL')}>
+          <KpiCard icon={<Users size={18} />} label="Total Users" value={stats.totalUsers} accent="var(--txt)" />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate('/admin/users?status=ACTIVE')}>
+          <KpiCard icon={<UserCheck size={18} />} label="Active Users" value={stats.activeUsers} accent="var(--ok)" />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate('/admin/users?status=INACTIVE')}>
+          <KpiCard icon={<UserX size={18} />} label="Inactive Users" value={stats.inactiveUsers} accent="var(--txt-dim)" />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate(`/admin/audit?from=${encodeURIComponent(since24h)}`)}>
+          <KpiCard icon={<Activity size={18} />} label="Audit Events (24h)" value={stats.auditEventsLast24h} accent="var(--info)" />
+        </ClickableKpi>
       </div>
 
       <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 24 }}>

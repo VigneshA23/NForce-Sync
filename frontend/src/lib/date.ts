@@ -95,3 +95,17 @@ export function formatDateTime(iso: string): string {
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${formatDate(d)}, ${formatTime12h(`${hh}:${mm}`)}`;
 }
+
+/** Display-layer only: a `Date` as `Wed, 23 Sep 2025` — the dashboard hero banner's "Today" card. */
+export function formatHeroDate(d: Date): string {
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/** Display-layer only: a `Date` as a 12-hour clock with no seconds, e.g. `10:24 AM`. */
+export function formatHeroTime(d: Date): string {
+  const h24 = d.getHours();
+  const period = h24 >= 12 ? 'PM' : 'AM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${h12}:${mm} ${period}`;
+}

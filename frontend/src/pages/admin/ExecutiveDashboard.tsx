@@ -11,6 +11,7 @@ import {
 import { Card, KpiCard } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { DatePicker } from '../../components/DatePicker';
+import { HeroBanner } from '../../components/dashboard/HeroBanner';
 import { toLocalISODate, todayISO, formatDate } from '../../lib/date';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 import { toRole } from '../../api/auth';
@@ -29,19 +30,6 @@ function dateInputStyle(): React.CSSProperties {
 }
 
 // ── Shared primitives (mirrors Admin Dashboard's own local copies) ────────────
-
-function PageHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div style={{ marginBottom: 20, display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'space-between', alignItems: 'flex-end' }}>
-      <div>
-        <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 24, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-          {title}
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>{subtitle}</p>
-      </div>
-    </div>
-  );
-}
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 16 }}>{children}</div>;
@@ -217,7 +205,11 @@ export default function ExecutiveDashboard() {
 
   return (
     <div>
-      <PageHeader title="Executive Dashboard" subtitle="Organization-wide operational overview." />
+      {/* Hero banner — always visible, even while the dashboard data below is still loading
+          or failed to load (matches every other dashboard's behavior). */}
+      <div style={{ marginBottom: 20 }}>
+        <HeroBanner subtitle="Organization-wide operational overview." />
+      </div>
 
       {/* Date filter */}
       <Card style={{ marginBottom: 24, padding: '14px 20px' }}>
@@ -254,7 +246,7 @@ export default function ExecutiveDashboard() {
       {data && (
         <>
           {/* KPI row 1 — Workforce */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16, marginBottom: 16 }}>
+          <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16, marginBottom: 16 }}>
             <KpiCard icon={<Users size={18} />} label="Total Users" value={data.workforce.totalUsers} accent="var(--txt)" />
             <KpiCard icon={<UserCheck size={18} />} label="Active Users" value={data.workforce.activeUsers} accent="var(--ok)" />
             <KpiCard icon={<UserX size={18} />} label="Inactive Users" value={data.workforce.inactiveUsers} accent="var(--txt-dim)" />

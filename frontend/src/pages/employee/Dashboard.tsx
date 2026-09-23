@@ -15,6 +15,8 @@ import type {
 import { useAuth } from '../../lib/auth';
 import { UtilPctDonut, CategoryDonut, SegmentDonut } from '../../components/UtilizationDonut';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { KpiCard } from '../../components/KpiCard';
+import { HeroBanner } from '../../components/dashboard/HeroBanner';
 import { utilColor, fmtPct } from '../../lib/rules';
 import { formatDate, formatDateTime, formatTime12h, toLocalISODate, todayISO } from '../../lib/date';
 import { useHashScroll } from '../../lib/useHashScroll';
@@ -64,7 +66,10 @@ const DAY_COLORS = {
   EMPTY:     { bg: 'var(--day-empty-bg)',    text: 'var(--day-empty-text)' },
 } as const;
 
-function cellTint(day: CalendarDay): string {
+function cellTint(day: CalendarDay, isToday: boolean): string {
+  // Today is always a solid filled brand-red circle, regardless of its own status tint —
+  // matches the reference's "selected day" treatment and gives "today" one unambiguous look.
+  if (isToday) return 'var(--brand)';
   // Checked before the future/empty fallback so a holiday or weekend still reads as a
   // non-working day even when it falls on a not-yet-arrived date.
   if (day.status === 'HOLIDAY') return DAY_COLORS.HOLIDAY.bg;
@@ -84,7 +89,7 @@ function cellTint(day: CalendarDay): string {
 }
 
 function cellBorderColor(day: CalendarDay, isToday: boolean): string {
-  if (isToday) return 'color-mix(in srgb, var(--txt) 55%, transparent)';
+  if (isToday) return 'rgba(255,255,255,.45)';
   if (day.status === 'HOLIDAY') return `color-mix(in srgb, ${DAY_COLORS.HOLIDAY.text} 40%, transparent)`;
   if (day.isWeekend) return `color-mix(in srgb, ${DAY_COLORS.WEEKEND.text} 40%, transparent)`;
   if (day.isFuture) return 'var(--line)';
@@ -92,7 +97,8 @@ function cellBorderColor(day: CalendarDay, isToday: boolean): string {
   return 'transparent';
 }
 
-function cellTextColor(day: CalendarDay): string {
+function cellTextColor(day: CalendarDay, isToday: boolean): string {
+  if (isToday) return '#fff';
   if (day.status === 'HOLIDAY') return DAY_COLORS.HOLIDAY.text;
   if (day.isWeekend) return DAY_COLORS.WEEKEND.text;
   if (day.isFuture) return 'var(--txt-dim)';
@@ -143,7 +149,7 @@ function calendarTooltip(day: CalendarDay): string {
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { color: string; label: string }> = {
     APPROVED:          { color: 'var(--ok)',       label: 'Approved' },
-    SUBMITTED:         { color: 'var(--info)',      label: 'Pending' },
+    SUBMITTED:         { color: 'var(--warn)',      label: 'Pending' },
     DRAFT:             { color: 'var(--txt-dim)',   label: 'Draft' },
     REJECTED:          { color: 'var(--risk)',      label: 'Rejected' },
     MISSED:            { color: 'var(--risk)',      label: 'Missed' },
@@ -159,42 +165,6 @@ function StatusBadge({ status }: { status: string }) {
     }}>
       {label}
     </span>
-  );
-}
-
-// ── KPI tile ───────────────────────────────────────────────────────────────────
-
-function KpiTile({
-  icon, label, value, sub, accent = 'var(--txt)',
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  sub?: string;
-  accent?: string;
-}) {
-  return (
-    <Card>
-      <div style={{ marginBottom: 14 }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: 8,
-          background: 'var(--raised2)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', color: accent,
-        }}>
-          {icon}
-        </div>
-      </div>
-      <div style={{
-        fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-        fontSize: 26, fontWeight: 700, color: accent,
-        letterSpacing: '-0.02em', lineHeight: 1,
-        fontVariantNumeric: 'tabular-nums', marginBottom: 6,
-      }}>
-        {value}
-      </div>
-      <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontWeight: 500 }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 4 }}>{sub}</div>}
-    </Card>
   );
 }
 
@@ -314,7 +284,7 @@ function CalendarHeatmap({
               style={{
                 width: 'var(--nf-cal-cell)', height: 'var(--nf-cal-cell)',
                 borderRadius: 7,
-                background: cellTint(day),
+                background: cellTint(day, isToday),
                 border: `1.5px solid ${cellBorderColor(day, isToday)}`,
                 boxSizing: 'border-box',
                 display: 'flex', flexDirection: 'column',
@@ -322,7 +292,7 @@ function CalendarHeatmap({
                 gap: 3, cursor: 'default',
                 transition: 'filter 0.1s',
                 boxShadow: isToday
-                  ? '0 0 0 2px color-mix(in srgb, var(--txt) 20%, transparent)'
+                  ? '0 0 0 2px color-mix(in srgb, var(--brand-bright) 45%, transparent)'
                   : undefined,
               }}
               onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.filter = 'brightness(1.2)'; }}
@@ -330,7 +300,7 @@ function CalendarHeatmap({
             >
               <span style={{
                 fontSize: 13, fontWeight: 600, lineHeight: 1,
-                color: cellTextColor(day), fontVariantNumeric: 'tabular-nums',
+                color: cellTextColor(day, isToday), fontVariantNumeric: 'tabular-nums',
               }}>
                 {dayNum}
               </span>
@@ -399,8 +369,8 @@ function MonthStatsPanel({ days }: { days: CalendarDay[] }) {
           centerValue={`${completePct}%`}
           segments={[
             { label: 'Approved',     value: approved,    color: 'var(--ok)' },
-            { label: 'Pending',      value: submitted,   color: 'var(--info)' },
-            { label: 'Needs action', value: needsAction, color: 'var(--warn)' },
+            { label: 'Pending',      value: submitted,   color: 'var(--warn)' },
+            { label: 'Needs action', value: needsAction, color: 'var(--risk)' },
             { label: 'Missed',       value: missed,       color: 'var(--risk)' },
           ]}
         />
@@ -418,8 +388,8 @@ function MonthStatsPanel({ days }: { days: CalendarDay[] }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         {([
           { color: 'var(--ok)',      count: approved,    label: 'Approved' },
-          { color: 'var(--info)',    count: submitted,   label: 'Pending review' },
-          { color: 'var(--warn)',    count: needsAction, label: 'Needs action' },
+          { color: 'var(--warn)',    count: submitted,   label: 'Pending review' },
+          { color: 'var(--risk)',    count: needsAction, label: 'Needs action' },
           { color: 'var(--risk)',    count: missed,      label: 'Missed' },
           { color: 'var(--cat-4)', count: holiday,     label: 'Holiday' },
           { color: 'var(--txt-dim)', count: empty,       label: 'Not submitted' },
@@ -747,76 +717,6 @@ function UtilPeriodCard({
   );
 }
 
-// ── Cutoff banner ──────────────────────────────────────────────────────────────
-
-function CutoffBanner({
-  status, cutoffPassed, cutoffTime, cutoffNextDay,
-}: { status: string | null; cutoffPassed: boolean; cutoffTime: string | null; cutoffNextDay?: boolean }) {
-  const needsAction = !status || status === 'DRAFT' || status === 'REJECTED';
-  if (!needsAction) return null;
-  // No shift assigned, or no cutoff configured on it — there is no deadline to warn about.
-  if (!cutoffTime) return null;
-
-  // 12-hour clock plus an explicit "next day": a bare "0:30" for a shift that ends after
-  // midnight reads as though the deadline already passed this morning.
-  const fmt = `${formatTime12h(cutoffTime)}${cutoffNextDay ? ' (next day)' : ''}`;
-
-  if (cutoffPassed) {
-    return (
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '12px 16px', marginBottom: 20,
-        background: 'color-mix(in srgb, var(--risk) 8%, transparent)',
-        border: '1px solid color-mix(in srgb, var(--risk) 25%, transparent)',
-        borderRadius: 8,
-      }}>
-        <AlertCircle size={16} color="var(--risk)" style={{ flexShrink: 0 }} />
-        <div style={{ flex: 1 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--risk)' }}>
-            {"Cutoff passed - EOD not submitted."}
-          </span>
-          <span style={{ fontSize: 12, color: 'var(--txt-mut)', marginLeft: 8 }}>
-            This day may be marked as missed.
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '12px 16px', marginBottom: 20,
-      background: 'color-mix(in srgb, var(--warn) 8%, transparent)',
-      border: '1px solid color-mix(in srgb, var(--warn) 25%, transparent)',
-      borderRadius: 8,
-    }}>
-      <Clock size={16} color="var(--warn)" style={{ flexShrink: 0 }} />
-      <div style={{ flex: 1 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--warn)' }}>
-          {status === 'DRAFT'
-            ? "Draft saved - remember to submit."
-            : "Today's EOD not yet submitted."}
-        </span>
-        <span style={{ fontSize: 12, color: 'var(--txt-mut)', marginLeft: 8 }}>
-          Cutoff at {fmt}.
-        </span>
-      </div>
-      <Link
-        to="/eod/submit"
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '6px 12px', borderRadius: 6,
-          background: 'var(--warn)', color: '#000',
-          fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0,
-        }}
-      >
-        Submit <ArrowRight size={12} />
-      </Link>
-    </div>
-  );
-}
-
 // ── Blocked tasks panel ────────────────────────────────────────────────────────
 
 function BlockersPanel({ tasks, onSelect }: { tasks: BlockedTask[]; onSelect: (t: BlockedTask) => void }) {
@@ -963,12 +863,12 @@ function RecentActivity({ entries }: { entries: RecentEntry[] }) {
 }
 
 // ── Today's EOD Status ──────────────────────────────────────────────────────────
-// Always visible (unlike CutoffBanner, which only renders when action is needed) so
-// "what's today's status" has one persistent, unambiguous answer on the dashboard.
+// Always visible, so "what's today's status" has one persistent, unambiguous answer on
+// the dashboard.
 
 const TODAY_STATUS_META: Record<string, { color: string; label: string }> = {
   APPROVED:          { color: 'var(--ok)',     label: 'Approved' },
-  SUBMITTED:         { color: 'var(--info)',   label: 'Pending Review' },
+  SUBMITTED:         { color: 'var(--warn)',   label: 'Pending Review' },
   DRAFT:             { color: 'var(--txt-dim)', label: 'Draft Saved' },
   REJECTED:          { color: 'var(--risk)',   label: 'Rejected' },
   MISSING:           { color: 'var(--txt-dim)', label: 'Not Submitted' },
@@ -1148,17 +1048,11 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{
-          fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-          fontSize: 22, fontWeight: 700, color: 'var(--txt)',
-          margin: '0 0 4px', letterSpacing: '-0.01em',
-        }}>
-          My Dashboard
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>{todayLabel}</p>
+        <HeroBanner />
       </div>
+
+      <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: '-8px 0 20px' }}>{todayLabel}</p>
 
       {/* Today's EOD status — always visible */}
       <TodayStatusCard
@@ -1168,48 +1062,36 @@ export default function Dashboard() {
         isWeekend={isWeekend}
       />
 
-      {/* Cutoff banner */}
-      {!isWeekend && (
-        <CutoffBanner
-          status={cutoffStatus.entryStatus}
-          cutoffPassed={cutoffStatus.cutoffPassed}
-          cutoffTime={cutoffStatus.cutoffTime}
-          cutoffNextDay={cutoffStatus.cutoffNextDay}
-        />
-      )}
-
-      {/* KPI tiles — same track widths as the calendar/right-rail row below (3 flexible
-          tiles matching the calendar's width, then one fixed-width tile matching the
-          Pending Corrections rail), so the last tile's edges line up with it. */}
-      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr)) minmax(280px, 340px)', gap: 16, marginBottom: 20 }}>
-        <KpiTile
+      {/* KPI tiles — full-width row */}
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16, marginBottom: 20 }}>
+        <KpiCard
           icon={<Clock size={18} />}
           label="This week approved"
           value={`${quickStats.weekApprovedHours.toFixed(1)}h`}
           accent="var(--info)"
         />
-        <KpiTile
+        <KpiCard
           icon={<TrendingUp size={18} />}
           label="Month avg utilization"
           value={fmtPct(quickStats.monthAvgUtil)}
           accent={monthAvgColor}
         />
-        <KpiTile
+        <KpiCard
           icon={<Zap size={18} />}
           label="Approved streak"
           value={streakLabel}
-          sub={quickStats.streak >= 5 ? '🔥 On a roll' : undefined}
           accent={quickStats.streak >= 5 ? 'var(--ok)' : quickStats.streak > 0 ? 'var(--info)' : 'var(--txt-dim)'}
+          trend={quickStats.streak >= 5 ? { label: '🔥 On a roll', positive: true } : undefined}
         />
-        <KpiTile
+        <KpiCard
           icon={<Activity size={18} />}
           label="Last issue"
           value={dsiLabel}
-          sub={quickStats.daysSinceLastIssue < 0 ? 'in past 90 days' : undefined}
           accent={
             quickStats.daysSinceLastIssue < 0 || quickStats.daysSinceLastIssue > 7 ? 'var(--ok)'
             : quickStats.daysSinceLastIssue <= 2 ? 'var(--risk)' : 'var(--warn)'
           }
+          trend={quickStats.daysSinceLastIssue < 0 ? { label: 'in past 90 days', positive: true } : undefined}
         />
       </div>
 

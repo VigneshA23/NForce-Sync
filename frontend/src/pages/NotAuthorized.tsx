@@ -25,7 +25,7 @@ export function NotAuthorized() {
           width: 64,
           height: 64,
           borderRadius: '50%',
-          background: 'rgba(177,17,22,.12)',
+          background: 'color-mix(in srgb, var(--brand) 12%, transparent)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

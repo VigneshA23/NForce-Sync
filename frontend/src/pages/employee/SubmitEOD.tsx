@@ -1543,7 +1543,7 @@ export default function SubmitEOD() {
                   background: 'var(--brand)', border: '1px solid var(--brand-deep)',
                   color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
                   opacity: submitMutation.isPending ? 0.6 : 1,
-                  boxShadow: '0 2px 8px rgba(177,17,22,.35)',
+                  boxShadow: '0 2px 8px color-mix(in srgb, var(--brand) 35%, transparent)',
                 }}
               >
                 {submitMutation.isPending ? 'Submitting…' : 'Submit report'}

@@ -95,7 +95,7 @@ interface AuthLayoutProps {
 }
 
 const panelGradient = [
-  'radial-gradient(120% 100% at 80% 10%, rgba(177,17,22,.26) 0%, transparent 55%)',
+  'radial-gradient(120% 100% at 80% 10%, color-mix(in srgb, var(--brand) 26%, transparent) 0%, transparent 55%)',
   'linear-gradient(160deg, #0a0b0e 0%, #12141a 100%)',
 ].join(', ');
 
@@ -241,7 +241,7 @@ export function AuthLayout({ leftHeadline, showStats = false, children }: AuthLa
             position: 'absolute',
             inset: 0,
             zIndex: 0,
-            background: 'radial-gradient(70% 55% at 50% 40%, rgba(228,55,61,.07) 0%, transparent 70%)',
+            background: 'radial-gradient(70% 55% at 50% 40%, color-mix(in srgb, var(--brand-bright) 7%, transparent) 0%, transparent 70%)',
           }}
         />
 
