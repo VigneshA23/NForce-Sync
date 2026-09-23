@@ -7,6 +7,8 @@ import { BrandMark } from './BrandMark';
 import { NAV, ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, navSubItemPath, isNavGroup } from '../lib/nav';
 import type { NavItem } from '../lib/nav';
 import { useAuth } from '../lib/auth';
+import { useAccentColor, ACCENT_BAND_POSITION_X } from '../lib/accentColor';
+import sidebarDecoration from '../assets/sidebar-decoration.png';
 import { NotAuthorized } from '../pages/NotAuthorized';
 import { globalSearch } from '../api/search';
 import type { UserResult, ProjectResult } from '../api/search';
@@ -370,17 +372,17 @@ function NavLinkItem({ item, isActive, badge, indent, onNavClick }: {
         display: 'flex',
         alignItems: 'center',
         gap: 9,
-        padding: 'var(--nf-density-nav-pad, 9px 11px)',
-        margin: indent ? '1px 8px 1px 22px' : '1px 8px',
-        borderRadius: 6,
+        padding: 'var(--nf-density-nav-pad, 8px 12px)',
+        margin: indent ? '1px 8px 1px 20px' : '1px 8px',
+        borderRadius: 7,
         textDecoration: 'none',
         position: 'relative',
-        fontSize: 13,
+        fontSize: 12.5,
         fontWeight: 450,
       }}
       onClick={onNavClick}
     >
-      <Icon size={indent ? 15 : 17} style={{ flex: 'none', opacity: isActive ? 1 : 0.8 }} aria-hidden="true" />
+      <Icon size={15} style={{ flex: 'none', opacity: isActive ? 1 : 0.8 }} aria-hidden="true" />
       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {item.label}
       </span>
@@ -428,9 +430,10 @@ function NavLinkItem({ item, isActive, badge, indent, onNavClick }: {
 
 /** An expandable "Project Manager Views"-style parent row — a button, not a
  *  Link (it has no page of its own), with a chevron that rotates to reflect expanded/collapsed
- *  state. Its own active-state isn't tracked here; each child highlights itself when active. */
-function NavGroupRow({ label, icon: Icon, expanded, onToggle }: {
-  label: string; icon: NavItem['icon']; expanded: boolean; onToggle: () => void;
+ *  state. `isActivePath` (a descendant is the current page) gets it the same dimmed accent bar a
+ *  leaf item shows when active, without claiming the leaf's own aria-current="page"/full highlight. */
+function NavGroupRow({ label, icon: Icon, expanded, onToggle, isActivePath }: {
+  label: string; icon: NavItem['icon']; expanded: boolean; onToggle: () => void; isActivePath: boolean;
 }) {
   return (
     <button
@@ -443,21 +446,30 @@ function NavGroupRow({ label, icon: Icon, expanded, onToggle }: {
         alignItems: 'center',
         gap: 9,
         width: 'calc(100% - 16px)',
-        padding: 'var(--nf-density-nav-pad, 9px 11px)',
+        padding: 'var(--nf-density-nav-pad, 8px 12px)',
         margin: '1px 8px',
-        borderRadius: 6,
+        borderRadius: 7,
         border: 'none',
         background: 'transparent',
         cursor: 'pointer',
         font: 'inherit',
-        fontSize: 13,
-        fontWeight: 450,
+        fontSize: 12.5,
+        fontWeight: 600,
+        letterSpacing: '.03em',
         lineHeight: 'normal',
         textAlign: 'left',
         fontFamily: 'inherit',
+        position: 'relative',
+        color: isActivePath ? '#FFFFFF' : undefined,
       }}
     >
-      <Icon size={17} style={{ flex: 'none', opacity: 0.8 }} aria-hidden="true" />
+      {isActivePath && (
+        <span aria-hidden="true" style={{
+          position: 'absolute', left: -8, top: 6, bottom: 6, width: 3,
+          background: 'color-mix(in srgb, var(--brand-bright) 55%, transparent)', borderRadius: '0 3px 3px 0',
+        }} />
+      )}
+      <Icon size={15} style={{ flex: 'none', opacity: 0.8 }} aria-hidden="true" />
       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {label}
       </span>
@@ -467,6 +479,36 @@ function NavGroupRow({ label, icon: Icon, expanded, onToggle }: {
         style={{ flex: 'none', opacity: 0.8, transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}
       />
     </button>
+  );
+}
+
+/** Decorative artwork for the sidebar's lower empty area — copied from NForce OneHR's Shell.
+ *  Purely visual: absolutely positioned (out of flex flow, adds no height, never pushes the logo/
+ *  nav content) and pointer-events:none (never intercepts clicks). zIndex:-1 keeps it behind the
+ *  sidebar's own static in-flow content while still painting above the <aside>'s solid background
+ *  (a positioned element needs a NEGATIVE z-index to paint behind static siblings — 0 would paint
+ *  above them instead). One 5-band sprite (assets/sidebar-decoration.png, same file as OneHR's)
+ *  covers all 5 accent colors — background-size stretches it to 5x this box's width, and
+ *  background-position-x picks one 1x-wide band per accent (see ACCENT_BAND_POSITION_X) — no
+ *  per-color image files, and the PNG itself is never cropped/stretched/distorted, only positioned.
+ *  The mask-image fades the artwork's own alpha from 0 at the top to fully opaque by 40% down, so
+ *  the sidebar's plain background shows through smoothly at the seam instead of a hard edge. */
+function SidebarDecor() {
+  const { accent } = useAccentColor();
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0, height: 380, zIndex: -1,
+        overflow: 'hidden', pointerEvents: 'none',
+        backgroundImage: `url(${sidebarDecoration})`,
+        backgroundSize: '500% auto',
+        backgroundPosition: `${ACCENT_BAND_POSITION_X[accent]} 100%`,
+        backgroundRepeat: 'no-repeat',
+        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.5) 22%, black 42%)',
+        maskImage: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.5) 22%, black 42%)',
+      }}
+    />
   );
 }
 
@@ -604,6 +646,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 
               if (isNavGroup(entry)) {
                 const expanded = !!expandedGroups[entry.key];
+                const isActivePath = entry.children.some(c => c.path === location.pathname);
                 return (
                   <div key={entry.key}>
                     <NavGroupRow
@@ -611,6 +654,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                       icon={entry.icon}
                       expanded={expanded}
                       onToggle={() => toggleGroup(entry.key)}
+                      isActivePath={isActivePath}
                     />
                     {expanded && entry.children.map(child => (
                       <NavLinkItem
@@ -722,12 +766,13 @@ export function Shell() {
           left: 0,
           bottom: 0,
           width: 236,
-          background: '#0E0F12',
-          borderRight: '1px solid #2A2E37',
+          background: '#0B0C0F',
+          borderRight: '1px solid #23262D',
           zIndex: 40,
           overflow: 'hidden',
         }}
       >
+        <SidebarDecor />
         <SidebarContent />
       </aside>
 
@@ -762,8 +807,8 @@ export function Shell() {
                 left: 0,
                 bottom: 0,
                 width: 236,
-                background: '#0E0F12',
-                borderRight: '1px solid #2A2E37',
+                background: '#0B0C0F',
+                borderRight: '1px solid #23262D',
                 zIndex: 50,
                 display: 'flex',
                 flexDirection: 'column',
@@ -791,6 +836,7 @@ export function Shell() {
               >
                 <X size={16} aria-hidden="true" />
               </button>
+              <SidebarDecor />
               <SidebarContent onNavClick={() => setDrawerOpen(false)} />
             </motion.aside>
           </>

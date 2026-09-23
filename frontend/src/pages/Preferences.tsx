@@ -1,32 +1,14 @@
 import { useState } from 'react';
-import { Sun, Moon, Monitor, Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Sun, Moon, Monitor, Check } from 'lucide-react';
 import { useTheme, type ThemeMode } from '../lib/theme';
 import { useAccentColor, ACCENT_SWATCHES, type AccentColor } from '../lib/accentColor';
 import { useDensity, type Density } from '../lib/density';
+import { useFontSize, type FontSize } from '../lib/fontSize';
 import { Card } from '../components/KpiCard';
 
 // ── Local, localStorage-only preferences (no backend endpoint yet — matches how theme/accent
 // already persist). Each is read once at mount and written on change. ──────────────────────
-
-function usePersisted<T extends string>(key: string, fallback: T) {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const stored = localStorage.getItem(key);
-      return (stored as T) ?? fallback;
-    } catch {
-      return fallback;
-    }
-  });
-  function set(next: T) {
-    setValue(next);
-    try {
-      localStorage.setItem(key, next);
-    } catch {
-      // localStorage unavailable — preference still applies for this page load, just won't persist.
-    }
-  }
-  return [value, set] as const;
-}
 
 function usePersistedBool(key: string, fallback: boolean) {
   const [value, setValue] = useState<boolean>(() => {
@@ -124,7 +106,7 @@ const DISPLAY_MODES: { key: ThemeMode; label: string; icon: React.ComponentType<
 ];
 
 const DENSITIES: Density[] = ['Compact', 'Comfortable', 'Spacious'];
-const FONT_SIZES = ['Small', 'Default', 'Large'] as const;
+const FONT_SIZES: FontSize[] = ['Small', 'Default', 'Large'];
 
 const TABS = ['Appearance', 'Notifications', 'Accessibility'] as const;
 type Tab = typeof TABS[number];
@@ -132,6 +114,7 @@ type Tab = typeof TABS[number];
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Preferences() {
+  const navigate = useNavigate();
   const { mode, setMode } = useTheme();
   const { accent, setAccent } = useAccentColor();
   const { density, setDensity } = useDensity();
@@ -144,7 +127,7 @@ export default function Preferences() {
   const [blockerUpdates, setBlockerUpdates] = usePersistedBool('nf-notif-blockers', true);
 
   const [reduceMotion, setReduceMotionState] = usePersistedBool('nf-reduce-motion', false);
-  const [fontSize, setFontSize] = usePersisted<typeof FONT_SIZES[number]>('nf-font-size', 'Default');
+  const { fontSize, setFontSize } = useFontSize();
 
   function toggleReduceMotion(next: boolean) {
     setReduceMotionState(next);
@@ -154,6 +137,15 @@ export default function Preferences() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
       <div>
+        <button
+          onClick={() => navigate(-1)}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
+            cursor: 'pointer', color: 'var(--brand-bright)', fontSize: 12.5, padding: 0, marginBottom: 10,
+          }}
+        >
+          <ArrowLeft size={14} aria-hidden="true" /> Back to Application
+        </button>
         <h1 style={{ margin: 0, marginBottom: 4, fontSize: 20, fontWeight: 700, color: 'var(--txt)' }}>User Preferences</h1>
         <p style={{ margin: 0, fontSize: 13, color: 'var(--txt-mut)' }}>Manage your personal appearance, notifications, and accessibility settings.</p>
       </div>
@@ -248,12 +240,9 @@ export default function Preferences() {
               <div>
                 <SectionTitle>Text size</SectionTitle>
                 <SectionHint>Adjust the base text size used across the app.</SectionHint>
-                <select value={fontSize} onChange={e => setFontSize(e.target.value as typeof FONT_SIZES[number])} style={SELECT_STYLE}>
+                <select value={fontSize} onChange={e => setFontSize(e.target.value as FontSize)} style={SELECT_STYLE}>
                   {FONT_SIZES.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
-                <p style={{ margin: '8px 0 0', fontSize: 11.5, color: 'var(--txt-dim)', fontStyle: 'italic' }}>
-                  Saved, but no page adjusts its text size based on this yet.
-                </p>
               </div>
             </div>
           )}

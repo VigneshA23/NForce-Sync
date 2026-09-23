@@ -26,6 +26,13 @@ const ACCENT_SWATCHES: Record<AccentColor, {
 
 export { ACCENT_SWATCHES };
 
+// Maps each accent to its 1x-wide band in the 5-band sidebar-decoration.png sprite (copied from
+// NForce OneHR, which defines this same band order for that image) — background-position-x picks
+// the matching band; the PNG itself is never re-cropped per accent.
+export const ACCENT_BAND_POSITION_X: Record<AccentColor, string> = {
+  red: '0%', blue: '25%', pink: '50%', purple: '75%', green: '100%',
+};
+
 function hexToRgb(hex: string): string {
   const n = parseInt(hex.slice(1), 16);
   return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
@@ -64,6 +71,17 @@ function applyAccent(accent: AccentColor, theme: 'dark' | 'light') {
 }
 
 let _accent: AccentColor = getInitialAccent();
+
+// Applied synchronously at module load — same fix theme.tsx already applies for itself — so the
+// browser's first paint uses the saved accent instead of index.css's default (red), which used to
+// show as a red flash before the useEffect below ran on the next tick and switched it to the real
+// color. theme.tsx's own module-level applyTheme() call has already set data-theme on <html> by
+// this point (ThemeProvider is imported before AccentColorProvider in App.tsx), so reading it here
+// is reliable even though this runs outside any component/effect.
+function currentDomTheme(): 'dark' | 'light' {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+}
+applyAccent(_accent, currentDomTheme());
 
 interface AccentColorContextValue {
   accent: AccentColor;

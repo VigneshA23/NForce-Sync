@@ -155,15 +155,15 @@
    that doesn't opt in still renders at its normal (Comfortable-equivalent) size. */
 :root {
   --nf-density-card-pad: 20px;
-  --nf-density-nav-pad:  9px 11px;
+  --nf-density-nav-pad:  8px 12px;
 }
 html[data-density="Compact"] {
   --nf-density-card-pad: 14px;
-  --nf-density-nav-pad:  5px 9px;
+  --nf-density-nav-pad:  5px 10px;
 }
 html[data-density="Spacious"] {
   --nf-density-card-pad: 26px;
-  --nf-density-nav-pad:  13px 14px;
+  --nf-density-nav-pad:  12px 15px;
 }
 
 /* ─── Explicit "reduce motion" preference (Preferences → Accessibility) ─────── */
@@ -192,6 +192,16 @@ body {
 }
 
 #root { min-height: 100dvh; }
+
+/* ─── Text size (Preferences → Accessibility) ───────────────────── */
+/* The desktop layout is ~1,400 hardcoded `fontSize: N` inline pixel values (see CLAUDE.md —
+   inline styles are the source of truth, never converted to rem), so there's no shared token to
+   scale. `zoom` on the app root scales the whole rendered subtree uniformly instead — layout,
+   spacing, and fixed-position children all scale together, same as a browser page-zoom, without
+   touching any component. Not supported pre-2024 Firefox, but every browser this app targets
+   (evergreen Chrome/Edge/Safari/Firefox) has it. */
+html[data-font-size="Small"]   #root { zoom: 0.9; }
+html[data-font-size="Large"]   #root { zoom: 1.15; }
 
 /* ─── Focus ring — every interactive element ───────────────────── */
 *:focus-visible {

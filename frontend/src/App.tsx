@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ThemeProvider } from './lib/theme';
 import { AccentColorProvider } from './lib/accentColor';
 import { DensityProvider } from './lib/density';
+import { FontSizeProvider } from './lib/fontSize';
 import { AuthProvider, useAuth, ROLE_LANDING } from './lib/auth';
 import { ToastProvider } from './lib/toast';
 import { todayISO } from './lib/date';
@@ -275,14 +276,16 @@ export default function App() {
     <ThemeProvider>
       <AccentColorProvider>
         <DensityProvider>
-          <AuthProvider>
-            <ToastProvider>
-              {/* Inside the providers so the fallback picks up the theme variables. */}
-              <ErrorBoundary>
-                <AppRoutes />
-              </ErrorBoundary>
-            </ToastProvider>
-          </AuthProvider>
+          <FontSizeProvider>
+            <AuthProvider>
+              <ToastProvider>
+                {/* Inside the providers so the fallback picks up the theme variables. */}
+                <ErrorBoundary>
+                  <AppRoutes />
+                </ErrorBoundary>
+              </ToastProvider>
+            </AuthProvider>
+          </FontSizeProvider>
         </DensityProvider>
       </AccentColorProvider>
     </ThemeProvider>
