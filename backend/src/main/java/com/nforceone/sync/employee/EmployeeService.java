@@ -1,7 +1,7 @@
 package com.nforceone.sync.employee;
 
 import com.nforceone.sync.auth.AppUser;
-import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.config.Futures;
 import com.nforceone.sync.businessrules.BusinessRuleConfig;
 import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.businessrules.Holiday;
@@ -34,6 +34,8 @@ import java.time.LocalDateTime;
 // import java.time.OffsetDateTime;
 // import java.time.ZoneOffset;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,11 +45,11 @@ public class EmployeeService {
     private final EodTaskRepository         taskRepository;
     private final UtilSnapshotRepository    snapshotRepository;
     private final UtilizationService        utilizationService;
-    private final AppUserRepository         userRepository;
     private final ShiftDefinitionRepository shiftRepository;
     private final HolidayRepository         holidayRepository;
     private final BusinessRuleConfigRepository configRepository;
     private final AllocationRepository      allocationRepository;
+    private final Executor                  dashboardQueryExecutor;
 
     private static final long BUSINESS_RULE_CONFIG_ID = 1L;
 
@@ -55,80 +57,105 @@ public class EmployeeService {
                            EodTaskRepository taskRepository,
                            UtilSnapshotRepository snapshotRepository,
                            UtilizationService utilizationService,
-                           AppUserRepository userRepository,
                            ShiftDefinitionRepository shiftRepository,
                            HolidayRepository holidayRepository,
                            BusinessRuleConfigRepository configRepository,
-                           AllocationRepository allocationRepository) {
+                           AllocationRepository allocationRepository,
+                           Executor dashboardQueryExecutor) {
         this.entryRepository  = entryRepository;
         this.taskRepository   = taskRepository;
         this.snapshotRepository = snapshotRepository;
         this.utilizationService = utilizationService;
-        this.userRepository   = userRepository;
         this.shiftRepository  = shiftRepository;
         this.holidayRepository = holidayRepository;
         this.configRepository = configRepository;
         this.allocationRepository = allocationRepository;
+        this.dashboardQueryExecutor = dashboardQueryExecutor;
     }
 
-    @Transactional(readOnly = true)
-    public DashboardSummaryDto getDashboardSummary(Long employeeId, LocalDate calendarFrom, LocalDate calendarTo) {
+    public DashboardSummaryDto getDashboardSummary(AppUser employee, LocalDate calendarFrom, LocalDate calendarTo) {
+        Long employeeId = employee.getId();
         LocalDate today = LocalDate.now();
 
-        // ── Cutoff status ──────────────────────────────────────────────────────
-        DashboardSummaryDto.CutoffStatus cutoffStatus = buildCutoffStatus(employeeId, today);
-
-        // ── Quick stats: current Mon–today (or full week) ──────────────────────
         LocalDate weekStart = today.with(DayOfWeek.MONDAY);
         LocalDate monthStart = today.withDayOfMonth(1);
-
         // Week and month ranges overlap (weekStart can fall before OR after monthStart,
         // depending on where in the month "today" is) — fetched as one covering range in a
         // single query instead of two separate round trips, then split in memory.
         LocalDate rangeStart = weekStart.isBefore(monthStart) ? weekStart : monthStart;
-        List<UtilSnapshotDto> rangeSnaps = utilizationService.getForEmployee(employeeId, rangeStart, today);
+        LocalDate lookback30 = today.minusDays(30);
 
-        // Week approved hours from snapshots Mon–today
-        BigDecimal weekApprovedHours = rangeSnaps.stream()
-                .filter(s -> !s.snapshotDate().isBefore(weekStart))
-                .map(UtilSnapshotDto::approvedProductiveHours)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // ── Fan every independent read out in parallel ──────────────────────────
+        // None of the six reads below depends on another's result, but each is its own network
+        // round trip to the remote DB (~0.3-1.5s measured), so running them one after another —
+        // as this method used to — only ever adds their latencies together. Dispatched on
+        // dashboardQueryExecutor (bounded, see AsyncQueryConfig) so wall-clock cost drops from
+        // sum(latencies) to roughly max(latencies).
+        CompletableFuture<DashboardSummaryDto.CutoffStatus> cutoffStatusF = CompletableFuture.supplyAsync(
+                () -> buildCutoffStatus(employee, today), dashboardQueryExecutor);
 
-        // Month avg util from snapshots (only days with available > 0)
-        List<UtilSnapshotDto> monthSnaps = rangeSnaps.stream()
-                .filter(s -> !s.snapshotDate().isBefore(monthStart))
-                .toList();
-        BigDecimal monthAvgUtil = computeAvgUtil(monthSnaps);
+        CompletableFuture<List<UtilSnapshotDto>> rangeSnapsF = CompletableFuture.supplyAsync(
+                () -> utilizationService.getForEmployee(employeeId, rangeStart, today), dashboardQueryExecutor);
 
         // Streak and days-since-last-issue both only need entryDate+status over a trailing
         // lookback window, so they share ONE lightweight query (100 days covers both: streak
         // needs 100, the issue lookback needs 90 and is filtered out of the same map) instead of
         // each independently issuing its own full tasks/project/category-joined fetch.
-        Map<LocalDate, EodEntry.Status> statusByDate = entryRepository
-                .findEntryDateAndStatusByEmployeeIdAndEntryDateBetween(
-                        employeeId, today.minusDays(STREAK_LOOKBACK_DAYS), today)
-                .stream()
-                .collect(Collectors.toMap(EodEntryRepository.EntryDateStatusView::getEntryDate,
-                        EodEntryRepository.EntryDateStatusView::getStatus, (a, b) -> a));
+        CompletableFuture<Map<LocalDate, EodEntry.Status>> statusByDateF = CompletableFuture.supplyAsync(
+                () -> entryRepository
+                        .findEntryDateAndStatusByEmployeeIdAndEntryDateBetween(
+                                employeeId, today.minusDays(STREAK_LOOKBACK_DAYS), today)
+                        .stream()
+                        .collect(Collectors.toMap(EodEntryRepository.EntryDateStatusView::getEntryDate,
+                                EodEntryRepository.EntryDateStatusView::getStatus, (a, b) -> a)),
+                dashboardQueryExecutor);
 
-        // Streak: consecutive approved weekdays going back from today
+        // Blocked tasks (last 14 days) and recent entries (last 30) share this one entry fetch —
+        // the 14-day window is always a subset of the 30-day one — instead of each running its
+        // own separate, fully-redundant copy of the same query.
+        CompletableFuture<List<EodEntry>> last30DaysF = CompletableFuture.supplyAsync(
+                () -> entryRepository.findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(
+                        employeeId, lookback30, today),
+                dashboardQueryExecutor);
+        CompletableFuture<Map<LocalDate, UtilSnapshot>> last30SnapMapF = CompletableFuture.supplyAsync(
+                () -> snapshotRepository
+                        .findByEmployeeIdAndSnapshotDateBetweenOrderBySnapshotDateAsc(employeeId, lookback30, today)
+                        .stream()
+                        .collect(Collectors.toMap(UtilSnapshot::getSnapshotDate, s -> s)),
+                dashboardQueryExecutor);
+
+        CompletableFuture<List<DashboardSummaryDto.CalendarDay>> calendarDataF = CompletableFuture.supplyAsync(
+                () -> buildCalendarData(employeeId, calendarFrom, calendarTo), dashboardQueryExecutor);
+
+        CompletableFuture.allOf(cutoffStatusF, rangeSnapsF, statusByDateF,
+                last30DaysF, last30SnapMapF, calendarDataF).join();
+
+        DashboardSummaryDto.CutoffStatus cutoffStatus = Futures.join(cutoffStatusF);
+        List<UtilSnapshotDto> rangeSnaps = Futures.join(rangeSnapsF);
+        Map<LocalDate, EodEntry.Status> statusByDate = Futures.join(statusByDateF);
+        List<EodEntry> last30Days = Futures.join(last30DaysF);
+        Map<LocalDate, UtilSnapshot> last30SnapMap = Futures.join(last30SnapMapF);
+        List<DashboardSummaryDto.CalendarDay> calendarData = Futures.join(calendarDataF);
+
+        // ── Quick stats — pure in-memory from rangeSnaps/statusByDate above ─────
+        BigDecimal weekApprovedHours = rangeSnaps.stream()
+                .filter(s -> !s.snapshotDate().isBefore(weekStart))
+                .map(UtilSnapshotDto::approvedProductiveHours)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<UtilSnapshotDto> monthSnaps = rangeSnaps.stream()
+                .filter(s -> !s.snapshotDate().isBefore(monthStart))
+                .toList();
+        BigDecimal monthAvgUtil = computeAvgUtil(monthSnaps);
         int streak = computeStreak(statusByDate, today);
-
-        // Days since last issue (MISSED, REJECTED)
         int daysSinceLastIssue = computeDaysSinceLastIssue(statusByDate, today);
-
         DashboardSummaryDto.QuickStats quickStats = new DashboardSummaryDto.QuickStats(
                 weekApprovedHours, monthAvgUtil, streak, daysSinceLastIssue);
 
-        // ── Blocked tasks: from last 14 days' non-APPROVED entries still active ─
-        List<DashboardSummaryDto.BlockedTask> blockedTasks = buildBlockedTasks(employeeId, today.minusDays(14), today);
-
-        // ── Recent entries: last 5 ─────────────────────────────────────────────
-        List<DashboardSummaryDto.RecentEntry> recentEntries = buildRecentEntries(employeeId, today);
-
-        // ── Calendar: full displayed month ─────────────────────────────────────
-        List<DashboardSummaryDto.CalendarDay> calendarData = buildCalendarData(employeeId, calendarFrom, calendarTo);
+        // ── Blocked tasks + recent entries — pure in-memory from last30Days/last30SnapMap ───
+        List<DashboardSummaryDto.BlockedTask> blockedTasks =
+                blockedTasksFrom(last30Days, today.minusDays(14));
+        List<DashboardSummaryDto.RecentEntry> recentEntries = buildRecentEntries(last30Days, last30SnapMap);
 
         return new DashboardSummaryDto(cutoffStatus, quickStats, blockedTasks, recentEntries, calendarData);
     }
@@ -169,11 +196,11 @@ public class EmployeeService {
      * <p>No shift assigned, or a shift with no cutoff configured, means there is no deadline to
      * show: the banner is suppressed rather than a cutoff being invented.
      */
-    private DashboardSummaryDto.CutoffStatus buildCutoffStatus(Long employeeId, LocalDate today) {
-        Optional<EodEntry> todayEntry = entryRepository.findByEmployeeIdAndEntryDate(employeeId, today);
+    private DashboardSummaryDto.CutoffStatus buildCutoffStatus(AppUser employee, LocalDate today) {
+        Optional<EodEntry> todayEntry = entryRepository.findByEmployeeIdAndEntryDate(employee.getId(), today);
         String status = todayEntry.map(e -> e.getStatus().name()).orElse(null);
 
-        ShiftDefinition shift = shiftFor(employeeId);
+        ShiftDefinition shift = shiftFor(employee.getShiftId());
         LocalDateTime cutoffAt = shift == null ? null : ShiftSchedule.cutoffAt(shift, today);
         if (cutoffAt == null) {
             return new DashboardSummaryDto.CutoffStatus(today, status, false, null, false);
@@ -186,11 +213,11 @@ public class EmployeeService {
                 cutoffAt.toLocalTime(), cutoffAt.toLocalDate().isAfter(today));
     }
 
-    /** This employee's assigned shift, or null when they have none. */
-    private ShiftDefinition shiftFor(Long employeeId) {
-        Long shiftId = userRepository.findById(employeeId)
-                .map(AppUser::getShiftId)
-                .orElse(null);
+    /** The given shift id's definition, or null when the employee has none assigned.
+     *  Takes the id directly — the caller already has the AppUser it came from, so re-querying
+     *  it here would just repeat the exact lookup the controller (or getDashboardSummary) already
+     *  did to authenticate/resolve this request. */
+    private ShiftDefinition shiftFor(Long shiftId) {
         if (shiftId == null) return null;
         return shiftRepository.findById(shiftId).orElse(null);
     }
@@ -274,9 +301,16 @@ public class EmployeeService {
     private List<DashboardSummaryDto.BlockedTask> buildBlockedTasks(Long employeeId, LocalDate from, LocalDate to) {
         List<EodEntry> recent = entryRepository
                 .findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(employeeId, from, to);
+        return blockedTasksFrom(recent, from);
+    }
 
+    /** Shared with getDashboardSummary, which already has a 30-day entry fetch on hand and
+     *  passes it straight in rather than repeating buildBlockedTasks' own query for its
+     *  (always-narrower) 14-day window. */
+    private List<DashboardSummaryDto.BlockedTask> blockedTasksFrom(List<EodEntry> entries, LocalDate from) {
         List<DashboardSummaryDto.BlockedTask> blocked = new ArrayList<>();
-        for (EodEntry entry : recent) {
+        for (EodEntry entry : entries) {
+            if (entry.getEntryDate().isBefore(from)) continue;
             if (entry.getStatus() == EodEntry.Status.MISSED) continue;
             for (EodTask task : entry.getTasks()) {
                 if (task.getTaskStatus() == EodTask.TaskStatus.BLOCKED) {
@@ -303,16 +337,11 @@ public class EmployeeService {
         return blocked;
     }
 
-    private List<DashboardSummaryDto.RecentEntry> buildRecentEntries(Long employeeId, LocalDate today) {
-        LocalDate lookback = today.minusDays(30);
-        List<EodEntry> entries = entryRepository
-                .findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(employeeId, lookback, today);
-
-        Map<LocalDate, UtilSnapshot> snapMap = snapshotRepository
-                .findByEmployeeIdAndSnapshotDateBetweenOrderBySnapshotDateAsc(employeeId, lookback, today)
-                .stream()
-                .collect(Collectors.toMap(UtilSnapshot::getSnapshotDate, s -> s));
-
+    /** Takes the same 30-day entry list and snapshot map getDashboardSummary already fetched
+     *  (in parallel, alongside this method's other independent reads) rather than re-querying
+     *  either here. */
+    private List<DashboardSummaryDto.RecentEntry> buildRecentEntries(
+            List<EodEntry> entries, Map<LocalDate, UtilSnapshot> snapMap) {
         return entries.stream()
                 .limit(10)
                 .map(e -> {

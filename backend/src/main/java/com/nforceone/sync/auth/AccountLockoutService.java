@@ -43,11 +43,16 @@ public class AccountLockoutService {
      * Seconds until the account's lock expires, or empty when it is not locked (including for an
      * email that has no account — an unknown address must stay indistinguishable from a wrong
      * password).
+     *
+     * <p>Takes the already-resolved user rather than re-querying by email — the caller (AuthController)
+     * looks the account up once per request; every method here used to repeat that same
+     * network round trip independently, which is what made a single login attempt cost 3-4x a
+     * single query's latency against the remote DB.
      */
     @Transactional(readOnly = true)
-    public Optional<Long> lockedSecondsRemaining(String email) {
-        return findUser(email).flatMap(user -> {
-            OffsetDateTime until = user.getLockedUntil();
+    public Optional<Long> lockedSecondsRemaining(Optional<AppUser> user) {
+        return user.flatMap(u -> {
+            OffsetDateTime until = u.getLockedUntil();
             if (until == null || !until.isAfter(OffsetDateTime.now())) return Optional.empty();
             // Round up: 0.4s remaining should still read as "1 second", never as "unlocked".
             long seconds = Duration.between(OffsetDateTime.now(), until).toSeconds();
@@ -67,10 +72,9 @@ public class AccountLockoutService {
      * @return attempts remaining before the lock, 0 if this failure just triggered it, or empty when
      *         the email has no account.
      */
-    public OptionalInt recordFailure(String email) {
-        int threshold = threshold();
-        Optional<AppUser> found = findUser(email);
+    public OptionalInt recordFailure(Optional<AppUser> found) {
         if (found.isEmpty()) return OptionalInt.empty();
+        int threshold = threshold();
 
         AppUser user = found.get();
         int attempts = user.getFailedLoginAttempts() + 1;
@@ -90,8 +94,8 @@ public class AccountLockoutService {
     }
 
     /** Clears lockout state after a successful sign-in. */
-    public void recordSuccess(String email) {
-        findUser(email).ifPresent(this::clear);
+    public void recordSuccess(Optional<AppUser> user) {
+        user.ifPresent(this::clear);
     }
 
     /**
@@ -123,13 +127,5 @@ public class AccountLockoutService {
 
     private Optional<BusinessRuleConfig> config() {
         return configRepository.findById(CONFIG_ID);
-    }
-
-    // Deleted-aware, per the convention documented on AppUserRepository: an email can be reused
-    // after a soft delete, so the deleted-inclusive findByEmail can match several rows and blow up
-    // an Optional query.
-    private Optional<AppUser> findUser(String email) {
-        if (email == null || email.isBlank()) return Optional.empty();
-        return userRepository.findByEmailAndDeletedAtIsNull(email);
     }
 }

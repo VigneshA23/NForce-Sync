@@ -67,7 +67,9 @@ public class AuthController {
 
         // Locked accounts never reach the authentication manager — a correct password must not
         // unlock early, otherwise the lock is only a speed bump for a credential-stuffing run.
-        Optional<Long> lockedFor = accountLockoutService.lockedSecondsRemaining(email);
+        // Reuses `existing` (looked up once above) rather than re-querying by email — see
+        // AccountLockoutService for why that repeat query mattered.
+        Optional<Long> lockedFor = accountLockoutService.lockedSecondsRemaining(existing);
         if (lockedFor.isPresent()) {
             return lockedResponse(lockedFor.get());
         }
@@ -77,12 +79,12 @@ public class AuthController {
                     new UsernamePasswordAuthenticationToken(email, request.password())
             );
             AppUser user = ((AppUserDetails) auth.getPrincipal()).getAppUser();
-            accountLockoutService.recordSuccess(email);
+            accountLockoutService.recordSuccess(existing);
             String token = jwtService.generateToken(user);
             return ResponseEntity.ok(
                     new LoginResponse(token, UserDto.from(user), user.isMustChangePassword()));
         } catch (BadCredentialsException e) {
-            OptionalInt attemptsRemaining = accountLockoutService.recordFailure(email);
+            OptionalInt attemptsRemaining = accountLockoutService.recordFailure(existing);
             if (attemptsRemaining.isPresent() && attemptsRemaining.getAsInt() == 0) {
                 // This failure tripped the lock — report the full window straight away rather than
                 // making the user submit once more to discover they are locked out.

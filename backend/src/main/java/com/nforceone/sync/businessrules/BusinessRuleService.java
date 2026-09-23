@@ -5,6 +5,7 @@ import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.auth.AuditLog;
 import com.nforceone.sync.auth.AuditLogRepository;
 import tools.jackson.databind.ObjectMapper;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,6 +64,10 @@ public class BusinessRuleService {
      * field meant a card with two edits raced itself: the last transaction to commit reverted the
      * other field, and the change looked like it had not saved. One card, one request.
      */
+    // beforeInvocation=true: evicts BEFORE requireConfig() runs below, so this write always
+    // fetches (and mutates) a fresh entity from the DB rather than a cached one that other
+    // concurrent readers might also be holding — see CacheConfig.
+    @CacheEvict(value = "businessRuleConfig", allEntries = true, beforeInvocation = true)
     public BusinessRuleConfigDto updateTimeAttendance(BigDecimal hoursPerDay,
                                                       BusinessRuleConfig.WeekendRule rule,
                                                       String actingEmail) {
@@ -90,6 +95,7 @@ public class BusinessRuleService {
      * the shift in V58, so EodReminderScheduler fires off {@code ShiftSchedule.cutoffAt} instead.
      * The column stays on the row (unread) so the audit history that names it still resolves.
      */
+    @CacheEvict(value = "businessRuleConfig", allEntries = true, beforeInvocation = true)
     public BusinessRuleConfigDto updateNotifications(Integer escalationSlaHours,
                                                      Integer lockoutAttemptThreshold,
                                                      Integer lockoutDurationMinutes,
@@ -114,6 +120,7 @@ public class BusinessRuleService {
     // (see ShiftSchedule). createShift/updateShift below carry it now.
 
     /** The shared monthly time-adjustment budget, in minutes (V62). */
+    @CacheEvict(value = "businessRuleConfig", allEntries = true, beforeInvocation = true)
     public BusinessRuleConfigDto updateAllowances(Integer monthlyAdjustmentMinutes, String actingEmail) {
         BusinessRuleConfig config = requireConfig();
         AppUser actor = requireActorByEmail(actingEmail);

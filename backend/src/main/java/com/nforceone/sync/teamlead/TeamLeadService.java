@@ -36,6 +36,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -44,7 +45,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
+
+import com.nforceone.sync.config.Futures;
 
 /**
  * Backs the Team Lead Dashboard. Every method resolves the acting Team Lead from
@@ -73,6 +78,7 @@ public class TeamLeadService {
     private final BlockerReplyRepository       replyRepository;
     private final NotificationService          notificationService;
     private final AllocationRepository         allocationRepository;
+    private final Executor                     dashboardQueryExecutor;
 
     public TeamLeadService(AppUserRepository userRepository,
                             EodEntryRepository entryRepository,
@@ -84,7 +90,8 @@ public class TeamLeadService {
                             DesignationRepository designationRepository,
                             BlockerReplyRepository replyRepository,
                             NotificationService notificationService,
-                            AllocationRepository allocationRepository) {
+                            AllocationRepository allocationRepository,
+                            Executor dashboardQueryExecutor) {
         this.userRepository    = userRepository;
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
@@ -96,6 +103,7 @@ public class TeamLeadService {
         this.replyRepository   = replyRepository;
         this.notificationService = notificationService;
         this.allocationRepository = allocationRepository;
+        this.dashboardQueryExecutor = dashboardQueryExecutor;
     }
 
     public ThresholdsDto getThresholds() {
@@ -109,13 +117,32 @@ public class TeamLeadService {
      */
     public TeamLeadSummaryDto getSummary(LocalDate from, LocalDate to, String actingEmail, Long teamLeadId) {
         Long leadId = resolveLeadId(actingEmail, teamLeadId);
-        BusinessRuleConfig config = requireConfig();
-        boolean holidayToday = holidayRepository.existsByHolidayDate(to);
-
         List<AppUser> members = activeMembers(leadId);
         List<Long> memberIds = members.stream().map(AppUser::getId).toList();
-        Map<Long, EodEntry> entryByMember = entriesForMembersOnDate(memberIds, to);
-        Map<Long, BigDecimal> pctByMember = utilizationService.resolveUtilizationPctForEmployees(memberIds, to);
+
+        // Independent reads, fanned out — see AsyncQueryConfig/EmployeeService for why: each is
+        // its own network round trip to the remote DB, and none depends on another's result.
+        CompletableFuture<BusinessRuleConfig> configF =
+                CompletableFuture.supplyAsync(this::requireConfig, dashboardQueryExecutor);
+        CompletableFuture<Boolean> holidayTodayF =
+                CompletableFuture.supplyAsync(() -> holidayRepository.existsByHolidayDate(to), dashboardQueryExecutor);
+        CompletableFuture<Map<Long, EodEntry>> entryByMemberF =
+                CompletableFuture.supplyAsync(() -> entriesForMembersOnDate(memberIds, to), dashboardQueryExecutor);
+        CompletableFuture<Map<Long, BigDecimal>> pctByMemberF = CompletableFuture.supplyAsync(
+                () -> utilizationService.resolveUtilizationPctForEmployees(memberIds, to), dashboardQueryExecutor);
+        CompletableFuture<Integer> activeBlockersF = CompletableFuture.supplyAsync(() ->
+                (int) taskRepository.findBlockedByManagerId(leadId).stream()
+                        .filter(t -> inRange(t.getEodEntry().getEntryDate(), from, to))
+                        .filter(t -> t.getAcknowledgedAt() == null)
+                        .count(),
+                dashboardQueryExecutor);
+
+        CompletableFuture.allOf(configF, holidayTodayF, entryByMemberF, pctByMemberF, activeBlockersF).join();
+        BusinessRuleConfig config = Futures.join(configF);
+        boolean holidayToday = Futures.join(holidayTodayF);
+        Map<Long, EodEntry> entryByMember = Futures.join(entryByMemberF);
+        Map<Long, BigDecimal> pctByMember = Futures.join(pctByMemberF);
+        int activeBlockers = Futures.join(activeBlockersF);
 
         int onLeave = 0, missing = 0, pending = 0, submitted = 0;
         int underutilized = 0, overloaded = 0;
@@ -146,29 +173,43 @@ public class TeamLeadService {
                 ? utilSum.divide(BigDecimal.valueOf(utilCount), 2, RoundingMode.HALF_UP)
                 : null;
 
-        int activeBlockers = (int) taskRepository.findBlockedByManagerId(leadId)
-                .stream()
-                .filter(t -> inRange(t.getEodEntry().getEntryDate(), from, to))
-                .filter(t -> t.getAcknowledgedAt() == null)
-                .count();
-
+        // Equivalent to utilizationService.isWorkingDay(to) — `holidayToday` above already
+        // answered the holiday half of that check for this exact date, so this avoids repeating
+        // the same existsByHolidayDate query a second time in one request.
+        boolean workingDay = !isWeekendDay(to) && !holidayToday;
         return new TeamLeadSummaryDto(
                 members.size(), onLeave, missing, pending, submitted,
                 avgUtil, underutilized, overloaded, activeBlockers,
-                toThresholds(config), utilizationService.isWorkingDay(to));
+                toThresholds(config), workingDay);
     }
 
     public List<MemberEodStatusDto> getMemberStatuses(LocalDate from, LocalDate to, String actingEmail, Long teamLeadId) {
         Long leadId = resolveLeadId(actingEmail, teamLeadId);
-        BusinessRuleConfig config = requireConfig();
-        boolean holidayToday = holidayRepository.existsByHolidayDate(to);
-
         List<AppUser> members = activeMembers(leadId);
         List<Long> memberIds = members.stream().map(AppUser::getId).toList();
-        List<TeamBlockerDto> openBlockers = getBlockers(from, to, actingEmail, false, teamLeadId);
-        Map<Long, List<String>> projectNamesByEmployee = activeProjectNamesByEmployee(memberIds, to);
-        Map<Long, EodEntry> entryByMember = entriesForMembersOnDate(memberIds, to);
-        Map<Long, BigDecimal> pctByMember = utilizationService.resolveUtilizationPctForEmployees(memberIds, to);
+
+        // Independent reads, fanned out — see AsyncQueryConfig/EmployeeService for why.
+        CompletableFuture<BusinessRuleConfig> configF =
+                CompletableFuture.supplyAsync(this::requireConfig, dashboardQueryExecutor);
+        CompletableFuture<Boolean> holidayTodayF =
+                CompletableFuture.supplyAsync(() -> holidayRepository.existsByHolidayDate(to), dashboardQueryExecutor);
+        CompletableFuture<List<TeamBlockerDto>> openBlockersF = CompletableFuture.supplyAsync(
+                () -> getBlockers(from, to, actingEmail, false, teamLeadId), dashboardQueryExecutor);
+        CompletableFuture<Map<Long, List<String>>> projectNamesByEmployeeF = CompletableFuture.supplyAsync(
+                () -> activeProjectNamesByEmployee(memberIds, to), dashboardQueryExecutor);
+        CompletableFuture<Map<Long, EodEntry>> entryByMemberF =
+                CompletableFuture.supplyAsync(() -> entriesForMembersOnDate(memberIds, to), dashboardQueryExecutor);
+        CompletableFuture<Map<Long, BigDecimal>> pctByMemberF = CompletableFuture.supplyAsync(
+                () -> utilizationService.resolveUtilizationPctForEmployees(memberIds, to), dashboardQueryExecutor);
+
+        CompletableFuture.allOf(configF, holidayTodayF, openBlockersF,
+                projectNamesByEmployeeF, entryByMemberF, pctByMemberF).join();
+        BusinessRuleConfig config = Futures.join(configF);
+        boolean holidayToday = Futures.join(holidayTodayF);
+        List<TeamBlockerDto> openBlockers = Futures.join(openBlockersF);
+        Map<Long, List<String>> projectNamesByEmployee = Futures.join(projectNamesByEmployeeF);
+        Map<Long, EodEntry> entryByMember = Futures.join(entryByMemberF);
+        Map<Long, BigDecimal> pctByMember = Futures.join(pctByMemberF);
 
         return members.stream().map(member -> {
             Optional<EodEntry> entry = Optional.ofNullable(entryByMember.get(member.getId()));
@@ -324,8 +365,6 @@ public class TeamLeadService {
     public DashboardTrendDto getTrend(LocalDate endDate, int days, String actingEmail, Long teamLeadId) {
         Long leadId = resolveLeadId(actingEmail, teamLeadId);
         List<AppUser> members = activeMembers(leadId);
-        List<EodTask> allBlocked = taskRepository.findBlockedByManagerId(leadId);
-
         LocalDate startDate = endDate.minusDays(days - 1);
         List<Long> memberIds = members.stream().map(AppUser::getId).toList();
 
@@ -333,17 +372,30 @@ public class TeamLeadService {
         // an M-member team previously issued O(M × 7) queries for entries alone (plus another
         // O(M × 7) for utilization); this does exactly 2 queries total regardless of team size or
         // window length: one for every entry in range, one for every day's resolved utilization.
-        Set<LocalDate> holidays = holidayRepository.findAllByOrderByHolidayDateAsc()
-                .stream()
-                .map(Holiday::getHolidayDate)
-                .collect(Collectors.toSet());
-        Map<Long, Map<LocalDate, EodEntry>> entriesByMemberAndDate = memberIds.isEmpty() ? Map.of()
-                : entryRepository.findWithTasksByEmployeeIdInAndEntryDateBetween(memberIds, startDate, endDate)
-                        .stream()
-                        .collect(Collectors.groupingBy(e -> e.getEmployee().getId(),
-                                Collectors.toMap(EodEntry::getEntryDate, e -> e, (a, b) -> a)));
-        Map<Long, Map<LocalDate, BigDecimal>> pctByMemberAndDate = memberIds.isEmpty() ? Map.of()
-                : utilizationService.resolveUtilizationPctForEmployees(memberIds, startDate, endDate);
+        // Fanned out — see AsyncQueryConfig/EmployeeService — since none of these 4 depends on
+        // another's result.
+        CompletableFuture<List<EodTask>> allBlockedF =
+                CompletableFuture.supplyAsync(() -> taskRepository.findBlockedByManagerId(leadId), dashboardQueryExecutor);
+        CompletableFuture<Set<LocalDate>> holidaysF = CompletableFuture.supplyAsync(() -> holidayRepository
+                .findAllByOrderByHolidayDateAsc().stream().map(Holiday::getHolidayDate).collect(Collectors.toSet()),
+                dashboardQueryExecutor);
+        CompletableFuture<Map<Long, Map<LocalDate, EodEntry>>> entriesByMemberAndDateF = CompletableFuture.supplyAsync(
+                () -> memberIds.isEmpty() ? Map.<Long, Map<LocalDate, EodEntry>>of()
+                        : entryRepository.findWithTasksByEmployeeIdInAndEntryDateBetween(memberIds, startDate, endDate)
+                                .stream()
+                                .collect(Collectors.groupingBy(e -> e.getEmployee().getId(),
+                                        Collectors.toMap(EodEntry::getEntryDate, e -> e, (a, b) -> a))),
+                dashboardQueryExecutor);
+        CompletableFuture<Map<Long, Map<LocalDate, BigDecimal>>> pctByMemberAndDateF = CompletableFuture.supplyAsync(
+                () -> memberIds.isEmpty() ? Map.<Long, Map<LocalDate, BigDecimal>>of()
+                        : utilizationService.resolveUtilizationPctForEmployees(memberIds, startDate, endDate),
+                dashboardQueryExecutor);
+
+        CompletableFuture.allOf(allBlockedF, holidaysF, entriesByMemberAndDateF, pctByMemberAndDateF).join();
+        List<EodTask> allBlocked = Futures.join(allBlockedF);
+        Set<LocalDate> holidays = Futures.join(holidaysF);
+        Map<Long, Map<LocalDate, EodEntry>> entriesByMemberAndDate = Futures.join(entriesByMemberAndDateF);
+        Map<Long, Map<LocalDate, BigDecimal>> pctByMemberAndDate = Futures.join(pctByMemberAndDateF);
 
         List<TrendPointDto> avgUtil = new ArrayList<>();
         List<TrendPointDto> submitted = new ArrayList<>();
@@ -353,7 +405,10 @@ public class TeamLeadService {
         for (int i = days - 1; i >= 0; i--) {
             LocalDate date = endDate.minusDays(i);
             boolean holidayToday = holidays.contains(date);
-            boolean workingDay = utilizationService.isWorkingDay(date);
+            // Equivalent to utilizationService.isWorkingDay(date), computed from the holiday Set
+            // already fetched above instead of that method's own holidayRepository.existsByHolidayDate
+            // call, which would otherwise repeat once per day in this loop.
+            boolean workingDay = !isWeekendDay(date) && !holidayToday;
 
             int submittedCount = 0, pendingCount = 0;
             BigDecimal utilSum = BigDecimal.ZERO;
@@ -560,6 +615,16 @@ public class TeamLeadService {
         return configRepository.findById(CONFIG_ID)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Business rule config row missing"));
+    }
+
+    // Sat/Sun only — mirrors UtilizationService's own private isWeekend (not the admin-configurable
+    // SAT_SUN/SUN_ONLY business rule). Factored out so getSummary/getTrend can compute "is this a
+    // working day" from a holiday Set they already fetched, instead of calling
+    // utilizationService.isWorkingDay(date), which would silently repeat the exact
+    // holidayRepository.existsByHolidayDate query they already ran.
+    private static boolean isWeekendDay(LocalDate date) {
+        DayOfWeek dow = date.getDayOfWeek();
+        return dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY;
     }
 
     private ThresholdsDto toThresholds(BusinessRuleConfig c) {

@@ -63,7 +63,7 @@ public class EmployeeController {
         LocalDate today = LocalDate.now();
         LocalDate from  = calendarFrom != null ? calendarFrom : today.withDayOfMonth(1);
         LocalDate to    = calendarTo   != null ? calendarTo   : today.withDayOfMonth(1).plusMonths(1).minusDays(1);
-        return employeeService.getDashboardSummary(user.getId(), from, to);
+        return employeeService.getDashboardSummary(user, from, to);
     }
 
     @GetMapping("/utilization-detail")

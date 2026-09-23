@@ -10,8 +10,12 @@ spring:
     password: npg_gBPETcD1Zb3m
     driver-class-name: org.postgresql.Driver
     hikari:
-      minimum-idle: 2
-      maximum-pool-size: 10
+      # Bumped from 2/10: dashboard endpoints now fan independent reads out across a bounded
+      # executor (see AsyncQueryConfig) instead of running them one at a time on a single
+      # connection, so one request can legitimately hold several connections at once. 20/6 gives
+      # headroom for a handful of concurrent dashboard loads without exhausting the pool.
+      minimum-idle: 6
+      maximum-pool-size: 20
       keepalive-time: 30000
       connection-timeout: 30000
       idle-timeout: 600000
