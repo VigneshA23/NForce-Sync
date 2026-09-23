@@ -1,12 +1,15 @@
-export function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+export function Card({ children, style, className }: { children: React.ReactNode; style?: React.CSSProperties; className?: string }) {
   return (
-    <div style={{
-      background: 'var(--panel)',
-      border: '1px solid var(--line)',
-      borderRadius: 10,
-      padding: 'var(--nf-density-card-pad, 20px)',
-      ...style,
-    }}>
+    <div
+      className={className}
+      style={{
+        background: 'var(--panel)',
+        border: '1px solid var(--line)',
+        borderRadius: 10,
+        padding: 'var(--nf-density-card-pad, 20px)',
+        ...style,
+      }}
+    >
       {children}
     </div>
   );

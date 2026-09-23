@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { api } from './client';
 
 /** Metadata only — file bytes are fetched on demand via getEodAttachmentDataUrl. */
@@ -148,6 +149,17 @@ export async function getTimeAdjustmentContext(date: string): Promise<TimeAdjust
 export async function getEntry(id: number): Promise<EodEntryDto> {
   const res = await api.get<EodEntryDto>(`/eod/${id}`);
   return res.data;
+}
+
+/** Single full entry by id — role-agnostic (EodAccessPolicy.canRead covers the owning employee
+ *  plus every manager-tier role, PM included), so any of the three EOD Inbox pages can use this
+ *  same hook for their "View EOD" panel without a per-role endpoint. */
+export function useEodEntry(id: number | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['eod', 'entry', id],
+    queryFn: () => getEntry(id!),
+    enabled: enabled && id != null,
+  });
 }
 
 /** Day Type / Work Location defaults for a date with no saved entry yet — see SubmitEOD.

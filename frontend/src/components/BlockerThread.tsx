@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Paperclip, Smile, AtSign, Eye, Search, File as FileIcon, X, Download, AlertCircle } from 'lucide-react';
 import {
-  useBlockerThread, useSendBlockerReply, useBlockerAttachmentUrl,
-  type BlockerAttachmentDto, type BlockerReplyDto, type ConversationScope,
+  useBlockerThread, useSendBlockerReply, fetchBlockerAttachmentUrl,
+  type ConversationScope,
 } from '../api/blockerConversation';
 import type { DateRange } from '../api/teamLead';
 import { useToast } from '../lib/toast';
@@ -74,8 +75,50 @@ function fmtDateTimeParts(iso: string): { date: string; time: string } {
   };
 }
 
-function AttachmentView({ attachment, scope }: { attachment: BlockerAttachmentDto; scope: ConversationScope }) {
-  const { data: url, isPending } = useBlockerAttachmentUrl(scope, attachment.id);
+// ── generic thread view — shared by Blockers and EOD Clarification ─────────────
+// Everything below (attachments/emoji/@mention compose box, message list, locked state) is pure
+// UI with no blocker-specific data fetching baked in: it takes messages/isPending/onSend/
+// fetchAttachmentUrl as props instead of calling useBlockerThread/useSendBlockerReply/
+// useBlockerAttachmentUrl directly, so a second feature (EOD Clarification) can reuse the exact
+// same compose UI wired to its own hooks rather than forking a second copy. BlockerThreadView
+// (below) is now a thin adapter over ThreadView; ClarificationThreadView (ClarificationThread.tsx)
+// is the other one.
+
+export interface GenericThreadAttachment {
+  id: number;
+  fileName: string;
+  contentType: string;
+  fileSize: number;
+}
+
+export interface GenericThreadMessage {
+  id: number;
+  senderName: string;
+  senderRole: 'EMPLOYEE' | 'TEAM_LEAD';
+  createdAt: string;
+  message: string;
+  attachments: GenericThreadAttachment[];
+}
+
+// Plain async function, not a hook — a prop can't be a *call* to a hook like
+// useBlockerAttachmentUrl itself (react-hooks/rules-of-hooks correctly rejects invoking a hook
+// from inside a callback). GenericAttachmentView below is what actually calls useQuery,
+// unconditionally, in its own body; attachmentUrlQueryKey supplies the per-feature cache key
+// (mirrors useBlockerAttachmentUrl/useClarificationAttachmentUrl's own queryKey exactly, so
+// caching behavior is unchanged) since the fetch function alone isn't a stable query key.
+type FetchAttachmentUrl = (attachmentId: number) => Promise<string>;
+type AttachmentUrlQueryKey = (attachmentId: number) => readonly unknown[];
+
+function GenericAttachmentView({ attachment, fetchAttachmentUrl, attachmentUrlQueryKey }: {
+  attachment: GenericThreadAttachment;
+  fetchAttachmentUrl: FetchAttachmentUrl;
+  attachmentUrlQueryKey: AttachmentUrlQueryKey;
+}) {
+  const { data: url, isPending } = useQuery({
+    queryKey: attachmentUrlQueryKey(attachment.id),
+    queryFn: () => fetchAttachmentUrl(attachment.id),
+    staleTime: Infinity,
+  });
   const isImage = attachment.contentType.startsWith('image/');
 
   if (isPending || !url) {
@@ -116,7 +159,11 @@ function AttachmentView({ attachment, scope }: { attachment: BlockerAttachmentDt
   );
 }
 
-function ConversationMessage({ m, scope }: { m: BlockerReplyDto; scope: ConversationScope }) {
+function GenericConversationMessage({ m, fetchAttachmentUrl, attachmentUrlQueryKey }: {
+  m: GenericThreadMessage;
+  fetchAttachmentUrl: FetchAttachmentUrl;
+  attachmentUrlQueryKey: AttachmentUrlQueryKey;
+}) {
   const isTeamLead = m.senderRole === 'TEAM_LEAD';
   const { date, time } = fmtDateTimeParts(m.createdAt);
   return (
@@ -144,7 +191,7 @@ function ConversationMessage({ m, scope }: { m: BlockerReplyDto; scope: Conversa
         )}
         {m.attachments.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {m.attachments.map(a => <AttachmentView key={a.id} attachment={a} scope={scope} />)}
+            {m.attachments.map(a => <GenericAttachmentView key={a.id} attachment={a} fetchAttachmentUrl={fetchAttachmentUrl} attachmentUrlQueryKey={attachmentUrlQueryKey} />)}
           </div>
         )}
       </div>
@@ -153,21 +200,35 @@ function ConversationMessage({ m, scope }: { m: BlockerReplyDto; scope: Conversa
 }
 
 /**
- * Shared conversation UI for a single blocker's thread — used by both the Team Lead's
- * Blockers detail panel and the employee's blocker view, so the two sides look and behave
- * identically. `scope` picks the access-controlled route; the thread itself is one shared
- * row set (see BlockerConversationService on the backend), not a per-side copy.
+ * Generic conversation UI — message list + attachments/emoji/@mention compose box + locked
+ * state — with no data-fetching of its own. `messages`/`onSend`/`fetchAttachmentUrl` are
+ * supplied by a thin per-feature adapter (BlockerThreadView below, ClarificationThreadView in
+ * ClarificationThread.tsx) so both features get byte-identical compose UI without either
+ * forking a copy of it.
  */
-export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote, range, isLocked }: {
-  taskId: number;
-  scope: ConversationScope;
+export function ThreadView({
+  messages, isPending, replyToLabel, visibilityNote, isLocked, lockedMessage,
+  onSend, isSending, fetchAttachmentUrl, attachmentUrlQueryKey,
+  maxAttachmentsPerReply = MAX_ATTACHMENTS_PER_REPLY, hideComposer,
+}: {
+  messages: GenericThreadMessage[] | undefined;
+  isPending: boolean;
   replyToLabel: string;
   visibilityNote: string;
-  range?: DateRange;
   isLocked?: boolean;
+  /** e.g. "This blocker has been marked resolved. Reply is disabled." — the one piece of copy
+   *  that differs per feature. */
+  lockedMessage: string;
+  onSend: (message: string, files: File[]) => Promise<unknown>;
+  isSending: boolean;
+  fetchAttachmentUrl: FetchAttachmentUrl;
+  attachmentUrlQueryKey: AttachmentUrlQueryKey;
+  maxAttachmentsPerReply?: number;
+  /** Message list only, no reply box / locked banner / visibility note at all — for a surface
+   *  that isn't part of the conversation on either side (e.g. PM's read-only EOD Inbox view,
+   *  which already shows its own "view only" notice elsewhere in the panel). */
+  hideComposer?: boolean;
 }) {
-  const { data: messages, isPending } = useBlockerThread(taskId, scope);
-  const sendReply = useSendBlockerReply(taskId, scope, range);
   const { show: toast } = useToast();
   const [draft, setDraft] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -212,7 +273,7 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
     if (isLocked || !canSend) return;
     setSendError(null);
     try {
-      await sendReply.mutateAsync({ message: draft.trim(), files: pendingFiles });
+      await onSend(draft.trim(), pendingFiles);
       // Only clear the compose box once the server has actually accepted the reply — clearing
       // unconditionally right after firing the request used to silently discard the draft and
       // attachments on any failure (network error, validation rejection, etc.) with no way to
@@ -238,7 +299,7 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
     const accepted: File[] = [];
     let error: string | null = null;
     for (const file of picked) {
-      const err = validateAttachmentFile(file, pendingFiles.length + accepted.length, MAX_ATTACHMENTS_PER_REPLY);
+      const err = validateAttachmentFile(file, pendingFiles.length + accepted.length, maxAttachmentsPerReply);
       if (err) { error = err; break; }
       accepted.push(file);
     }
@@ -283,10 +344,11 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
         ) : (messages ?? []).length === 0 ? (
           <div style={{ fontSize: 12.5, color: 'var(--txt-dim)' }}>No messages yet.</div>
         ) : (
-          (messages ?? []).map(m => <ConversationMessage key={m.id} m={m} scope={scope} />)
+          (messages ?? []).map(m => <GenericConversationMessage key={m.id} m={m} fetchAttachmentUrl={fetchAttachmentUrl} attachmentUrlQueryKey={attachmentUrlQueryKey} />)
         )}
       </div>
 
+      {!hideComposer && (
       <div style={{ paddingTop: 14, borderTop: '1px solid var(--line)', marginTop: 12 }}>
         <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontWeight: 600, marginBottom: 8 }}>
           {replyToLabel}
@@ -296,7 +358,7 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
             padding: '12px 14px', borderRadius: 8, fontSize: 12.5, color: 'var(--txt-mut)',
             background: 'var(--raised2)', border: '1px solid var(--line2)',
           }}>
-            This blocker has been marked resolved. Reply is disabled.
+            {lockedMessage}
           </div>
         ) : (
         <>
@@ -366,7 +428,7 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
               type="button"
               onClick={() => fileInputRef.current?.click()}
               aria-label="Attach file"
-              title={`Attach a file (${ALLOWED_ATTACHMENT_TYPES_LABEL} — up to ${MAX_ATTACHMENTS_PER_REPLY}, ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB each)`}
+              title={`Attach a file (${ALLOWED_ATTACHMENT_TYPES_LABEL} — up to ${maxAttachmentsPerReply}, ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB each)`}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28,
                 background: 'none', border: 'none', borderRadius: 6, color: 'inherit', cursor: 'pointer',
@@ -471,14 +533,14 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
           </div>
           <button
             onClick={handleSend}
-            disabled={!canSend || sendReply.isPending}
+            disabled={!canSend || isSending}
             style={{
               padding: '8px 16px', fontSize: 12.5, fontWeight: 600, borderRadius: 8,
               background: 'var(--risk)', border: '1px solid var(--risk)', color: '#fff',
               cursor: !canSend ? 'default' : 'pointer', opacity: !canSend ? 0.6 : 1,
             }}
           >
-            {sendReply.isPending ? 'Sending…' : 'Send Reply'}
+            {isSending ? 'Sending…' : 'Send Reply'}
           </button>
         </div>
         </>
@@ -487,6 +549,42 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
           <Eye size={12} aria-hidden="true" /> {visibilityNote}
         </div>
       </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * Shared conversation UI for a single blocker's thread — used by both the Team Lead's
+ * Blockers detail panel and the employee's blocker view, so the two sides look and behave
+ * identically. `scope` picks the access-controlled route; the thread itself is one shared
+ * row set (see BlockerConversationService on the backend), not a per-side copy.
+ *
+ * Thin adapter over the generic ThreadView above — this is what actually fetches/sends for
+ * Blockers specifically.
+ */
+export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote, range, isLocked }: {
+  taskId: number;
+  scope: ConversationScope;
+  replyToLabel: string;
+  visibilityNote: string;
+  range?: DateRange;
+  isLocked?: boolean;
+}) {
+  const { data: messages, isPending } = useBlockerThread(taskId, scope);
+  const sendReply = useSendBlockerReply(taskId, scope, range);
+  return (
+    <ThreadView
+      messages={messages}
+      isPending={isPending}
+      replyToLabel={replyToLabel}
+      visibilityNote={visibilityNote}
+      isLocked={isLocked}
+      lockedMessage="This blocker has been marked resolved. Reply is disabled."
+      onSend={(message, files) => sendReply.mutateAsync({ message, files })}
+      isSending={sendReply.isPending}
+      fetchAttachmentUrl={id => fetchBlockerAttachmentUrl(scope, id)}
+      attachmentUrlQueryKey={id => ['blocker-attachment-blob', scope, id]}
+    />
   );
 }

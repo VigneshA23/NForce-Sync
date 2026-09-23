@@ -111,7 +111,7 @@ export function Placeholder({ title }: PlaceholderProps) {
             lineHeight: 1.65,
           }}
         >
-          This screen is part of the next build phase. Navigation and shell are complete — content
+          This screen is part of the next build phase. Navigation and shell are complete. Content
           components ship in the next sprint.
         </p>
       </div>

@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown, ChevronRight, X, CheckCheck, RefreshCw,
-  Search, AlertTriangle,
+  Search, AlertTriangle, MessageCircleQuestion,
 } from 'lucide-react';
 import {
   usePendingApprovals, useDecidedApprovals,
   useApprove, useReject, type PendingApprovalsRange,
 } from '../api/approvals';
+import { useOpenClarification, useEodInbox } from '../api/eodClarification';
 import { FilterDropdown } from '../components/FilterDropdown';
 import { useToast } from '../lib/toast';
 import { formatDate as fmtDate } from '../lib/date';
 import type { EodEntryDto } from '../api/eod';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   sumHours, hrs, entryProjects, entryCategories,
   daySummary, timeAdjustmentLabel, formatRelative, extractError, initials,
@@ -31,13 +32,17 @@ function formatInactivity(hoursSince: number | null | undefined): string {
 
 function EntryRow({
   entry,
-  expanded, onToggleExpand, onOpenDetails, highlighted,
+  expanded, onToggleExpand, onOpenDetails, highlighted, clarificationRequested,
 }: {
   entry: EodEntryDto;
   expanded: boolean;
   onToggleExpand: () => void;
   onOpenDetails: () => void;
   highlighted?: boolean;
+  /** True while a Team Lead has an open (NEEDS_RESPONSE/ACKNOWLEDGED) clarification round on
+   *  this entry — the entry stays right here in Approvals, just flagged, rather than moving to
+   *  a separate tab or list. */
+  clarificationRequested?: boolean;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const total = sumHours(entry.tasks);
@@ -92,8 +97,13 @@ function EntryRow({
                 appear on the Approved/Rejected tabs. It is informational, not a lock: the entry
                 is still the Team Lead's to decide — see the tooltip. */}
             {entry.escalated && (
-              <span title="This entry passed the review SLA, so the Project Manager can now see and act on it too. You can still approve or reject it yourself — whoever acts first decides it.">
+              <span title="This entry passed the review SLA, so the Project Manager can now see and act on it too. You can still approve or reject it yourself. Whoever acts first decides it.">
                 <Chip tone="warn"><AlertTriangle size={11} aria-hidden="true" /> Escalated to Project Manager</Chip>
+              </span>
+            )}
+            {clarificationRequested && (
+              <span title="A clarification is open on this entry — Approve/Reject are disabled until it's resolved. Open it from EOD Inbox, or from here.">
+                <Chip tone="warn"><MessageCircleQuestion size={11} aria-hidden="true" /> Clarification Requested</Chip>
               </span>
             )}
           </div>
@@ -130,7 +140,7 @@ function EntryRow({
                 </div>
               )) : (
                 <div style={{ padding: '4px 11px', fontSize: 11, color: 'var(--txt-dim)' }}>
-                  Full-day leave — no tasks
+                  Full-day leave, no tasks
                 </div>
               )}
             </div>
@@ -183,6 +193,7 @@ export default function Approvals() {
   // With no params (direct nav via sidebar), the Pending tab shows every pending entry
   // regardless of any dashboard date filter.
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const fromParam = searchParams.get('from');
   const toParam = searchParams.get('to');
   const range: PendingApprovalsRange | undefined = fromParam && toParam ? { from: fromParam, to: toParam } : undefined;
@@ -196,7 +207,17 @@ export default function Approvals() {
   const { data: approved, isPending: approvedLoading } = useDecidedApprovals('APPROVED');
   const { data: rejected, isPending: rejectedLoading } = useDecidedApprovals('REJECTED');
   const reject = useReject();
+  const requestClarification = useOpenClarification();
   const { show } = useToast();
+
+  // Entries with an open clarification stay in this list (see EodEntryRepository — no longer
+  // excluded) — this just flags which rows to badge. Cheap: a Team Lead has at most a handful
+  // open at once.
+  const { data: openClarifications } = useEodInbox('lead', true);
+  const clarifiedEntryIds = useMemo(
+    () => new Set((openClarifications ?? []).map(c => c.eodEntryId)),
+    [openClarifications],
+  );
 
   const [tab, setTab] = useState<Tab>('pending');
   const [search, setSearch] = useState('');
@@ -279,6 +300,19 @@ export default function Approvals() {
       await reject.mutateAsync({ entryId, comment: reason });
       show('Entry rejected.', 'success');
       setDetailsEntryId(null);
+    } catch (err) {
+      show(extractError(err), 'error');
+    }
+  }
+
+  // Opens an empty clarification round with no reason prompt — same open-then-navigate pattern
+  // as jumping to a Blocker's conversation — then sends the TL straight to EOD Inbox with this
+  // entry's thread open, where they type the actual question as the first message.
+  async function handleRequestClarification(entryId: number) {
+    try {
+      await requestClarification.mutateAsync({ entryId });
+      setDetailsEntryId(null);
+      navigate(`/team/eod-inbox?highlight=${entryId}`);
     } catch (err) {
       show(extractError(err), 'error');
     }
@@ -430,6 +464,7 @@ export default function Approvals() {
               onToggleExpand={() => toggleExpand(entry.id)}
               onOpenDetails={() => setDetailsEntryId(entry.id)}
               highlighted={highlightId != null && entry.id === highlightId}
+              clarificationRequested={clarifiedEntryIds.has(entry.id)}
             />
           ))}
         </Card>
@@ -442,6 +477,8 @@ export default function Approvals() {
         onReject={handleDetailReject}
         approveBusy={modalApprove.isPending}
         rejectBusy={reject.isPending}
+        onRequestClarification={handleRequestClarification}
+        clarifyBusy={requestClarification.isPending}
       />
     </div>
   );

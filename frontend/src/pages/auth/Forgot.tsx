@@ -211,7 +211,7 @@ function ConfirmationCard({ onBack }: { onBack: () => void }) {
             If an account exists for that address, a temporary password is on its way.
           </p>
           <p style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
-            Check your inbox — sign in with it, then you'll be prompted to set a new password.
+            Check your inbox. Sign in with it, then you'll be prompted to set a new password.
           </p>
         </div>
       </div>

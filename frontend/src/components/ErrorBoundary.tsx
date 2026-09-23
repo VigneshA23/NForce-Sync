@@ -78,7 +78,7 @@ export class ErrorBoundary extends Component<Props, State> {
             Something went wrong
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.6, marginBottom: 20 }}>
-            This screen failed to render. The details below are what went wrong — reloading often
+            This screen failed to render. The details below are what went wrong. Reloading often
             clears it. If it happens every time, sign out and back in.
           </p>
 

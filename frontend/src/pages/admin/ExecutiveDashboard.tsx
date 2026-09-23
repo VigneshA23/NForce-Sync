@@ -280,7 +280,7 @@ export default function ExecutiveDashboard() {
           {/* Workforce Overview / Project Portfolio */}
           <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 16 }}>
             <Card>
-              <SectionTitle>Workforce — Users by Role</SectionTitle>
+              <SectionTitle>Workforce: Users by Role</SectionTitle>
               {Object.entries(data.workforce.usersByRole).filter(([, v]) => v > 0).length === 0
                 ? <EmptyNote>No data</EmptyNote>
                 : Object.entries(data.workforce.usersByRole).filter(([, v]) => v > 0).map(([role, count]) => (

@@ -4,7 +4,9 @@ import com.nforceone.sync.approval.dto.ApprovalActionDto;
 import com.nforceone.sync.approval.dto.ApproveRequest;
 import com.nforceone.sync.approval.dto.BatchApproveRequest;
 import com.nforceone.sync.approval.dto.RejectRequest;
+import com.nforceone.sync.eod.EodClarificationService;
 import com.nforceone.sync.eod.EodEntry;
+import com.nforceone.sync.eod.dto.EodClarificationStatusDto;
 import com.nforceone.sync.eod.dto.EodEntryDto;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -20,9 +22,11 @@ import java.util.List;
 public class ApprovalController {
 
     private final ApprovalService approvalService;
+    private final EodClarificationService clarificationService;
 
-    public ApprovalController(ApprovalService approvalService) {
+    public ApprovalController(ApprovalService approvalService, EodClarificationService clarificationService) {
         this.approvalService = approvalService;
+        this.clarificationService = clarificationService;
     }
 
     // from/to are optional but must be supplied together — omitting both falls back to the
@@ -56,6 +60,16 @@ public class ApprovalController {
     @GetMapping("/{entryId}/history")
     public List<ApprovalActionDto> getEntryHistory(@PathVariable Long entryId) {
         return approvalService.getHistory(entryId, actingEmail());
+    }
+
+    // Backs the Approve/Reject buttons' disabled state in the detail modal — grey them out
+    // whenever status is NEEDS_RESPONSE/ACKNOWLEDGED (EodClarificationStatusDto.open), same gate
+    // ApprovalService.requireNoOpenClarification enforces server-side on the actual approve/
+    // reject calls. Delegates straight to EodClarificationAccessPolicy.requireCanRead, which
+    // already covers both a Team Lead and a scoped PM viewing this entry.
+    @GetMapping("/{entryId}/clarification-status")
+    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId) {
+        return clarificationService.getStatus(entryId, actingEmail());
     }
 
     @PostMapping("/{entryId}/approve")

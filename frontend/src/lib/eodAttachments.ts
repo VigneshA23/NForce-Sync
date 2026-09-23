@@ -117,7 +117,7 @@ export async function previewEodAttachment(
 ): Promise<void> {
   const win = window.open('', '_blank');
   if (!win) {
-    throw new Error('Your browser blocked the new tab — allow pop-ups for this site and try again.');
+    throw new Error('Your browser blocked the new tab. Allow pop-ups for this site and try again.');
   }
   win.document.write(buildAttachmentLoadingHtml(attachment.fileName));
   win.document.close();

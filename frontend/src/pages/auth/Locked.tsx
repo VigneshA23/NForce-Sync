@@ -164,7 +164,7 @@ export default function Locked() {
             lineHeight: 1.5,
           }}
         >
-          {stillLocked && <>The lockout lifts automatically — you can leave this page.<br /></>}
+          {stillLocked && <>The lockout lifts automatically. You can leave this page.<br /></>}
           <a
             href="/login"
             onClick={(e) => { e.preventDefault(); navigate('/login', { replace: true }); }}

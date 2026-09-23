@@ -1,4 +1,4 @@
-import { UserCog, ClipboardCheck, ShieldCheck, Settings, Activity } from 'lucide-react';
+import { UserCog, ClipboardCheck, ShieldCheck, Settings, Activity, FileClock } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { AuditLogDto } from '../api/admin';
 import { toRole } from '../api/auth';
@@ -46,10 +46,43 @@ function safeParse(raw: string | null): Record<string, unknown> | null {
   }
 }
 
-function roleLabel(backendRole: unknown): string {
+export function roleLabel(backendRole: unknown): string {
   if (typeof backendRole !== 'string') return 'Unknown role';
   return ROLE_LABELS[toRole(backendRole)] ?? backendRole;
 }
+
+// ── Entity type display (icon + label) — the 3 entity types the backend actually writes today
+// (APP_USER, EOD_ENTRY, BUSINESS_RULE). See AuditLogController/writeAudit call sites.
+export const ENTITY_TYPE_META: Record<string, { label: string; icon: LucideIcon }> = {
+  APP_USER:     { label: 'User',          icon: UserCog },
+  EOD_ENTRY:    { label: 'EOD Entry',      icon: ClipboardCheck },
+  BUSINESS_RULE: { label: 'Business Rule', icon: Settings },
+};
+
+export function entityTypeMeta(entityType: string): { label: string; icon: LucideIcon } {
+  return ENTITY_TYPE_META[entityType] ?? { label: entityType.replace(/_/g, ' '), icon: FileClock };
+}
+
+// ── Action filter options — the Action dropdown's 8 values, each mapped to the actual stored
+// action string (and, for Activate/Deactivate, the afterStatus split — see
+// AuditLogSpecs.afterStatusIs) rather than renaming what's already written to the DB.
+export interface AuditActionOption {
+  key: string;
+  label: string;
+  action: string;
+  afterStatus?: string;
+}
+
+export const AUDIT_ACTION_OPTIONS: AuditActionOption[] = [
+  { key: 'CREATE',         label: 'Create',         action: 'CREATE' },
+  { key: 'UPDATE',         label: 'Update',         action: 'UPDATE' },
+  { key: 'DELETE',         label: 'Delete',         action: 'SOFT_DELETE' },
+  { key: 'ACTIVATE',       label: 'Activate',       action: 'STATUS_CHANGE', afterStatus: 'ACTIVE' },
+  { key: 'DEACTIVATE',     label: 'Deactivate',     action: 'STATUS_CHANGE', afterStatus: 'INACTIVE' },
+  { key: 'APPROVE',        label: 'Approve',        action: 'EOD_APPROVED' },
+  { key: 'REJECT',         label: 'Reject',         action: 'EOD_REJECTED' },
+  { key: 'PASSWORD_RESET', label: 'Password Reset', action: 'PASSWORD_RESET' },
+];
 
 // Resolves raw audit-log entries into human-readable text + a category, e.g.
 // "Created a new app_user" -> "Created employee profile: Jane Smith" (user-management)
@@ -94,7 +127,7 @@ export function describeAuditEvent(event: AuditLogDto): AuditDisplay {
   if (event.entityType === 'EOD_ENTRY') {
     const name = (after?.employeeName as string | undefined) ?? `EOD entry #${event.entityId ?? '?'}`;
     const date = after?.entryDate as string | undefined;
-    const dateSuffix = date ? ` — ${date}` : '';
+    const dateSuffix = date ? `, ${date}` : '';
 
     switch (event.action) {
       case 'EOD_APPROVED':
@@ -150,11 +183,32 @@ export function auditActionBadgeStyle(action: string): { bg: string; color: stri
     CREATE:                { bg: 'rgba(47,182,124,.12)',  color: '#2FB67C' },
     UPDATE:                { bg: 'rgba(76,141,214,.12)',  color: '#4C8DD6' },
     STATUS_CHANGE:         { bg: 'rgba(224,169,59,.12)',  color: '#E0A93B' },
-    PASSWORD_RESET:        { bg: 'rgba(155,109,255,.12)', color: '#9B6DFF' },
+    PASSWORD_RESET:        { bg: 'rgba(233,30,99,.12)',   color: '#E91E63' },
     SOFT_DELETE:           { bg: 'rgba(228,55,61,.12)',   color: '#E4373D' },
-    EOD_APPROVED:          { bg: 'rgba(47,182,124,.12)',  color: '#2FB67C' },
-    EOD_REJECTED:          { bg: 'rgba(228,55,61,.12)',   color: '#E4373D' },
+    EOD_APPROVED:          { bg: 'rgba(232,144,36,.12)',  color: '#E89024' },
+    EOD_REJECTED:          { bg: 'rgba(155,109,255,.12)', color: '#9B6DFF' },
     EOD_CHANGES_REQUESTED: { bg: 'rgba(224,169,59,.12)',  color: '#E0A93B' },
   };
   return map[action] ?? { bg: 'var(--raised2)', color: 'var(--txt-dim)' };
+}
+
+/** Action pill label + color, resolving STATUS_CHANGE's Activate/Deactivate split from the
+ *  entry's own afterValue (same "status" field AuditLogSpecs.afterStatusIs queries on server).
+ *  Colors follow the spec: green=Create/Activate, blue=Update, red=Delete, amber=Deactivate,
+ *  purple=Reject, pink=Password Reset, amber/orange=Approve. */
+export function auditActionDisplay(entry: AuditLogDto): { label: string; bg: string; color: string } {
+  if (entry.action === 'STATUS_CHANGE') {
+    const after = safeParse(entry.afterValue);
+    const activated = after?.status === 'ACTIVE';
+    return activated
+      ? { label: 'Activate',   bg: 'rgba(47,182,124,.12)', color: '#2FB67C' }
+      : { label: 'Deactivate', bg: 'rgba(224,169,59,.12)', color: '#E0A93B' };
+  }
+  const labels: Record<string, string> = {
+    CREATE: 'Create', UPDATE: 'Update', SOFT_DELETE: 'Delete',
+    PASSWORD_RESET: 'Password Reset', EOD_APPROVED: 'Approve', EOD_REJECTED: 'Reject',
+    EOD_CHANGES_REQUESTED: 'Changes Requested',
+  };
+  const style = auditActionBadgeStyle(entry.action);
+  return { label: labels[entry.action] ?? entry.action.replace(/_/g, ' '), ...style };
 }

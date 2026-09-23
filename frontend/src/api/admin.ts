@@ -28,9 +28,22 @@ export interface AuditLogDto {
   action: string;
   actorId: number | null;
   actorName: string | null;
+  /** Raw AppUser.Role enum name — map through ROLE_LABELS (lib/nav.ts) for display. */
+  actorRole: string | null;
   beforeValue: string | null;
   afterValue: string | null;
   occurredAt: string;
+}
+
+/** KPI strip counts — scoped to whatever filters are currently applied, not the global total. */
+export interface AuditSummaryDto {
+  total: number;
+  create: number;
+  update: number;
+  delete: number;
+  activate: number;
+  deactivate: number;
+  other: number;
 }
 
 export interface AdminStatsDto {
@@ -101,6 +114,9 @@ export interface UpdateUserPayload {
 export interface AuditFilters {
   entityType?: string;
   action?: string;
+  /** Only meaningful alongside action: 'STATUS_CHANGE' — splits Activate ('ACTIVE') from
+   *  Deactivate ('INACTIVE'), which the stored action string alone doesn't distinguish. */
+  afterStatus?: string;
   actorId?: number;
   actorName?: string;
   // Comma-separated list of the "name" field inside before/after JSON (see
@@ -110,6 +126,8 @@ export interface AuditFilters {
   to?: string;
   page?: number;
   size?: number;
+  /** 'asc' | 'desc' — toggled by the Timestamp column header. Defaults server-side to 'desc'. */
+  sort?: string;
 }
 
 // ── API helpers ────────────────────────────────────────────────────────────────
@@ -200,6 +218,12 @@ export async function listAuditLog(filters: AuditFilters): Promise<PageDto<Audit
 
 export async function getAuditEntry(id: number): Promise<AuditLogDto> {
   const res = await api.get<AuditLogDto>(`/audit/${id}`);
+  return res.data;
+}
+
+/** KPI strip counts — same filter shape as listAuditLog minus page/size/sort. */
+export async function getAuditSummary(filters: Omit<AuditFilters, 'page' | 'size' | 'sort'>): Promise<AuditSummaryDto> {
+  const res = await api.get<AuditSummaryDto>('/audit/summary', { params: filters });
   return res.data;
 }
 

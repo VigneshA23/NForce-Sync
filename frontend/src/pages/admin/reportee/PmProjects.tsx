@@ -8,7 +8,7 @@ import { ReporteeViewBanner } from '../../../components/ReporteeViewBanner';
 export default function ReporteePmProjects() {
   return (
     <div>
-      <ReporteeViewBanner label="Project Manager Views — Projects & Allocation" />
+      <ReporteeViewBanner label="Project Manager Views: Projects & Allocation" />
       <ProjectsAllocation readOnly />
     </div>
   );

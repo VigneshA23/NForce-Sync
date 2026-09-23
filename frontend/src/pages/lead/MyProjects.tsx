@@ -245,7 +245,7 @@ function DeleteCategoryModal({ category, onClose }: {
       const result = await deleteMutation.mutateAsync(category.id);
       showToast('success', result.deleted
         ? 'Category deleted'
-        : 'Category has recorded EOD history — marked Inactive instead of deleted');
+        : 'Category has recorded EOD history, marked Inactive instead of deleted');
       onClose();
     } catch (err) {
       setError(extractApiError(err, 'Failed to delete category'));

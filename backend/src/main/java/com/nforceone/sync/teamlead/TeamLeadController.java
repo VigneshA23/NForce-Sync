@@ -2,7 +2,14 @@ package com.nforceone.sync.teamlead;
 
 import com.nforceone.sync.eod.BlockerConversationService;
 import com.nforceone.sync.eod.BlockerReplyAttachment;
+import com.nforceone.sync.eod.EodClarificationReplyAttachment;
+import com.nforceone.sync.eod.EodClarificationService;
 import com.nforceone.sync.eod.dto.BlockerReplyDto;
+import com.nforceone.sync.eod.dto.EodClarificationMessageRequest;
+import com.nforceone.sync.eod.dto.EodClarificationReplyDto;
+import com.nforceone.sync.eod.dto.EodClarificationStatusDto;
+import com.nforceone.sync.eod.dto.EodClarificationStatusRequest;
+import com.nforceone.sync.eod.dto.EodInboxItemDto;
 import com.nforceone.sync.teamlead.dto.BlockerStatusRequest;
 import com.nforceone.sync.teamlead.dto.DashboardTrendDto;
 import com.nforceone.sync.teamlead.dto.MemberEodStatusDto;
@@ -29,10 +36,13 @@ public class TeamLeadController {
 
     private final TeamLeadService teamLeadService;
     private final BlockerConversationService conversationService;
+    private final EodClarificationService clarificationService;
 
-    public TeamLeadController(TeamLeadService teamLeadService, BlockerConversationService conversationService) {
+    public TeamLeadController(TeamLeadService teamLeadService, BlockerConversationService conversationService,
+                               EodClarificationService clarificationService) {
         this.teamLeadService = teamLeadService;
         this.conversationService = conversationService;
+        this.clarificationService = clarificationService;
     }
 
     @GetMapping("/dashboard/summary")
@@ -124,6 +134,70 @@ public class TeamLeadController {
                 .contentType(MediaType.parseMediaType(attachment.getContentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + attachment.getFileName() + "\"")
                 .body(attachment.getData());
+    }
+
+    // ── EOD Inbox / Clarification ───────────────────────────────────────────
+
+    @GetMapping("/eod-inbox")
+    public List<EodInboxItemDto> getEodInbox(@RequestParam(defaultValue = "true") boolean open) {
+        return clarificationService.listForLead(actingEmail(), open);
+    }
+
+    @GetMapping("/eod/{entryId}/clarification")
+    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId) {
+        return clarificationService.getStatus(entryId, actingEmail());
+    }
+
+    @GetMapping("/eod/{entryId}/clarification/replies")
+    public List<EodClarificationReplyDto> getClarificationReplies(@PathVariable Long entryId) {
+        return clarificationService.getThread(entryId, actingEmail());
+    }
+
+    // Opening the EOD Inbox row's conversation panel — marks the round read for this TL, clearing
+    // the unread/bold indicator on the row (see EodClarificationService.markRead).
+    @PostMapping("/eod/{entryId}/clarification/read")
+    public void markClarificationRead(@PathVariable Long entryId) {
+        clarificationService.markRead(entryId, actingEmail());
+    }
+
+    // Opens a new round — the Approvals detail popup's "Request Clarification" action. No message
+    // required (matches Blockers' open-empty-thread-then-navigate pattern): the button just opens
+    // the round and the TL is navigated to EOD Inbox to type the actual question there. A body is
+    // still accepted (not @Valid — an empty/blank message is legal here, unlike a reply) so this
+    // stays extensible if a caller ever wants to open with a first message in one call.
+    @PostMapping("/eod/{entryId}/clarification")
+    public EodClarificationStatusDto openClarification(
+            @PathVariable Long entryId,
+            @RequestBody(required = false) EodClarificationMessageRequest body) {
+        return clarificationService.open(entryId, actingEmail(), body != null ? body.message() : null);
+    }
+
+    // Multipart, not JSON — matches Blockers' postBlockerReply exactly (message + files together),
+    // now that clarification replies support attachments too (see EodClarificationService.reply).
+    @PostMapping(value = "/eod/{entryId}/clarification/replies", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public EodClarificationReplyDto postClarificationReply(
+            @PathVariable Long entryId,
+            @RequestParam(required = false) String message,
+            @RequestParam(required = false) List<MultipartFile> files) {
+        return clarificationService.reply(entryId, actingEmail(), message, files);
+    }
+
+    @GetMapping("/eod/attachments/{attachmentId}")
+    public ResponseEntity<byte[]> downloadClarificationAttachment(@PathVariable Long attachmentId) {
+        EodClarificationReplyAttachment attachment = clarificationService.getAttachment(attachmentId, actingEmail());
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(attachment.getContentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + attachment.getFileName() + "\"")
+                .body(attachment.getData());
+    }
+
+    // TL-only status dropdown (NEEDS_RESPONSE / ACKNOWLEDGED / RESOLVED) — mirrors Blockers'
+    // PATCH .../status, same shape as BlockerStatusRequest.
+    @PatchMapping("/eod/{entryId}/clarification/status")
+    public EodClarificationStatusDto setClarificationStatus(
+            @PathVariable Long entryId,
+            @RequestBody EodClarificationStatusRequest body) {
+        return clarificationService.setStatus(entryId, actingEmail(), body.status());
     }
 
     // Reuses the existing Admin Config (business_rule_config) row — this just exposes the

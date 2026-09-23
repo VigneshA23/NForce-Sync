@@ -560,7 +560,7 @@ export default function BusinessRules() {
         </h1>
         <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
           Working hours, calendars, cutoffs and escalation policy. New rules apply forward
-          only — past periods are not re-flagged.
+          only. Past periods are not re-flagged.
         </p>
       </div>
 
@@ -621,7 +621,7 @@ export default function BusinessRules() {
           each shift's end, which is also what reminders now fire from. */}
       <RuleCard
         title="Notifications & Escalation"
-        description="Escalation and lockout timing for EOD submissions. The EOD cutoff — and the reminder that follows it — is set per shift below."
+        description="Escalation and lockout timing for EOD submissions. The EOD cutoff, and the reminder that follows it, is set per shift below."
         icon={<Bell size={16} aria-hidden="true" />}
         accent="var(--warn)"
         footer={<LastUpdatedCaption info={notificationsUpdate} isReady={notificationsAudit.isSuccess} />}
@@ -690,7 +690,7 @@ export default function BusinessRules() {
           limit (30–120 min) is a separate fixed policy enforced in EodService. */}
       <RuleCard
         title="Time Adjustment Budget"
-        description="Shared monthly minutes for late arrivals, breaks, or early leaves. Applies to everyone — no per-role overrides."
+        description="Shared monthly minutes for late arrivals, breaks, or early leaves. Applies to everyone. No per-role overrides."
         icon={<Clock3 size={16} aria-hidden="true" />}
         accent="var(--info)"
         footer={<LastUpdatedCaption info={allowancesUpdate} isReady={allowancesAudit.isSuccess} />}
@@ -819,7 +819,7 @@ export default function BusinessRules() {
               <>
                 This shift is assigned to <b style={{ color: 'var(--txt)' }}>
                   {deleteShiftItem.assignedEmployeeCount} employee{deleteShiftItem.assignedEmployeeCount === 1 ? '' : 's'}
-                </b> — deleting it will not reassign them, they'll keep referencing a shift that no longer exists in this list.
+                </b>: deleting it will not reassign them, they'll keep referencing a shift that no longer exists in this list.
               </>
             ) : (
               <>No employees are currently assigned to this shift.</>
@@ -919,7 +919,7 @@ function ShiftTable({ data, isPending, isError, onEdit, onToggle, isTogglePendin
                 <td style={tdStyle}><span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>{formatTime12h(shift.startTime)} – {formatTime12h(shift.endTime)}</span></td>
                 <td style={tdStyle}>
                   <span style={{ fontSize: 13, color: shift.eodCutoffHours == null ? 'var(--txt-dim)' : 'var(--txt-mut)' }}
-                        title={shift.eodCutoffHours == null ? 'No deadline — no reminder is sent for this shift.' : undefined}>
+                        title={shift.eodCutoffHours == null ? 'No deadline, so no reminder is sent for this shift.' : undefined}>
                     {cutoffLabel(shift.startTime, shift.endTime, shift.eodCutoffHours)}
                   </span>
                 </td>
@@ -1112,7 +1112,7 @@ function ShiftFormModal({ state, onClose, onSubmit, isPending, error, fieldError
           <FieldError msg={fieldErrors.eodCutoffHours} />
           <p style={{ fontSize: 11, color: 'var(--txt-dim)', margin: '6px 0 0' }}>
             {cutoff.trim() === ''
-              ? 'Leave blank for no deadline — no reminder will be sent for this shift.'
+              ? 'Leave blank for no deadline, so no reminder will be sent for this shift.'
               : `EOD due ${cutoffLabel(`${start}:00`, `${end}:00`, Number(cutoff))}. A reminder is sent once it passes.`}
           </p>
         </div>

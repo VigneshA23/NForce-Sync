@@ -16,6 +16,7 @@ import { useUnreadNotificationsCount } from '../api/notifications';
 import { usePendingApprovalsCount } from '../api/approvals';
 import { useTeamLeadSummary } from '../api/teamLead';
 import { usePmBlockers } from '../api/pmBlockers';
+import { useEodInboxCount } from '../api/eodClarification';
 import { resolveBlockersDateFilter } from '../lib/pmBlockersDateFilter';
 import { todayISO } from '../lib/date';
 
@@ -527,6 +528,11 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
     ? (pmRangeBlockers ?? []).filter(b => b.status !== 'RESOLVED').length
     : 0;
 
+  // Sidebar EOD Inbox badge — open clarification count, for Team Lead, PM, and Employee alike.
+  // Shares the "open" list's query cache with the EOD Inbox page itself (see useEodInboxCount).
+  const eodInboxRole = role === 'lead' ? 'lead' : role === 'pm' ? 'pm' : 'employee';
+  const eodInboxCount = useEodInboxCount(eodInboxRole, role === 'lead' || role === 'pm' || role === 'employee');
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
@@ -591,7 +597,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                     ? openBlockersCount
                     : role === 'pm' && item.key === 'blockers'
                       ? pmOpenBlockersCount
-                      : item.badge;
+                      : (role === 'lead' || role === 'pm' || role === 'employee') && item.key === 'eod-inbox'
+                        ? eodInboxCount
+                        : item.badge;
               }
 
               if (isNavGroup(entry)) {

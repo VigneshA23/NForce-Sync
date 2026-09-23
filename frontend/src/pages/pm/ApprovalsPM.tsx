@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
   ChevronDown, ChevronRight, X, CheckCheck, RefreshCw,
-  Search, AlertTriangle,
+  Search, AlertTriangle, MessageCircleQuestion,
 } from 'lucide-react';
 import {
   usePendingApprovals, useDecidedApprovals,
   useApprove, useReject,
 } from '../../api/approvals';
+import { useEodInbox } from '../../api/eodClarification';
 import { FilterDropdown, toggleFilterVal } from '../../components/FilterDropdown';
 import { useToast } from '../../lib/toast';
 import type { EodEntryDto } from '../../api/eod';
@@ -50,12 +51,15 @@ function teamLeadOf(entry: EodEntryDto): string {
 
 function EntryRow({
   entry,
-  expanded, onToggleExpand, onOpenDetails,
+  expanded, onToggleExpand, onOpenDetails, clarificationRequested,
 }: {
   entry: EodEntryDto;
   expanded: boolean;
   onToggleExpand: () => void;
   onOpenDetails: () => void;
+  /** True while a Team Lead has an open clarification round on this entry — PM's list flags it
+   *  read-only (PM has no Request Clarification action of their own — see SubmissionDetailModal). */
+  clarificationRequested?: boolean;
 }) {
   const total = sumHours(entry.tasks);
   const overtime = entry.isOvertime && entry.overtimeHours != null ? Number(entry.overtimeHours) : 0;
@@ -95,6 +99,11 @@ function EntryRow({
             {entry.escalated && (
               <span title={entry.tlName ? `${entry.tlName} hasn't reviewed since this was submitted.` : 'No Team Lead assigned.'}>
                 <Chip tone="warn"><AlertTriangle size={11} aria-hidden="true" /> Escalated · Team Lead inactive {formatInactivity(entry.tlInactivityHours)}</Chip>
+              </span>
+            )}
+            {clarificationRequested && (
+              <span title="The Team Lead has an open clarification on this entry — Approve/Reject are disabled until it's resolved.">
+                <Chip tone="warn"><MessageCircleQuestion size={11} aria-hidden="true" /> Clarification Requested</Chip>
               </span>
             )}
           </div>
@@ -185,6 +194,14 @@ export default function ApprovalsPM() {
   const { data: rejected, isPending: rejectedLoading } = useDecidedApprovals('REJECTED');
   const reject = useReject();
   const { show } = useToast();
+
+  // Entries with an open clarification stay in this list (see EodEntryRepository — no longer
+  // excluded) — this just flags which rows to badge, read-only from the PM side.
+  const { data: openClarifications } = useEodInbox('pm', true);
+  const clarifiedEntryIds = useMemo(
+    () => new Set((openClarifications ?? []).map(c => c.eodEntryId)),
+    [openClarifications],
+  );
 
   const [tab, setTab] = useState<Tab>('pending');
   const [search, setSearch] = useState('');
@@ -310,7 +327,7 @@ export default function ApprovalsPM() {
           <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
             Approvals
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>Review and act on your projects' EOD submissions — across every team touching them</p>
+          <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>Review and act on your projects' EOD submissions, across every team touching them</p>
         </div>
       </div>
 
@@ -324,7 +341,7 @@ export default function ApprovalsPM() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <AlertTriangle size={18} style={{ color: 'var(--warn)' }} aria-hidden="true" />
             <div style={{ fontSize: 13, color: 'var(--txt)' }}>
-              <strong>{escalatedCount} entr{escalatedCount !== 1 ? 'ies' : 'y'}</strong> need your review — assigned Team Lead hasn't responded within SLA.
+              <strong>{escalatedCount} entr{escalatedCount !== 1 ? 'ies' : 'y'}</strong> need your review. Assigned Team Lead hasn't responded within SLA.
             </div>
           </div>
           <Btn variant="warn" onClick={() => switchTab('escalated')}>Review now →</Btn>
@@ -421,7 +438,7 @@ export default function ApprovalsPM() {
           </div>
           <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>
             {tab === 'pending' && 'No pending entries match your current filters.'}
-            {tab === 'escalated' && 'All Team Leads are current — nothing has breached SLA.'}
+            {tab === 'escalated' && 'All Team Leads are current. Nothing has breached SLA.'}
             {tab === 'approved' && 'Entries you or a Team Lead approve will appear here.'}
             {tab === 'rejected' && 'Entries you or a Team Lead reject will appear here with the reason given.'}
           </div>
@@ -439,6 +456,7 @@ export default function ApprovalsPM() {
               expanded={expanded.has(entry.id)}
               onToggleExpand={() => toggleExpand(entry.id)}
               onOpenDetails={() => setDetailsEntryId(entry.id)}
+              clarificationRequested={clarifiedEntryIds.has(entry.id)}
             />
           ))}
         </Card>

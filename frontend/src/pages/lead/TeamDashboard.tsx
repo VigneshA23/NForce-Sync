@@ -261,8 +261,8 @@ function BlockerRow({ b, isLast, flagged, onView }: {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12.5, color: 'var(--txt)', lineHeight: 1.4, marginBottom: 4 }}>
-            <span style={{ fontWeight: 600 }}>{b.employeeName}</span>
-            {' — '}
+            <span style={{ fontWeight: 600 }}>{b.employeeName}:</span>
+            {' '}
             <span style={{ color: 'var(--txt-mut)' }}>{b.blockerReason ?? b.description ?? 'No detail provided'}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--txt-dim)' }}>
@@ -438,7 +438,7 @@ function UtilizationOverviewRing({ summary }: { summary: TeamLeadSummaryDto }) {
   if (!summary.workingDay) {
     return (
       <div style={{ height: 130, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ fontSize: 13, color: 'var(--txt-dim)' }}>Non-working day — no utilization data</span>
+        <span style={{ fontSize: 13, color: 'var(--txt-dim)' }}>Non-working day, no utilization data</span>
       </div>
     );
   }

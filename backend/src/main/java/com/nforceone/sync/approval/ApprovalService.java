@@ -9,6 +9,8 @@ import com.nforceone.sync.auth.AuditLogRepository;
 import com.nforceone.sync.businessrules.BusinessRuleConfig;
 import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.eod.EodAttachmentService;
+import com.nforceone.sync.eod.EodClarification;
+import com.nforceone.sync.eod.EodClarificationRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
@@ -49,6 +51,7 @@ public class ApprovalService {
     private final NotificationService    notificationService;
     private final BusinessRuleConfigRepository configRepository;
     private final EodAttachmentService    attachmentService;
+    private final EodClarificationRepository clarificationRepository;
 
     public ApprovalService(EodEntryRepository entryRepository,
                            AppUserRepository userRepository,
@@ -58,7 +61,8 @@ public class ApprovalService {
                            ObjectMapper objectMapper,
                            NotificationService notificationService,
                            BusinessRuleConfigRepository configRepository,
-                           EodAttachmentService attachmentService) {
+                           EodAttachmentService attachmentService,
+                           EodClarificationRepository clarificationRepository) {
         this.entryRepository     = entryRepository;
         this.userRepository      = userRepository;
         this.actionRepository    = actionRepository;
@@ -68,6 +72,7 @@ public class ApprovalService {
         this.notificationService = notificationService;
         this.configRepository    = configRepository;
         this.attachmentService   = attachmentService;
+        this.clarificationRepository = clarificationRepository;
     }
 
     // from/to are both null or both present — enforced by the controller, which only forwards
@@ -175,6 +180,7 @@ public class ApprovalService {
         EodEntry entry = requireEntryById(entryId);
         checkManagerAuthorization(actor, entry);
         requireStatus(entry, EodEntry.Status.SUBMITTED);
+        requireNoOpenClarification(entry);
         return approveEntry(entry, actor, comment);
     }
 
@@ -183,6 +189,7 @@ public class ApprovalService {
         EodEntry entry = requireEntryById(entryId);
         checkManagerAuthorization(actor, entry);
         requireStatus(entry, EodEntry.Status.SUBMITTED);
+        requireNoOpenClarification(entry);
 
         OffsetDateTime now = OffsetDateTime.now();
         recordAction(entry, actor, ApprovalAction.Action.REJECT, comment, now);
@@ -317,6 +324,7 @@ public class ApprovalService {
     private EodEntryDto approveEntry(EodEntry entry, AppUser actor, String comment) {
         checkManagerAuthorization(actor, entry);
         requireStatus(entry, EodEntry.Status.SUBMITTED);
+        requireNoOpenClarification(entry);
 
         OffsetDateTime now = OffsetDateTime.now();
         recordAction(entry, actor, ApprovalAction.Action.APPROVE, comment, now);
@@ -372,6 +380,16 @@ public class ApprovalService {
         if (entry.getStatus() != required) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Entry must be in " + required + " status; current: " + entry.getStatus());
+        }
+    }
+
+    // Defense in depth — the pending queries already exclude entries with an open clarification
+    // round (see EodEntryRepository), so the UI should never offer Approve/Reject on one of
+    // these. This guards a stale tab / direct API call from bypassing that.
+    private void requireNoOpenClarification(EodEntry entry) {
+        if (clarificationRepository.existsByEodEntryIdAndStatusNot(entry.getId(), EodClarification.Status.RESOLVED)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This entry has an open clarification and cannot be approved or rejected until it is resolved");
         }
     }
 

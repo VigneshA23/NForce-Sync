@@ -3,6 +3,8 @@ package com.nforceone.sync.eod;
 import com.nforceone.sync.eod.dto.CategoryHoursRow;
 import com.nforceone.sync.eod.dto.DateHoursRow;
 import com.nforceone.sync.eod.dto.EmployeeProjectHoursRow;
+import com.nforceone.sync.eod.dto.EodTaskCategoryNameRow;
+import com.nforceone.sync.eod.dto.EodTaskProjectNameRow;
 import com.nforceone.sync.eod.dto.ProjectHoursRow;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -80,6 +82,22 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
     List<EodTask> findBlockedByProjectIdsAndDateRange(@Param("projectIds") List<Long> projectIds,
                                                         @Param("from") LocalDate from,
                                                         @Param("to") LocalDate to);
+
+    // EOD Inbox card subtitle — batch entry -> project name lookup for EodClarificationService's
+    // enrich() step, so the inbox list doesn't lazy-load t.project per row (N+1).
+    @Query("SELECT new com.nforceone.sync.eod.dto.EodTaskProjectNameRow(t.eodEntry.id, t.project.name) " +
+           "FROM EodTask t " +
+           "WHERE t.eodEntry.id IN :entryIds AND t.project IS NOT NULL " +
+           "ORDER BY t.id ASC")
+    List<EodTaskProjectNameRow> findProjectNamesByEntryIds(@Param("entryIds") List<Long> entryIds);
+
+    // EOD Inbox "Category" filter — same batch entry -> value lookup shape as
+    // findProjectNamesByEntryIds, for t.taskCategory.name instead of t.project.name.
+    @Query("SELECT new com.nforceone.sync.eod.dto.EodTaskCategoryNameRow(t.eodEntry.id, t.taskCategory.name) " +
+           "FROM EodTask t " +
+           "WHERE t.eodEntry.id IN :entryIds AND t.taskCategory IS NOT NULL " +
+           "ORDER BY t.id ASC")
+    List<EodTaskCategoryNameRow> findCategoryNamesByEntryIds(@Param("entryIds") List<Long> entryIds);
 
     // ── Project Dashboard aggregates ──────────────────────────────────────────
     // All scoped to APPROVED entries only — matches UtilizationService's convention that only
