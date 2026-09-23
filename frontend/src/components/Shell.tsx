@@ -2,12 +2,11 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Menu, X, Search, Bell, LogOut, Sun, Moon, UserCircle2, HelpCircle, Shield, FolderKanban, ChevronDown, KeyRound } from 'lucide-react';
+import { Menu, X, Search, Bell, LogOut, UserCircle2, HelpCircle, Shield, FolderKanban, ChevronDown, KeyRound, Settings } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { NAV, ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, navSubItemPath, isNavGroup } from '../lib/nav';
 import type { NavItem } from '../lib/nav';
 import { useAuth } from '../lib/auth';
-import { useTheme } from '../lib/theme';
 import { NotAuthorized } from '../pages/NotAuthorized';
 import { globalSearch } from '../api/search';
 import type { UserResult, ProjectResult } from '../api/search';
@@ -297,7 +296,7 @@ function WorkspaceSearch() {
                     onMouseEnter={() => setIdx(globalIdx)}
                     onMouseLeave={() => setIdx(-1)}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: highlighted ? 'rgba(255,255,255,.06)' : 'none', border: 'none', cursor: 'pointer', color: '#C8CCD2', fontSize: 13, textAlign: 'left' }}>
-                    <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', background: '#B11116', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 600, color: '#fff', flexShrink: 0 }}>
+                    <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 600, color: '#fff', flexShrink: 0 }}>
                       {initials}
                     </span>
                     <div style={{ minWidth: 0, flex: 1 }}>
@@ -370,7 +369,7 @@ function NavLinkItem({ item, isActive, badge, indent, onNavClick }: {
         display: 'flex',
         alignItems: 'center',
         gap: 9,
-        padding: '9px 11px',
+        padding: 'var(--nf-density-nav-pad, 9px 11px)',
         margin: indent ? '1px 8px 1px 22px' : '1px 8px',
         borderRadius: 6,
         textDecoration: 'none',
@@ -389,7 +388,7 @@ function NavLinkItem({ item, isActive, badge, indent, onNavClick }: {
         <span
           aria-label={`${badge} unread`}
           style={{
-            background: '#B11116',
+            background: 'var(--brand)',
             color: '#fff',
             fontSize: 10,
             fontWeight: 600,
@@ -443,7 +442,7 @@ function NavGroupRow({ label, icon: Icon, expanded, onToggle }: {
         alignItems: 'center',
         gap: 9,
         width: 'calc(100% - 16px)',
-        padding: '9px 11px',
+        padding: 'var(--nf-density-nav-pad, 9px 11px)',
         margin: '1px 8px',
         borderRadius: 6,
         border: 'none',
@@ -646,7 +645,6 @@ export function Shell() {
 
   const { user, logout } = useAuth();
   const photo = useProfilePhoto();
-  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate  = useNavigate();
   const reduced   = useReducedMotion();
@@ -659,13 +657,15 @@ export function Shell() {
     // Notifications and Profile have no sidebar entry (reachable only via the topbar bell /
     // avatar dropdown), but every role must still be able to open them.
     || location.pathname === '/notifications'
-    || location.pathname === '/profile';
+    || location.pathname === '/profile'
+    || location.pathname === '/preferences';
 
   // FIX 4: derive breadcrumb label from nav map
   const navInfo  = getNavItem(role, location.pathname);
   const pageLabel = navInfo?.item.label
     ?? (location.pathname === '/notifications' ? 'Notifications'
       : location.pathname === '/profile' ? 'Profile'
+      : location.pathname === '/preferences' ? 'Preferences'
       : 'Home');
 
   const bellBadge = useUnreadNotificationsCount();
@@ -804,9 +804,9 @@ export function Shell() {
         <header
           style={{
             height: 56,
-            background: 'linear-gradient(90deg, #050506 0%, #6B0C10 40%, #A01418 100%)',
+            background: 'linear-gradient(90deg, #050506 0%, var(--brand-deep) 40%, var(--brand) 100%)',
             backdropFilter: 'blur(10px)',
-            borderBottom: '1px solid rgba(228,55,61,.22)',
+            borderBottom: '1px solid color-mix(in srgb, var(--brand-bright) 22%, transparent)',
             position: 'sticky',
             top: 0,
             zIndex: 30,
@@ -851,31 +851,6 @@ export function Shell() {
             {/* Global search — nav items (client-side), people + projects (role-scoped backend) */}
             <WorkspaceSearch />
 
-            {/* Theme toggle — current-mode text label */}
-            <button
-              onClick={toggleTheme}
-              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              className="nf-topbar-item"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 7,
-                borderRadius: 6,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                fontSize: 12,
-              }}
-            >
-              {theme === 'dark'
-                ? <Sun  size={15} aria-hidden="true" />
-                : <Moon size={15} aria-hidden="true" />}
-              <span style={{ fontSize: 12, fontWeight: 500 }}>
-                {theme === 'dark' ? 'Light' : 'Dark'}
-              </span>
-            </button>
-
             {/* Bell */}
             <Link
               to="/notifications"
@@ -901,7 +876,7 @@ export function Shell() {
                     right: 3,
                     minWidth: 16,
                     height: 16,
-                    background: '#E4373D',
+                    background: 'var(--risk)',
                     borderRadius: 8,
                     fontSize: 9,
                     fontWeight: 700,
@@ -933,7 +908,7 @@ export function Shell() {
                     width: 32,
                     height: 32,
                     borderRadius: '50%',
-                    background: '#B11116',
+                    background: 'var(--brand)',
                     color: '#fff',
                     fontSize: 12,
                     fontWeight: 700,
@@ -966,7 +941,7 @@ export function Shell() {
                       placeItems: 'center',
                     }}
                   >
-                    <Shield size={8} color={role === 'superadmin' ? '#E4373D' : '#6366F1'} aria-hidden="true" />
+                    <Shield size={8} color={role === 'superadmin' ? 'var(--risk)' : '#6366F1'} aria-hidden="true" />
                   </span>
                 )}
               </div>{/* end 32×32 wrapper */}
@@ -996,7 +971,7 @@ export function Shell() {
                         width: 36,
                         height: 36,
                         borderRadius: '50%',
-                        background: '#B11116',   /* FIX 4: brand red */
+                        background: 'var(--brand)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -1053,6 +1028,38 @@ export function Shell() {
                     >
                       <UserCircle2 size={14} aria-hidden="true" />
                       My Profile
+                    </Link>
+
+                    {/* Preferences */}
+                    <Link
+                      to="/preferences"
+                      role="menuitem"
+                      onClick={() => setProfileOpen(false)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        width: '100%',
+                        padding: '9px 10px',
+                        borderRadius: 6,
+                        textDecoration: 'none',
+                        color: '#9BA1AC',
+                        fontSize: 13,
+                        fontWeight: 500,
+                        fontFamily: 'Inter, sans-serif',
+                        transition: 'background 120ms, color 120ms',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,.05)';
+                        e.currentTarget.style.color = '#E8EAED';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = '#9BA1AC';
+                      }}
+                    >
+                      <Settings size={14} aria-hidden="true" />
+                      Preferences
                     </Link>
 
                     {/* Help & Guidance */}
@@ -1136,7 +1143,7 @@ export function Shell() {
                         border: 'none',
                         borderRadius: 6,
                         cursor: 'pointer',
-                        color: '#E4373D',
+                        color: 'var(--risk)',
                         fontSize: 13,
                         fontWeight: 500,
                         fontFamily: 'Inter, sans-serif',
@@ -1144,12 +1151,12 @@ export function Shell() {
                         textAlign: 'left',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(228,55,61,.08)';
-                        e.currentTarget.style.color = '#E4373D';
+                        e.currentTarget.style.background = 'color-mix(in srgb, var(--risk) 8%, transparent)';
+                        e.currentTarget.style.color = 'var(--risk)';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.background = 'transparent';
-                        e.currentTarget.style.color = '#E4373D';
+                        e.currentTarget.style.color = 'var(--risk)';
                       }}
                     >
                       <LogOut size={14} aria-hidden="true" />

@@ -308,7 +308,7 @@ export default function Profile() {
   const saving = saveMutation.isPending;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 900 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
 
       {/* Page header */}
       <div>
@@ -440,7 +440,7 @@ export default function Profile() {
 
       {/* Quick facts — contact info strip */}
       <Card style={{ boxShadow: CARD_SHADOW }}>
-        <div className="nf-r-profile-contacts" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', rowGap: 18, columnGap: 16 }}>
+        <div className="nf-r-profile-contacts" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', rowGap: 18, columnGap: 16 }}>
           <ContactChip icon={<Mail size={16} aria-hidden />} label="Email" value={profile.email} />
           <ContactChip icon={<Phone size={16} aria-hidden />} label="Phone" value={profile.phone} />
           <ContactChip icon={<MapPin size={16} aria-hidden />} label="Location" value={profile.locationName} />

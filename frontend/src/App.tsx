@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ThemeProvider } from './lib/theme';
+import { AccentColorProvider } from './lib/accentColor';
+import { DensityProvider } from './lib/density';
 import { AuthProvider, useAuth, ROLE_LANDING } from './lib/auth';
 import { ToastProvider } from './lib/toast';
 import { todayISO } from './lib/date';
@@ -59,6 +61,7 @@ const ReporteePmUtilization = lazy(() => import('./pages/admin/reportee/PmUtiliz
 const Profile             = lazy(() => import('./pages/Profile'));
 const Notifications       = lazy(() => import('./pages/Notifications'));
 const ChangePassword      = lazy(() => import('./pages/ChangePassword'));
+const Preferences         = lazy(() => import('./pages/Preferences'));
 
 // Eagerly trigger dynamic imports for the chunks a role will commonly visit.
 // Runs once after login; by the time the user navigates, the chunk is cached.
@@ -70,6 +73,7 @@ function ChunkPrefetcher() {
     // Shared — everyone uses these
     import('./pages/Profile');
     import('./pages/Notifications');
+    import('./pages/Preferences');
     import('./pages/employee/Dashboard');
     import('./pages/employee/MyUtilization');
     import('./pages/employee/SubmitEOD');
@@ -246,6 +250,7 @@ function AppRoutes() {
             <Route path="/notifications"   element={<Notifications />} />
             <Route path="/profile"         element={<Profile />} />
             <Route path="/change-password" element={<ChangePassword />} />
+            <Route path="/preferences"     element={<Preferences />} />
 
             {/* Catch-all → 403 inside shell */}
             <Route path="*" element={<NotAuthorized />} />
@@ -259,14 +264,18 @@ function AppRoutes() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <ToastProvider>
-          {/* Inside the providers so the fallback picks up the theme variables. */}
-          <ErrorBoundary>
-            <AppRoutes />
-          </ErrorBoundary>
-        </ToastProvider>
-      </AuthProvider>
+      <AccentColorProvider>
+        <DensityProvider>
+          <AuthProvider>
+            <ToastProvider>
+              {/* Inside the providers so the fallback picks up the theme variables. */}
+              <ErrorBoundary>
+                <AppRoutes />
+              </ErrorBoundary>
+            </ToastProvider>
+          </AuthProvider>
+        </DensityProvider>
+      </AccentColorProvider>
     </ThemeProvider>
   );
 }

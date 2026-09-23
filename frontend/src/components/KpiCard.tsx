@@ -4,7 +4,7 @@ export function Card({ children, style }: { children: React.ReactNode; style?: R
       background: 'var(--panel)',
       border: '1px solid var(--line)',
       borderRadius: 10,
-      padding: '20px',
+      padding: 'var(--nf-density-card-pad, 20px)',
       ...style,
     }}>
       {children}

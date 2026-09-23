@@ -150,6 +150,33 @@
   }
 }
 
+/* ─── Density (Preferences → Appearance) ────────────────────────── */
+/* Consumed via var(--nf-density-*, <fallback>) at each call site, so a component
+   that doesn't opt in still renders at its normal (Comfortable-equivalent) size. */
+:root {
+  --nf-density-card-pad: 20px;
+  --nf-density-nav-pad:  9px 11px;
+}
+html[data-density="Compact"] {
+  --nf-density-card-pad: 14px;
+  --nf-density-nav-pad:  5px 9px;
+}
+html[data-density="Spacious"] {
+  --nf-density-card-pad: 26px;
+  --nf-density-nav-pad:  13px 14px;
+}
+
+/* ─── Explicit "reduce motion" preference (Preferences → Accessibility) ─────── */
+/* Same effect as prefers-reduced-motion, but as an app-level opt-in independent of OS setting. */
+html[data-reduce-motion="true"] *,
+html[data-reduce-motion="true"] *::before,
+html[data-reduce-motion="true"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
 /* ─── Base ─────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -639,6 +666,12 @@ textarea:-webkit-autofill:focus {
 }
 @media (max-width: 480px) {
   .nf-r-profile-contacts { grid-template-columns: 1fr !important; }
+}
+
+/* ─── Preferences page — tab rail collapses to a horizontal row on narrow screens ─── */
+@media (max-width: 640px) {
+  .nf-r-preferences-layout { flex-direction: column !important; }
+  .nf-r-preferences-rail { width: 100% !important; flex-direction: row !important; overflow-x: auto; }
 }
 
 /* ─── Donut + legend rows ───────────────────────────────────────── */
