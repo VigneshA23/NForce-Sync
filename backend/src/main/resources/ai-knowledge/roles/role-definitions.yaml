@@ -1,0 +1,140 @@
+knowledge:
+  - knowledgeId: role.employee
+    type: ROLE
+    module: roles
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: The Employee role
+    synonyms:
+      - what can an employee do
+      - employee permissions
+    body: |
+      Employee is the base role every working person in Sync has. An Employee can:
+      - Submit and edit their own EOD entries (while in DRAFT or REJECTED status).
+      - View their own EOD history, filtered by status.
+      - View their own utilization.
+      - View the projects they are currently allocated to.
+      - Raise and follow up on blockers for their own tasks.
+      - Respond to EOD clarifications their Team Lead has opened with them.
+      - View their own notifications, profile and preferences.
+      An Employee cannot approve anyone's EOD, cannot see another employee's EOD or utilization,
+      and has no administration access.
+
+  - knowledgeId: role.manager
+    type: ROLE
+    module: roles
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: The Team Lead role (backend role MANAGER)
+    synonyms:
+      - team lead
+      - what can my manager do
+      - what can a team lead do
+      - manager role
+    body: |
+      "Team Lead" is the label shown in the UI; the backend calls this role MANAGER. A Team Lead
+      is the direct reporting manager for a set of employees (set via each employee's manager
+      assignment). A Team Lead can:
+      - Do everything an Employee can for their own EOD.
+      - See their direct reports' submitted EODs and approve or reject them.
+      - Open, reply to and resolve EOD clarifications with their reports.
+      - See a team dashboard, team utilization, and team blockers.
+      - Run team reports (EOD-by-employee, missing EOD).
+      A Team Lead's approval authority is over their own direct reports specifically, not the
+      whole organization. A Team Lead does not have Project Manager, Admin or Super Admin access
+      unless they separately hold one of those roles.
+
+  - knowledgeId: role.pm
+    type: ROLE
+    module: roles
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: The Project Manager role
+    synonyms:
+      - pm role
+      - what can a project manager do
+    body: |
+      A Project Manager owns one or more projects. A Project Manager can:
+      - Create and update the projects they manage, and allocate employees to them.
+      - Approve or reject EOD entries that touch their projects (in addition to each employee's
+        own Team Lead being able to).
+      - See a project dashboard, projects utilization, project blockers and an EOD inbox scoped to
+        their projects.
+      - Run project reports.
+      A Project Manager is a distinct role from a Team Lead: a Team Lead is someone's direct
+      reporting manager; a Project Manager owns the projects that person may be allocated to.
+      The same person can hold either role, but the two are not the same thing.
+
+  - knowledgeId: role.admin
+    type: ROLE
+    module: roles
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: The Admin role
+    synonyms:
+      - what can an admin do
+      - admin permissions
+    body: |
+      Admin is Sync's user-and-configuration administration role. An Admin can:
+      - Create, edit, deactivate and search user accounts (User Management).
+      - Maintain Organization Masters (departments, designations, locations, project types) and
+        Business Rules (shift definitions, holidays, configurable thresholds), alongside Super
+        Admin.
+      - View Roles & Access and the Audit Log.
+      Admin does not have Super Admin's executive dashboard, reportee views, or AI/operational
+      controls.
+
+  - knowledgeId: role.superadmin
+    type: ROLE
+    module: roles
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: The Super Admin role
+    synonyms:
+      - what can a super admin do
+      - super admin permissions
+    body: |
+      Super Admin is Sync's highest-privilege role. A Super Admin can:
+      - See an organization-wide Executive Dashboard.
+      - Maintain Organization Masters and Business Rules, alongside Admin.
+      - See read-only reportee views into any Project Manager's projects, EOD activity and
+        utilization (Reportee Views in the sidebar — EOD, Projects, Utilization), each reusing the
+        Project Manager's own reporting pages with organization-wide data.
+      - See the organization-wide pending-approvals and approval-history lists, narrowed to a
+        specific Team Lead or Project Manager.
+      - Administer AI assistant operational settings (re-index, rate limits, usage, billing) once
+        that page ships.
+      There is no page or button anywhere in Super Admin's sidebar to approve or reject an EOD entry
+      themselves — Reportee Views' EOD page is read-only (it reuses the Project Manager's reporting
+      view, not the approvals inbox), and Approvals is not in the Super Admin sidebar at all. If
+      asked how to approve an entry as a Super Admin, say this isn't available through the app today
+      rather than describing steps — Sync doesn't currently give Super Admin an approve/reject
+      action anywhere in the UI, even though it can review the same pending/history lists Team
+      Leads and Project Managers see.
+      A Super Admin does not submit their own EOD entries — Submit EOD is only in the sidebar for
+      Employee and Team Lead. A Super Admin also does not receive a notification when someone else
+      submits, approves, or rejects an EOD entry; those notifications go only to the employee's own
+      Team Lead (on submit) and to the employee themself (on approve or reject). Even for an
+      employee with no manager assigned — whose submission only a Super Admin can act on — no
+      notification is sent; a Super Admin finds that entry by checking the Approvals list directly.
+      Super Admin does not have Admin's User Management page in their own sidebar — that is
+      Admin-only.
+
+  - knowledgeId: role.dm-finance-leadership
+    type: ROLE
+    module: roles
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: Delivery Manager, Finance Admin and Leadership Viewer — not yet available
+    synonyms:
+      - delivery manager role
+      - finance admin role
+      - leadership viewer role
+      - what can a delivery manager do
+    body: |
+      Delivery Manager, Finance Admin and Leadership Viewer are real roles in Sync's role model,
+      each with a full sidebar of intended pages (dashboards, escalations, allocation, reports,
+      billable data, profitability, trends, and so on). None of that functionality has shipped
+      yet — every page under these three roles currently renders a roadmap placeholder with no
+      real data or actions. A user in one of these roles can sign in and see their sidebar, but
+      cannot currently perform any of the described work through the application.

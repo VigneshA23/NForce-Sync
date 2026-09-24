@@ -21,6 +21,7 @@ import { usePmBlockers } from '../api/pmBlockers';
 import { useEodInboxCount } from '../api/eodClarification';
 import { resolveBlockersDateFilter } from '../lib/pmBlockersDateFilter';
 import { todayISO } from '../lib/date';
+import { AssistantLauncher } from './aiAssistant/AssistantLauncher';
 
 // ─── Workspace search (top nav) ────────────────────────────────────────────────
 // Pattern mirrors OneHR's global search: nav items filtered client-side (instant),
@@ -1238,6 +1239,8 @@ export function Shell() {
           {isAllowed ? <Outlet /> : <NotAuthorized />}
         </main>
       </div>
+
+      <AssistantLauncher />
     </div>
   );
 }

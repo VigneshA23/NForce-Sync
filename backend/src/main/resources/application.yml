@@ -90,6 +90,41 @@ app:
     # instance from runaway growth. Re-tune from real usage once this has been live a while — see
     # EodAttachmentService.assertStorageAvailable / BlockerConversationService.saveReply.
     max-total-storage-bytes: 2147483648   # 2 GB
+  # AI support assistant — off by default so Sync boots normally with no AI credentials at all.
+  # The Mistral API key is never set here: it goes in the gitignored application-local.yml
+  # (app.ai.mistral.api-key) for local dev, or the AI_ASSISTANT_ENABLED/MISTRAL_API_KEY env vars
+  # in a deployed environment. See docs/ai-assistant/configuration.md.
+  ai:
+    enabled: ${AI_ASSISTANT_ENABLED:false}
+    provider: ${AI_PROVIDER:mistral}
+    live-data-enabled: ${AI_LIVE_DATA_ENABLED:true}
+    mistral:
+      api-key: ${MISTRAL_API_KEY:}
+      base-url: https://api.mistral.ai
+      chat-model: ${MISTRAL_CHAT_MODEL:ministral-8b-latest}
+      embed-model: ${MISTRAL_EMBED_MODEL:mistral-embed}   # coupled to the vector(1024) column — see V92
+      timeout-seconds: 30
+      connect-timeout-seconds: 5
+      max-attempts: 3
+      retry-backoff-millis: 500
+      temperature: 0.2
+      max-tokens: 1200
+    retrieval:
+      top-k: 8
+      min-score: 0.60
+      candidate-multiplier: 3
+      max-context-chars: 12000
+      follow-up-context: true
+    limits:
+      max-message-chars: 1000
+      max-history-turns: 6
+      max-history-chars: 6000
+      turn-deadline-seconds: 45
+    retention:
+      enabled: true
+      message-days: 90
+      log-days: 365
+      cron: "0 30 2 * * *"
 
 resend:
   api-key: ${RESEND_API_KEY:}

@@ -1,0 +1,23 @@
+knowledge:
+  - knowledgeId: page.reports
+    type: PAGE
+    module: reports
+    pageId: reports
+    version: 1
+    audience: [MANAGER, PM]
+    title: Reports
+    synonyms:
+      - eod reports
+      - missing eod report
+      - export eod report
+      - remind someone to submit eod
+    sources:
+      - backend/src/main/java/com/nforceone/sync/reports/ReportsController.java
+      - backend/src/main/java/com/nforceone/sync/reports/TeamReportsController.java
+    body: |
+      Reports has two views, scoped to your own team (Team Lead) or your own projects (Project
+      Manager): a Missing EOD report (who hasn't logged which days, filterable by project/date/
+      employee) and an EOD-by-employee report (each employee's entries and status over a date
+      range). Both can be filtered further and the EOD-by-employee report can be exported as CSV,
+      Excel or PDF. From the Missing EOD report you can send a reminder notification to one
+      employee for specific missing dates, or remind everyone in scope at once.

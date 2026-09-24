@@ -1,0 +1,27 @@
+knowledge:
+  - knowledgeId: module.search
+    type: MODULE
+    module: search
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: Global search
+    synonyms:
+      - search bar
+      - find a user
+      - find a project
+      - search box
+    sources:
+      - backend/src/main/java/com/nforceone/sync/search/SearchService.java
+      - backend/src/main/java/com/nforceone/sync/search/SearchController.java
+    body: |
+      The search box in the top bar looks up users and projects at once, starting from 2
+      characters typed. Results are capped at 5 users and 5 projects. What it can find depends on
+      the signed-in role:
+      - Users: Admin can find any user; a Team Lead can find their own direct reports; every
+        other role gets no user results from search.
+      - Projects: Super Admin, Delivery Manager, Finance Admin and Leadership Viewer can find any
+        project; a Project Manager can find the projects they manage; a Team Lead can find
+        projects they lead; an Employee can find projects they are allocated to today; Admin gets
+        no project results from search.
+      Search only looks up users and projects — it does not search EOD entries, blockers or
+      reports.

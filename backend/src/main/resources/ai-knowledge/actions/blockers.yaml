@@ -1,0 +1,33 @@
+knowledge:
+  - knowledgeId: action.blockers.lifecycle
+    type: ACTION
+    module: blockers
+    pageId: blockers
+    actionId: blockers.manage
+    version: 1
+    audience: [EMPLOYEE, MANAGER, PM]
+    title: Raising and resolving a blocker
+    synonyms:
+      - I'm blocked on a task
+      - raise a blocker
+      - resolve a blocker
+      - reply to a blocker
+    sources:
+      - backend/src/main/java/com/nforceone/sync/eod/EodTask.java
+      - backend/src/main/java/com/nforceone/sync/eod/BlockerConversationService.java
+    body: |
+      A blocker isn't a separate thing you create — it's simply an EOD task row you mark as
+      Blocked, with a reason explaining what's blocking it. Once submitted, that task shows up as
+      a blocker your Team Lead (and, if it's on a project, that project's Project Manager) can
+      see and reply to.
+
+      Each blocker has a status: Needs Response (nobody has looked at it yet), Acknowledged (your
+      Team Lead has replied), or Resolved (your Team Lead has explicitly marked it resolved).
+      Replying flips it back to Needs Response if the employee is the one who replied most
+      recently — whoever replied last effectively hands it back to the other side. Once marked
+      Resolved, no more replies are accepted on it; if it comes up again, treat it as a new
+      blocker.
+
+      A reply can include a message, one or more file attachments (up to 4 per reply), or both.
+      A Project Manager can read blockers on their own projects but cannot reply to or resolve
+      them directly — that stays with the employee and their Team Lead.

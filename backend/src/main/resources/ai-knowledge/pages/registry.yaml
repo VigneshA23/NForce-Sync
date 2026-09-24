@@ -1,0 +1,360 @@
+# Authoritative navigation registry for the AI support assistant. NOT knowledge — excluded from
+# knowledge loading (see KnowledgeIndexingService). The model may only ever return a pageId from
+# here; NavigationValidator resolves it to a label, and the frontend (pageTargets.ts) resolves it
+# to a route by looking the pageId up in nav.ts itself — never trusting a route from this file or
+# the model directly.
+#
+# Built directly from frontend/src/lib/nav.ts, App.tsx and Shell.tsx (verified 2026-09-24 against
+# the sravani branch / commit 7be4d7c). A pageId is chosen independently of nav.ts's own `key`
+# values, because those keys collide across roles (e.g. "eod-inbox", "approvals", "blockers",
+# "reports" each mean a different route per role) — see PageRegistryParityTest, which fails the
+# build if this file drifts from the frontend source of truth.
+#
+# `placeholder: true` means the route renders <Placeholder> in App.tsx today. The assistant may
+# describe it as "on the roadmap, not yet available" (the user can see it in their own sidebar),
+# but NavigationValidator will never let the model navigate there.
+pages:
+  - pageId: dashboard
+    module: dashboard
+    variants:
+      - roles: [EMPLOYEE]
+        label: "My Dashboard"
+        route: /dashboard
+        description: "The employee landing page: this month's EOD/utilization overview, assigned projects, holiday calendar, open blockers and recent activity."
+      - roles: [MANAGER]
+        label: "Team Dashboard"
+        route: /team/dashboard
+        description: "The Team Lead's overview of their direct reports: team EOD/utilization status and pending work."
+      - roles: [PM]
+        label: "Project Dashboard"
+        route: /projects/dashboard
+        description: "The Project Manager's overview across the projects they manage."
+      - roles: [ADMIN]
+        label: "Admin Dashboard"
+        route: /admin/dashboard
+        description: "The Admin landing page for user and organization administration."
+      - roles: [SUPERADMIN]
+        label: "Executive Dashboard"
+        route: /admin/executive-dashboard
+        description: "Organization-wide executive KPIs and oversight for Super Admin."
+      - roles: [DM]
+        label: "Delivery Dashboard"
+        route: /dm/dashboard
+        description: "Delivery Manager dashboard."
+        placeholder: true
+      - roles: [FINANCE]
+        label: "Finance Dashboard"
+        route: /finance/dashboard
+        description: "Finance Admin dashboard."
+        placeholder: true
+      - roles: [LEADERSHIP]
+        label: "Org Dashboard"
+        route: /leadership/dashboard
+        description: "Leadership Viewer organization dashboard."
+        placeholder: true
+
+  - pageId: eod-submit
+    module: eod
+    variants:
+      - roles: [EMPLOYEE, MANAGER]
+        label: "Submit EOD"
+        route: /eod/submit
+        description: "Log or edit today's (or a past date's) End of Day entry: day type, tasks, hours, work location and any time adjustment."
+
+  - pageId: eod-history
+    module: eod
+    variants:
+      - roles: [EMPLOYEE]
+        label: "My EOD History"
+        route: /eod/history
+        description: "The employee's own past EOD entries, filterable by status (Submitted, Approved, Rejected, Draft, Missing)."
+
+  - pageId: eod-inbox
+    module: eod
+    variants:
+      - roles: [EMPLOYEE]
+        label: "EOD Inbox"
+        route: /employee/eod-inbox
+        description: "Clarification requests from the employee's Team Lead on their submitted EODs."
+      - roles: [MANAGER]
+        label: "EOD Inbox"
+        route: /team/eod-inbox
+        description: "EOD clarification threads the Team Lead has opened with their reports."
+      - roles: [PM]
+        label: "EOD Inbox"
+        route: /projects/eod-inbox
+        description: "EOD clarification threads visible to the Project Manager across their projects."
+
+  - pageId: my-projects
+    module: projects
+    variants:
+      - roles: [EMPLOYEE]
+        label: "My Projects"
+        route: /my-projects
+        description: "Projects the employee is currently allocated to."
+      - roles: [MANAGER]
+        label: "My Projects"
+        route: /team/projects
+        description: "Projects the Team Lead's reports are allocated to."
+
+  - pageId: projects-allocation
+    module: projects
+    variants:
+      - roles: [PM]
+        label: "Projects & Allocation"
+        route: /projects
+        description: "Create/update projects and allocate employees to them (percentage-based, date-ranged), for the Project Manager's own projects."
+
+  - pageId: utilization
+    module: utilization
+    variants:
+      - roles: [EMPLOYEE]
+        label: "My Utilization"
+        route: /utilization
+        description: "The employee's own utilization percentage over time, with a weekly trend, period summary, hours breakdown and daily history."
+      - roles: [MANAGER]
+        label: "Team Utilization"
+        route: /team/utilization
+        description: "Utilization for the Team Lead's direct reports."
+      - roles: [PM]
+        label: "Projects Utilization"
+        route: /projects/utilization
+        description: "Utilization for employees allocated to the Project Manager's projects."
+      - roles: [DM]
+        label: "Cross-Project Util"
+        route: /dm/utilization
+        description: "Delivery Manager cross-project utilization view."
+        placeholder: true
+
+  - pageId: blockers
+    module: blockers
+    variants:
+      - roles: [EMPLOYEE]
+        label: "My Blockers"
+        route: /blockers
+        description: "Blockers the employee has raised on their own EOD tasks, and any replies."
+      - roles: [MANAGER]
+        label: "Blockers"
+        route: /team/blockers
+        description: "Blockers raised by the Team Lead's reports, with reply/acknowledge/resolve actions."
+      - roles: [PM]
+        label: "Blockers"
+        route: /projects/blockers
+        description: "Blockers on tasks within the Project Manager's own projects."
+
+  - pageId: approvals
+    module: approvals
+    variants:
+      - roles: [MANAGER]
+        label: "Approvals"
+        route: /team/approvals
+        description: "Pending EOD entries awaiting the Team Lead's approve/reject decision, plus approval history."
+      - roles: [PM]
+        label: "Approvals"
+        route: /projects/approvals
+        description: "Pending EOD entries awaiting approval where the Project Manager is the project's PM, plus history."
+
+  - pageId: reports
+    module: reports
+    variants:
+      - roles: [MANAGER]
+        label: "Reports"
+        route: /team/reports
+        description: "EOD-by-employee and missing-EOD reports scoped to the Team Lead's reports."
+      - roles: [PM]
+        label: "Reports"
+        route: /projects/reports
+        description: "EOD-by-employee and missing-EOD reports scoped to the Project Manager's projects, exportable."
+      - roles: [DM]
+        label: "Reports"
+        route: /dm/reports
+        description: "Delivery Manager reports."
+        placeholder: true
+      - roles: [FINANCE]
+        label: "Reports"
+        route: /finance/reports
+        description: "Finance Admin reports."
+        placeholder: true
+      - roles: [LEADERSHIP]
+        label: "Reports"
+        route: /leadership/reports
+        description: "Leadership Viewer reports."
+        placeholder: true
+
+  - pageId: user-management
+    module: admin
+    variants:
+      - roles: [ADMIN]
+        label: "User Management"
+        route: /admin/users
+        description: "Create, edit, deactivate and search Sync user accounts. Admin-only — Super Admin does not have this in their own navigation."
+
+  - pageId: org-masters
+    module: admin
+    variants:
+      - roles: [ADMIN, SUPERADMIN]
+        label: "Organization Masters"
+        route: /admin/org-masters
+        description: "Departments, designations, locations and project-type master data."
+
+  - pageId: business-rules
+    module: admin
+    variants:
+      - roles: [ADMIN, SUPERADMIN]
+        label: "Business Rules"
+        route: /admin/rules
+        description: "Shift definitions, holidays and configurable business-rule values (e.g. the monthly time-adjustment minutes budget, account lockout thresholds)."
+
+  - pageId: roles-access
+    module: admin
+    variants:
+      - roles: [ADMIN]
+        label: "Roles & Access"
+        route: /admin/roles
+        description: "Reference view of Sync's roles and what each can access."
+
+  - pageId: audit-log
+    module: admin
+    variants:
+      - roles: [ADMIN]
+        label: "Audit Log"
+        route: /admin/audit
+        description: "A record of administrative actions: user creation, role/status changes, password resets, EOD approvals/rejections."
+
+  - pageId: reportee-pm-projects
+    module: admin
+    variants:
+      - roles: [SUPERADMIN]
+        label: "Projects & Allocation"
+        route: /admin/reportee/pm/projects
+        description: "Super Admin read-only view into a Project Manager's projects and allocations."
+
+  - pageId: reportee-pm-eod
+    module: admin
+    variants:
+      - roles: [SUPERADMIN]
+        label: "EOD"
+        route: /admin/reportee/pm/eod
+        description: "Super Admin read-only view into a Project Manager's team's EOD activity."
+
+  - pageId: reportee-pm-utilization
+    module: admin
+    variants:
+      - roles: [SUPERADMIN]
+        label: "Utilization"
+        route: /admin/reportee/pm/utilization
+        description: "Super Admin read-only view into a Project Manager's team's utilization."
+
+  - pageId: integrations
+    module: admin
+    variants:
+      - roles: [SUPERADMIN]
+        label: "Integrations"
+        route: /admin/integrations
+        description: "Super Admin third-party integrations."
+        placeholder: true
+
+  - pageId: ai-assistant-admin
+    module: admin
+    variants:
+      - roles: [SUPERADMIN]
+        label: "AI & Automation"
+        route: /admin/ai
+        description: "AI assistant operational controls: health, re-indexing, rate-limit settings, usage and billing."
+
+  - pageId: dm-escalations
+    module: dm
+    variants:
+      - roles: [DM]
+        label: "Escalations"
+        route: /dm/escalations
+        description: "Delivery Manager escalations queue."
+        placeholder: true
+
+  - pageId: dm-allocation
+    module: dm
+    variants:
+      - roles: [DM]
+        label: "Allocation"
+        route: /dm/allocation
+        description: "Delivery Manager allocation view."
+        placeholder: true
+
+  - pageId: dm-heatmap
+    module: dm
+    variants:
+      - roles: [DM]
+        label: "Allocation Heatmap"
+        route: /dm/heatmap
+        description: "Delivery Manager allocation heatmap."
+        placeholder: true
+
+  - pageId: finance-billable
+    module: finance
+    variants:
+      - roles: [FINANCE]
+        label: "Billable Data"
+        route: /finance/billable
+        description: "Finance Admin billable-hours data."
+        placeholder: true
+
+  - pageId: finance-profitability
+    module: finance
+    variants:
+      - roles: [FINANCE]
+        label: "Profitability"
+        route: /finance/profitability
+        description: "Finance Admin profitability view."
+        placeholder: true
+
+  - pageId: leadership-trends
+    module: leadership
+    variants:
+      - roles: [LEADERSHIP]
+        label: "Trends & Drilldown"
+        route: /leadership/trends
+        description: "Leadership Viewer trend analysis."
+        placeholder: true
+
+  - pageId: leadership-teams
+    module: leadership
+    variants:
+      - roles: [LEADERSHIP]
+        label: "Team Rankings"
+        route: /leadership/teams
+        description: "Leadership Viewer team rankings."
+        placeholder: true
+
+  # Shared pages — reachable by every role via the topbar (bell/avatar), not the sidebar. Allowed
+  # outside getNavPaths(role) by Shell.tsx's own allowlist (line ~706-713).
+  - pageId: notifications
+    module: shared
+    variants:
+      - roles: [EMPLOYEE, MANAGER, PM, DM, FINANCE, LEADERSHIP, ADMIN, SUPERADMIN]
+        label: "Notifications"
+        route: /notifications
+        description: "The user's own notifications (EOD submitted/approved/rejected, clarifications, blocker replies)."
+
+  - pageId: profile
+    module: shared
+    variants:
+      - roles: [EMPLOYEE, MANAGER, PM, DM, FINANCE, LEADERSHIP, ADMIN, SUPERADMIN]
+        label: "Profile"
+        route: /profile
+        description: "The user's own profile: name, photo, personal details."
+
+  - pageId: change-password
+    module: shared
+    variants:
+      - roles: [EMPLOYEE, MANAGER, PM, DM, FINANCE, LEADERSHIP, ADMIN, SUPERADMIN]
+        label: "Change Password"
+        route: /change-password
+        description: "Change the signed-in user's own password."
+
+  - pageId: preferences
+    module: shared
+    variants:
+      - roles: [EMPLOYEE, MANAGER, PM, DM, FINANCE, LEADERSHIP, ADMIN, SUPERADMIN]
+        label: "Preferences"
+        route: /preferences
+        description: "Appearance preferences: theme, accent color, density, font size."

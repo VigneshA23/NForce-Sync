@@ -27,6 +27,7 @@ const UnallocatedResources = lazy(() => import('./pages/admin/UnallocatedResourc
 const UserManagement      = lazy(() => import('./pages/admin/UserManagement'));
 const AuditLog            = lazy(() => import('./pages/admin/AuditLog'));
 const RolesAccess         = lazy(() => import('./pages/admin/RolesAccess'));
+const AiAssistantAdmin    = lazy(() => import('./pages/admin/AiAssistantAdmin'));
 const OrganizationMasters = lazy(() => import('./pages/admin/OrganizationMasters'));
 const BusinessRules       = lazy(() => import('./pages/admin/BusinessRules'));
 const EmployeeDashboard   = lazy(() => import('./pages/employee/Dashboard'));
@@ -247,7 +248,7 @@ function AppRoutes() {
             <Route path="/admin/org-masters"  element={<OrganizationMasters />} />
             <Route path="/admin/rules"        element={<BusinessRules />} />
             <Route path="/admin/integrations" element={<Placeholder title="Integrations" />} />
-            <Route path="/admin/ai"           element={<Placeholder title="AI & Automation" />} />
+            <Route path="/admin/ai"           element={<AiAssistantAdmin />} />
 
             {/* ── Super Admin Reportee Views (Project Manager Views only) ── */}
             <Route path="/admin/reportee/pm/projects"      element={<ReporteePmProjects />} />

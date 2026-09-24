@@ -327,8 +327,19 @@ export default function EodHistory() {
     setPage(0);
   }
 
+  // Clears only the From/To date range, leaving Status and Search untouched — the same
+  // both-empty branch applyDateFilter itself takes, so this can never raise a validation error.
+  function clearDateRange() {
+    setFromText(''); setToText('');
+    setDateFrom(''); setDateTo('');
+    setFromInvalid(false); setToInvalid(false); setDateError(null);
+    setDateFilterStatus('none');
+    setLinkedDates(null);
+    setPage(0);
+  }
+
   return (
-    <div style={{ maxWidth: 860 }}>
+    <div>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <div style={{
@@ -387,7 +398,7 @@ export default function EodHistory() {
               onBlur={() => applyDateFilter(fromText, toText)}
               onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
               aria-invalid={fromInvalid}
-              style={{ ...selectStyle, cursor: 'text', width: 110, paddingRight: 26 }}
+              style={{ ...selectStyle, cursor: 'text', width: 128, paddingRight: 26 }}
             />
             <div style={{
               position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
@@ -415,7 +426,7 @@ export default function EodHistory() {
               onBlur={() => applyDateFilter(fromText, toText)}
               onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
               aria-invalid={toInvalid}
-              style={{ ...selectStyle, cursor: 'text', width: 110, paddingRight: 26 }}
+              style={{ ...selectStyle, cursor: 'text', width: 128, paddingRight: 26 }}
             />
             <div style={{
               position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
@@ -433,6 +444,25 @@ export default function EodHistory() {
             />
           </div>
         </div>
+        {/* Hidden while both date fields are empty — reflects the raw typed text (not just the
+            committed dateFrom/dateTo) so it appears the moment either field has anything in it,
+            not only once the value is validated on blur. */}
+        {(fromText.trim() !== '' || toText.trim() !== '') && (
+          <div>
+            <label style={{ ...labelStyle, visibility: 'hidden' }}>Clear</label>
+            <button
+              type="button"
+              onClick={clearDateRange}
+              style={{
+                padding: '7px 12px', borderRadius: 6,
+                background: 'var(--raised2)', border: '1px solid var(--line2)',
+                color: 'var(--txt)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
         {/* Sorting lives on the Date column header instead of a filter-bar control — the arrow
             there shows which direction is active, which a separate button could not. */}
         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--txt-dim)' }}>

@@ -1,0 +1,81 @@
+knowledge:
+  - knowledgeId: page.notifications
+    type: PAGE
+    module: shared
+    pageId: notifications
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: Notifications
+    synonyms:
+      - my notifications
+      - alerts
+      - bell icon
+    sources:
+      - backend/src/main/java/com/nforceone/sync/notification/NotificationController.java
+      - backend/src/main/java/com/nforceone/sync/notification/NotificationService.java
+    body: |
+      Notifications are reached from the bell icon in the top bar, available to every role. They
+      show events relevant to the signed-in user: an EOD being submitted, approved, rejected or
+      due soon (reminder), an EOD clarification being opened or replied to, and a blocker reply or
+      resolution. Every user sees only their own notifications. Unread ones can be marked read
+      individually or all at once.
+
+  - knowledgeId: page.profile
+    type: PAGE
+    module: shared
+    pageId: profile
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: Profile
+    synonyms:
+      - my profile
+      - my account
+      - profile photo
+    sources:
+      - backend/src/main/java/com/nforceone/sync/profile/ProfileController.java
+    body: |
+      Profile, reached from the avatar menu in the top bar, shows and lets the signed-in user
+      edit their own personal details, and upload or remove a profile photo and a banner image.
+      A user can only view and edit their own profile through this page — there is no way to view
+      someone else's profile here (Admin's User Management is the place to look up another user).
+
+  - knowledgeId: page.change-password
+    type: PAGE
+    module: shared
+    pageId: change-password
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: Change Password
+    synonyms:
+      - reset my password
+      - update my password
+    sources:
+      - backend/src/main/java/com/nforceone/sync/auth/AuthController.java
+    body: |
+      Change Password lets the signed-in user set a new password for their own account. It is
+      reached from the avatar menu. This is for changing your own password while signed in; if
+      you're locked out and can't sign in at all, use the "Forgot password" link on the login
+      page instead, which emails a reset link.
+
+  - knowledgeId: page.preferences
+    type: PAGE
+    module: shared
+    pageId: preferences
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: Preferences
+    synonyms:
+      - dark mode
+      - theme
+      - appearance settings
+      - font size
+    sources:
+      - frontend/src/lib/theme.tsx
+      - frontend/src/lib/accentColor.tsx
+      - frontend/src/lib/density.tsx
+      - frontend/src/lib/fontSize.tsx
+    body: |
+      Preferences, reached from the avatar menu, controls appearance only: theme (dark, light or
+      auto), accent color, layout density and font size. These are saved per browser, not on the
+      server — they affect how the app looks for you on the device you set them on, not any
+      application data or workflow behavior.

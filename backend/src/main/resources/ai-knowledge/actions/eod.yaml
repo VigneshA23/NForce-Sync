@@ -1,0 +1,179 @@
+knowledge:
+  - knowledgeId: action.eod.day-types-and-submission
+    type: ACTION
+    module: eod
+    pageId: eod-submit
+    actionId: eod.submit
+    version: 1
+    audience: [EMPLOYEE, MANAGER]
+    title: Day types and what each requires to submit
+    synonyms:
+      - how do I submit my EOD
+      - log my day
+      - what day type should I pick
+      - half day leave
+      - full day leave
+      - working day entry
+    sources:
+      - backend/src/main/java/com/nforceone/sync/eod/EodEntry.java
+      - backend/src/main/java/com/nforceone/sync/eod/EodService.java
+    body: |
+      From Submit EOD, pick a date and a day type, then fill in what that type needs before you
+      can submit (saving a draft never requires any of this).
+
+      - Working Day: needs at least one task row, a work location, and a next-day plan. Each task
+        needs a category, hours (0 or more), a status, and — unless it's a Leave category row — a
+        project. A Blocked task also needs a blocker reason. Total hours for the day must be at
+        least 2 and at most 24; there is no upper cap that rejects a long day, only a floor.
+      - Holiday: carries no task rows and no work location at all — nothing to fill in, and every
+        task/hours check is skipped.
+      - Weekend: has no work location and no minimum-hours floor, but you can still log optional
+        task rows — any hours logged there are pure overtime. A next-day plan is not required.
+      - Leave (full day): no work location required, but a next-day plan is still required. Leave
+        rows cannot have a project set.
+      - First Half Leave / Second Half Leave: the other half of the day is still worked, so these
+        carry task rows, a work location and a next-day plan like a Working Day, but the minimum
+        hours floor is half of the standard day (e.g. 4 hours on an 8-hour standard day) instead
+        of the full 2-hour Working Day floor.
+
+      Total hours can never be too high to reject a submission — extra hours are handled as
+      overtime, not blocked.
+
+  - knowledgeId: action.eod.time-adjustment
+    type: ACTION
+    module: eod
+    pageId: eod-submit
+    actionId: eod.time-adjustment
+    version: 1
+    audience: [EMPLOYEE, MANAGER]
+    title: Time adjustment (late arrival, early leave, intervening time-off)
+    synonyms:
+      - came in late
+      - left early
+      - short break during the day
+      - time adjustment budget
+    sources:
+      - backend/src/main/java/com/nforceone/sync/eod/EodService.java
+    body: |
+      A time adjustment is only available on a Working Day. It records a partial-day schedule
+      shift, not an absence — for an absence, use a Leave day type instead. There are three
+      types: Late Arrival, Intervening (a short break during the day) and Leaving Early.
+
+      Rules:
+      - The duration must be between 30 minutes and 2 hours.
+      - You need an assigned shift to use this at all — without one, it's blocked with a message
+        to contact your administrator.
+      - The duration cannot exceed your shift's own length.
+      - There is a shared monthly minutes budget across all three adjustment types combined
+        (configured by an administrator). Going over it blocks the submission with how much you
+        have left this month. Draft and rejected entries never count against this budget, and
+        resubmitting an entry you're editing doesn't double-count its own prior usage.
+      - Adjustment minutes are added on top of your expected hours for the day, not subtracted —
+        the time away is expected to be made up, so it raises the bar for what counts as overtime
+        rather than lowering your hour requirement.
+
+  - knowledgeId: action.eod.overtime
+    type: ACTION
+    module: eod
+    actionId: eod.overtime
+    version: 1
+    audience: [EMPLOYEE, MANAGER, PM, SUPERADMIN]
+    title: How overtime is calculated
+    synonyms:
+      - OT calculation
+      - extra hours logged
+      - why does my entry show overtime
+    sources:
+      - backend/src/main/java/com/nforceone/sync/eod/EodService.java
+    body: |
+      Overtime is calculated automatically on every submitted entry except Holiday, and it never
+      blocks a submission — it only flags the excess for whoever reviews it.
+
+      The reference hours it compares against depend on the day type: zero on a Weekend (so any
+      hours logged there are entirely overtime), half the standard day on a Half Leave day, and
+      the full standard day otherwise (Working Day or full Leave). If a time adjustment is active
+      that day, its minutes are added on top of the reference before comparing, since that time
+      is expected to be made up. Any total hours logged beyond that reference become the
+      overtime hours shown to the approver — there is no separate approval step for overtime
+      itself; it's informational context on the same EOD entry.
+
+  - knowledgeId: action.eod.attachments
+    type: ACTION
+    module: eod
+    pageId: eod-submit
+    actionId: eod.attachments
+    version: 1
+    audience: [EMPLOYEE, MANAGER]
+    title: EOD attachments
+    synonyms:
+      - attach a file to my EOD
+      - upload a screenshot
+      - eod attachment limits
+    sources:
+      - backend/src/main/java/com/nforceone/sync/eod/EodAttachmentService.java
+      - backend/src/main/java/com/nforceone/sync/eod/EodAttachmentValidation.java
+    body: |
+      You can attach files to an EOD entry as a whole, or to an individual task row. Allowed
+      types are PNG, JPG/JPEG, WEBP, PDF, DOC/DOCX and XLS/XLSX. Each file can be up to 10 MB.
+      There's a cap of 5 attachments per task and 10 per entry, plus an organization-wide total
+      storage ceiling — if that's reached, uploads are blocked until an administrator frees up
+      space or raises the limit.
+
+      You can only add or remove attachments while the entry is still editable (Draft or
+      Rejected) — once submitted, its attachments are locked along with the rest of the entry.
+      You can only delete your own uploads.
+
+  - knowledgeId: action.eod.missing-eod
+    type: ACTION
+    module: eod
+    actionId: eod.missing
+    version: 1
+    audience: [EMPLOYEE, MANAGER, PM, SUPERADMIN, ADMIN]
+    title: What a "Missing" EOD means
+    synonyms:
+      - missing eod
+      - missed eod
+      - forgot to log a day
+      - didn't submit yesterday
+    sources:
+      - backend/src/main/java/com/nforceone/sync/eod/EodService.java
+    body: |
+      A "Missing" (or "Missed") EOD isn't a real saved entry — nothing is ever stored for it.
+      When you look at EOD history or a report, the system checks recent working days (up to
+      about 6 months back) and reports any weekday that isn't a holiday and has no entry at all
+      as missing, but only once that day's submission deadline has actually passed — today is
+      never flagged as missing before your chance to submit it has gone. Because nothing is
+      stored, you can't "open" a missing day; the only way to resolve it is to submit a real EOD
+      entry for that date, which then shows up in place of the missing flag.
+
+  - knowledgeId: action.eod.clarification
+    type: ACTION
+    module: eod
+    pageId: eod-inbox
+    actionId: eod.clarification
+    version: 1
+    audience: [EMPLOYEE, MANAGER, PM]
+    title: EOD clarifications
+    synonyms:
+      - clarification request
+      - my team lead asked about my EOD
+      - respond to a clarification
+      - eod inbox
+    sources:
+      - backend/src/main/java/com/nforceone/sync/eod/EodClarificationService.java
+      - backend/src/main/java/com/nforceone/sync/eod/EodClarification.java
+    body: |
+      A clarification is a separate message thread a Team Lead can open on a submitted EOD entry
+      when something needs explaining, before deciding to approve or reject it. It does not
+      change the EOD entry's own status. While a clarification is open, that entry cannot be
+      approved or rejected until it's resolved.
+
+      Only the employee's own Team Lead (or a Super Admin) can open or resolve a clarification.
+      Both the Team Lead and the employee can reply in the thread; a Project Manager on the
+      entry's project can read it but not reply. A clarification moves through three states:
+      Needs Response, Acknowledged and Resolved — a Team Lead reply automatically marks it
+      Acknowledged if it was still Needs Response. Once marked Resolved, that round is closed;
+      a new "request clarification" starts a fresh round on the same entry if needed again.
+
+      Employees see their open clarifications in their EOD Inbox; Team Leads and Project Managers
+      each have their own inbox scoped to their own team or projects.

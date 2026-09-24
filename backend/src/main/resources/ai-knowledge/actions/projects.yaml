@@ -1,0 +1,79 @@
+knowledge:
+  - knowledgeId: action.projects.my-projects
+    type: ACTION
+    module: projects
+    pageId: my-projects
+    actionId: projects.my-projects
+    version: 1
+    audience: [EMPLOYEE, MANAGER]
+    title: My Projects (Employee / Team Lead view)
+    synonyms:
+      - my assigned projects
+      - what projects am I on
+      - team's projects
+    sources:
+      - backend/src/main/java/com/nforceone/sync/employee/EmployeeProjectService.java
+      - backend/src/main/java/com/nforceone/sync/teamlead/TeamLeadProjectService.java
+    body: |
+      My Projects shows the projects you're currently allocated to, as of today (or a date you
+      pick). An employee sees only their own allocations and cannot see who else is staffed on a
+      project. A Team Lead's My Projects is different: it shows the projects they lead as Team
+      Lead — the projects where they are the approver — not the projects their reports happen to
+      be allocated to.
+
+  - knowledgeId: action.projects.create-and-manage
+    type: ACTION
+    module: projects
+    pageId: projects-allocation
+    actionId: projects.manage
+    version: 1
+    audience: [PM]
+    title: Creating and managing a project
+    synonyms:
+      - create a new project
+      - edit a project
+      - who leads this project
+    sources:
+      - backend/src/main/java/com/nforceone/sync/project/ProjectService.java
+      - backend/src/main/java/com/nforceone/sync/project/Project.java
+    body: |
+      A project has a code, name, client, project type, status (Active, Inactive, Completed or
+      On Hold) and optional start/end dates. It has two distinct people attached to it, and
+      they're easy to confuse:
+      - Its Team Lead: an active Team Lead (backend role MANAGER) who is the one who actually
+        approves EOD entries on the project.
+      - Its Project Manager: the PM who owns and oversees it — this is what scopes a PM's own
+        dashboards and reports to "their" projects.
+      A project's Team Lead and its overseeing Project Manager are set when the project is
+      created and can be changed later; the person set for either must hold that exact role.
+      Only Project Manager or Super Admin can create or update projects.
+
+  - knowledgeId: action.projects.allocation
+    type: ACTION
+    module: projects
+    pageId: projects-allocation
+    actionId: projects.allocate
+    version: 1
+    audience: [PM]
+    title: Allocating an employee to a project
+    synonyms:
+      - assign an employee to a project
+      - staffing percentage
+      - allocate someone
+    sources:
+      - backend/src/main/java/com/nforceone/sync/project/AllocationService.java
+      - backend/src/main/java/com/nforceone/sync/project/Allocation.java
+    body: |
+      Allocating gives an employee a percentage of their time on a project for a date range (an
+      open-ended range if no end date is set). Rules:
+      - The percentage must be between 10% and 100%, in steps of 10.
+      - Across everything they're allocated to in an overlapping period, an employee's total
+        cannot exceed 100% — if it would, the error tells you how much is actually still
+        available.
+      - An employee can't be allocated twice to the same project over overlapping dates.
+      - The project must be Active, and its Team Lead must be the employee's actual reporting
+        manager — you can't allocate someone to a project whose Team Lead isn't their manager, and
+        an employee with no reporting manager set can't be allocated to anything until one is.
+      - The end date can't be before the start date, and the start date can't be earlier than the
+        project's own start date.
+      Only that project's Project Manager, or a Super Admin, can allocate to it.

@@ -1,0 +1,29 @@
+knowledge:
+  - knowledgeId: error.allocation.validation
+    type: ERROR
+    module: projects
+    pageId: projects-allocation
+    version: 1
+    audience: [PM]
+    title: Allocation validation errors
+    synonyms:
+      - why can't I allocate this employee
+      - allocation error
+    sources:
+      - backend/src/main/java/com/nforceone/sync/project/AllocationService.java
+    errorMessages:
+      - "Allocation must be between 10% and 100% and must be a multiple of 10."
+      - "Cannot allocate {pct}%. {name} already has {pct}% allocated for this period — only {pct}% is available."
+      - "{name} is already allocated to {project} {dates}. Choose dates outside that window."
+      - "{project} is {status} — only ACTIVE projects can be allocated."
+      - "{name} has no reporting manager, so no project can be allocated. Set their manager first."
+      - "{project} is not led by this employee's reporting manager ({manager})."
+      - "Effective To cannot be earlier than Effective From"
+      - "Effective From date cannot be earlier than the project start date."
+    body: |
+      Allocation is refused when the percentage is outside 10-100% or not a multiple of 10; the
+      employee would go over 100% total across overlapping allocations; the employee is already
+      allocated to the same project over an overlapping period; the project isn't Active; the
+      employee has no reporting manager set; the project's Team Lead isn't that employee's actual
+      manager; or the date range itself is invalid (end before start, or starting before the
+      project's own start date).
