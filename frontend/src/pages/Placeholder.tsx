@@ -93,7 +93,6 @@ export function Placeholder({ title }: PlaceholderProps) {
           />
           <span
             style={{
-              fontFamily: '"JetBrains Mono", monospace',
               fontSize: 11,
               letterSpacing: '0.10em',
               textTransform: 'uppercase',

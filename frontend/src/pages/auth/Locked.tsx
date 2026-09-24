@@ -103,7 +103,6 @@ export default function Locked() {
             aria-live="off"
             aria-label={`Lockout lifts in ${formatCountdown(remaining)}`}
             style={{
-              fontFamily: '"JetBrains Mono", monospace',
               fontSize: 34,
               fontWeight: 600,
               color: 'var(--txt)',

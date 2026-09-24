@@ -389,7 +389,7 @@ export function ProjectsPanel({
                     >
                       {p.name}
                     </button>
-                    <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 2 }}>
                       {p.code}
                     </div>
                   </td>

@@ -69,9 +69,9 @@ function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
   return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
 }
 
-function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+function Card({ children, style, className }: { children: React.ReactNode; style?: React.CSSProperties; className?: string }) {
   return (
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, ...style }}>
+    <div className={className} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, ...style }}>
       {children}
     </div>
   );
@@ -114,9 +114,9 @@ function KpiCard({
   deltaIcon: LucideIcon; deltaText: string; deltaColor: string;
 }) {
   return (
-    <Card style={{ padding: '1rem' }}>
+    <Card className="nf-tile-accent" style={{ padding: '1rem', '--nf-tile-accent': accent } as React.CSSProperties}>
       <div style={{ minWidth: 0 }}>
-        <div style={{
+        <div className="nf-tile-chip" style={{
           width: 30, height: 30, borderRadius: 7, marginBottom: 12,
           background: `color-mix(in srgb, ${accent} 18%, transparent)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
@@ -163,7 +163,7 @@ function MemberDetail({ eodEntryId }: { eodEntryId: number }) {
               </div>
               {t.blockerReason && <div style={{ fontSize: 11, color: 'var(--risk)' }}>Blocker: {t.blockerReason}</div>}
             </div>
-            <div style={{ fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-mut)', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 12, color: 'var(--txt-mut)', whiteSpace: 'nowrap' }}>
               {t.hours != null ? `${t.hours}h` : '—'}
             </div>
           </div>
@@ -225,7 +225,7 @@ function MemberRow({ member, isLast, expanded, onToggle, onOpenApproval }: {
             <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {member.fullName}
             </div>
-            <div style={{ fontSize: 10, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+            <div style={{ fontSize: 10, color: 'var(--txt-dim)' }}>
               {member.employeeCode}
             </div>
           </div>
@@ -367,7 +367,7 @@ function WeeklyUtilChart({ points }: { points: TrendPointDto[] }) {
           <XAxis dataKey="day" tick={<XAxisTick />} tickLine={false} axisLine={false} />
           <YAxis
             domain={[0, axisMax]} ticks={axisTicks}
-            tick={{ fontSize: 10, fill: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}
+            tick={{ fontSize: 10, fill: 'var(--txt-dim)' }}
             tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}%`} width={40}
           />
           <Tooltip content={<CustomTooltip />} />
@@ -417,7 +417,7 @@ function StatusDistributionDonut({ summary }: { summary: TeamLeadSummaryDto }) {
           <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: s.color, flexShrink: 0 }} />
             <span style={{ flex: 1, fontSize: 12, color: 'var(--txt-mut)' }}>{s.label}</span>
-            <span style={{ fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
               {s.count} <span style={{ color: 'var(--txt-dim)' }}>({total > 0 ? Math.round((s.count / total) * 100) : 0}%)</span>
             </span>
           </div>
@@ -478,7 +478,7 @@ function UtilizationOverviewRing({ summary }: { summary: TeamLeadSummaryDto }) {
           <div key={b.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: b.color, flexShrink: 0 }} />
             <span style={{ flex: 1, fontSize: 12, color: 'var(--txt-mut)' }}>{b.label}</span>
-            <span style={{ fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
               {b.count}
             </span>
           </div>

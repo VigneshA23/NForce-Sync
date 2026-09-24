@@ -435,7 +435,7 @@ export default function EodHistory() {
         </div>
         {/* Sorting lives on the Date column header instead of a filter-bar control — the arrow
             there shows which direction is active, which a separate button could not. */}
-        <span style={{ marginLeft: 'auto', fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-dim)' }}>
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--txt-dim)' }}>
           {dateFilterStatus === 'invalid'
             ? '0 entries'
             : `${filtered.length} ${filtered.length === 1 ? 'entry' : 'entries'}`}
@@ -589,17 +589,17 @@ export default function EodHistory() {
                   </div>
                 )}
               </div>
-              <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-mut)' }}>
+              <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
                 {projectSummary(entry)}
               </div>
               <div style={{ fontSize: 12, color: 'var(--txt-mut)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {taskSummary(entry)}
               </div>
-              <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-mut)' }}>
+              <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
                 {totalHours(entry).toFixed(1)}h
               </div>
               <div><StatusBadge status={entry.status} /></div>
-              <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, color: 'var(--txt-dim)' }}>
+              <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
                 {entry.submittedAt ? formatDateTime(entry.submittedAt) : '-'}
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -623,7 +623,7 @@ export default function EodHistory() {
               >
                 <ChevronLeft size={13} /> Prev
               </button>
-              <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+              <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
                 Page {pageSafe + 1} of {pageCount}
               </span>
               <button

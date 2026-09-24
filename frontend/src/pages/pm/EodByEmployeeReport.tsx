@@ -214,7 +214,7 @@ function EmployeeSearch({ query, onQueryChange, matches, onPick }: {
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {m.employeeName}
               </span>
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)' }}>
                 {m.employeeCode}
               </span>
             </button>
@@ -352,9 +352,9 @@ function FilterBar({
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-mut)' }}>
-          <span style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-bright)', fontWeight: 700 }}>{summary?.employeeCount ?? 0}</span> employees ·{' '}
-          <span style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-bright)', fontWeight: 700 }}>{summary?.entryCount ?? 0}</span> EOD entries ·{' '}
-          <span style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-bright)', fontWeight: 700 }}>{hrs(summary?.totalHours ?? 0)}</span> hrs in range
+          <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{summary?.employeeCount ?? 0}</span> employees ·{' '}
+          <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{summary?.entryCount ?? 0}</span> EOD entries ·{' '}
+          <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{hrs(summary?.totalHours ?? 0)}</span> hrs in range
         </div>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', border: '1px solid var(--line2)', borderRadius: 8, overflow: 'hidden' }}>
@@ -510,8 +510,8 @@ function RosterFlow({
                     {[r.designationName, r.employeeCode].filter(Boolean).join(' · ')}
                   </div>
                 </div>
-                <div style={{ textAlign: 'right', fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: r.entryCount === 0 ? 'var(--risk)' : 'var(--txt)', flexShrink: 0, minWidth: 20 }}>{r.entryCount}</div>
-                <div style={{ textAlign: 'right', fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-mut)', flexShrink: 0, minWidth: 34 }}>{hrs(r.totalHours)}</div>
+                <div style={{ textAlign: 'right', fontSize: 12, color: r.entryCount === 0 ? 'var(--risk)' : 'var(--txt)', flexShrink: 0, minWidth: 20 }}>{r.entryCount}</div>
+                <div style={{ textAlign: 'right', fontSize: 12, color: 'var(--txt-mut)', flexShrink: 0, minWidth: 34 }}>{hrs(r.totalHours)}</div>
                 <button
                   onClick={e => { e.stopPropagation(); onExport(rowExportKey, [r.employeeId]); }}
                   disabled={exportingKey === rowExportKey}
@@ -574,7 +574,7 @@ function RosterFlow({
               ].map(([label, value], i) => (
                 <div key={label} style={{ padding: '10px 14px', borderLeft: i > 0 ? '1px solid var(--line)' : undefined }}>
                   <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--txt-dim)', textTransform: 'uppercase', marginBottom: 3 }}>{label}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace' }}>{value}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--txt)' }}>{value}</div>
                 </div>
               ))}
             </div>
@@ -603,14 +603,14 @@ function RosterFlow({
                   <div style={{ color: 'var(--txt)' }}>
                     {i === 0 || sortedEntries[i - 1].date !== e.date ? (
                       <>
-                        <div style={{ fontFamily: '"JetBrains Mono", monospace' }}>{formatDate(e.date)}</div>
+                        <div>{formatDate(e.date)}</div>
                         <TimeAdjustmentBadge entry={e} />
                       </>
                     ) : ''}
                   </div>
-                  <div style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{e.projectCode ?? '—'}</div>
+                  <div style={{ color: 'var(--txt)' }}>{e.projectCode ?? '—'}</div>
                   <div style={{ color: 'var(--txt-mut)' }}>{e.categoryName ?? '—'}</div>
-                  <div style={{ textAlign: 'right', fontFamily: '"JetBrains Mono", monospace', fontWeight: 700, color: 'var(--txt)' }}>{hrs(e.hours)}</div>
+                  <div style={{ textAlign: 'right', fontWeight: 700, color: 'var(--txt)' }}>{hrs(e.hours)}</div>
                 </div>
               ))}
             </div>
@@ -714,7 +714,7 @@ function TeamFlow({
                   </span>
                   <div style={{ flex: 1 }} />
                   <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{r.entryCount} {r.entryCount === 1 ? 'entry' : 'entries'}</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace' }}>{hrs(r.totalHours)}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)' }}>{hrs(r.totalHours)}</span>
                   <StatusChip status={r.status} />
                   <button
                     onClick={e => { e.stopPropagation(); onExport(`emp-${r.employeeId}`, [r.employeeId]); }}
@@ -736,14 +736,14 @@ function TeamFlow({
                     <span>
                       {i === 0 || entriesAsc[i - 1].date !== e.date ? (
                         <>
-                          <span style={{ fontFamily: '"JetBrains Mono", monospace', display: 'block' }}>{formatDate(e.date)}</span>
+                          <span style={{ display: 'block' }}>{formatDate(e.date)}</span>
                           <TimeAdjustmentBadge entry={e} />
                         </>
                       ) : ''}
                     </span>
-                    <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{e.projectCode ?? '—'}</span>
+                    <span>{e.projectCode ?? '—'}</span>
                     <span>{e.categoryName ?? '—'}</span>
-                    <span style={{ textAlign: 'right', fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{hrs(e.hours)}</span>
+                    <span style={{ textAlign: 'right', color: 'var(--txt)' }}>{hrs(e.hours)}</span>
                   </div>
                 ))}
               </div>

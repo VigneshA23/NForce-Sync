@@ -36,7 +36,7 @@ export function UtilPctDonut({ pct, size = 92 }: UtilPctDonutProps) {
         alignItems: 'center', justifyContent: 'center',
       }}>
         <span style={{
-          fontFamily: '"JetBrains Mono", monospace', fontSize: size * 0.16,
+          fontSize: size * 0.16,
           fontWeight: 700, color, fontVariantNumeric: 'tabular-nums',
         }}>
           {fmtPct(pct)}

@@ -1247,7 +1247,7 @@ export default function SubmitEOD() {
               <div style={{ fontSize: 13, color: 'var(--txt)', marginTop: 2 }}>
                 {ADJ_TYPES.find(t => t.value === adjType)?.label ?? 'Time adjustment'}
                 {' · '}
-                <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{minutesLabel(adjMins)}</span>
+                <span>{minutesLabel(adjMins)}</span>
               </div>
               <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 6 }}>
                 {adjBanner()}
@@ -1286,7 +1286,7 @@ export default function SubmitEOD() {
                 }}>
                   {/* Shift timings — read-only, from the existing shift assignment */}
                   <Label>Shift timings</Label>
-                  <div style={{ fontSize: 13, color: 'var(--txt)', marginBottom: 4, fontFamily: '"JetBrains Mono", monospace' }}>
+                  <div style={{ fontSize: 13, color: 'var(--txt)', marginBottom: 4 }}>
                     {adjContext?.shiftStart && adjContext?.shiftEnd
                       ? `${formatTime12h(adjContext.shiftStart)} – ${formatTime12h(adjContext.shiftEnd)}`
                       : '-'}
@@ -1453,7 +1453,7 @@ export default function SubmitEOD() {
                         +{overtimeHrs.toFixed(1)} hrs overtime
                       </span>
                     )}
-                    <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 13, color: 'var(--txt-mut)' }}>
+                    <div style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
                       {/* Numerator: task hours + an active adjustment's minutes, in "H.MM" notation
                           (45 minutes → ".45", NOT decimal-hours ".75") — never decimal math when an
                           adjustment is active. Denominator: the fixed target, plain decimal, never
@@ -1633,7 +1633,7 @@ function TaskCard({
     }}>
       {/* Task header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, color: 'var(--txt-dim)', flexShrink: 0 }}>
+        <span style={{ fontSize: 10, color: 'var(--txt-dim)', flexShrink: 0 }}>
           #{index + 1}
         </span>
         <div className="nf-eod-task-grid" style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr 80px auto auto', gap: 8, alignItems: 'end' }}>
@@ -1691,7 +1691,6 @@ function TaskCard({
               value={task.hours}
               onChange={e => onUpdate({ hours: e.target.value })}
               disabled={isReadOnly}
-              style={{ fontFamily: '"JetBrains Mono", monospace' }}
               placeholder="0"
             />
           </div>

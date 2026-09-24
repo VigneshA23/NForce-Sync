@@ -254,7 +254,7 @@ function NotificationListItem({
           </span>
           <span style={{
             fontSize: 10, color: 'var(--txt-dim)', flexShrink: 0,
-            fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums',
+            fontVariantNumeric: 'tabular-nums',
           }}>
             {timeAgo(n.createdAt)}
           </span>

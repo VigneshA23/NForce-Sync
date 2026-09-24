@@ -212,7 +212,7 @@ function EodInboxTableRow({ row, index, selected, onClick }: {
         </span>
       </div>
 
-      <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', minWidth: 0, ...ellipsis }} title={openedAtFull}>
+      <div style={{ fontSize: 12, color: 'var(--txt-mut)', minWidth: 0, ...ellipsis }} title={openedAtFull}>
         {fmtOpenedAtCompact(item.openedAt)}
       </div>
 

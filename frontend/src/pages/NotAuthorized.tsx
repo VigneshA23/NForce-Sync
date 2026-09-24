@@ -38,7 +38,6 @@ export function NotAuthorized() {
       <div>
         <div
           style={{
-            fontFamily: '"JetBrains Mono", monospace',
             fontSize: 11,
             letterSpacing: '0.12em',
             color: 'var(--brand-bright)',

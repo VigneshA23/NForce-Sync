@@ -303,13 +303,13 @@ function MemberRow({ member, selected, onSelect, onHover }: { member: MergedMemb
       </div>
 
       <div>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color, marginBottom: 4, fontFamily: '"JetBrains Mono", monospace' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color, marginBottom: 4 }}>
           {member.pct == null ? '—' : `${Math.round(member.pct)}%`}
         </div>
         <ProgressBar pct={member.pct} color={color} />
       </div>
 
-      <div style={{ fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-mut)' }}>
+      <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
         {hrs(member.approvedHours)}h / {hrs(member.availableHours)}h
       </div>
 
@@ -417,7 +417,7 @@ function WeeklyTrendChart({ points }: { points: { date: string; value: number | 
           <XAxis dataKey="day" tick={<XAxisTick />} tickLine={false} axisLine={false} interval={0} height={dense ? 46 : 30} />
           <YAxis
             domain={[0, axisMax]} ticks={axisTicks}
-            tick={{ fontSize: 10, fill: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}
+            tick={{ fontSize: 10, fill: 'var(--txt-dim)' }}
             tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}%`} width={40}
           />
           <Tooltip content={<CustomTooltip />} />
@@ -760,7 +760,7 @@ export default function TeamUtilization() {
               Team Avg Utilization
             </div>
             <ProgressBar pct={teamSummary.avgPct} color={teamSummary.avgPct == null ? 'var(--txt-dim)' : teamSummary.avgPct < 60 ? 'var(--warn)' : teamSummary.avgPct > 100 ? 'var(--risk)' : 'var(--ok)'} />
-            <div style={{ marginTop: 4, fontSize: 12, fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums', color: teamSummary.avgPct == null ? 'var(--txt-dim)' : teamSummary.avgPct < 60 ? 'var(--warn)' : teamSummary.avgPct > 100 ? 'var(--risk)' : 'var(--ok)' }}>
+            <div style={{ marginTop: 4, fontSize: 12, fontVariantNumeric: 'tabular-nums', color: teamSummary.avgPct == null ? 'var(--txt-dim)' : teamSummary.avgPct < 60 ? 'var(--warn)' : teamSummary.avgPct > 100 ? 'var(--risk)' : 'var(--ok)' }}>
               {teamSummary.avgPct == null ? 'N/A' : `${Math.round(teamSummary.avgPct)}%`}
             </div>
           </div>
@@ -770,7 +770,7 @@ export default function TeamUtilization() {
           {/* Hours */}
           <div>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Approved / Available</div>
-            <div style={{ fontSize: 13, fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums', color: 'var(--txt)' }}>
+            <div style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums', color: 'var(--txt)' }}>
               {teamSummary.totalApproved.toFixed(1)}h
               <span style={{ color: 'var(--txt-dim)', marginLeft: 4, fontSize: 11 }}>/ {teamSummary.totalAvailable.toFixed(0)}h</span>
             </div>

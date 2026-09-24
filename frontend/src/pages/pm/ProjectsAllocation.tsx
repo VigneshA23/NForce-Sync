@@ -900,7 +900,7 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
             ) : (
               filtered.map(p => (
                 <tr key={p.id}>
-                  <td style={{ ...tdStyle, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-mut)' }}>{p.code}</td>
+                  <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{p.code}</td>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{p.name}</td>
                   {/* Master-managed (Organization Masters → Project Types); the DTO sends its name. */}
                   <td style={tdStyle}>{p.projectType ?? '-'}</td>
@@ -1328,7 +1328,7 @@ function EditAllocationModal({ allocation, onClose, projects }: {
               <div style={labelStyle}>Employee</div>
               <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
                 {allocation.employeeName}{' '}
-                <span style={{ color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>
+                <span style={{ color: 'var(--txt-dim)', fontSize: 11 }}>
                   {allocation.employeeCode}
                 </span>
               </div>
@@ -1657,9 +1657,9 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
             ) : (
               filtered.map(a => (
                 <tr key={a.id}>
-                  <td style={{ ...tdStyle, fontWeight: 500 }}>{a.employeeName} <span style={{ color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>{a.employeeCode}</span></td>
+                  <td style={{ ...tdStyle, fontWeight: 500 }}>{a.employeeName} <span style={{ color: 'var(--txt-dim)', fontSize: 11 }}>{a.employeeCode}</span></td>
                   <td style={tdStyle}>{a.projectCode}: {a.projectName}</td>
-                  <td style={{ ...tdStyle, fontFamily: '"JetBrains Mono", monospace' }}>{a.allocationPct}%</td>
+                  <td style={tdStyle}>{a.allocationPct}%</td>
                   <td style={tdStyle}>{fmtDateDMY(a.effectiveFrom)}</td>
                   <td style={tdStyle}>{fmtDateDMY(a.effectiveTo)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>

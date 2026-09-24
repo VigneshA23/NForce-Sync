@@ -151,7 +151,7 @@ export default function RolesAccess() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--txt-mut)' }}>
           <ShieldCheck size={13} style={{ color: 'var(--ok)' }} />
           <strong style={{ color: 'var(--txt)' }}>API-enforced:</strong>
-          checked by Spring Security <code style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, background: 'var(--raised2)', padding: '1px 5px', borderRadius: 3 }}>@PreAuthorize</code>; cannot be bypassed
+          checked by Spring Security <code style={{ fontSize: 10, background: 'var(--raised2)', padding: '1px 5px', borderRadius: 3 }}>@PreAuthorize</code>; cannot be bypassed
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--txt-mut)' }}>
           <Monitor size={13} style={{ color: 'var(--info)' }} />
@@ -236,7 +236,7 @@ export default function RolesAccess() {
                             {row.label}
                           </td>
                           <td style={{ padding: '10px 16px' }}>
-                            <code style={{ fontSize: 10, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+                            <code style={{ fontSize: 10, color: 'var(--txt-dim)' }}>
                               {row.endpoint}
                             </code>
                           </td>

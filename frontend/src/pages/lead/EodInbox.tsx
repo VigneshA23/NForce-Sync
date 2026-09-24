@@ -44,7 +44,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>{item.employeeName}</div>
-                <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>{item.employeeCode}</span>
+                <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>{item.employeeCode}</span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>EOD entry for {fmtDate(item.entryDate)}</div>
             </div>

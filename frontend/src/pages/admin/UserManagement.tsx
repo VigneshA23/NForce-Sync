@@ -662,7 +662,7 @@ function AddModal({
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--risk)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>
                 Temp password: share once, store nowhere
               </div>
-              <code style={{ fontSize: 14, color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace', userSelect: 'all' }}>
+              <code style={{ fontSize: 14, color: 'var(--txt)', userSelect: 'all' }}>
                 {created.tempPassword}
               </code>
             </div>
@@ -1266,7 +1266,7 @@ function TempPasswordModal({
           border: '1px solid var(--line2)', borderRadius: 8, marginBottom: 20,
         }}>
           <span style={{
-            flex: 1, fontFamily: '"JetBrains Mono", monospace',
+            flex: 1,
             fontSize: 15, fontWeight: 600, color: 'var(--txt)', letterSpacing: '0.04em',
           }}>
             {tempPassword}
@@ -1432,7 +1432,7 @@ function DeleteModal({
             spellCheck={false}
           />
           <p style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 20, marginTop: 4 }}>
-            Must match exactly: <code style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-mut)' }}>{user.email}</code>
+            Must match exactly: <code style={{ color: 'var(--txt-mut)' }}>{user.email}</code>
           </p>
           {error && <div style={{ color: 'var(--risk)', marginBottom: 12, fontSize: 13 }}>{error}</div>}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
@@ -2074,7 +2074,7 @@ export default function UserManagement() {
                       }}
                     >
                       <td style={tdStyle}>
-                        <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
+                        <span style={{ fontSize: 12, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
                           {user.employeeCode}
                         </span>
                       </td>

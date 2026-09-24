@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Users, UserCheck, UserX, FolderKanban, PauseCircle, CheckCircle2,
-  ClipboardList, AlertTriangle, Gauge, TrendingUp, TrendingDown, RefreshCw,
+  Users, ClipboardList, AlertTriangle, Gauge, TrendingUp, TrendingDown, RefreshCw,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, LineChart, Line,
@@ -76,7 +75,7 @@ function RoleBar({ roleKey, count, total }: { roleKey: string; count: number; to
       <div style={{ flex: 1, height: 6, background: 'var(--raised2)', borderRadius: 3, overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 3, transition: 'width 0.6s ease' }} />
       </div>
-      <div style={{ width: 28, fontSize: 11, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums', fontFamily: '"JetBrains Mono", monospace', textAlign: 'right', flexShrink: 0 }}>
+      <div style={{ width: 28, fontSize: 11, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums', textAlign: 'right', flexShrink: 0 }}>
         {count}
       </div>
     </div>
@@ -112,7 +111,7 @@ function CenterDonut({ segments, centerValue, centerLabel }: {
           <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: s.color, flexShrink: 0 }} />
             <span style={{ flex: 1, fontSize: 12, color: 'var(--txt-mut)' }}>{s.label}</span>
-            <span style={{ fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>
               {s.count} <span style={{ color: 'var(--txt-dim)' }}>({total > 0 ? Math.round((s.count / total) * 100) : 0}%)</span>
             </span>
           </div>
@@ -157,7 +156,7 @@ function UtilList({ title, rows, accent }: { title: string; rows: EmployeeUtiliz
             <div style={{ fontSize: 12, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.fullName}</div>
             {r.primaryProject && <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>{r.primaryProject}</div>}
           </div>
-          <div style={{ fontSize: 12, fontFamily: '"JetBrains Mono", monospace', color: accent, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+          <div style={{ fontSize: 12, color: accent, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
             {fmtPct(r.utilizationPct)}
           </div>
         </div>
@@ -253,24 +252,14 @@ export default function ExecutiveDashboard() {
 
       {data && (
         <>
-          {/* KPI row 1 — Workforce */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16, marginBottom: 16 }}>
-            <KpiCard icon={<Users size={18} />} label="Total Users" value={data.workforce.totalUsers} accent="var(--txt)" />
-            <KpiCard icon={<UserCheck size={18} />} label="Active Users" value={data.workforce.activeUsers} accent="var(--ok)" />
-            <KpiCard icon={<UserX size={18} />} label="Inactive Users" value={data.workforce.inactiveUsers} accent="var(--txt-dim)" />
-            <KpiCard icon={<FolderKanban size={18} />} label="Total Projects" value={data.projects.totalProjects} accent="var(--txt)" />
-          </div>
-
-          {/* KPI row 2 — Projects / EOD / Utilization */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16, marginBottom: 16 }}>
-            <KpiCard icon={<CheckCircle2 size={18} />} label="Active Projects" value={data.projects.activeProjects} accent="var(--ok)" />
-            <KpiCard icon={<PauseCircle size={18} />} label="Projects On Hold" value={data.projects.onHoldProjects} accent="var(--warn)" />
+          {/* KPI row — EOD / Utilization. Workforce (Total/Active/Inactive Users) and
+              Projects (Total/Active/On Hold) tiles were dropped: those counts are already
+              shown in the Workforce and Project Portfolio charts below, and this page is a
+              CEO-facing summary that shouldn't repeat the same numbers as both a tile and a
+              chart. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16, marginBottom: 24 }}>
             <KpiCard icon={<ClipboardList size={18} />} label="EOD Compliance" value={fmtPct(data.eodCompliance.compliancePct)} accent="var(--info)" />
             <KpiCard icon={<AlertTriangle size={18} />} label="Missing EODs" value={data.eodCompliance.missing} accent="var(--risk)" />
-          </div>
-
-          {/* KPI row 3 — Utilization */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16, marginBottom: 24 }}>
             <KpiCard icon={<Gauge size={18} />} label="Overall Utilization" value={fmtPct(data.utilization.overallUtilizationPct)} accent="var(--info)" />
             <KpiCard icon={<TrendingDown size={18} />} label="Under-utilized" value={data.utilization.underutilizedCount} accent="var(--warn)" />
             <KpiCard icon={<TrendingUp size={18} />} label="Over-utilized" value={data.utilization.overloadedCount} accent="var(--risk)" />
@@ -333,7 +322,7 @@ export default function ExecutiveDashboard() {
                   {data.allocation.byProject.map((p: ProjectAllocationDto) => (
                     <div key={p.projectId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
                       <span style={{ color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{p.projectName}</span>
-                      <span style={{ color: 'var(--txt-mut)', flexShrink: 0, marginLeft: 10, fontFamily: '"JetBrains Mono", monospace' }}>{p.allocatedResources} resources</span>
+                      <span style={{ color: 'var(--txt-mut)', flexShrink: 0, marginLeft: 10 }}>{p.allocatedResources} resources</span>
                     </div>
                   ))}
                 </div>
@@ -429,7 +418,7 @@ export default function ExecutiveDashboard() {
                           <Icon size={13} aria-hidden="true" />
                         </div>
                         <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5, flex: 1, minWidth: 0 }}>{message}</div>
-                        <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 11, color: 'var(--txt-dim)', flexShrink: 0, whiteSpace: 'nowrap' }}>
                           {formatRelative(event.occurredAt)}
                         </div>
                       </div>

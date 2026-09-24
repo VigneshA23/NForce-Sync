@@ -497,7 +497,7 @@ export default function AuditLog() {
                           }}
                         >
                           <td style={tdStyle}>
-                            <span style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-dim)', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: 11, color: 'var(--txt-dim)', whiteSpace: 'nowrap' }}>
                               {formatAuditDate(entry.occurredAt)}
                             </span>
                           </td>
@@ -505,7 +505,7 @@ export default function AuditLog() {
                           <td style={tdStyle}><ActionPill entry={entry} /></td>
                           <td style={tdStyle}><EntityCell entityType={entry.entityType} /></td>
                           <td style={tdStyle}>
-                            <span style={{ fontSize: 11.5, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+                            <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>
                               {entry.entityId ?? '—'}
                             </span>
                           </td>

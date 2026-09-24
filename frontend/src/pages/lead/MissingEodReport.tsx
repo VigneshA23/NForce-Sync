@@ -205,7 +205,7 @@ function EmployeeSearch({ query, onQueryChange, matches, onPick }: {
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {m.employeeName}
               </span>
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)' }}>
                 {m.employeeCode}
               </span>
             </button>
@@ -560,8 +560,8 @@ export default function LeadMissingEodReport() {
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
         <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>
-          <span style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-bright)', fontWeight: 700 }}>{data?.employeeCount ?? 0}</span> employees ·{' '}
-          <span style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--brand-bright)', fontWeight: 700 }}>{data?.totalMissingDays ?? 0}</span> missing days in range
+          <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{data?.employeeCount ?? 0}</span> employees ·{' '}
+          <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{data?.totalMissingDays ?? 0}</span> missing days in range
         </div>
         {employees.length > 0 && (
           <button
@@ -623,7 +623,7 @@ export default function LeadMissingEodReport() {
                   </div>
                 </div>
                 <div style={{ color: 'var(--txt-mut)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.projectName ?? '—'}</div>
-                <div style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)' }}>{row.missingCount}/{row.totalWorkingDays} ({row.missingPct.toFixed(0)}%)</div>
+                <div style={{ color: 'var(--txt)' }}>{row.missingCount}/{row.totalWorkingDays} ({row.missingPct.toFixed(0)}%)</div>
                 <div><Chip status={row.status} /></div>
                 <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                   <button

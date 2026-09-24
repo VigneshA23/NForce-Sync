@@ -42,9 +42,9 @@ public class Allocation {
     private LocalDate effectiveTo;
 
     /**
-     * Share of the employee's available capacity planned for this project, 1-100 (V61). Drives
-     * {@code PlannedVsActualService}'s planned-hours math: an employee split across concurrent
-     * projects plans each one at its own share rather than 100% each.
+     * Share of the employee's available capacity planned for this project, 1-100 (V61): an
+     * employee split across concurrent projects plans each one at its own share rather than
+     * 100% each.
      */
     @Column(name = "allocation_pct", nullable = false)
     private Integer allocationPct;

@@ -43,7 +43,6 @@ const Blockers            = lazy(() => import('./pages/lead/Blockers'));
 const EodInbox            = lazy(() => import('./pages/lead/EodInbox'));
 const ProjectsAllocation  = lazy(() => import('./pages/pm/ProjectsAllocation'));
 const ProjectsUtilization = lazy(() => import('./pages/pm/ProjectsUtilization'));
-const PlannedVsActual     = lazy(() => import('./pages/pm/PlannedVsActual'));
 const ApprovalsPM         = lazy(() => import('./pages/pm/ApprovalsPM'));
 const ProjectDashboard    = lazy(() => import('./pages/pm/ProjectDashboard'));
 const ReportsDashboard    = lazy(() => import('./pages/pm/ReportsDashboard'));
@@ -117,7 +116,6 @@ function ChunkPrefetcher() {
       import('./pages/pm/ProjectDashboard');
       import('./pages/pm/ReportsDashboard');
       import('./pages/pm/ProjectsUtilization');
-      import('./pages/pm/PlannedVsActual');
       import('./pages/pm/Blockers');
       import('./pages/pm/EodInbox');
       import('./pages/Approvals');
@@ -209,7 +207,6 @@ function AppRoutes() {
             <Route path="/projects"                element={<ProjectsAllocation />} />
             <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
             <Route path="/projects/utilization"     element={<ProjectsUtilization />} />
-            <Route path="/projects/planned-actual" element={<PlannedVsActual />} />
             <Route path="/projects/blockers"       element={<PmBlockers />} />
             <Route path="/projects/eod-inbox"      element={<PmEodInbox />} />
             <Route path="/projects/approvals"      element={<ApprovalsPM />} />
@@ -220,7 +217,6 @@ function AppRoutes() {
             <Route path="/dm/escalations"    element={<Placeholder title="Escalations" />} />
             <Route path="/dm/allocation"     element={<Placeholder title="Allocation" />} />
             <Route path="/dm/heatmap"        element={<Placeholder title="Allocation Heatmap" />} />
-            <Route path="/dm/planned-actual" element={<Placeholder title="Planned vs Actual" />} />
             <Route path="/dm/utilization"    element={<Placeholder title="Cross-Project Util" />} />
             <Route path="/dm/reports"        element={<Placeholder title="Reports" />} />
 

@@ -68,13 +68,6 @@ export interface ResourceUtilizationRowDto {
   utilizationPct: number;
 }
 
-export interface PlannedVsActualDto {
-  plannedHours: number;
-  actualHours: number;
-  variance: number;
-  variancePct: number;
-}
-
 export interface MissingEodRowDto {
   employeeId: number;
   employeeName: string;
@@ -95,7 +88,6 @@ export interface ProjectDashboardSummaryDto {
   cards: DashboardSummaryCardsDto;
   projectUtilization: ProjectUtilizationRowDto[];
   resourceUtilization: ResourceUtilizationRowDto[];
-  plannedVsActual: PlannedVsActualDto;
   missingEod: MissingEodRowDto[];
   taskCategoryBreakdown: TaskCategoryUtilizationRowDto[];
   utilizationTrend: UtilizationTrendPointDto[];

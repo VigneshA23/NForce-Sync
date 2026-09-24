@@ -71,25 +71,29 @@ function KpiCard({ icon, label, value, accent = 'var(--txt)', onClick }: KpiProp
   return (
     <Card
       onClick={onClick}
-      onMouseEnter={onClick ? () => setHover(true) : undefined}
-      onMouseLeave={onClick ? () => setHover(false) : undefined}
-      style={onClick ? {
-        cursor: 'pointer',
-        borderColor: hover ? 'var(--txt-dim)' : 'var(--line)',
-        background: hover ? 'var(--raised2)' : 'var(--panel)',
-        transition: 'border-color 0.14s, background 0.14s',
-      } : undefined}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        cursor: onClick ? 'pointer' : undefined,
+        borderColor: hover ? `color-mix(in srgb, ${accent} 40%, var(--line))` : 'var(--line)',
+        boxShadow: hover ? `0 4px 16px color-mix(in srgb, ${accent} 18%, transparent)` : 'none',
+        transform: hover ? 'translateY(-2px)' : 'none',
+        transition: 'border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease',
+      }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{
           width: 36,
           height: 36,
           borderRadius: 8,
-          background: 'var(--raised2)',
+          background: hover
+            ? `color-mix(in srgb, ${accent} 20%, var(--raised2))`
+            : `color-mix(in srgb, ${accent} 12%, var(--raised2))`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           color: accent,
+          transition: 'background 0.18s ease',
         }}>
           {icon}
         </div>
@@ -129,7 +133,7 @@ function RoleBar({ roleKey, count, total }: { roleKey: string; count: number; to
       <div style={{ flex: 1, height: 6, background: 'var(--raised2)', borderRadius: 3, overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 3, transition: 'width 0.6s ease' }} />
       </div>
-      <div style={{ width: 28, fontSize: 11, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums', fontFamily: '"JetBrains Mono", monospace', textAlign: 'right', flexShrink: 0 }}>
+      <div style={{ width: 28, fontSize: 11, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums', textAlign: 'right', flexShrink: 0 }}>
         {count}
       </div>
     </div>
@@ -243,7 +247,7 @@ export default function AdminDashboard() {
                       <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5, flex: 1, minWidth: 0 }}>
                         {message}
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 11, color: 'var(--txt-dim)', flexShrink: 0, whiteSpace: 'nowrap' }}>
                         {formatRelative(event.occurredAt)}
                       </div>
                     </div>

@@ -303,7 +303,7 @@ export default function Login() {
             <Lock size={15} style={{ flexShrink: 0, marginTop: 1, color: 'var(--risk)' }} aria-hidden="true" />
             <span>
               Account temporarily locked. Try again in{' '}
-              <strong style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+              <strong>
                 {formatCountdown(lockRemaining)}
               </strong>
               , or{' '}

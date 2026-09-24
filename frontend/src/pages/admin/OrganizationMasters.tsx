@@ -213,7 +213,7 @@ function DeleteConfirmModal({ open, onClose, onConfirm, itemName, isPending = fa
           spellCheck={false}
         />
         <p style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 20, marginTop: 4 }}>
-          Must match exactly: <code style={{ fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-mut)' }}>{itemName}</code>
+          Must match exactly: <code style={{ color: 'var(--txt-mut)' }}>{itemName}</code>
         </p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button

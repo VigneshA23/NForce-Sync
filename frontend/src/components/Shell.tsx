@@ -398,7 +398,6 @@ function NavLinkItem({ item, isActive, badge, indent, onNavClick }: {
             lineHeight: 1,
             padding: '2px 5px',
             borderRadius: 10,
-            fontFamily: '"JetBrains Mono", monospace',
             fontVariantNumeric: 'tabular-nums',
             flexShrink: 0,
           }}
@@ -939,7 +938,6 @@ export function Shell() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     padding: '0 3px',
-                    fontFamily: '"JetBrains Mono", monospace',
                     fontVariantNumeric: 'tabular-nums',
                     border: '1.5px solid #0E0F12',
                   }}

@@ -219,7 +219,7 @@ function UtilizationTrendChart({ points }: { points: UtilizationTrendPointDto[] 
           return (
             <div key={s.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
               <span style={{ color: s.color }}>{s.label}</span>
-              <span style={{ color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace' }}>{p.value}%</span>
+              <span style={{ color: 'var(--txt)' }}>{p.value}%</span>
             </div>
           );
         })}
@@ -241,7 +241,7 @@ function UtilizationTrendChart({ points }: { points: UtilizationTrendPointDto[] 
             />
             <YAxis
               domain={[0, 100]} ticks={[0, 25, 50, 75, 100]}
-              tick={{ fontSize: 10, fill: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}
+              tick={{ fontSize: 10, fill: 'var(--txt-dim)' }}
               tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}%`} width={38}
             />
             <Tooltip content={<CustomTooltip />} />
@@ -274,7 +274,7 @@ function DonutLegend({ items }: { items: { label: string; valueLabel: string; pc
             <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
             <span style={{ fontSize: 11, color: 'var(--txt-mut)' }}>{label}</span>
           </div>
-          <div style={{ fontSize: 11, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+          <div style={{ fontSize: 11, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
             {valueLabel}
             <span style={{ color: 'var(--txt-dim)', marginLeft: 4, fontSize: 10 }}>({Math.round(pct)}%)</span>
           </div>
@@ -368,13 +368,13 @@ function ProjectTable({ rows }: { rows: ProjectTableRow[] }) {
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {row.projectName}
             </span>
-            <span style={{ fontSize: 12, textAlign: 'center', color: utilColor(row.utilizationPct), fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, textAlign: 'center', color: utilColor(row.utilizationPct), fontVariantNumeric: 'tabular-nums' }}>
               {fmtPct(row.utilizationPct)}
             </span>
-            <span style={{ fontSize: 12, textAlign: 'center', color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, textAlign: 'center', color: 'var(--txt-mut)', fontVariantNumeric: 'tabular-nums' }}>
               {row.actualHours.toFixed(0)}h
             </span>
-            <span style={{ fontSize: 12, textAlign: 'center', color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, textAlign: 'center', color: 'var(--txt-mut)', fontVariantNumeric: 'tabular-nums' }}>
               {row.employees}
             </span>
             {row.topContributor
@@ -454,10 +454,10 @@ function ResourceTable({ rows }: { rows: ResourceUtilizationRowDto[] }) {
             <span style={{ fontSize: 11, color: 'var(--txt-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {row.projectName}
             </span>
-            <span style={{ fontSize: 11, textAlign: 'right', color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 11, textAlign: 'right', color: 'var(--txt-mut)', fontVariantNumeric: 'tabular-nums' }}>
               {row.productiveHours.toFixed(1)}h
             </span>
-            <span style={{ fontSize: 11, textAlign: 'right', color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 11, textAlign: 'right', color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
               {row.availableHours.toFixed(0)}h
             </span>
             <UtilBar pct={row.utilizationPct} />
@@ -535,7 +535,7 @@ function TopContributorsPanel({ resourceRows }: { resourceRows: ResourceUtilizat
                       {c.employeeName}
                     </span>
                   </div>
-                  <span style={{ fontSize: 11.5, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-mut)', flexShrink: 0 }}>
+                  <span style={{ fontSize: 11.5, color: 'var(--txt-mut)', flexShrink: 0 }}>
                     {c.hours.toFixed(0)}h <span style={{ color: 'var(--txt-dim)' }}>({Math.round(pctOfTotal)}%)</span>
                   </span>
                 </div>
@@ -666,7 +666,7 @@ function AlertsPanel({ projectRows, resourceRows }: { projectRows: ProjectUtiliz
                 <a.icon size={13} />
               </div>
               <span style={{ fontSize: 12.5, color: 'var(--txt)' }}>
-                <strong style={{ fontFamily: '"JetBrains Mono", monospace' }}>{a.count}</strong> {a.label}
+                <strong>{a.count}</strong> {a.label}
               </span>
             </div>
           ))}
@@ -715,14 +715,13 @@ function CategoryTable({ rows }: { rows: { category: string; hours: number; pctO
           <div key={row.category} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{
               fontSize: 10, color: 'var(--txt-dim)', width: 14, flexShrink: 0,
-              fontFamily: '"JetBrains Mono", monospace',
             }}>
               {page * CATEGORY_PAGE_SIZE + i + 1}
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>{row.category}</span>
-                <span style={{ fontSize: 11.5, fontFamily: '"JetBrains Mono", monospace', color: 'var(--txt-mut)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                <span style={{ fontSize: 11.5, color: 'var(--txt-mut)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
                   {row.hours.toFixed(1)}h
                   <span style={{ color: 'var(--txt-dim)', marginLeft: 4 }}>({Math.round(row.pctOfTotal)}%)</span>
                 </span>
@@ -983,7 +982,7 @@ export default function ProjectsUtilization() {
     );
   }
 
-  const { cards, projectUtilization, resourceUtilization, taskCategoryBreakdown, utilizationTrend, plannedVsActual } = data!;
+  const { cards, projectUtilization, resourceUtilization, taskCategoryBreakdown, utilizationTrend } = data!;
 
   // Employees + top contributor per project, derived client-side from resourceUtilization (joined
   // by projectName — the only key ResourceUtilizationRowDto carries — same convention CategoryTable
@@ -1085,7 +1084,6 @@ export default function ProjectsUtilization() {
           icon={<TrendingUp size={16} />}
           label="Overall Utilization"
           value={fmtPct(cards.overallUtilizationPct)}
-          sub={`${plannedVsActual.plannedHours.toFixed(0)}h planned`}
           accent="var(--brand)"
           delta={cards.overallUtilizationDeltaPct}
           deltaSuffix="%"
@@ -1095,7 +1093,6 @@ export default function ProjectsUtilization() {
           icon={<Activity size={16} />}
           label="Approved Utilization"
           value={fmtPct(cards.actualUtilizationPct)}
-          sub={`${plannedVsActual.actualHours.toFixed(0)}h approved`}
           accent="var(--ok)"
           delta={cards.actualUtilizationDeltaPct}
           deltaSuffix="%"

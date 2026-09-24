@@ -405,7 +405,7 @@ export default function Profile() {
                 <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: profile.active ? 'rgba(47,182,124,.15)' : 'rgba(107,114,128,.15)', color: profile.active ? 'var(--ok)' : 'var(--txt-dim)' }}>
                   {profile.active ? 'Active' : 'Inactive'}
                 </span>
-                <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 20, background: 'rgba(107,114,128,.15)', color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+                <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 20, background: 'rgba(107,114,128,.15)', color: 'var(--txt-dim)' }}>
                   {profile.employeeCode}
                 </span>
               </div>

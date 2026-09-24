@@ -428,7 +428,7 @@ function BlockerRow({ b, index, selected, onClick }: {
           {b.employeeName}
         </span>
       </div>
-      <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
+      <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
         {reportedDate}<br />{reportedTime}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: 'var(--txt-mut)' }}>
@@ -494,7 +494,7 @@ function DetailPanel({ b, range, onClose, readOnly = false }: { b: TeamBlockerDt
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>{b.employeeName}</div>
-                <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+                <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
                   {b.employeeCode}
                 </span>
               </div>

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -191,6 +191,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Native form controls don't inherit the page font by default (UA stylesheets give them
+   their own system font) — without this, every <input>/<select>/<button>/<textarea> (date
+   fields, dropdowns, native buttons) renders in the OS default sans instead of Inter. */
+input, select, textarea, button, optgroup, option {
+  font-family: inherit;
+}
+
 #root { min-height: 100dvh; }
 
 /* ─── Text size (Preferences → Accessibility) ───────────────────── */
@@ -379,6 +386,23 @@ textarea:-webkit-autofill:focus {
 }
 .nf-nav-item[aria-current="page"]:hover {
   background: linear-gradient(90deg, rgba(177,17,22,.26), rgba(177,17,22,.07)) !important;
+}
+
+/* ─── Accent-tinted tile hover (dashboard/KPI cards) ───────────── */
+/*     Set --nf-tile-accent inline per-tile to color the glow/border. */
+.nf-tile-accent {
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.nf-tile-accent:hover {
+  border-color: color-mix(in srgb, var(--nf-tile-accent, var(--brand)) 40%, var(--line)) !important;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--nf-tile-accent, var(--brand)) 18%, transparent);
+  transform: translateY(-2px);
+}
+.nf-tile-accent .nf-tile-chip {
+  transition: background 0.18s ease;
+}
+.nf-tile-accent:hover .nf-tile-chip {
+  background: color-mix(in srgb, var(--nf-tile-accent, var(--brand)) 20%, var(--raised2)) !important;
 }
 
 /* ─── Sidebar items — always dark, never themes ────────────────── */

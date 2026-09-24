@@ -134,7 +134,7 @@ function TrendChart({ weeks }: { weeks: WeekTrend[] }) {
         borderRadius: 7, padding: '8px 12px', fontSize: 12,
       }}>
         <div style={{ color: 'var(--txt-mut)', marginBottom: 4 }}>Week of {label}</div>
-        <div style={{ color, fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>
+        <div style={{ color, fontWeight: 600 }}>
           {fmtPct(util ?? null)}
         </div>
       </div>
@@ -168,7 +168,7 @@ function TrendChart({ weeks }: { weeks: WeekTrend[] }) {
           <YAxis
             domain={[0, 120]}
             ticks={[0, 60, 100, 120]}
-            tick={{ fontSize: 10, fill: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}
+            tick={{ fontSize: 10, fill: 'var(--txt-dim)' }}
             tickLine={false} axisLine={false}
             tickFormatter={(v: number) => `${v}%`}
           />
@@ -267,7 +267,7 @@ function DonutChart({ productive, bench }: {
               </span>
             </div>
             <div style={{
-              fontSize: 11, fontFamily: '"JetBrains Mono", monospace',
+              fontSize: 11,
               color: 'var(--txt)', fontVariantNumeric: 'tabular-nums',
               flexShrink: 0, whiteSpace: 'nowrap',
             }}>
@@ -333,18 +333,18 @@ function HistoryTable({ rows }: { rows: HistoryDay[] }) {
             borderBottom: i < slice.length - 1 ? '1px solid var(--line)' : 'none',
             alignItems: 'center',
           }}>
-            <span style={{ fontSize: 12, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
+            <span style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
               {label}
             </span>
             <span style={{
               fontSize: 11, textAlign: 'right', color: 'var(--txt-dim)',
-              fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums',
+              fontVariantNumeric: 'tabular-nums',
             }}>
               {row.availableHours.toFixed(1)}h
             </span>
             <span style={{
               fontSize: 11, textAlign: 'right', color,
-              fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums',
+              fontVariantNumeric: 'tabular-nums',
             }}>
               {row.approvedHours.toFixed(1)}h
             </span>
@@ -444,7 +444,6 @@ function CurrentPeriodCard({
           <div key={label} style={{ minWidth: 0 }}>
             <div style={{ color: 'var(--txt-dim)', marginBottom: 3 }}>{label}</div>
             <div style={{
-              fontFamily: '"JetBrains Mono", monospace',
               fontVariantNumeric: 'tabular-nums', color: 'var(--txt)', fontSize: 14, fontWeight: 600,
             }}>
               {value}

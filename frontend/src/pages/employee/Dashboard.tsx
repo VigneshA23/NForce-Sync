@@ -23,10 +23,10 @@ import { useHashScroll } from '../../lib/useHashScroll';
 
 
 function Card({
-  children, style, pad = 20,
-}: { children: React.ReactNode; style?: React.CSSProperties; pad?: number }) {
+  children, style, pad = 20, className,
+}: { children: React.ReactNode; style?: React.CSSProperties; pad?: number; className?: string }) {
   return (
-    <div style={{
+    <div className={className} style={{
       background: 'var(--panel)', border: '1px solid var(--line)',
       borderRadius: 10, padding: pad, ...style,
     }}>
@@ -174,11 +174,11 @@ function KpiTile({
   accent?: string;
 }) {
   return (
-    <Card>
+    <Card className="nf-tile-accent" style={{ '--nf-tile-accent': accent } as React.CSSProperties}>
       <div style={{ marginBottom: 14 }}>
-        <div style={{
+        <div className="nf-tile-chip" style={{
           width: 36, height: 36, borderRadius: 8,
-          background: 'var(--raised2)', display: 'flex',
+          background: `color-mix(in srgb, ${accent} 12%, var(--raised2))`, display: 'flex',
           alignItems: 'center', justifyContent: 'center', color: accent,
         }}>
           {icon}
@@ -429,7 +429,7 @@ function MonthStatsPanel({ days }: { days: CalendarDay[] }) {
             <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
             <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--txt-mut)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
             <span style={{
-              fontSize: 12, fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums',
+              fontSize: 12, fontVariantNumeric: 'tabular-nums',
               color: count === 0 ? 'var(--txt-dim)' : 'var(--txt)', fontWeight: count > 0 ? 600 : 400,
               minWidth: 28, textAlign: 'right',
             }}>
@@ -480,7 +480,7 @@ function PendingCorrectionsPanel({ corrections }: { corrections: PendingCorrecti
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                  <span style={{ fontSize: 11, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
+                  <span style={{ fontSize: 11, color: 'var(--txt-mut)' }}>
                     {formatDate(c.entryDate)}
                   </span>
                   <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--risk)' }}>
@@ -546,7 +546,7 @@ function MissedSubmissionsPanel({ dates, count }: { dates: string[]; count: numb
               padding: '9px 16px', borderTop: '1px solid var(--line)',
               display: 'flex', alignItems: 'center', gap: 10,
             }}>
-              <span style={{ flex: 1, fontSize: 12, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
+              <span style={{ flex: 1, fontSize: 12, color: 'var(--txt-mut)' }}>
                 {formatDate(date)}
               </span>
               <Link to={`/eod/submit?date=${date}`} style={{
@@ -585,7 +585,7 @@ function AssignedProjectsPanel({ projects }: { projects: EmployeeProjectDto[] })
         <FolderKanban size={13} color="var(--txt-mut)" style={{ flexShrink: 0 }} />
         <SectionLabel id="assigned-projects" style={{ marginBottom: 0 }}>Assigned Projects</SectionLabel>
         {projects.length > 0 && (
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)' }}>
             {projects.length}
           </span>
         )}
@@ -604,7 +604,7 @@ function AssignedProjectsPanel({ projects }: { projects: EmployeeProjectDto[] })
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12, color: 'var(--txt)', fontWeight: 500, marginBottom: 2 }}>
                   {p.projectName}
-                  <span style={{ fontSize: 10, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', marginLeft: 6 }}>
+                  <span style={{ fontSize: 10, color: 'var(--txt-dim)', marginLeft: 6 }}>
                     {p.projectCode}
                   </span>
                 </div>
@@ -642,7 +642,7 @@ function HolidaysPanel({ holidays, year }: { holidays: HolidayDto[]; year: numbe
         <CalendarDays size={13} color="var(--txt-mut)" style={{ flexShrink: 0 }} />
         <SectionLabel id="holiday-calendar" style={{ marginBottom: 0 }}>Holiday Calendar - {year}</SectionLabel>
         {holidays.length > 0 && (
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--txt-dim)' }}>
             {holidays.length}
           </span>
         )}
@@ -663,7 +663,7 @@ function HolidaysPanel({ holidays, year }: { holidays: HolidayDto[]; year: numbe
               }}>
                 <span style={{ flex: 1, fontSize: 12, color: 'var(--txt)' }}>{h.name}</span>
                 <span style={{ fontSize: 10, color: 'var(--txt-dim)' }}>{dayOfWeek}</span>
-                <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>
+                <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
                   {formatDate(h.holidayDate)}
                 </span>
               </div>
@@ -710,11 +710,11 @@ function UtilPeriodCard({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11 }}>
           <div>
             <span style={{ color: 'var(--txt-dim)' }}>Approved </span>
-            <span style={{ color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>{approvedHours.toFixed(1)}h</span>
+            <span style={{ color: 'var(--txt)', fontWeight: 600 }}>{approvedHours.toFixed(1)}h</span>
           </div>
           <div>
             <span style={{ color: 'var(--txt-dim)' }}>Available </span>
-            <span style={{ color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>{availableHours.toFixed(1)}h</span>
+            <span style={{ color: 'var(--txt)', fontWeight: 600 }}>{availableHours.toFixed(1)}h</span>
           </div>
         </div>
       </div>
@@ -735,7 +735,7 @@ function UtilPeriodCard({
                 border: `1px solid color-mix(in srgb, ${utilColor(b.pct)} 25%, transparent)`,
               }}>
                 <span style={{ fontSize: 10, color: 'var(--txt-mut)' }}>{b.label}</span>
-                <span style={{ fontSize: 10, color: utilColor(b.pct), fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>
+                <span style={{ fontSize: 10, color: utilColor(b.pct), fontWeight: 600 }}>
                   {fmtPct(b.pct)}
                 </span>
               </div>
@@ -934,7 +934,7 @@ function RecentActivity({ entries }: { entries: RecentEntry[] }) {
               display: 'grid', gridTemplateColumns: '150px 1fr auto auto',
               gap: 12, alignItems: 'center',
             }}>
-              <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
+              <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
                 {dateLabel}
               </div>
               <StatusBadge status={entry.status} />
@@ -944,14 +944,14 @@ function RecentActivity({ entries }: { entries: RecentEntry[] }) {
                     padding: '2px 8px', borderRadius: 10,
                     background: `color-mix(in srgb, ${utilAccent} 12%, transparent)`,
                     border: `1px solid color-mix(in srgb, ${utilAccent} 30%, transparent)`,
-                    fontSize: 11, color: utilAccent, fontFamily: '"JetBrains Mono", monospace',
+                    fontSize: 11, color: utilAccent, 
                     fontWeight: 600, fontVariantNumeric: 'tabular-nums',
                   }}>
                     {fmtPct(entry.utilizationPct ?? null)}
                   </span>
                 : <span />
               }
-              <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
                 {entry.totalHours.toFixed(1)}h
               </span>
             </div>
@@ -1015,7 +1015,7 @@ function TodayStatusCard({
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>
             Submitted At
           </div>
-          <div style={{ fontSize: 13, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
+          <div style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
             {submittedAt ? formatDateTime(submittedAt) : isWeekend ? 'Weekend - not required' : cutoffLabel}
           </div>
         </div>

@@ -340,10 +340,6 @@ public class ProjectDashboardService {
             utilizationTrend.add(new UtilizationTrendPointDto(d, pctOf(dayActual, dayAvailable)));
         }
 
-        BigDecimal plannedVariance = totalActualHours.subtract(totalPlannedHours);
-        PlannedVsActualDto plannedVsActual = new PlannedVsActualDto(
-                totalPlannedHours, totalActualHours, plannedVariance, pctOf(plannedVariance, totalPlannedHours));
-
         BigDecimal totalCategoryHours = categoryRows.stream().map(CategoryHoursRow::hours).reduce(BigDecimal.ZERO, BigDecimal::add);
         List<TaskCategoryUtilizationRowDto> taskCategoryBreakdown = categoryRows.stream()
                 .map(r -> new TaskCategoryUtilizationRowDto(r.categoryName(), r.hours(), pctOf(r.hours(), totalCategoryHours)))
@@ -375,7 +371,7 @@ public class ProjectDashboardService {
                 previous.hasData() ? currentActiveProjectCount - previous.activeProjectCount() : null);
 
         return new ProjectDashboardSummaryDto(
-                cards, projectUtilization, resourceUtilization, plannedVsActual, missingEod, taskCategoryBreakdown, utilizationTrend);
+                cards, projectUtilization, resourceUtilization, missingEod, taskCategoryBreakdown, utilizationTrend);
     }
 
     // ── Previous-period snapshot (for "vs last month" deltas) ──────────────────
@@ -607,7 +603,6 @@ public class ProjectDashboardService {
                 totalAssignedProjects, activeProjects, onHoldProjects, completedProjects,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0,
                 null, null, null);
-        PlannedVsActualDto plannedVsActual = new PlannedVsActualDto(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
-        return new ProjectDashboardSummaryDto(cards, List.of(), List.of(), plannedVsActual, List.of(), List.of(), List.of());
+        return new ProjectDashboardSummaryDto(cards, List.of(), List.of(), List.of(), List.of(), List.of());
     }
 }

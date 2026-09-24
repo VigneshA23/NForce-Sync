@@ -2,11 +2,11 @@ import { useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   FolderKanban, CheckCircle2, PauseCircle, Archive, Gauge,
-  Target, TrendingUp, AlertTriangle, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown, X,
+  AlertTriangle, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown, X,
   Calendar as CalendarIcon,
 } from 'lucide-react';
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
 import { KpiCard } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
@@ -43,7 +43,17 @@ const thStyle: React.CSSProperties = {
   background: 'var(--raised)',
   borderBottom: '1px solid var(--line)',
   whiteSpace: 'nowrap',
+  // Stays visible while a scrollable table body (maxHeight + overflowY) scrolls past it —
+  // inert on tables that don't scroll.
+  position: 'sticky',
+  top: 0,
+  zIndex: 1,
 };
+
+// Header row (~38px) + 10 data rows (~41px each) — caps long tables (e.g. the QA-automation-
+// heavy project/missing-EOD lists) to a scannable page-height chunk instead of a mile-long
+// scroll, while keeping every row reachable via the table's own scrollbar.
+const SCROLL_TABLE_MAX_HEIGHT = 448;
 
 const tdStyle: React.CSSProperties = {
   padding: '12px 16px',
@@ -736,7 +746,7 @@ function ProjectUtilizationTable({ rows }: { rows: ProjectUtilizationRowDto[] })
       {rows.length === 0 ? (
         <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No data for the selected filters.</div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflow: 'auto', maxHeight: SCROLL_TABLE_MAX_HEIGHT }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
@@ -804,7 +814,7 @@ function ResourceUtilizationTable({ rows }: { rows: ResourceUtilizationRowDto[] 
       {rows.length === 0 ? (
         <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No data for the selected filters.</div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflow: 'auto', maxHeight: SCROLL_TABLE_MAX_HEIGHT }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
@@ -856,7 +866,7 @@ function MissingEodTable({ rows }: { rows: MissingEodRowDto[] }) {
       {rows.length === 0 ? (
         <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No missing submissions in this range.</div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflow: 'auto', maxHeight: SCROLL_TABLE_MAX_HEIGHT }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
@@ -947,11 +957,7 @@ export default function ProjectDashboard() {
     );
   }
 
-  const { cards, projectUtilization, resourceUtilization, plannedVsActual, missingEod, taskCategoryBreakdown } = data;
-
-  const plannedActualChartData = projectUtilization.map(p => ({
-    name: p.projectName, Planned: p.plannedHours, Actual: p.actualHours,
-  }));
+  const { cards, projectUtilization, resourceUtilization, missingEod, taskCategoryBreakdown } = data;
 
   const categoryChartData = taskCategoryBreakdown.map(c => ({ name: c.category, hours: c.hours }));
 
@@ -985,32 +991,6 @@ export default function ProjectDashboard() {
         <KpiCard icon={<Archive size={17} aria-hidden="true" />} label="Completed" value={cards.completedProjects} accent="var(--info)" />
         <KpiCard icon={<AlertTriangle size={17} aria-hidden="true" />} label="Missing EOD" value={cards.missingEodCount} accent={cards.missingEodCount > 0 ? 'var(--risk)' : 'var(--txt)'} />
         <KpiCard icon={<Gauge size={17} aria-hidden="true" />} label="Overall Utilization" value={fmtPct(cards.overallUtilizationPct)} accent={utilColor(cards.overallUtilizationPct)} />
-        <KpiCard icon={<Target size={17} aria-hidden="true" />} label="Planned Utilization" value={fmtPct(cards.plannedUtilizationPct)} />
-        <KpiCard icon={<TrendingUp size={17} aria-hidden="true" />} label="Actual Utilization" value={fmtPct(cards.actualUtilizationPct)} accent={utilColor(cards.actualUtilizationPct)} />
-      </div>
-
-      {/* Charts row */}
-      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16, marginBottom: 20 }}>
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <SectionHeader title="Planned vs Actual Utilization" subtitle={`Variance: ${plannedVsActual.variance >= 0 ? '+' : ''}${plannedVsActual.variance.toFixed(1)}h (${plannedVsActual.variancePct.toFixed(1)}%)`} />
-          <div style={{ padding: '20px 16px', height: 200 }}>
-            {plannedActualChartData.length === 0 ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--txt-dim)', fontSize: 13 }}>No data for the selected filters.</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={plannedActualChartData} margin={{ left: 0, right: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} interval={0} angle={-15} textAnchor="end" height={50} />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} unit="h" />
-                  <Tooltip cursor={false} contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="Planned" fill="var(--info)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                  <Bar dataKey="Actual" fill="var(--ok)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </Card>
       </div>
 
       <Card style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>

@@ -376,7 +376,7 @@ function BlockerRow({ b, index, selected, onClick }: {
           {b.employeeName}
         </span>
       </div>
-      <div style={{ fontSize: 12, color: 'var(--txt-mut)', fontFamily: '"JetBrains Mono", monospace' }}>
+      <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
         {reportedDate}<br />{reportedTime}
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{fmtDuration(blockerDurationHours(b))}</div>

@@ -24,13 +24,13 @@ interface KpiProps {
 
 export function KpiCard({ icon, label, value, accent = 'var(--txt)' }: KpiProps) {
   return (
-    <Card>
+    <Card className="nf-tile-accent" style={{ '--nf-tile-accent': accent } as React.CSSProperties}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{
+        <div className="nf-tile-chip" style={{
           width: 36,
           height: 36,
           borderRadius: 8,
-          background: 'var(--raised2)',
+          background: `color-mix(in srgb, ${accent} 12%, var(--raised2))`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

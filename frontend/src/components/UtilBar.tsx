@@ -29,7 +29,7 @@ export function UtilBar({ pct, capAt = 120 }: UtilBarProps) {
         }} />
       </div>
       <span style={{
-        fontFamily: '"JetBrains Mono", monospace', fontSize: 12,
+        fontSize: 12,
         color, minWidth: 42, textAlign: 'right', fontVariantNumeric: 'tabular-nums',
       }}>
         {fmtPct(pct)}

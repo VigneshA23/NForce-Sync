@@ -95,7 +95,7 @@ function EntryRow({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--txt)' }}>{entry.employeeName}</span>
-            <span style={{ fontSize: 11.5, color: 'var(--txt-dim)', fontFamily: '"JetBrains Mono", monospace' }}>{entry.employeeCode}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{entry.employeeCode}</span>
             {entry.escalated && (
               <span title={entry.tlName ? `${entry.tlName} hasn't reviewed since this was submitted.` : 'No Team Lead assigned.'}>
                 <Chip tone="warn"><AlertTriangle size={11} aria-hidden="true" /> Escalated · Team Lead inactive {formatInactivity(entry.tlInactivityHours)}</Chip>

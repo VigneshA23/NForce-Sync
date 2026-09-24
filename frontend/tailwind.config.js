@@ -24,7 +24,7 @@ export default {
       fontFamily: {
         heading: ['Inter', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
         body:    ['Inter', 'sans-serif'],
-        mono:    ['"JetBrains Mono"', 'monospace'],
+        mono:    ['Inter', 'sans-serif'],
       },
       keyframes: {
         'fade-up': {
