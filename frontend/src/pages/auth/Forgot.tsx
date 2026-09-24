@@ -259,5 +259,5 @@ const inputStyle: React.CSSProperties = {
 const inputFocusStyle: React.CSSProperties = {
   ...inputStyle,
   borderColor: 'var(--brand-bright)',
-  boxShadow: '0 0 0 3px rgba(228,55,61,.14)',
+  boxShadow: '0 0 0 3px color-mix(in srgb, var(--brand-bright) 14%, transparent)',
 };

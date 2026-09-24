@@ -27,7 +27,7 @@ export function FilterDropdown({ label, options, selected, onToggle, onClear, ge
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 500,
           background: selected.size ? 'color-mix(in srgb, var(--brand) 10%, var(--raised2))' : 'var(--raised2)',
-          border: `1px solid ${selected.size ? 'rgba(177,17,22,.5)' : 'var(--line2)'}`,
+          border: `1px solid ${selected.size ? 'color-mix(in srgb, var(--brand) 50%, transparent)' : 'var(--line2)'}`,
           color: 'var(--txt)', cursor: 'pointer', whiteSpace: 'nowrap',
         }}
       >

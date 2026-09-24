@@ -2,10 +2,9 @@ import { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ArrowDown, ArrowUp, Ban, Calendar, ChevronDown, ChevronRight, ClipboardCheck, ClipboardList,
-  Download, Flag, Gauge, Hourglass, Loader2, Scale,
+  Ban, Calendar, ChevronDown, ChevronRight, ClipboardCheck,
+  Flag, Gauge, Hourglass, Loader2, Scale,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import {
   ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -22,6 +21,8 @@ import {
 } from '../../api/teamLead';
 import { ReporteeScopePicker } from '../../components/ReporteeScopePicker';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { Card, KpiCard } from '../../components/KpiCard';
+import { HeroBanner } from '../../components/dashboard/HeroBanner';
 
 // ── status config ──────────────────────────────────────────────────────────────
 // SUBMITTED here means the entry has been through review and is APPROVED (backend
@@ -69,14 +70,6 @@ function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
   return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
 }
 
-function Card({ children, style, className }: { children: React.ReactNode; style?: React.CSSProperties; className?: string }) {
-  return (
-    <div className={className} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, ...style }}>
-      {children}
-    </div>
-  );
-}
-
 function Avatar({ name, color }: { name: string; color: string }) {
   const initials = name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
   return (
@@ -102,39 +95,6 @@ function StatusPill({ status }: { status: MemberEodStatus }) {
     }}>
       {label}
     </span>
-  );
-}
-
-// ── KPI card ─────────────────────────────────────────────────────────────────────
-
-function KpiCard({
-  icon: Icon, accent, label, value, deltaIcon: DeltaIcon, deltaText, deltaColor,
-}: {
-  icon: LucideIcon; accent: string; label: string; value: React.ReactNode;
-  deltaIcon: LucideIcon; deltaText: string; deltaColor: string;
-}) {
-  return (
-    <Card className="nf-tile-accent" style={{ padding: '1rem', '--nf-tile-accent': accent } as React.CSSProperties}>
-      <div style={{ minWidth: 0 }}>
-        <div className="nf-tile-chip" style={{
-          width: 30, height: 30, borderRadius: 7, marginBottom: 12,
-          background: `color-mix(in srgb, ${accent} 18%, transparent)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
-        }}>
-          <Icon size={15} aria-hidden="true" />
-        </div>
-        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, whiteSpace: 'nowrap' }}>
-          {label}
-        </div>
-        <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 25, fontWeight: 700, color: 'var(--txt)', letterSpacing: '-0.02em', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
-          {value}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: deltaColor, whiteSpace: 'nowrap' }}>
-          <DeltaIcon size={11} aria-hidden="true" />
-          {deltaText}
-        </div>
-      </div>
-    </Card>
   );
 }
 
@@ -488,36 +448,6 @@ function UtilizationOverviewRing({ summary }: { summary: TeamLeadSummaryDto }) {
   );
 }
 
-// ── Quick Actions ─────────────────────────────────────────────────────────────────
-
-function QuickActionTile({ icon: Icon, accent, title, subtitle, onClick, disabled }: {
-  icon: LucideIcon; accent: string; title: string; subtitle: string; onClick?: () => void; disabled?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={disabled ? 'Not available yet' : undefined}
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8,
-        padding: 14, borderRadius: 9, textAlign: 'left',
-        background: 'var(--raised2)', border: '1px solid var(--line)',
-        cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.55 : 1,
-      }}
-    >
-      <div style={{
-        width: 28, height: 28, borderRadius: 7,
-        background: `color-mix(in srgb, ${accent} 18%, transparent)`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
-      }}>
-        <Icon size={14} aria-hidden="true" />
-      </div>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)' }}>{title}</div>
-      <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>{subtitle}</div>
-    </button>
-  );
-}
-
 // ── main ─────────────────────────────────────────────────────────────────────────────
 
 const ROSTER_COLLAPSED_COUNT = 6;
@@ -701,17 +631,8 @@ export default function TeamDashboard() {
       {isSuperAdmin && (
         <ReporteeScopePicker role="MANAGER" label="Team Lead" value={teamLeadId} onChange={setTeamLeadId} />
       )}
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-            Team Lead Dashboard
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-            Overview of your team's productivity and status
-          </p>
-        </div>
-
+      {/* Header controls — date filter + review-approvals action */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ position: 'relative' }}>
             <button
@@ -817,42 +738,44 @@ export default function TeamDashboard() {
         </div>
       </div>
 
-      {/* KPI row — 5 cards, split across the same 1.7fr/1fr columns as the Team Status row
-          below (first 4 cards in the left zone, the 5th in the right rail zone) so both
-          rows' edges line up instead of drifting apart at different screen widths. */}
-      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 16, marginBottom: 16 }}>
-        <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+      <div style={{ marginBottom: 16 }}>
+        <HeroBanner subtitle="Overview of your team's productivity and status" />
+      </div>
+
+      {/* KPI tiles — own full-width row below the hero/quick-actions row. */}
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
           <KpiCard
-            icon={Gauge} accent="var(--warn)" label="Team Utilization" value={avgUtilLabel}
-            deltaIcon={utilDelta !== null && utilDelta < 0 ? ArrowDown : ArrowUp}
-            deltaText={utilDelta === null ? 'vs yesterday: -' : `${utilDelta >= 0 ? '+' : ''}${utilDelta} pts vs yesterday`}
-            deltaColor="var(--warn)"
+            icon={<Gauge size={18} />} accent="var(--warn)" label="Team Utilization" value={avgUtilLabel}
+            trend={utilDelta === null ? undefined : {
+              label: `${utilDelta >= 0 ? '+' : ''}${utilDelta} pts vs yesterday`,
+              positive: utilDelta >= 0,
+            }}
           />
           <KpiCard
-            icon={ClipboardCheck} accent="var(--warn)" label="Submitted Today" value={submittedTodayValue}
-            deltaIcon={ArrowDown}
-            deltaText={`${summary.missingCount} missing`}
-            deltaColor="var(--risk)"
+            icon={<ClipboardCheck size={18} />} accent="var(--warn)" label="Submitted Today" value={submittedTodayValue}
+            trend={{ label: `${summary.missingCount} missing`, positive: summary.missingCount === 0 }}
           />
           <KpiCard
-            icon={Hourglass} accent="var(--risk)" label="Pending Approval" value={pendingApprovalsCount}
-            deltaIcon={pendingDelta !== null && pendingDelta < 0 ? ArrowDown : ArrowUp}
-            deltaText={pendingDelta === null ? '-' : `${pendingDelta >= 0 ? '+' : ''}${pendingDelta}`}
-            deltaColor="var(--risk)"
+            icon={<Hourglass size={18} />} accent="var(--risk)" label="Pending Approval" value={pendingApprovalsCount}
+            trend={pendingDelta === null ? undefined : {
+              label: `${pendingDelta >= 0 ? '+' : ''}${pendingDelta} vs yesterday`,
+              positive: pendingDelta <= 0,
+            }}
           />
           <KpiCard
-            icon={Scale} accent="var(--ok)" label="Over-allocated" value={summary.overloadedCount}
-            deltaIcon={ArrowUp}
-            deltaText={topOverloaded ? `${topOverloaded.fullName.split(' ')[0]} ${fmtPct(topOverloaded.utilizationPct)}` : 'None'}
-            deltaColor="var(--ok)"
+            icon={<Scale size={18} />} accent="var(--ok)" label="Over-allocated" value={summary.overloadedCount}
+            trend={{
+              label: topOverloaded ? `${topOverloaded.fullName.split(' ')[0]} ${fmtPct(topOverloaded.utilizationPct)}` : 'None',
+              positive: !topOverloaded,
+            }}
           />
-        </div>
-        <KpiCard
-          icon={Ban} accent="var(--info)" label="Open Blockers" value={blockers ? blockers.length : summary.activeBlockersCount}
-          deltaIcon={blockersDelta !== null && blockersDelta > 0 ? ArrowUp : ArrowDown}
-          deltaText={blockersDelta === null ? '-' : `${blockersDelta >= 0 ? '+' : ''}${blockersDelta}`}
-          deltaColor="var(--info)"
-        />
+          <KpiCard
+            icon={<Ban size={18} />} accent="var(--info)" label="Open Blockers" value={blockers ? blockers.length : summary.activeBlockersCount}
+            trend={blockersDelta === null ? undefined : {
+              label: `${blockersDelta >= 0 ? '+' : ''}${blockersDelta} vs yesterday`,
+              positive: blockersDelta <= 0,
+            }}
+          />
       </div>
 
       {/* Mid section: Team Status table + right stack */}
@@ -957,7 +880,7 @@ export default function TeamDashboard() {
         </div>
       </div>
 
-      {/* Bottom row: 3 panels */}
+      {/* Bottom row: 2 panels (Quick Actions now lives beside the KPI row above) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
         <Card style={{ padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
@@ -981,31 +904,6 @@ export default function TeamDashboard() {
             </span>
           </div>
           <UtilizationOverviewRing summary={summary} />
-        </Card>
-
-        <Card style={{ padding: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)', marginBottom: 14 }}>Quick Actions</div>
-          <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <QuickActionTile
-              icon={ClipboardList} accent="var(--brand)" title="Review Approvals"
-              subtitle={`${summary.pendingApprovalCount} pending`}
-              onClick={() => navigate('/team/approvals')}
-            />
-            <QuickActionTile
-              icon={Ban} accent="var(--risk)" title="View Blockers"
-              subtitle={`${blockers ? blockers.length : summary.activeBlockersCount} open`}
-              onClick={() => navigate('/team/blockers')}
-            />
-            <QuickActionTile
-              icon={Gauge} accent="var(--info)" title="Team Utilization"
-              subtitle="Detailed report"
-              onClick={() => navigate('/team/utilization')}
-            />
-            <QuickActionTile
-              icon={Download} accent="var(--ok)" title="Export Report"
-              subtitle="Download" disabled
-            />
-          </div>
         </Card>
       </div>
 

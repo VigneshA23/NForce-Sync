@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { KpiCard } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { HeroBanner } from '../../components/dashboard/HeroBanner';
 import { useIsPhone } from '../../lib/useMediaQuery';
 import { useAuth } from '../../lib/auth';
 import { searchUsers } from '../../api/admin';
@@ -963,14 +964,8 @@ export default function ProjectDashboard() {
 
   return (
     <div>
-      {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-          Project Dashboard
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-          Resource utilization, project health and EOD compliance across your portfolio.
-        </p>
+        <HeroBanner subtitle="Resource utilization, project health and EOD compliance across your portfolio." />
       </div>
 
       <FilterBar filters={filters} onChange={setFilters} onDateStatusChange={setDateFilterStatus} isSuperAdmin={isSuperAdmin} />
@@ -983,8 +978,8 @@ export default function ProjectDashboard() {
         </Card>
       ) : (
         <>
-      {/* Summary cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 20 }}>
+      {/* Summary cards — full-width row */}
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 20 }}>
         <KpiCard icon={<FolderKanban size={17} aria-hidden="true" />} label="Total Projects" value={cards.totalAssignedProjects} />
         <KpiCard icon={<CheckCircle2 size={17} aria-hidden="true" />} label="Active" value={cards.activeProjects} accent="var(--ok)" />
         <KpiCard icon={<PauseCircle size={17} aria-hidden="true" />} label="On Hold" value={cards.onHoldProjects} accent="var(--warn)" />

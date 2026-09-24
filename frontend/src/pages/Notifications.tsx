@@ -231,7 +231,7 @@ function NotificationListItem({
         borderRadius: 8,
         border: '1px solid ' + (selected ? 'var(--line2)' : 'transparent'),
         borderLeft: n.read ? (selected ? '1px solid var(--line2)' : '3px solid transparent') : '3px solid var(--brand-bright)',
-        background: selected ? 'var(--raised2)' : n.read ? 'transparent' : 'rgba(228,55,61,.05)',
+        background: selected ? 'var(--raised2)' : n.read ? 'transparent' : 'color-mix(in srgb, var(--brand-bright) 5%, transparent)',
         cursor: 'pointer',
         transition: 'background 120ms ease, border-color 120ms ease',
       }}
@@ -344,7 +344,7 @@ function NotificationDetailPane({ n }: { n: NotificationDto | null }) {
         <Pill color={priority.color} bg={priority.bg}>{priorityValue} priority</Pill>
         <Pill
           color={n.read ? 'var(--txt-dim)' : 'var(--brand-bright)'}
-          bg={n.read ? 'var(--raised2)' : 'rgba(228,55,61,.14)'}
+          bg={n.read ? 'var(--raised2)' : 'color-mix(in srgb, var(--brand-bright) 14%, transparent)'}
         >
           {n.read ? 'Read' : 'Unread'}
         </Pill>
@@ -494,8 +494,8 @@ export default function Notifications() {
             {unread > 0 && (
               <span style={{
                 padding: '2px 9px',
-                background: 'rgba(228,55,61,.15)',
-                border: '1px solid rgba(228,55,61,.3)',
+                background: 'color-mix(in srgb, var(--brand-bright) 15%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--brand-bright) 30%, transparent)',
                 borderRadius: 10, fontSize: 12, fontWeight: 700,
                 color: 'var(--brand-bright)',
                 fontFamily: 'Inter, sans-serif',
@@ -616,7 +616,7 @@ export default function Notifications() {
         }}>
           <div style={{
             width: 64, height: 64, borderRadius: '50%',
-            background: 'linear-gradient(135deg, rgba(228,55,61,.14), rgba(228,55,61,.03))',
+            background: 'linear-gradient(135deg, color-mix(in srgb, var(--brand-bright) 14%, transparent), color-mix(in srgb, var(--brand-bright) 3%, transparent))',
             border: '1px solid var(--line)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             margin: '0 auto 18px',

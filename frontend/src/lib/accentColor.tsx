@@ -16,12 +16,16 @@ const ACCENT_SWATCHES: Record<AccentColor, {
   brandDeep: string;
   brightDark: string;
   brightLight: string;
+  /** Very dark, low-saturation corner tone for the hero banner's radial gradient + the hero
+   *  illustration's corner patch — same hue family as `brand`, just darkened toward near-black
+   *  so it still reads as "dark corner" rather than a bright accent swatch. */
+  heroCorner: string;
 }> = {
-  red:    { label: 'Red',    brand: '#B11116', brandDeep: '#7A0C10', brightDark: '#E4373D', brightLight: '#C81A1F' },
-  purple: { label: 'Purple', brand: '#6D28D9', brandDeep: '#4C1D95', brightDark: '#9F67F5', brightLight: '#7C3AED' },
-  blue:   { label: 'Blue',   brand: '#1D4ED8', brandDeep: '#1E3A8A', brightDark: '#3B82F6', brightLight: '#1D4ED8' },
-  green:  { label: 'Green',  brand: '#15803D', brandDeep: '#14532D', brightDark: '#22C55E', brightLight: '#15803D' },
-  pink:   { label: 'Pink',   brand: '#BE185D', brandDeep: '#831843', brightDark: '#EC4899', brightLight: '#BE185D' },
+  red:    { label: 'Red',    brand: '#B11116', brandDeep: '#7A0C10', brightDark: '#E4373D', brightLight: '#C81A1F', heroCorner: '#2A0D12' },
+  purple: { label: 'Purple', brand: '#6D28D9', brandDeep: '#4C1D95', brightDark: '#9F67F5', brightLight: '#7C3AED', heroCorner: '#1B0E2E' },
+  blue:   { label: 'Blue',   brand: '#1D4ED8', brandDeep: '#1E3A8A', brightDark: '#3B82F6', brightLight: '#1D4ED8', heroCorner: '#0E1633' },
+  green:  { label: 'Green',  brand: '#15803D', brandDeep: '#14532D', brightDark: '#22C55E', brightLight: '#15803D', heroCorner: '#0C2418' },
+  pink:   { label: 'Pink',   brand: '#BE185D', brandDeep: '#831843', brightDark: '#EC4899', brightLight: '#BE185D', heroCorner: '#2E0D1E' },
 };
 
 export { ACCENT_SWATCHES };
@@ -56,6 +60,7 @@ function applyAccent(accent: AccentColor, theme: 'dark' | 'light') {
     root.removeProperty('--brand');
     root.removeProperty('--brand-bright');
     root.removeProperty('--brand-deep');
+    root.removeProperty('--hero-corner');
     root.removeProperty('--bm-ring');
     root.removeProperty('--bm-glow');
     return;
@@ -65,6 +70,7 @@ function applyAccent(accent: AccentColor, theme: 'dark' | 'light') {
   root.setProperty('--brand', swatch.brand);
   root.setProperty('--brand-bright', bright);
   root.setProperty('--brand-deep', swatch.brandDeep);
+  root.setProperty('--hero-corner', swatch.heroCorner);
   const rgb = hexToRgb(bright);
   root.setProperty('--bm-ring', `rgba(${rgb}, .25)`);
   root.setProperty('--bm-glow', `radial-gradient(circle, rgba(${rgb}, .18) 0%, rgba(${rgb}, 0) 70%)`);

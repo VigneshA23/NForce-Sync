@@ -127,7 +127,7 @@ const inputStyle: React.CSSProperties = {
 };
 const inputFocusStyle: React.CSSProperties = {
   ...inputStyle, borderColor: 'var(--brand-bright)',
-  boxShadow: '0 0 0 3px rgba(228,55,61,.14)',
+  boxShadow: '0 0 0 3px color-mix(in srgb, var(--brand-bright) 14%, transparent)',
 };
 // The closed <select> box renders using the <select> element's OWN color (confirmed via
 // computed styles — it does not pick up the currently-selected <option>'s style), so the
