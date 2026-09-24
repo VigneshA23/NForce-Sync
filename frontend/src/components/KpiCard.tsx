@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import { ChevronRight } from 'lucide-react';
+
 export function Card({ children, style, className }: { children: React.ReactNode; style?: React.CSSProperties; className?: string }) {
   return (
     <div
@@ -70,5 +73,36 @@ export function KpiCard({ icon, label, value, accent = 'var(--txt)', trend }: Kp
         </div>
       )}
     </Card>
+  );
+}
+
+/** Accessible click wrapper for a KpiCard (or any tile) that navigates somewhere — hover-lift +
+ *  a chevron that brightens on hover, so a tile reads as clickable at a glance instead of only
+ *  on hover. Keyboard-activatable (role="button", Enter/Space) to match a real <button>. */
+export function ClickableKpi({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+      style={{
+        cursor: 'pointer', borderRadius: 10, position: 'relative',
+        transition: 'transform 0.14s', transform: hover ? 'translateY(-2px)' : undefined,
+      }}
+    >
+      {children}
+      <ChevronRight
+        size={14}
+        aria-hidden="true"
+        style={{
+          position: 'absolute', top: 10, right: 10, color: 'var(--txt-dim)',
+          opacity: hover ? 1 : 0.45, transition: 'opacity 0.14s', pointerEvents: 'none',
+        }}
+      />
+    </div>
   );
 }

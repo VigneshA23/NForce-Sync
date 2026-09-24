@@ -23,6 +23,7 @@ import ForceChangePassword from './pages/auth/ForceChangePassword';
 
 const AdminDashboard      = lazy(() => import('./pages/admin/Dashboard'));
 const ExecutiveDashboard  = lazy(() => import('./pages/admin/ExecutiveDashboard'));
+const UnallocatedResources = lazy(() => import('./pages/admin/UnallocatedResources'));
 const UserManagement      = lazy(() => import('./pages/admin/UserManagement'));
 const AuditLog            = lazy(() => import('./pages/admin/AuditLog'));
 const RolesAccess         = lazy(() => import('./pages/admin/RolesAccess'));
@@ -240,6 +241,7 @@ function AppRoutes() {
 
             {/* ── Super Admin (executive oversight) ──── */}
             <Route path="/admin/executive-dashboard" element={<ExecutiveDashboard />} />
+            <Route path="/admin/unallocated-resources" element={<UnallocatedResources />} />
 
             {/* ── Super Admin (system configuration) ─── */}
             <Route path="/admin/org-masters"  element={<OrganizationMasters />} />

@@ -16,6 +16,7 @@ import com.nforceone.sync.executive.dto.ExecutiveDashboardDto;
 import com.nforceone.sync.executive.dto.ProjectAllocationDto;
 import com.nforceone.sync.executive.dto.ProjectAttentionDto;
 import com.nforceone.sync.executive.dto.ProjectPortfolioDto;
+import com.nforceone.sync.executive.dto.UnallocatedResourceDto;
 import com.nforceone.sync.executive.dto.UtilizationOverviewDto;
 import com.nforceone.sync.executive.dto.UtilizationTrendPointDto;
 import com.nforceone.sync.executive.dto.WorkforceOverviewDto;
@@ -334,6 +335,12 @@ public class ExecutiveDashboardService {
                 .filter(e -> allocatedEmployeeIds.contains(e.getId())).count();
         long noActiveAllocation = activeEmployees.size() - totalAllocatedResources;
 
+        List<UnallocatedResourceDto> unallocatedResources = activeEmployees.stream()
+                .filter(e -> !allocatedEmployeeIds.contains(e.getId()))
+                .map(e -> new UnallocatedResourceDto(e.getId(), e.getFullName(), e.getEmployeeCode(), e.getRole().name()))
+                .sorted(Comparator.comparing(UnallocatedResourceDto::employeeName))
+                .toList();
+
         Map<Long, List<Allocation>> byProject = activeAllocations.stream()
                 .collect(Collectors.groupingBy(a -> a.getProject().getId()));
 
@@ -349,7 +356,7 @@ public class ExecutiveDashboardService {
                 .limit(ALLOCATION_BY_PROJECT_LIMIT)
                 .toList();
 
-        return new AllocationOverviewDto(totalAllocatedResources, noActiveAllocation, byProjectList);
+        return new AllocationOverviewDto(totalAllocatedResources, noActiveAllocation, byProjectList, unallocatedResources);
     }
 
     // ── Projects requiring attention ─────────────────────────────────────────────

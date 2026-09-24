@@ -5,5 +5,6 @@ import java.util.List;
 public record AllocationOverviewDto(
         long totalAllocatedResources,
         long resourcesWithNoActiveAllocation,
-        List<ProjectAllocationDto> byProject
+        List<ProjectAllocationDto> byProject,
+        List<UnallocatedResourceDto> unallocatedResources
 ) {}

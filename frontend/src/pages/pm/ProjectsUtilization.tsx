@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
   TrendingUp, TrendingDown, Activity, RefreshCw, Layers,
   Calendar, Download, Lightbulb, AlertTriangle, Users, ArrowUp, ArrowDown, Minus,
-  CheckCircle2, Award, FolderKanban, ChevronLeft, ChevronRight,
+  CheckCircle2, Award, FolderKanban, ChevronLeft, ChevronRight, X,
 } from 'lucide-react';
 import { UtilBar } from '../../components/UtilBar';
 import { GlobalLoader } from '../../components/GlobalLoader';
@@ -934,6 +935,15 @@ function CalendarRangePopover({ from, to, onApply }: { from: string; to: string;
 // ── main ───────────────────────────────────────────────────────────────────────
 
 export default function ProjectsUtilization() {
+  // Deep-link from a KPI tile elsewhere (e.g. Executive Dashboard's Under/Over-utilized tiles) —
+  // pre-filters the Employee Utilization table below to just that status.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const statusParam = searchParams.get('status');
+  const employeeStatusFilter: 'under' | 'over' | null = statusParam === 'under' || statusParam === 'over' ? statusParam : null;
+  function clearStatusFilter() {
+    setSearchParams(prev => { prev.delete('status'); return prev; });
+  }
+
   const [rangeIdx, setRangeIdx] = useState(0);
   const [customRange, setCustomRange] = useState<{ from: string; to: string } | null>(null);
   const [projectId, setProjectId] = useState<number | undefined>(undefined);
@@ -1156,8 +1166,26 @@ export default function ProjectsUtilization() {
 
       {/* Employee Utilization */}
       <Card style={{ marginBottom: 16 }}>
-        <SectionLabel><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Activity size={12} />Employee Utilization</span></SectionLabel>
-        <ResourceTable rows={resourceUtilization} />
+        <SectionLabel
+          action={employeeStatusFilter && (
+            <button
+              onClick={clearStatusFilter}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 11, fontWeight: 600, textTransform: 'none', letterSpacing: 0,
+                padding: '3px 10px', borderRadius: 20, cursor: 'pointer',
+                color: employeeStatusFilter === 'under' ? 'var(--warn)' : 'var(--risk)',
+                background: `color-mix(in srgb, ${employeeStatusFilter === 'under' ? 'var(--warn)' : 'var(--risk)'} 14%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${employeeStatusFilter === 'under' ? 'var(--warn)' : 'var(--risk)'} 30%, transparent)`,
+              }}
+            >
+              Filtered: {employeeStatusFilter === 'under' ? 'Under-utilized' : 'Over-utilized'} <X size={12} aria-hidden="true" />
+            </button>
+          )}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Activity size={12} />Employee Utilization</span>
+        </SectionLabel>
+        <ResourceTable rows={employeeStatusFilter ? resourceUtilization.filter(r => utilState(r.utilizationPct) === employeeStatusFilter) : resourceUtilization} />
       </Card>
 
       {/* Category breakdown */}

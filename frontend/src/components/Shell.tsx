@@ -709,7 +709,10 @@ export function Shell() {
     // avatar dropdown), but every role must still be able to open them.
     || location.pathname === '/notifications'
     || location.pathname === '/profile'
-    || location.pathname === '/preferences';
+    || location.pathname === '/preferences'
+    // Drill-through target for the Executive Dashboard's "Unallocated Resources" KPI tile —
+    // no sidebar entry of its own, same pattern as the exceptions above.
+    || location.pathname === '/admin/unallocated-resources';
 
   // FIX 4: derive breadcrumb label from nav map
   const navInfo  = getNavItem(role, location.pathname);
@@ -717,6 +720,7 @@ export function Shell() {
     ?? (location.pathname === '/notifications' ? 'Notifications'
       : location.pathname === '/profile' ? 'Profile'
       : location.pathname === '/preferences' ? 'Preferences'
+      : location.pathname === '/admin/unallocated-resources' ? 'Unallocated Resources'
       : 'Home');
 
   const bellBadge = useUnreadNotificationsCount();

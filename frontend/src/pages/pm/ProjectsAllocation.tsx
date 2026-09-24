@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   FolderKanban, Users, Plus, RefreshCw, AlertTriangle, Trash2, Pencil, Search, X,
   ArrowUp, ArrowDown, ArrowUpDown,
@@ -716,8 +717,11 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
   const { data, isPending, isError, isFetching, refetch } = useAllProjects();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ProjectFullDto | null>(null);
+  // Deep-link from a KPI tile elsewhere (e.g. Project Dashboard's Active/On Hold/Completed
+  // tiles) — `?status=` seeds the same filter the on-page dropdown offers.
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') ?? '');
   const [leadFilter, setLeadFilter] = useState('');
   const [pmFilter, setPmFilter] = useState('');
 

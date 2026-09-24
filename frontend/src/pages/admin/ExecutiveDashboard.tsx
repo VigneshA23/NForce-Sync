@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   Users, ClipboardList, AlertTriangle, Gauge, TrendingUp, TrendingDown, RefreshCw,
 } from 'lucide-react';
@@ -7,7 +8,7 @@ import {
   PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { Card, KpiCard } from '../../components/KpiCard';
+import { Card, KpiCard, ClickableKpi } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { DatePicker } from '../../components/DatePicker';
 import { HeroBanner } from '../../components/dashboard/HeroBanner';
@@ -156,6 +157,7 @@ function UtilList({ title, rows, accent }: { title: string; rows: EmployeeUtiliz
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ExecutiveDashboard() {
+  const navigate = useNavigate();
   const [from, setFrom] = useState(firstOfMonthISO());
   const [to, setTo] = useState(todayISO());
   const [dateError, setDateError] = useState<string | null>(null);
@@ -250,12 +252,24 @@ export default function ExecutiveDashboard() {
               CEO-facing summary that shouldn't repeat the same numbers as both a tile and a
               chart. */}
           <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16, marginBottom: 16 }}>
-            <KpiCard icon={<ClipboardList size={18} />} label="EOD Compliance" value={fmtPct(data.eodCompliance.compliancePct)} accent="var(--info)" />
-            <KpiCard icon={<AlertTriangle size={18} />} label="Missing EODs" value={data.eodCompliance.missing} accent="var(--risk)" />
-            <KpiCard icon={<Gauge size={18} />} label="Overall Utilization" value={fmtPct(data.utilization.overallUtilizationPct)} accent="var(--info)" />
-            <KpiCard icon={<TrendingDown size={18} />} label="Under-utilized" value={data.utilization.underutilizedCount} accent="var(--warn)" />
-            <KpiCard icon={<TrendingUp size={18} />} label="Over-utilized" value={data.utilization.overloadedCount} accent="var(--risk)" />
-            <KpiCard icon={<Users size={18} />} label="Unallocated Resources" value={data.allocation.resourcesWithNoActiveAllocation} accent="var(--txt-dim)" />
+            <ClickableKpi onClick={() => navigate('/admin/reportee/pm/eod?tab=missing')}>
+              <KpiCard icon={<ClipboardList size={18} />} label="EOD Compliance" value={fmtPct(data.eodCompliance.compliancePct)} accent="var(--info)" />
+            </ClickableKpi>
+            <ClickableKpi onClick={() => navigate('/admin/reportee/pm/eod?tab=missing')}>
+              <KpiCard icon={<AlertTriangle size={18} />} label="Missing EODs" value={data.eodCompliance.missing} accent="var(--risk)" />
+            </ClickableKpi>
+            <ClickableKpi onClick={() => navigate('/admin/reportee/pm/utilization')}>
+              <KpiCard icon={<Gauge size={18} />} label="Overall Utilization" value={fmtPct(data.utilization.overallUtilizationPct)} accent="var(--info)" />
+            </ClickableKpi>
+            <ClickableKpi onClick={() => navigate('/admin/reportee/pm/utilization?status=under')}>
+              <KpiCard icon={<TrendingDown size={18} />} label="Under-utilized" value={data.utilization.underutilizedCount} accent="var(--warn)" />
+            </ClickableKpi>
+            <ClickableKpi onClick={() => navigate('/admin/reportee/pm/utilization?status=over')}>
+              <KpiCard icon={<TrendingUp size={18} />} label="Over-utilized" value={data.utilization.overloadedCount} accent="var(--risk)" />
+            </ClickableKpi>
+            <ClickableKpi onClick={() => navigate(`/admin/unallocated-resources?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)}>
+              <KpiCard icon={<Users size={18} />} label="Unallocated Resources" value={data.allocation.resourcesWithNoActiveAllocation} accent="var(--txt-dim)" />
+            </ClickableKpi>
           </div>
 
           {/* Workforce Overview / Project Portfolio */}
@@ -356,12 +370,16 @@ export default function ExecutiveDashboard() {
             {data.projectsRequiringAttention.length === 0 ? (
               <EmptyNote>No projects currently require attention.</EmptyNote>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
+              <div style={{ overflow: 'auto', maxHeight: 448 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--line)' }}>
                       {['Project', 'Project Manager', 'Status', 'Metric', 'Reason'].map(h => (
-                        <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--txt-dim)', fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                        <th key={h} style={{
+                          textAlign: 'left', padding: '6px 10px', color: 'var(--txt-dim)', fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em',
+                          // Stays visible while the capped table body scrolls past it.
+                          position: 'sticky', top: 0, zIndex: 1, background: 'var(--panel)',
+                        }}>{h}</th>
                       ))}
                     </tr>
                   </thead>

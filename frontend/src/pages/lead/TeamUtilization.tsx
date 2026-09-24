@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Search, ChevronDown, ChevronRight, Download, Calendar,
@@ -557,7 +558,16 @@ type SortMode = 'util-desc' | 'util-asc' | 'name-asc';
 /** Rows shown before collapsing behind "View all members". */
 const MEMBER_LIST_CAP = 8;
 
+// Deep-link from a KPI tile elsewhere (e.g. Team Dashboard's "Over-allocated" tile) —
+// `?status=under`/`?status=over` seeds the same filter the on-page dropdown offers.
+function initialStatusFromUrl(raw: string | null): StatusFilter {
+  if (raw === 'under') return 'UNDERUTILIZED';
+  if (raw === 'over') return 'OVERALLOCATED';
+  return 'ALL';
+}
+
 export default function TeamUtilization() {
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const isSuperAdmin = user!.role === 'superadmin';
   // Super Admin-only "view as Team Lead" scope (Reportee Views enhancement) — always null for
@@ -569,7 +579,7 @@ export default function TeamUtilization() {
   const [dateISO, setDateISO] = useState(todayISO);
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState<ProjectFilter>('ALL');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => initialStatusFromUrl(searchParams.get('status')));
   const [sort, setSort] = useState<SortMode>('util-desc');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showAllMembers, setShowAllMembers] = useState(false);

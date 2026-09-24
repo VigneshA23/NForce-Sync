@@ -68,10 +68,18 @@ export interface ProjectAllocationDto {
   allocationPctTotal: number;
 }
 
+export interface UnallocatedResourceDto {
+  employeeId: number;
+  employeeName: string;
+  employeeCode: string;
+  role: string;
+}
+
 export interface AllocationOverviewDto {
   totalAllocatedResources: number;
   resourcesWithNoActiveAllocation: number;
   byProject: ProjectAllocationDto[];
+  unallocatedResources: UnallocatedResourceDto[];
 }
 
 export interface ProjectAttentionDto {

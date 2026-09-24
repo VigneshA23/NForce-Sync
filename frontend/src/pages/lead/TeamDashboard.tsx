@@ -21,7 +21,7 @@ import {
 } from '../../api/teamLead';
 import { ReporteeScopePicker } from '../../components/ReporteeScopePicker';
 import { GlobalLoader } from '../../components/GlobalLoader';
-import { Card, KpiCard } from '../../components/KpiCard';
+import { Card, KpiCard, ClickableKpi } from '../../components/KpiCard';
 import { HeroBanner } from '../../components/dashboard/HeroBanner';
 
 // ── status config ──────────────────────────────────────────────────────────────
@@ -744,38 +744,48 @@ export default function TeamDashboard() {
 
       {/* KPI tiles — own full-width row below the hero/quick-actions row. */}
       <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <KpiCard
-            icon={<Gauge size={18} />} accent="var(--warn)" label="Team Utilization" value={avgUtilLabel}
-            trend={utilDelta === null ? undefined : {
-              label: `${utilDelta >= 0 ? '+' : ''}${utilDelta} pts vs yesterday`,
-              positive: utilDelta >= 0,
-            }}
-          />
-          <KpiCard
-            icon={<ClipboardCheck size={18} />} accent="var(--warn)" label="Submitted Today" value={submittedTodayValue}
-            trend={{ label: `${summary.missingCount} missing`, positive: summary.missingCount === 0 }}
-          />
-          <KpiCard
-            icon={<Hourglass size={18} />} accent="var(--risk)" label="Pending Approval" value={pendingApprovalsCount}
-            trend={pendingDelta === null ? undefined : {
-              label: `${pendingDelta >= 0 ? '+' : ''}${pendingDelta} vs yesterday`,
-              positive: pendingDelta <= 0,
-            }}
-          />
-          <KpiCard
-            icon={<Scale size={18} />} accent="var(--ok)" label="Over-allocated" value={summary.overloadedCount}
-            trend={{
-              label: topOverloaded ? `${topOverloaded.fullName.split(' ')[0]} ${fmtPct(topOverloaded.utilizationPct)}` : 'None',
-              positive: !topOverloaded,
-            }}
-          />
-          <KpiCard
-            icon={<Ban size={18} />} accent="var(--info)" label="Open Blockers" value={blockers ? blockers.length : summary.activeBlockersCount}
-            trend={blockersDelta === null ? undefined : {
-              label: `${blockersDelta >= 0 ? '+' : ''}${blockersDelta} vs yesterday`,
-              positive: blockersDelta <= 0,
-            }}
-          />
+          <ClickableKpi onClick={() => navigate('/team/utilization')}>
+            <KpiCard
+              icon={<Gauge size={18} />} accent="var(--warn)" label="Team Utilization" value={avgUtilLabel}
+              trend={utilDelta === null ? undefined : {
+                label: `${utilDelta >= 0 ? '+' : ''}${utilDelta} pts vs yesterday`,
+                positive: utilDelta >= 0,
+              }}
+            />
+          </ClickableKpi>
+          <ClickableKpi onClick={() => navigate('/team/eod-inbox')}>
+            <KpiCard
+              icon={<ClipboardCheck size={18} />} accent="var(--warn)" label="Submitted Today" value={submittedTodayValue}
+              trend={{ label: `${summary.missingCount} missing`, positive: summary.missingCount === 0 }}
+            />
+          </ClickableKpi>
+          <ClickableKpi onClick={() => navigate('/team/approvals')}>
+            <KpiCard
+              icon={<Hourglass size={18} />} accent="var(--risk)" label="Pending Approval" value={pendingApprovalsCount}
+              trend={pendingDelta === null ? undefined : {
+                label: `${pendingDelta >= 0 ? '+' : ''}${pendingDelta} vs yesterday`,
+                positive: pendingDelta <= 0,
+              }}
+            />
+          </ClickableKpi>
+          <ClickableKpi onClick={() => navigate('/team/utilization?status=over')}>
+            <KpiCard
+              icon={<Scale size={18} />} accent="var(--ok)" label="Over-allocated" value={summary.overloadedCount}
+              trend={{
+                label: topOverloaded ? `${topOverloaded.fullName.split(' ')[0]} ${fmtPct(topOverloaded.utilizationPct)}` : 'None',
+                positive: !topOverloaded,
+              }}
+            />
+          </ClickableKpi>
+          <ClickableKpi onClick={() => navigate('/team/blockers')}>
+            <KpiCard
+              icon={<Ban size={18} />} accent="var(--info)" label="Open Blockers" value={blockers ? blockers.length : summary.activeBlockersCount}
+              trend={blockersDelta === null ? undefined : {
+                label: `${blockersDelta >= 0 ? '+' : ''}${blockersDelta} vs yesterday`,
+                positive: blockersDelta <= 0,
+              }}
+            />
+          </ClickableKpi>
       </div>
 
       {/* Mid section: Team Status table + right stack */}

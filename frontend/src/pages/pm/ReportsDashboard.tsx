@@ -1,11 +1,19 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import EodByEmployeeReport from './EodByEmployeeReport';
 import MissingEodReport from './MissingEodReport';
 
 export type Tab = 'eod' | 'missing';
 
+function isTab(v: string | null): v is Tab {
+  return v === 'eod' || v === 'missing';
+}
+
 export default function ReportsDashboard({ initialTab }: { initialTab?: Tab } = {}) {
-  const [tab, setTab] = useState<Tab>(initialTab ?? 'eod');
+  // `?tab=` lets a KPI tile elsewhere (e.g. Executive Dashboard's EOD Compliance/Missing EODs)
+  // deep-link straight to a tab — falls back to the explicit prop, then 'eod'.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(initialTab ?? (isTab(searchParams.get('tab')) ? searchParams.get('tab') as Tab : 'eod'));
 
   return (
     <div>

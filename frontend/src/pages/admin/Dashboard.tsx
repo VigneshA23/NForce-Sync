@@ -7,36 +7,10 @@ import { toRole } from '../../api/auth';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 import { describeAuditEvent, formatRelative, AUDIT_CATEGORY_ICONS, AUDIT_CATEGORY_LABELS } from '../../lib/auditLog';
 import { GlobalLoader } from '../../components/GlobalLoader';
-import { Card, KpiCard } from '../../components/KpiCard';
+import { Card, KpiCard, ClickableKpi } from '../../components/KpiCard';
 import { HeroBanner } from '../../components/dashboard/HeroBanner';
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
-
-// A thin clickable wrapper around the shared KpiCard — preserves the KPI tiles'
-// click-to-filter navigation (e.g. straight into Users pre-filtered by status)
-// without forking the shared component just to add an onClick prop it doesn't need
-// anywhere else.
-function ClickableKpi({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
-  const [hover, setHover] = useState(false);
-  return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
-      style={{
-        cursor: 'pointer',
-        borderRadius: 10,
-        transition: 'transform 0.14s',
-        transform: hover ? 'translateY(-2px)' : undefined,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
 
 // ── Role bar ──────────────────────────────────────────────────────────────────
 

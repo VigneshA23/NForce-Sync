@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   FolderKanban, CheckCircle2, PauseCircle, Archive, Gauge,
@@ -8,7 +9,7 @@ import {
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
-import { KpiCard } from '../../components/KpiCard';
+import { KpiCard, ClickableKpi } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { HeroBanner } from '../../components/dashboard/HeroBanner';
 import { useIsPhone } from '../../lib/useMediaQuery';
@@ -907,6 +908,7 @@ function MissingEodTable({ rows }: { rows: MissingEodRowDto[] }) {
 // ── main page ──────────────────────────────────────────────────────────────────
 
 export default function ProjectDashboard() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const isSuperAdmin = user!.role === 'superadmin';
   // Recharts measures axis width in JS, so this one can't be done in CSS.
@@ -980,12 +982,24 @@ export default function ProjectDashboard() {
         <>
       {/* Summary cards — full-width row */}
       <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 20 }}>
-        <KpiCard icon={<FolderKanban size={17} aria-hidden="true" />} label="Total Projects" value={cards.totalAssignedProjects} />
-        <KpiCard icon={<CheckCircle2 size={17} aria-hidden="true" />} label="Active" value={cards.activeProjects} accent="var(--ok)" />
-        <KpiCard icon={<PauseCircle size={17} aria-hidden="true" />} label="On Hold" value={cards.onHoldProjects} accent="var(--warn)" />
-        <KpiCard icon={<Archive size={17} aria-hidden="true" />} label="Completed" value={cards.completedProjects} accent="var(--info)" />
-        <KpiCard icon={<AlertTriangle size={17} aria-hidden="true" />} label="Missing EOD" value={cards.missingEodCount} accent={cards.missingEodCount > 0 ? 'var(--risk)' : 'var(--txt)'} />
-        <KpiCard icon={<Gauge size={17} aria-hidden="true" />} label="Overall Utilization" value={fmtPct(cards.overallUtilizationPct)} accent={utilColor(cards.overallUtilizationPct)} />
+        <ClickableKpi onClick={() => navigate('/projects')}>
+          <KpiCard icon={<FolderKanban size={17} aria-hidden="true" />} label="Total Projects" value={cards.totalAssignedProjects} />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate('/projects?status=ACTIVE')}>
+          <KpiCard icon={<CheckCircle2 size={17} aria-hidden="true" />} label="Active" value={cards.activeProjects} accent="var(--ok)" />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate('/projects?status=ON_HOLD')}>
+          <KpiCard icon={<PauseCircle size={17} aria-hidden="true" />} label="On Hold" value={cards.onHoldProjects} accent="var(--warn)" />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate('/projects?status=COMPLETED')}>
+          <KpiCard icon={<Archive size={17} aria-hidden="true" />} label="Completed" value={cards.completedProjects} accent="var(--info)" />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate('/projects/reports?tab=missing')}>
+          <KpiCard icon={<AlertTriangle size={17} aria-hidden="true" />} label="Missing EOD" value={cards.missingEodCount} accent={cards.missingEodCount > 0 ? 'var(--risk)' : 'var(--txt)'} />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate('/projects/utilization')}>
+          <KpiCard icon={<Gauge size={17} aria-hidden="true" />} label="Overall Utilization" value={fmtPct(cards.overallUtilizationPct)} accent={utilColor(cards.overallUtilizationPct)} />
+        </ClickableKpi>
       </div>
 
       <Card style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
