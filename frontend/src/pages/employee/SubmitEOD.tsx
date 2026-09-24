@@ -1090,7 +1090,7 @@ export default function SubmitEOD() {
 
   if (loadingProjects || loadingCategories) {
     return (
-      <div style={{ maxWidth: 860 }}>
+      <div>
         <PageHeader selectedDate={selectedDate} onDateChange={handleDateChange} entryStatus={null} />
         <GlobalLoader fullScreen={false} label="Loading EOD form..." />
       </div>
@@ -1100,7 +1100,7 @@ export default function SubmitEOD() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ maxWidth: 860 }}>
+    <div>
       {/* Page header */}
       <PageHeader
         selectedDate={selectedDate}
