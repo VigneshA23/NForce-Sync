@@ -1,0 +1,134 @@
+knowledge:
+  - knowledgeId: page.user-management
+    type: PAGE
+    module: admin
+    pageId: user-management
+    version: 1
+    audience: [ADMIN]
+    title: User Management
+    synonyms:
+      - create a user
+      - add an employee
+      - deactivate a user
+      - reset someone's password
+    sources:
+      - backend/src/main/java/com/nforceone/sync/admin/UserController.java
+      - backend/src/main/java/com/nforceone/sync/admin/UserService.java
+    body: |
+      User Management lets an Admin create, edit, search, deactivate/reactivate and reset the
+      password of any Sync account. A new account needs a full name (letters and spaces only), a
+      company email ending in @nforceone.com, and an Employee ID in the format NF- followed by 8
+      digits. The role must be one an Admin is allowed to assign: Employee, Team Lead, Project
+      Manager, Admin or Super Admin (a small number of legacy roles exist on older accounts but
+      can't be newly assigned here).
+
+      Every creatable role except Super Admin requires a reporting manager, and that manager must
+      themselves hold the next role up the chain (an Employee's manager must be a Team Lead, a
+      Team Lead's manager must be a Project Manager, a Project Manager's or Admin's manager must
+      be a Super Admin) — Sync also blocks a circular reporting chain. Deactivating an account
+      blocks sign-in but keeps their history; you can't remove the last active Super Admin.
+      Resetting a password generates a temporary one, forces a change on next sign-in, and clears
+      any existing lockout.
+
+  - knowledgeId: page.org-masters
+    type: PAGE
+    module: admin
+    pageId: org-masters
+    version: 1
+    audience: [ADMIN, SUPERADMIN]
+    title: Organization Masters
+    synonyms:
+      - add a department
+      - add a designation
+      - add a location
+      - project type master
+    sources:
+      - backend/src/main/java/com/nforceone/sync/org/OrgController.java
+      - backend/src/main/java/com/nforceone/sync/org/OrgService.java
+    body: |
+      Organization Masters manages the reference data other parts of Sync depend on: departments,
+      designations, locations and project types. Any signed-in user can view these lists; only
+      Admin or Super Admin can add, edit or deactivate an entry. A master record already in use
+      (e.g. a department with employees assigned to it) can't be deleted — you'd need to
+      reassign what depends on it first.
+
+  - knowledgeId: page.business-rules
+    type: PAGE
+    module: admin
+    pageId: business-rules
+    version: 1
+    audience: [ADMIN, SUPERADMIN]
+    title: Business Rules
+    synonyms:
+      - working hours setting
+      - monthly time adjustment budget
+      - account lockout settings
+      - shift definitions
+      - holiday calendar setup
+    sources:
+      - backend/src/main/java/com/nforceone/sync/businessrules/BusinessRuleController.java
+      - backend/src/main/java/com/nforceone/sync/businessrules/BusinessRuleConfig.java
+    body: |
+      Business Rules, for Admin and Super Admin, configures the organization-wide values other
+      features rely on: the standard working hours per day, which days count as the weekend, the
+      escalation SLA hours for unactioned approvals, account lockout attempt threshold and
+      duration, utilization under/over-utilized thresholds, the shared monthly time-adjustment
+      minutes budget, plus shift definitions and the holiday calendar. Changes here are
+      forward-looking only — they don't rewrite already-submitted EOD entries or past
+      calculations.
+
+  - knowledgeId: page.roles-access
+    type: PAGE
+    module: admin
+    pageId: roles-access
+    version: 1
+    audience: [ADMIN]
+    title: Roles & Access
+    synonyms:
+      - what roles exist
+      - role permissions reference
+    sources:
+      - backend/src/main/java/com/nforceone/sync/admin/RolesController.java
+    body: |
+      Roles & Access is a reference page listing Sync's roles and a short description of each —
+      Employee, Team Lead, Admin, Super Admin, Project Manager, Delivery Manager, Finance and
+      Leadership. It's informational; role assignment itself happens on a user's account in User
+      Management.
+
+  - knowledgeId: page.audit-log
+    type: PAGE
+    module: admin
+    pageId: audit-log
+    version: 1
+    audience: [ADMIN]
+    title: Audit Log
+    synonyms:
+      - who changed this
+      - admin activity log
+      - audit trail
+    sources:
+      - backend/src/main/java/com/nforceone/sync/admin/AuditLogController.java
+    body: |
+      Audit Log is a searchable record of administrative actions: user creation and edits, role
+      or status changes, password resets, and EOD approve/reject decisions — each with the actor,
+      what changed, and when. It can be filtered by entity type, action, actor, date range and
+      more, and shows a KPI strip summarizing recent activity by action type.
+
+  - knowledgeId: page.reportee-pm-views
+    type: PAGE
+    module: admin
+    pageId: reportee-pm-projects
+    version: 1
+    audience: [SUPERADMIN]
+    title: Reportee PM views
+    synonyms:
+      - view a project manager's projects
+      - see a pm's team eod
+      - pm reportee utilization
+    sources:
+      - backend/src/main/java/com/nforceone/sync/project/AllocationService.java
+    body: |
+      The Reportee PM views let a Super Admin look into a specific Project Manager's world
+      read-only: their projects and allocations, their team's EOD activity, and their team's
+      utilization — the same data that Project Manager sees for their own portfolio, viewed from
+      an oversight role rather than acted on directly here.

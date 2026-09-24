@@ -1,0 +1,91 @@
+knowledge:
+  - knowledgeId: page.dashboard.employee
+    type: PAGE
+    module: dashboard
+    pageId: dashboard
+    version: 1
+    audience: [EMPLOYEE]
+    title: My Dashboard (Employee)
+    synonyms:
+      - my home page
+      - employee dashboard
+    sources:
+      - backend/src/main/java/com/nforceone/sync/employee/EmployeeService.java
+    body: |
+      My Dashboard is the employee landing page. It shows: today's submission status and cutoff
+      (whether you've logged today and when the deadline is), quick stats (approved hours this
+      week, this month's average utilization, a submission streak, days since your last blocked
+      task), your currently blocked tasks, your most recent EOD entries, and a monthly activity
+      calendar.
+
+  - knowledgeId: page.dashboard.manager
+    type: PAGE
+    module: dashboard
+    pageId: dashboard
+    version: 1
+    audience: [MANAGER]
+    title: Team Dashboard (Team Lead)
+    synonyms:
+      - team lead dashboard
+      - my team's status
+    sources:
+      - backend/src/main/java/com/nforceone/sync/teamlead/TeamLeadService.java
+    body: |
+      Team Dashboard is the Team Lead's overview of their direct reports: how many are active, on
+      leave, missing an entry, or pending approval today; average team utilization; how many are
+      under- or over-utilized against configured thresholds; active blocker count; and a
+      day-by-day trend. It also lets you drill into any one team member's recent activity. A
+      Super Admin can view this scoped to a specific Team Lead.
+
+  - knowledgeId: page.dashboard.pm
+    type: PAGE
+    module: dashboard
+    pageId: dashboard
+    version: 1
+    audience: [PM]
+    title: Project Dashboard (Project Manager)
+    synonyms:
+      - project manager dashboard
+      - my projects overview
+    sources:
+      - backend/src/main/java/com/nforceone/sync/projectdashboard/ProjectDashboardService.java
+    body: |
+      Project Dashboard summarizes the Project Manager's own projects: counts by status (active,
+      on hold, completed), overall and planned-vs-actual utilization, missing-EOD counts, a
+      resource utilization breakdown, task-category breakdown, and a utilization trend — all
+      scoped to projects this PM actually oversees.
+
+  - knowledgeId: page.dashboard.admin
+    type: PAGE
+    module: dashboard
+    pageId: dashboard
+    version: 1
+    audience: [ADMIN]
+    title: Admin Dashboard
+    synonyms:
+      - admin home page
+    sources:
+      - backend/src/main/java/com/nforceone/sync/admin/AdminStatsController.java
+    body: |
+      Admin Dashboard is the landing page for user and organization administration: total users
+      and how many are active/inactive, a breakdown of users by role, and a feed of recent
+      administrative activity (excluding routine EOD events).
+
+  - knowledgeId: page.dashboard.executive
+    type: PAGE
+    module: dashboard
+    pageId: dashboard
+    version: 1
+    audience: [SUPERADMIN]
+    title: Executive Dashboard (Super Admin)
+    synonyms:
+      - executive dashboard
+      - organization wide overview
+    sources:
+      - backend/src/main/java/com/nforceone/sync/executive/ExecutiveDashboardService.java
+    body: |
+      Executive Dashboard is organization-wide, for Super Admin only: workforce counts by role,
+      project counts by status, EOD compliance (expected vs. submitted vs. missing, with a
+      trend), utilization (overall percentage, who's under- or over-utilized, top and bottom
+      performers), allocation coverage by project, projects needing attention, and a recent
+      activity feed. It is read-only — no user-administration actions happen from here.

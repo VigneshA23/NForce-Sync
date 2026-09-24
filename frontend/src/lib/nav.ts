@@ -276,7 +276,7 @@ export const NAV: Record<Role, RoleNav> = {
         { key: 'org-masters',    label: 'Organization Masters', path: '/admin/org-masters',  icon: Building2 },
         { key: 'business-rules', label: 'Business Rules',       path: '/admin/rules',        icon: Settings },
         { key: 'integrations',   label: 'Integrations',     path: '/admin/integrations', icon: Plug, phase: 2 },
-        { key: 'ai-settings',    label: 'AI & Automation',  path: '/admin/ai',           icon: Bot, phase: 3 },
+        { key: 'ai-settings',    label: 'AI & Automation',  path: '/admin/ai',           icon: Bot },
       ],
     },
     {

@@ -1,0 +1,92 @@
+knowledge:
+  - knowledgeId: workflow.eod.approval-lifecycle
+    type: WORKFLOW
+    module: approvals
+    workflowId: eod.approval
+    version: 1
+    audience: [EMPLOYEE, MANAGER, PM, SUPERADMIN]
+    title: How an EOD entry gets approved
+    synonyms:
+      - who approves my eod
+      - eod approval process
+      - what happens after i submit
+    sources:
+      - backend/src/main/java/com/nforceone/sync/approval/ApprovalService.java
+      - backend/src/main/java/com/nforceone/sync/eod/EodEntry.java
+    body: |
+      Once an entry is Submitted, it can only move to Approved or Rejected — there is no
+      in-between "changes requested" status; a reject already puts it back in an editable state,
+      which covers that need.
+
+      Who can act on it: the employee's Team Lead — specifically, whoever was their manager at
+      the moment they first submitted, which is locked in even if their manager later changes —
+      or the Project Manager of any project one of the entry's tasks touches, or a Super Admin.
+      Anyone else gets a permission error.
+
+      If the entry has an open clarification thread, it cannot be approved or rejected until that
+      thread is resolved. Rejecting requires a comment explaining why; approving does not.
+
+      Approving is what triggers a utilization recalculation for that day — rejecting does not
+      recompute anything, since the hours were never accepted. A reviewer can also approve
+      several submitted entries at once from a batch action; any entry in that batch that isn't
+      actually still Submitted (already decided, or blocked by an open clarification) is simply
+      skipped rather than failing the whole batch.
+
+      An entry more than a configured number of hours old (default 48) with no manager action is
+      flagged as escalated, so it doesn't sit unnoticed.
+
+  - knowledgeId: action.approvals.review
+    type: ACTION
+    module: approvals
+    pageId: approvals
+    actionId: approvals.review
+    version: 1
+    audience: [MANAGER, PM]
+    title: Reviewing pending approvals
+    synonyms:
+      - see pending approvals
+      - approve an eod
+      - reject an eod
+      - how many approvals are pending
+    sources:
+      - backend/src/main/java/com/nforceone/sync/approval/ApprovalService.java
+      - backend/src/main/java/com/nforceone/sync/approval/ApprovalController.java
+    body: |
+      The Approvals page lists submitted entries waiting on you. A Team Lead sees their direct
+      reports' entries; a Project Manager sees every entry touching any of their projects,
+      regardless of who submitted it or who their manager is. A Super Admin sees everything
+      organization-wide, and can narrow the view to a specific Team Lead or Project Manager.
+
+      Each row shows the entry along with useful context: whether it's overdue/escalated, how
+      many hours under the expected total it logged (a Working Day only), whether this is a
+      resubmission after an earlier rejection, and — once decided — who decided it and when. You
+      can approve or reject individually, or select several submitted entries and batch-approve
+      them at once. Rejecting always requires a short comment; approving does not.
+
+      Approval history (past decisions) is scoped the same way for a Team Lead — only entries
+      they personally decided — but a Project Manager's history shows every decided entry on
+      their projects, whether they or the employee's Team Lead made the call.
+
+  - knowledgeId: action.eod.history-visibility
+    type: ACTION
+    module: approvals
+    actionId: eod.history-visibility
+    version: 1
+    audience: [EMPLOYEE, MANAGER, PM, SUPERADMIN]
+    title: Who can see an entry's approval history
+    synonyms:
+      - why was my eod rejected
+      - see approval history for an entry
+      - who rejected my entry
+    sources:
+      - backend/src/main/java/com/nforceone/sync/approval/ApprovalService.java
+      - backend/src/main/java/com/nforceone/sync/approval/ApprovalController.java
+    body: |
+      The detailed approve/reject history for a specific EOD entry — including who decided it and
+      exactly when — is only visible to that entry's Team Lead, a Project Manager on one of its
+      projects, or a Super Admin, the same people who could act on it. An employee viewing their
+      own entry does not get that same history detail. What they do see, right on the entry
+      itself, is the reviewer's comment when it was rejected — so the reason for a rejection is
+      visible to the employee, even though who specifically rejected it and the exact decision
+      timestamp are not shown on their own view. They're also notified when their entry is
+      rejected.

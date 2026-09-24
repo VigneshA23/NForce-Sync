@@ -1,0 +1,33 @@
+knowledge:
+  - knowledgeId: error.approvals.validation
+    type: ERROR
+    module: approvals
+    version: 1
+    audience: [MANAGER, PM, SUPERADMIN]
+    title: Approval action errors
+    synonyms:
+      - why can't I approve this
+      - why can't I reject this
+      - approval error
+    sources:
+      - backend/src/main/java/com/nforceone/sync/approval/ApprovalService.java
+      - backend/src/main/java/com/nforceone/sync/approval/dto/RejectRequest.java
+      - backend/src/main/java/com/nforceone/sync/approval/dto/BatchApproveRequest.java
+    errorMessages:
+      - "Entry must be in SUBMITTED status; current: {status}"
+      - "Only the employee's direct manager or a project manager on this entry can perform this action"
+      - "This entry has an open clarification and cannot be approved or rejected until it is resolved"
+      - "Comment is required when rejecting"
+      - "At least one entry ID is required"
+      - "from and to must both be supplied, or both omitted"
+    body: |
+      Common reasons an approve or reject action is refused:
+      - The entry isn't currently Submitted (it may already be decided, or still a draft) — you
+        can only act on a Submitted entry.
+      - You aren't authorized for this specific entry — only the employee's Team Lead (as of when
+        they submitted), a Project Manager on one of the entry's projects, or a Super Admin can
+        act on it.
+      - The entry has an open clarification thread — resolve that first before approving or
+        rejecting.
+      - Rejecting without a comment — a comment explaining why is always required to reject.
+      - Batch-approving with no entries selected.

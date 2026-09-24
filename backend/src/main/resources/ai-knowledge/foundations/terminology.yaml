@@ -1,0 +1,128 @@
+knowledge:
+  - knowledgeId: term.eod
+    type: TERM
+    module: eod
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: "EOD terminology"
+    synonyms:
+      - end of day
+      - daily update
+      - daily status
+      - daily entry
+      - timesheet
+      - my day
+    body: |
+      "EOD" stands for End of Day. In Sync it means the daily record of what an employee worked
+      on: tasks, hours, day type and work location. People also call this a "daily update",
+      "daily status", "daily entry", or sometimes loosely a "timesheet" — they all mean the same
+      EOD entry feature. "Submit my EOD" means the same as "send my daily update" or "log today's
+      work". "My EOD history" means the same as "my past EODs" or "my previous entries".
+
+  - knowledgeId: term.manager-ambiguity
+    type: TERM
+    module: roles
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: "\"Manager\" is ambiguous — Team Lead vs Project Manager"
+    synonyms:
+      - who is my manager
+      - my manager
+      - who approves my eod
+    body: |
+      The word "manager" is ambiguous in Sync and must not be assumed. There are two distinct
+      roles that both get called "manager" in everyday speech:
+      - Team Lead (backend role MANAGER): the employee's direct reporting manager, set on their
+        user record. A Team Lead approves their direct reports' EODs and sees a team dashboard.
+      - Project Manager (PM): owns one or more projects and can also approve EOD entries that
+        touch those projects, independently of who the employee's Team Lead is.
+      An employee's EOD can be approved by either their Team Lead or a Project Manager on one of
+      the projects the entry touches, or by a Super Admin. When a question uses the word
+      "manager" without more context, prefer explaining the Team Lead meaning (the direct
+      reporting manager) since that is the everyday sense of the word, but mention that a Project
+      Manager can also approve when the question is specifically about EOD approval.
+
+  - knowledgeId: term.blocker
+    type: TERM
+    module: blockers
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: "Blocker terminology"
+    synonyms:
+      - issue
+      - impediment
+      - stuck
+      - what's blocking me
+    body: |
+      A "blocker" in Sync is a task on an EOD entry marked with status Blocked, together with a
+      required reason explaining what's blocking it. People also say "issue" or "impediment" to
+      mean the same thing. A blocker is visible to the employee's Team Lead and, if the task's
+      project has one, that project's Project Manager, who can reply to or resolve it.
+
+  - knowledgeId: term.utilization
+    type: TERM
+    module: utilization
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: "Utilization terminology"
+    synonyms:
+      - utilization percentage
+      - productive utilization
+      - my util
+      - how utilized am i
+    body: |
+      "Utilization" (sometimes "utilization percentage" or "productive utilization") means the
+      share of an employee's available working time that went to approved, productive task hours,
+      calculated from their approved EOD entries. It is calculated per day and can be viewed over
+      a date range. It is not the same as hours logged — only APPROVED hours count, and only
+      categories marked productive contribute to the productive portion.
+
+  - knowledgeId: term.allocation
+    type: TERM
+    module: projects
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: "Allocation terminology"
+    synonyms:
+      - assign to project
+      - project assignment
+      - staffing
+    body: |
+      "Allocation" (also "assigning someone to a project" or "staffing") means giving an employee
+      a percentage share of their time on a specific project for a date range. It is set up by
+      that project's Project Manager on the Projects & Allocation page. An employee can be
+      allocated to more than one project at once, but a Project Manager cannot allocate someone
+      past 100% of their time across overlapping date ranges.
+
+  - knowledgeId: term.overtime
+    type: TERM
+    module: eod
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: "Overtime (OT) terminology"
+    synonyms:
+      - OT
+      - extra hours
+      - worked late
+    body: |
+      "Overtime" or "OT" refers to hours logged on an EOD entry beyond the expected hours for
+      that day. It is calculated automatically from the entry's logged hours and flagged for the
+      reviewer — it never blocks or reduces a submission. Logging more hours than expected is
+      never an error.
+
+  - knowledgeId: term.missing-eod
+    type: TERM
+    module: eod
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: "\"Missing EOD\" terminology"
+    synonyms:
+      - missed eod
+      - forgot to submit
+      - didn't log my day
+    body: |
+      A "missing EOD" (shown with status Missing in some views) is a past working day that has no
+      EOD entry at all — the employee never created one, not even a draft. This is not a status
+      stored on a real entry; it is generated on the fly by looking at recent working days with
+      no matching entry, so it only shows up in history and reporting views, never as something
+      you can open and edit directly. To resolve it, submit a new EOD entry for that date.

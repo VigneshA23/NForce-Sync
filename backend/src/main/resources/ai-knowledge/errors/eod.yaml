@@ -1,0 +1,65 @@
+knowledge:
+  - knowledgeId: error.eod.submission-validation
+    type: ERROR
+    module: eod
+    pageId: eod-submit
+    version: 1
+    audience: [EMPLOYEE, MANAGER]
+    title: EOD submission validation errors
+    synonyms:
+      - why won't my eod submit
+      - eod submission error
+      - can't submit eod
+    sources:
+      - backend/src/main/java/com/nforceone/sync/eod/EodService.java
+    errorMessages:
+      - "Cannot log an EOD entry for a future date"
+      - "Entry in status {status} cannot be edited"
+      - "Entry in status {status} cannot be submitted"
+      - "Cannot submit another employee's EOD entry"
+      - "At least one task row is required for a working day."
+      - "Work location is required."
+      - "Next-day plan is required."
+      - "All tasks must have a category assigned"
+      - "All tasks must have a project assigned"
+      - "All tasks must have a status assigned"
+      - "Row #{n}: Leave rows cannot have a project set."
+      - "All tasks must have a non-negative hours value"
+      - "Blocked tasks must include a blocker reason"
+      - "Minimum {hours} hours required for {First Half Leave|Second Half Leave} — you've logged {hours} hours."
+      - "Total hours ({hours}) must be at least 2 for a single day."
+      - "Total hours ({hours}) cannot exceed 24 for a single day."
+    body: |
+      When submit is refused, it's almost always one of: the date is in the future; the entry
+      isn't actually editable anymore (it's already Submitted or Approved); a Working Day has no
+      task rows; a task is missing its category, project, or status; a Blocked task has no
+      blocker reason; a Leave row has a project set (it shouldn't); or the total logged hours for
+      the day fall outside what's allowed for that day type — at least 2 hours for a Working Day
+      (or half the standard day for a Half Leave day), and never more than 24 hours in a single
+      day. None of these apply on a Holiday, which skips this validation entirely.
+
+  - knowledgeId: error.eod.time-adjustment-validation
+    type: ERROR
+    module: eod
+    pageId: eod-submit
+    version: 1
+    audience: [EMPLOYEE, MANAGER]
+    title: Time adjustment validation errors
+    synonyms:
+      - why won't my time adjustment save
+      - time adjustment error
+    sources:
+      - backend/src/main/java/com/nforceone/sync/eod/EodService.java
+    errorMessages:
+      - "Select a time adjustment type (Late arrival, Intervening time-off, or Leaving early)."
+      - "Enter a valid duration for this time adjustment."
+      - "{Late arrival|Leaving early|Intervening time-off} must be between 30 minutes and 2 hours (got {n} minutes)."
+      - "A time adjustment needs an assigned shift. Contact your administrator."
+      - "Time adjustment minutes ({n}) cannot exceed the shift length ({n} minutes)."
+      - "{Late arrival|Leaving early|Intervening time-off} of {duration} exceeds your monthly time adjustment budget — {remaining} of {budget} left this month."
+    body: |
+      A time adjustment fails validation when: no type is picked but a duration is entered (or
+      vice versa); the duration is outside 30 minutes to 2 hours; you have no shift assigned, so
+      there's nothing to adjust against; the duration is longer than your actual shift; or using
+      it would put you over your shared monthly adjustment-minutes budget across all three
+      adjustment types combined. The exact remaining budget is shown in the error.

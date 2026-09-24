@@ -1,0 +1,67 @@
+knowledge:
+  - knowledgeId: foundation.overview
+    type: FOUNDATION
+    module: foundations
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: What NForce Sync is
+    synonyms:
+      - what is sync
+      - what is this app
+      - what does sync do
+    body: |
+      NForce Sync is an internal project and daily-work tracking application. Its center of
+      gravity is the EOD (End of Day) entry: every working day, each employee logs what they
+      worked on, and that record flows into project visibility, approvals, utilization
+      calculations and reporting for the rest of the organization.
+
+      The main things the application tracks:
+      - EOD entries: a daily record of tasks worked on, hours, day type and work location.
+      - Approvals: a Team Lead or Project Manager reviews and approves or rejects submitted EODs.
+      - Projects and allocation: which employees are assigned to which projects, and for what
+        percentage of their time.
+      - Utilization: how much of an employee's available time was spent on approved, productive
+        work, calculated from approved EOD hours.
+      - Blockers: obstacles an employee flags on a specific task, which their Team Lead or the
+        project's Project Manager can see and respond to.
+
+      Access to pages and data depends on the signed-in user's role. Some roles (Delivery
+      Manager, Finance Admin, Leadership Viewer) currently only have roadmap placeholder pages —
+      their real functionality has not shipped yet.
+
+  - knowledgeId: foundation.eod-cycle
+    type: FOUNDATION
+    module: eod
+    version: 1
+    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    title: The EOD lifecycle, end to end
+    synonyms:
+      - how does eod work
+      - eod workflow
+      - what happens after i submit my eod
+    body: |
+      An EOD entry moves through a small set of statuses: DRAFT, SUBMITTED, APPROVED, REJECTED.
+      A fifth status, MISSED, is never actually stored — it only appears when the system notices
+      a past working day has no entry at all, so it can be surfaced as "missing" in reports and
+      history.
+
+      The cycle:
+      1. The employee opens Submit EOD, picks a date and a day type, and fills in tasks (for a
+         Working Day) or leaves it minimal (Holiday, Weekend, Leave).
+      2. Saving without submitting keeps the entry in DRAFT. A draft can be edited freely and
+         re-saved as many times as needed.
+      3. Submitting moves the entry to SUBMITTED. From this point the entry is locked — the
+         employee cannot edit it further unless it is later rejected.
+      4. The employee's Team Lead (their direct manager) reviews it, or, if the entry touches a
+         project, that project's Project Manager may also act on it. They approve or reject.
+      5. APPROVED is final for that entry: utilization gets recalculated from it, and it stays
+         locked.
+      6. REJECTED sends it back to the employee, editable again, exactly like a DRAFT — they fix
+         it and submit again.
+      7. Before approving or rejecting, the reviewer can also open a clarification if something
+         is unclear. This does not change the EOD's own status; it is a separate back-and-forth
+         thread that must be resolved before the entry can be approved or rejected.
+
+      Only APPROVED hours ever count toward utilization. A submission is never rejected purely
+      for having too many or too few hours — extra hours beyond the expected amount are flagged
+      as overtime for the reviewer's information, not blocked.

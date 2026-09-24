@@ -5,7 +5,10 @@
 
 Spring Boot 4.1.0 (not 3.5 as originally planned — drifted during dependency additions, kept
 deliberately since auth was built and tested on it) · Java 17 · PostgreSQL 16 · Flyway owns
-schema · Hibernate (ddl-auto: validate)
+schema · Hibernate (ddl-auto: none — corrected 2026-09-24; this file previously said "validate",
+which is wrong and was never true in `application.yml`. Entity/DB drift does NOT stop the app
+booting — it fails at runtime instead, so the "down app looks like an API bug" gotcha below is
+about a DIFFERENT boot-time failure class, not schema drift)
 
 Spring Boot 4.1.0 brings:
 - Spring Security 7 — breaking API changes vs 6.x: DaoAuthenticationProvider requires
@@ -45,10 +48,19 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   `SchemaManagementException: missing column`. That's a skipped migration, not a code bug.
 - Flyway expands `${...}` as a placeholder EVEN INSIDE `--` comments — never put `${}` (e.g. a JS
   template literal) in a migration comment; it fails to parse before touching the DB.
+- Top version as of 2026-09-24 is **V95** (`ai_billing_settings`), applied directly to the shared
+  dev DB as part of the AI support assistant build — see `## AI Support Assistant` below. Re-run
+  the query above before adding the next migration; other branches may have moved past V95 since.
+- An earlier, uncommitted Cerebras-based assistant prototype had applied `assistant_conversation`,
+  `assistant_message` and `assistant_knowledge` out-of-band (V78–V81). **These are gone** — V91
+  dropped them. The AI assistant's real schema is the `ai_*` tables from V91–V95
+  (`docs/ai-assistant/architecture.md` has the full list). If you see `assistant_*` mentioned in
+  old notes or a stale IDE autocomplete, it no longer exists.
 
 ## Debugging gotchas
-- `ddl-auto: validate` → any entity/DB drift stops the app BOOTING (`wrong column type` /
-  `missing column`). Read the startup log first: a down app looks like an API bug.
+- `ddl-auto: none` → Hibernate does NOT check the schema at boot. Entity/DB drift (`wrong column
+  type` / `missing column`) fails at query time, not startup, and looks like a plain API bug.
+  Read the actual SQL exception, not the boot log, when a working endpoint suddenly 500s.
 - `{"error":"Unauthorized"}` is SecurityConfig's entry point, NOT necessarily an auth failure —
   a controller exception forwarded to `/error` surfaces this way. Genuine bad credentials return
   `{"error":"Invalid email or password"}`. Check the server log for the real exception.
@@ -193,6 +205,45 @@ com.nforceone.sync/
                      GET  /api/utilization/team/{managerId}?date=
   employee/        — Employee entity (pre-existing, legacy)
 ```
+
+## AI Support Assistant (`ai/` package, built 2026-09-24)
+
+Authenticated, Sync-only RAG chatbot. Full docs in `docs/ai-assistant/` — this is a pointer, not
+a duplicate.
+
+- Provider: Mistral (`ministral-8b-latest` chat, `mistral-embed` 1024-dim), behind
+  `LlmProvider`/`EmbeddingProvider` interfaces via JDK `HttpClient` — no new dependency.
+- Storage: pgvector in `ai_knowledge_chunk` (+ `_audience`), `ai_conversation(_message)`,
+  `ai_interaction_log`, `ai_rate_limit_settings`, `ai_billing_settings` — V91–V95, see the Flyway
+  section above. No JPA entity for the chunk table; it's raw `JdbcTemplate`
+  (`ai/index/PgVectorKnowledgeIndexRepository`) on purpose.
+- Knowledge is authored YAML under `backend/src/main/resources/ai-knowledge/`, never derived from
+  this file or the prototype HTML — see `docs/ai-assistant/knowledge-authoring.md`. Re-index via
+  `POST /api/ai-assistant/admin/reindex` (SUPERADMIN) after any knowledge change; nothing
+  re-indexes automatically on startup.
+- Navigation the model returns is always a `pageId`, never a raw route — validated server-side
+  against `ai-knowledge/pages/registry.yaml` (`ai/navigation/`), then resolved to a real route on
+  the frontend (`frontend/src/lib/ai/pageTargets.ts`), re-checked against the live `nav.ts` both
+  times. The model can never hand back a URL directly.
+- Config lives under `app.ai.*` in `application.yml`
+  (`ai/config/AiProperties`, `@ConfigurationProperties` — new pattern for this codebase, everything
+  else here still uses `@Value`). Key goes in the gitignored `application-local.yml` under
+  `app.ai.mistral.api-key`, or `MISTRAL_API_KEY` env — never committed, never logged.
+  `app.ai.enabled=false` (or a blank key) disables the feature; the rest of Sync is unaffected and
+  `/api/ai-assistant/health` reports `enabled:false` rather than the app failing to boot.
+- All reads are self-scoped by construction (`ai/data/*DataProviders` pass only the caller's own
+  `userId`/email into existing services) — see `docs/ai-assistant/live-data.md` and the
+  `DataProviderSafetyTest` Mockito verification for why this is a structural guarantee, not a
+  convention.
+- The assistant only ever writes to its own `ai_*` tables (plus `audit_log` on a SUPERADMIN
+  settings change) — never to EOD, approval, project, or user data. `ai/action/` is a fully inert
+  framework (10 classes) kept for future write-actions but currently wired to do nothing; see
+  `docs/ai-assistant/action-execution.md`.
+- Live eval harness (`AiEvaluationHarness`) is real-HTTP, costs real API calls, and is deliberately
+  excluded from `mvn test` — its name doesn't end in `Test`/`Tests`, so Surefire's default
+  discovery never picks it up. Run it explicitly:
+  `mvn test -Dtest=AiEvaluationHarness -DfailIfNoSpecifiedTests=false` with `AI_EVAL_BASE_URL` and
+  `AI_EVAL_<ROLE>=email:password` env vars set — see `docs/ai-assistant/operations.md`.
 
 ## Seed super admin credentials (local dev only)
 email: superadmin@nforceone.com

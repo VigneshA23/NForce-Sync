@@ -1,0 +1,34 @@
+knowledge:
+  - knowledgeId: action.utilization.explained
+    type: ACTION
+    module: utilization
+    pageId: utilization
+    actionId: utilization.view
+    version: 1
+    audience: [EMPLOYEE, MANAGER, PM]
+    title: How utilization is calculated
+    synonyms:
+      - what is my utilization
+      - why is my utilization blank
+      - why is my utilization 0
+      - utilization not showing
+    sources:
+      - backend/src/main/java/com/nforceone/sync/utilization/UtilizationCalculator.java
+      - backend/src/main/java/com/nforceone/sync/utilization/UtilizationService.java
+    body: |
+      Utilization for a day is your approved productive hours divided by your available hours for
+      that day, as a percentage. Two things people often find surprising:
+
+      - A day with no available hours — a weekend, a company holiday, or a day you took full-day
+        approved leave — shows no percentage at all (blank/N/A), never 0%. There was nothing to be
+        utilized against, so 0% would be misleading.
+      - A working day where you're available but logged nothing approved yet shows exactly 0.00%,
+        which is different from blank — it means "available and unused so far," not "not
+        applicable."
+
+      Only APPROVED EOD hours ever count — a pending or rejected entry doesn't move your
+      utilization at all. It's recalculated the moment an entry is approved, not before, and it
+      is never capped at 100% — logging well beyond the expected hours on a day can show over
+      100% utilization for that day. An Employee sees their own utilization; a Team Lead sees it
+      for their direct reports; a Project Manager sees it for employees allocated to their
+      projects.

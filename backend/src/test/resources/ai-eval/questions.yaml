@@ -1,0 +1,485 @@
+# Evaluation fixture set for the AI support assistant.
+#
+# AiEvaluationSetTest (free, no API calls) validates this file statically: ids are unique, roles/
+# categories/types are valid, every `navigation` pageId exists and is reachable (non-placeholder)
+# by that role, and every `knowledge` id exists and is visible to that role's audience.
+#
+# AiEvaluationHarness (live, costs real Mistral calls, opt-in via env vars) runs each question
+# against a real running backend and reports — but does not assert, since model output varies —
+# whether the response type, navigation, mustMention/mustMentionAny/mustNotMention expectations
+# were met.
+questions:
+  # ---- EOD: how-to ---------------------------------------------------------------------------
+  - id: emp.eod.submit
+    role: EMPLOYEE
+    question: "How do I submit my EOD?"
+    category: how-to
+    expect:
+      type: [HOW_TO]
+      navigation: eod-submit
+      knowledge: [action.eod.day-types-and-submission]
+      mustMention: ["task"]
+
+  - id: emp.eod.submit-informal
+    role: EMPLOYEE
+    question: "how do i log my daily update"
+    category: synonym
+    expect:
+      type: [HOW_TO]
+      navigation: eod-submit
+      knowledge: [action.eod.day-types-and-submission]
+    why: >
+      "daily update" is a synonym for EOD (term.eod) — must resolve to the same knowledge as the
+      formal wording.
+
+  - id: emp.eod.half-day-leave
+    role: EMPLOYEE
+    question: "What's the minimum hours for a half day leave?"
+    category: how-to
+    expect:
+      type: [HOW_TO, EXPLANATION]
+      knowledge: [action.eod.day-types-and-submission]
+      mustMention: ["half"]
+
+  - id: lead.eod.submit
+    role: MANAGER
+    question: "How do I submit my own EOD as a Team Lead?"
+    category: how-to
+    expect:
+      type: [HOW_TO]
+      navigation: eod-submit
+      knowledge: [action.eod.day-types-and-submission]
+
+  # ---- EOD: validation ------------------------------------------------------------------------
+  - id: emp.eod.wont-submit
+    role: EMPLOYEE
+    question: "Why won't my EOD submit? It says at least one task row is required."
+    category: validation
+    expect:
+      type: [TROUBLESHOOTING, EXPLANATION]
+      knowledge: [error.eod.submission-validation]
+      mustMention: ["Working Day"]
+
+  - id: emp.eod.blocked-no-reason
+    role: EMPLOYEE
+    question: "It says blocked tasks must include a blocker reason, what does that mean?"
+    category: validation
+    expect:
+      type: [TROUBLESHOOTING, EXPLANATION]
+      knowledge: [error.eod.submission-validation]
+
+  - id: emp.eod.time-adjustment-budget
+    role: EMPLOYEE
+    question: "Why can't I add a late arrival adjustment — it says I'm over my monthly budget?"
+    category: validation
+    expect:
+      type: [TROUBLESHOOTING, EXPLANATION]
+      knowledge: [error.eod.time-adjustment-validation, action.eod.time-adjustment]
+      mustMention: ["monthly"]
+
+  # ---- EOD: approval / clarification / history ------------------------------------------------
+  - id: emp.eod.who-approves
+    role: EMPLOYEE
+    question: "Who can approve my EOD?"
+    category: workflow
+    expect:
+      type: [EXPLANATION]
+      knowledge: [workflow.eod.approval-lifecycle]
+      mustMention: ["Team Lead"]
+
+  - id: emp.eod.after-submit
+    role: EMPLOYEE
+    question: "What happens after I submit an EOD?"
+    category: workflow
+    expect:
+      type: [EXPLANATION]
+      knowledge: [workflow.eod.approval-lifecycle]
+
+  - id: emp.eod.why-rejected
+    role: EMPLOYEE
+    question: "Why was my EOD rejected?"
+    category: workflow
+    expect:
+      type: [EXPLANATION, TROUBLESHOOTING]
+      knowledge: [action.eod.history-visibility]
+      mustMention: ["comment"]
+
+  - id: emp.eod.clarification-reply
+    role: EMPLOYEE
+    question: "How do I respond to an EOD clarification from my Team Lead?"
+    category: how-to
+    expect:
+      type: [HOW_TO, EXPLANATION]
+      navigation: eod-inbox
+      knowledge: [action.eod.clarification]
+
+  - id: lead.approvals.pending
+    role: MANAGER
+    question: "How do I see pending approvals for my team?"
+    category: how-to
+    expect:
+      type: [HOW_TO, NAVIGATION]
+      navigation: approvals
+      knowledge: [action.approvals.review]
+
+  - id: pm.approvals.who-can-approve
+    role: PM
+    question: "As a Project Manager, can I approve an EOD entry for someone who isn't my direct report?"
+    category: permission
+    expect:
+      type: [EXPLANATION, PERMISSION]
+      knowledge: [workflow.eod.approval-lifecycle]
+      mustMention: ["project"]
+
+  - id: lead.approvals.reject-no-comment
+    role: MANAGER
+    question: "Why do I have to enter a comment to reject an EOD?"
+    category: validation
+    expect:
+      type: [EXPLANATION]
+      knowledge: [error.approvals.validation]
+
+  # ---- EOD history / missing ------------------------------------------------------------------
+  - id: emp.eod.history
+    role: EMPLOYEE
+    question: "Where can I see my EOD history?"
+    category: navigation
+    expect:
+      type: [NAVIGATION, HOW_TO]
+      navigation: eod-history
+
+  - id: emp.eod.missing
+    role: EMPLOYEE
+    question: "What does it mean when an entry shows as Missing?"
+    category: how-to
+    expect:
+      type: [EXPLANATION]
+      knowledge: [action.eod.missing-eod]
+
+  # ---- overtime / attachments -------------------------------------------------------------------
+  - id: lead.eod.overtime
+    role: MANAGER
+    question: "Why does this entry show overtime hours?"
+    category: how-to
+    expect:
+      type: [EXPLANATION]
+      knowledge: [action.eod.overtime]
+
+  - id: emp.eod.attachment-limit
+    role: EMPLOYEE
+    question: "How big can a file be that I attach to my EOD?"
+    category: how-to
+    expect:
+      type: [HOW_TO, EXPLANATION]
+      knowledge: [action.eod.attachments]
+      mustMention: ["10 MB"]
+
+  # ---- Projects / allocation --------------------------------------------------------------------
+  - id: emp.projects.mine
+    role: EMPLOYEE
+    question: "Where are my projects?"
+    category: navigation
+    expect:
+      type: [NAVIGATION]
+      navigation: my-projects
+
+  - id: pm.projects.allocate
+    role: PM
+    question: "How do I allocate an employee to a project?"
+    category: how-to
+    expect:
+      type: [HOW_TO]
+      navigation: projects-allocation
+      knowledge: [action.projects.allocation]
+      mustMention: ["10%"]
+
+  - id: pm.projects.over-100
+    role: PM
+    question: "Why can't I allocate this employee — it says only a certain percentage is available?"
+    category: validation
+    expect:
+      type: [TROUBLESHOOTING, EXPLANATION]
+      knowledge: [error.allocation.validation]
+
+  - id: emp.projects.cant-access
+    role: EMPLOYEE
+    question: "Why can't I access this project?"
+    category: permission
+    expect:
+      type: [PERMISSION, EXPLANATION]
+      knowledge: [action.projects.my-projects]
+
+  - id: pm.projects.pm-vs-lead
+    role: PM
+    question: "What's the difference between a project's Team Lead and its Project Manager?"
+    category: terminology
+    expect:
+      type: [EXPLANATION]
+      knowledge: [action.projects.create-and-manage, term.manager-ambiguity]
+
+  # ---- Utilization ------------------------------------------------------------------------------
+  - id: emp.utilization.mine
+    role: EMPLOYEE
+    question: "Where can I see my utilization?"
+    category: navigation
+    expect:
+      type: [NAVIGATION, HOW_TO]
+      navigation: utilization
+      knowledge: [action.utilization.explained]
+
+  - id: emp.utilization.blank
+    role: EMPLOYEE
+    question: "Why is my utilization blank for the weekend instead of showing 0%?"
+    category: how-to
+    expect:
+      type: [EXPLANATION]
+      knowledge: [action.utilization.explained]
+      mustMention: ["N/A"]
+
+  - id: emp.utilization.synonym
+    role: EMPLOYEE
+    question: "What's my productive utilization looking like this month?"
+    category: synonym
+    expect:
+      type: [EXPLANATION, NAVIGATION]
+      knowledge: [action.utilization.explained, term.utilization]
+
+  # ---- Blockers -----------------------------------------------------------------------------------
+  - id: emp.blockers.where
+    role: EMPLOYEE
+    question: "Where are my blockers?"
+    category: navigation
+    expect:
+      type: [NAVIGATION]
+      navigation: blockers
+      knowledge: [action.blockers.lifecycle]
+
+  - id: emp.blockers.raise
+    role: EMPLOYEE
+    question: "How do I flag that I'm stuck on a task?"
+    category: synonym
+    expect:
+      type: [HOW_TO]
+      knowledge: [action.blockers.lifecycle, term.blocker]
+
+  - id: lead.blockers.resolve
+    role: MANAGER
+    question: "How do I mark a blocker as resolved for one of my reports?"
+    category: how-to
+    expect:
+      type: [HOW_TO]
+      navigation: blockers
+      knowledge: [action.blockers.lifecycle]
+
+  # ---- Dashboards / reports -------------------------------------------------------------------
+  - id: lead.dashboard.team
+    role: MANAGER
+    question: "What does my Team Dashboard show?"
+    category: explanation
+    expect:
+      type: [EXPLANATION]
+      navigation: dashboard
+      knowledge: [page.dashboard.manager]
+
+  - id: superadmin.dashboard.executive
+    role: SUPERADMIN
+    question: "What's on the Executive Dashboard?"
+    category: explanation
+    expect:
+      type: [EXPLANATION]
+      navigation: dashboard
+      knowledge: [page.dashboard.executive]
+
+  - id: pm.reports.missing
+    role: PM
+    question: "How do I find employees who haven't submitted their EOD?"
+    category: how-to
+    expect:
+      type: [HOW_TO, NAVIGATION]
+      navigation: reports
+      knowledge: [page.reports]
+
+  - id: lead.reports.export
+    role: MANAGER
+    question: "Can I export the EOD-by-employee report?"
+    category: how-to
+    expect:
+      type: [HOW_TO, EXPLANATION]
+      knowledge: [page.reports]
+      mustMentionAny: ["CSV", "Excel", "PDF"]
+
+  # ---- Admin ------------------------------------------------------------------------------------
+  - id: admin.users.create
+    role: ADMIN
+    question: "How do I create a new user account?"
+    category: how-to
+    expect:
+      type: [HOW_TO]
+      navigation: user-management
+      knowledge: [page.user-management]
+      mustMention: ["nforceone.com"]
+
+  - id: admin.users.employee-code-format
+    role: ADMIN
+    question: "What format does the Employee ID need to be in?"
+    category: validation
+    expect:
+      type: [HOW_TO, EXPLANATION]
+      knowledge: [page.user-management]
+      mustMention: ["NF-"]
+
+  - id: superadmin.roles.what-can-admin-do
+    role: SUPERADMIN
+    question: "What can an Admin do that I can't as Super Admin?"
+    category: permission
+    expect:
+      type: [EXPLANATION, PERMISSION]
+      knowledge: [role.admin, role.superadmin]
+      mustMention: ["User Management"]
+
+  - id: admin.business-rules.adjustment-budget
+    role: ADMIN
+    question: "Where do I change the monthly time adjustment minutes budget?"
+    category: navigation
+    expect:
+      type: [NAVIGATION, HOW_TO]
+      navigation: business-rules
+      knowledge: [page.business-rules]
+
+  - id: admin.audit.who-changed
+    role: ADMIN
+    question: "How do I see who deactivated a user account?"
+    category: how-to
+    expect:
+      type: [HOW_TO, NAVIGATION]
+      navigation: audit-log
+      knowledge: [page.audit-log]
+
+  # ---- Navigation ---------------------------------------------------------------------------------
+  - id: pm.nav.take-me-to-projects
+    role: PM
+    question: "Take me to my projects."
+    category: navigation
+    expect:
+      type: [NAVIGATION]
+      navigation: projects-allocation
+
+  - id: superadmin.nav.reportee-pm
+    role: SUPERADMIN
+    question: "Where can I see a specific Project Manager's team utilization?"
+    category: navigation
+    expect:
+      type: [NAVIGATION, HOW_TO]
+      navigation: reportee-pm-utilization
+      knowledge: [page.reportee-pm-views]
+
+  # ---- Roles / permission questions -----------------------------------------------------------
+  - id: emp.roles.who-is-my-manager
+    role: EMPLOYEE
+    question: "Who is my manager?"
+    category: terminology
+    expect:
+      type: [EXPLANATION]
+      knowledge: [term.manager-ambiguity]
+
+  # ---- Placeholder / unimplemented -------------------------------------------------------------
+  - id: dm.placeholder.dashboard
+    role: DM
+    question: "Show me my Delivery Manager dashboard."
+    category: placeholder
+    expect:
+      type: [EXPLANATION, UNKNOWN]
+      navigation: none
+      knowledge: [role.dm-finance-leadership]
+      mustMentionAny: ["not yet available", "roadmap"]
+    why: >
+      Every Delivery Manager page is a Placeholder in App.tsx — the assistant must say so and
+      never propose navigating there.
+
+  - id: finance.placeholder.billable
+    role: FINANCE
+    question: "How do I see billable data?"
+    category: placeholder
+    expect:
+      type: [EXPLANATION, UNKNOWN]
+      navigation: none
+      knowledge: [role.dm-finance-leadership]
+
+  - id: leadership.placeholder.trends
+    role: LEADERSHIP
+    question: "Where can I see organization trends?"
+    category: placeholder
+    expect:
+      type: [EXPLANATION, UNKNOWN]
+      navigation: none
+
+  # ---- Unauthorized (asking about a page this role can't reach) --------------------------------
+  - id: emp.unauthorized.user-management
+    role: EMPLOYEE
+    question: "How do I create a new employee account?"
+    category: unauthorized
+    expect:
+      type: [PERMISSION, UNKNOWN]
+      navigation: none
+    why: >
+      user-management has no EMPLOYEE variant in the registry — navigation must never resolve for
+      this role/question combination.
+
+  - id: lead.unauthorized.audit-log
+    role: MANAGER
+    question: "Can I see the audit log?"
+    category: unauthorized
+    expect:
+      type: [PERMISSION, EXPLANATION]
+      navigation: none
+
+  # ---- Search / shared ------------------------------------------------------------------------
+  - id: pm.search.how
+    role: PM
+    question: "How does the search bar work?"
+    category: explanation
+    expect:
+      type: [EXPLANATION]
+      knowledge: [module.search]
+
+  - id: emp.shared.preferences
+    role: EMPLOYEE
+    question: "How do I turn on dark mode?"
+    category: how-to
+    expect:
+      type: [HOW_TO, NAVIGATION]
+      navigation: preferences
+      knowledge: [page.preferences]
+
+  # ---- General knowledge / unknown (canary) ----------------------------------------------------
+  - id: emp.scope.capital
+    role: EMPLOYEE
+    question: "What is the capital of France?"
+    category: out-of-scope
+    expect:
+      type: [UNKNOWN]
+      navigation: none
+      mustNotMention: ["Paris"]
+    why: >
+      The min-score canary (mirrors OneHR's emp.scope.capital) — unrelated text scores well below
+      the retrieval threshold against this knowledge base. If this ever starts producing an
+      answer, min-score has drifted too low.
+
+  - id: emp.scope.weather
+    role: EMPLOYEE
+    question: "What's the weather like today?"
+    category: out-of-scope
+    expect:
+      type: [UNKNOWN]
+      navigation: none
+
+  - id: emp.unknown.made-up-feature
+    role: EMPLOYEE
+    question: "How do I set up recurring EOD templates?"
+    category: unknown
+    expect:
+      type: [UNKNOWN]
+      navigation: none
+    why: >
+      No such feature exists in Sync — must return UNKNOWN, never invent a plausible-sounding
+      answer about a feature that doesn't exist.
