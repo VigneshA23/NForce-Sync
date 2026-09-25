@@ -1,92 +1,8 @@
 import { motion, useReducedMotion } from 'framer-motion';
-import { ClipboardCheck, ScrollText, CalendarOff } from 'lucide-react';
 import { BrandMark } from '../../components/BrandMark';
-import loginIllustration from '../../assets/login_screen.png';
+import loginBg from '../../assets/login-bg.jpg';
 
-interface StreakDef {
-  top: string;
-  width: number;
-  opacity: number;
-  duration: number;
-  delay: number;
-}
-
-const STREAKS: StreakDef[] = [
-  { top:  '6.0%', width: 180, opacity: 0.28, duration: 11, delay:   0 },
-  { top: '10.5%', width: 120, opacity: 0.20, duration: 13, delay:  -4 },
-  { top: '15.0%', width: 240, opacity: 0.32, duration:  9, delay:  -8 },
-  { top: '19.5%', width:  95, opacity: 0.16, duration: 14, delay:  -3 },
-  { top: '24.0%', width: 275, opacity: 0.25, duration: 10, delay:  -7 },
-  { top: '28.5%', width: 145, opacity: 0.22, duration: 12, delay:  -2 },
-  { top: '33.0%', width: 200, opacity: 0.30, duration:  8, delay: -11 },
-  { top: '37.5%', width: 115, opacity: 0.17, duration: 15, delay:  -5 },
-  { top: '42.0%', width: 255, opacity: 0.24, duration: 11, delay:  -9 },
-  { top: '46.5%', width: 160, opacity: 0.21, duration: 13, delay:  -1 },
-  { top: '51.0%', width: 210, opacity: 0.27, duration:  9, delay:  -6 },
-  { top: '55.5%', width: 130, opacity: 0.19, duration: 12, delay: -10 },
-  { top: '60.0%', width: 175, opacity: 0.23, duration: 10, delay:  -4 },
-  { top: '64.5%', width: 105, opacity: 0.15, duration: 14, delay:  -8 },
-];
-
-function SpeedStreaks() {
-  const reduced = useReducedMotion();
-
-  if (reduced) {
-    return (
-      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: 1, gridColumn: '1 / -1' }}>
-        {STREAKS.map((s, i) => (
-          <div
-            key={i}
-            style={{
-              position: 'absolute',
-              top: s.top,
-              right: 0,
-              width: s.width,
-              height: 2,
-              background: 'linear-gradient(90deg, transparent, var(--brand-bright))',
-              borderRadius: 2,
-              opacity: s.opacity,
-            }}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 1, gridColumn: '1 / -1' }}>
-      {STREAKS.map((s, i) => (
-        <motion.div
-          key={i}
-          style={{
-            position: 'absolute',
-            top: s.top,
-            left: -(s.width + 60),
-            width: s.width,
-            height: 2,
-            background: 'linear-gradient(90deg, transparent, var(--brand-bright))',
-            borderRadius: 2,
-          }}
-          animate={{ x: [0, 1800] }}
-          transition={{
-            duration: s.duration,
-            delay: s.delay,
-            repeat: Infinity,
-            ease: 'linear',
-            repeatDelay: 0,
-          }}
-          initial={{ opacity: s.opacity }}
-        />
-      ))}
-    </div>
-  );
-}
-
-const CAPABILITIES = [
-  { Icon: ClipboardCheck, label: 'Role-based approvals' },
-  { Icon: ScrollText,     label: 'Full audit trail' },
-  { Icon: CalendarOff,    label: 'Weekend-aware utilization' },
-] as const;
+// ── Layout ────────────────────────────────────────────────────────────
 
 interface AuthLayoutProps {
   leftHeadline?: string;
@@ -94,318 +10,378 @@ interface AuthLayoutProps {
   children: React.ReactNode;
 }
 
-const panelGradient = [
-  'radial-gradient(120% 100% at 80% 10%, color-mix(in srgb, var(--brand) 26%, transparent) 0%, transparent 55%)',
-  'linear-gradient(160deg, #0a0b0e 0%, #12141a 100%)',
-].join(', ');
-
-export function AuthLayout({ leftHeadline, showStats = false, children }: AuthLayoutProps) {
+export function AuthLayout({ children }: AuthLayoutProps) {
   const reduced = useReducedMotion();
-  const headlineWords = leftHeadline ? leftHeadline.split(' ') : [];
 
   return (
     <div
       data-theme="dark"
       style={{
         position: 'relative',
-        display: 'grid',
-        gridTemplateColumns: '55fr 45fr',
-        minHeight: '100dvh',
+        height: '100dvh',
+        maxHeight: '100dvh',
+        overflow: 'hidden',
+        backgroundColor: '#04050e',
+        backgroundImage: `url(${loginBg})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        fontFamily: 'Inter, "Segoe UI", sans-serif',
       }}
-      className="nf-auth-grid"
     >
-      {/* Speed streaks — span the full screen, behind all panel content but above both
-          panels' plain backgrounds/imagery (z-index 1 vs their auto/0). */}
-      <SpeedStreaks />
+      {/* ── Dark overlay ── */}
+      <div aria-hidden="true" style={{
+        position: 'absolute', inset: 0, zIndex: 0,
+        background: 'rgba(4, 5, 14, 0.74)',
+        pointerEvents: 'none',
+      }} />
 
-      {/* ── LEFT PANEL ─────────────────────────────────── */}
+      {/* ── Gradient tint ── */}
+      <div aria-hidden="true" style={{
+        position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
+        background: [
+          'radial-gradient(ellipse 65% 55% at 15% 30%, rgba(91,33,182,0.26) 0%, transparent 65%)',
+          'radial-gradient(ellipse 50% 45% at 80% 75%, rgba(49,46,129,0.2) 0%, transparent 60%)',
+          'radial-gradient(ellipse 35% 30% at 5% 80%,  rgba(109,40,217,0.14) 0%, transparent 55%)',
+        ].join(', '),
+      }} />
+
+      {/* ── Animated blobs ── */}
+      <div aria-hidden="true" className="nf-blob nf-blob-1" style={{
+        position: 'absolute', top: '-12%', left: '-6%',
+        width: '48vw', height: '48vw', borderRadius: '50%',
+        background: 'radial-gradient(ellipse, rgba(100,40,200,0.11) 0%, transparent 70%)',
+        pointerEvents: 'none', zIndex: 1, willChange: 'transform',
+      }} />
+      <div aria-hidden="true" className="nf-blob nf-blob-2" style={{
+        position: 'absolute', bottom: '-18%', right: '-8%',
+        width: '42vw', height: '42vw', borderRadius: '50%',
+        background: 'radial-gradient(ellipse, rgba(49,46,129,0.13) 0%, transparent 70%)',
+        pointerEvents: 'none', zIndex: 1, willChange: 'transform',
+      }} />
+
+      {/* ── Crystal shimmer ── */}
+      <div aria-hidden="true" style={{
+        position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none',
+        background: 'linear-gradient(140deg, rgba(255,255,255,0.028) 0%, transparent 42%, rgba(255,255,255,0.018) 100%)',
+      }} />
+
+
+      {/* ── 60 / 40 grid ── */}
       <div
-        className="nf-auth-left"
+        className="nf-auth-outer"
         style={{
-          position: 'relative',
-          overflow: 'hidden',
-          background: '#0a0b0e',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          padding: '44px 48px',
+          position: 'relative', zIndex: 3,
+          display: 'grid',
+          gridTemplateColumns: '60fr 40fr',
+          height: '100dvh',
         }}
       >
+
+        {/* ══ LEFT 60% ══ */}
         <div
-          aria-hidden="true"
+          className="nf-auth-hero"
           style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 0,
-            backgroundImage: `url(${loginIllustration})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-            opacity: 0.3,
-          }}
-        />
-
-        {/* Brand row */}
-        <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 14 }}>
-          <BrandMark size="lg" />
-          <div>
-            <div
-              style={{
-                fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-                fontWeight: 700,
-                fontSize: 18,
-                letterSpacing: '0.04em',
-                color: 'var(--txt)',
-              }}
-            >
-              NForce Sync
-            </div>
-            <div
-              style={{
-                fontSize: 10,
-                letterSpacing: '0.14em',
-                textTransform: 'uppercase',
-                color: 'var(--txt-dim)',
-                marginTop: 3,
-              }}
-            >
-              EOD & Utilization
-            </div>
-          </div>
-        </div>
-
-        {/* Capability tags */}
-        {showStats ? (
-          <div
-            style={{
-              position: 'relative',
-              zIndex: 2,
-              display: 'flex',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              rowGap: 10,
-              borderTop: '1px solid rgba(255,255,255,.07)',
-              paddingTop: 20,
-            }}
-          >
-            {CAPABILITIES.map(({ Icon, label }, i) => (
-              <div
-                key={label}
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                {i > 0 && (
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      color: 'var(--line2)',
-                      fontSize: 14,
-                      lineHeight: 1,
-                      margin: '0 12px',
-                      userSelect: 'none',
-                    }}
-                  >
-                    ·
-                  </span>
-                )}
-                <Icon size={12} aria-hidden="true" style={{ color: 'var(--txt-dim)', flexShrink: 0 }} />
-                <span style={{ fontSize: 12, color: 'var(--txt-dim)', lineHeight: 1 }}>
-                  {label}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div />
-        )}
-      </div>
-
-      {/* ── RIGHT PANEL ────────────────────────────────── */}
-      <div
-        className="nf-auth-right"
-        style={{
-          position: 'relative',
-          overflow: 'hidden',
-          background: '#0a0b0e',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '40px 32px',
-          minHeight: '100dvh',
-        }}
-      >
-        {/* Faint depth behind the card — echoes the left panel's brand-red glow, much softer */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 0,
-            background: 'radial-gradient(70% 55% at 50% 40%, color-mix(in srgb, var(--brand-bright) 7%, transparent) 0%, transparent 70%)',
-          }}
-        />
-
-        {/* Mobile brand strip — only visible <900px */}
-        <div
-          className="nf-auth-brandstrip"
-          style={{
-            position: 'absolute',
-            zIndex: 2,
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 80,
-            background: panelGradient,
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-            borderBottom: '1px solid var(--line)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            padding: '40px 52px 40px 52px',
+            height: '100dvh',
+            overflow: 'hidden',
+            boxSizing: 'border-box',
           }}
         >
-          <BrandMark size="sm" />
-          <span
+          {/* Faint watermark */}
+          <div aria-hidden="true" style={{
+            position: 'absolute', bottom: -8, left: -10,
+            fontSize: 'clamp(100px, 15vw, 200px)',
+            fontWeight: 900,
+            letterSpacing: '-0.06em',
+            color: 'rgba(255,255,255,0.02)',
+            lineHeight: 1,
+            userSelect: 'none', pointerEvents: 'none',
+          }}>
+            SYNC
+          </div>
+
+          {/* ── Top: brand ── */}
+          <motion.div
+            initial={reduced ? false : { opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={reduced ? { duration: 0 } : { duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+            style={{ display: 'flex', alignItems: 'center', gap: 20, position: 'relative', zIndex: 1 }}
+          >
+            <BrandMark size="lg" />
+            <div>
+              <div style={{ lineHeight: 1.1 }}>
+                <span style={{
+                  fontWeight: 700, fontSize: 26,
+                  letterSpacing: '-0.01em', color: '#fff',
+                }}>
+                  NForce
+                </span>
+                <span style={{
+                  fontWeight: 700, fontSize: 26,
+                  letterSpacing: '-0.01em', color: '#B11116',
+                  marginLeft: 5,
+                }}>
+                  Sync
+                </span>
+              </div>
+              <div style={{
+                fontSize: 10, letterSpacing: '0.28em',
+                textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.52)', marginTop: 7,
+                fontWeight: 400,
+              }}>
+                EOD & Utilization
+              </div>
+            </div>
+          </motion.div>
+
+          {/* ── Centre: headline ── */}
+          <div style={{ position: 'relative', zIndex: 1 }}>
+
+            {/* Eyebrow */}
+            <div style={{ overflow: 'hidden', marginBottom: 16 }}>
+              <motion.div
+                initial={reduced ? false : { y: '110%' }}
+                animate={{ y: 0 }}
+                transition={reduced ? { duration: 0 } : { duration: 0.55, delay: 0.1, ease: [0.23, 1, 0.32, 1] }}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                }}
+              >
+                <span style={{
+                  display: 'inline-block', width: 28, height: 1.5,
+                  background: '#E4373D', borderRadius: 1,
+                }} />
+                <span style={{
+                  fontSize: 11, fontWeight: 600,
+                  color: '#E4373D', letterSpacing: '0.2em',
+                  textTransform: 'uppercase',
+                }}>
+                  Enterprise Workforce Platform
+                </span>
+              </motion.div>
+            </div>
+
+            {/* Main headline — line 1 */}
+            <div style={{ overflow: 'hidden' }}>
+              <motion.div
+                initial={reduced ? false : { y: '110%' }}
+                animate={{ y: 0 }}
+                transition={reduced ? { duration: 0 } : { duration: 0.65, delay: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                style={{
+                  fontSize: 'clamp(32px, 4.2vw, 58px)',
+                  fontWeight: 800,
+                  letterSpacing: '-0.03em',
+                  lineHeight: 1.05,
+                  color: '#fff',
+                }}
+              >
+                Centralized
+              </motion.div>
+            </div>
+
+            {/* Main headline — line 2 with red words */}
+            <div style={{ overflow: 'hidden' }}>
+              <motion.div
+                initial={reduced ? false : { y: '110%' }}
+                animate={{ y: 0 }}
+                transition={reduced ? { duration: 0 } : { duration: 0.68, delay: 0.25, ease: [0.23, 1, 0.32, 1] }}
+                style={{
+                  fontSize: 'clamp(32px, 4.2vw, 58px)',
+                  fontWeight: 800,
+                  letterSpacing: '-0.03em',
+                  lineHeight: 1.05,
+                }}
+              >
+                <span style={{ color: '#E4373D' }}>Work</span>
+                <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 300 }}> & </span>
+                <span style={{ color: '#E4373D' }}>Utilization</span>
+              </motion.div>
+            </div>
+
+            {/* Main headline — line 3 */}
+            <div style={{ overflow: 'hidden', marginBottom: 32 }}>
+              <motion.div
+                initial={reduced ? false : { y: '110%' }}
+                animate={{ y: 0 }}
+                transition={reduced ? { duration: 0 } : { duration: 0.65, delay: 0.32, ease: [0.23, 1, 0.32, 1] }}
+                style={{
+                  fontSize: 'clamp(32px, 4.2vw, 58px)',
+                  fontWeight: 800,
+                  letterSpacing: '-0.03em',
+                  lineHeight: 1.05,
+                  color: '#fff',
+                }}
+              >
+                Management.
+              </motion.div>
+            </div>
+
+            {/* Subtitle */}
+            <motion.p
+              initial={reduced ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={reduced ? { duration: 0 } : { duration: 0.5, delay: 0.44 }}
+              style={{
+                fontSize: 14,
+                fontWeight: 400,
+                color: 'rgba(255,255,255,0.36)',
+                lineHeight: 1.75,
+                margin: 0,
+                maxWidth: 380,
+                letterSpacing: '0.01em',
+              }}
+            >
+              Track EOD submissions and utilization across your entire team — all in one place.
+            </motion.p>
+
+            {/* Feature pills */}
+            <motion.div
+              initial={reduced ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={reduced ? { duration: 0 } : { duration: 0.5, delay: 0.54 }}
+              style={{ display: 'flex', gap: 8, marginTop: 24, flexWrap: 'wrap' }}
+            >
+              {['EOD Reports', 'Utilization Tracking', 'Team Insights'].map((label) => (
+                <span key={label} style={{
+                  fontSize: 11, fontWeight: 500,
+                  color: 'rgba(255,255,255,0.38)',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 20, padding: '5px 12px',
+                  letterSpacing: '0.04em',
+                }}>
+                  {label}
+                </span>
+              ))}
+            </motion.div>
+          </div>
+
+          {/* ── Bottom: copyright ── */}
+          <motion.div
+            initial={reduced ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={reduced ? { duration: 0 } : { delay: 0.7 }}
             style={{
-              fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-              fontWeight: 700,
-              fontSize: 15,
-              letterSpacing: '0.03em',
+              position: 'relative', zIndex: 1,
+              paddingTop: 20,
+              borderTop: '1px solid rgba(255,255,255,0.07)',
             }}
           >
-            NForce Sync
-          </span>
+            <span style={{
+              fontSize: 11,
+              color: 'rgba(255,255,255,0.2)',
+              letterSpacing: '0.04em',
+            }}>
+              © 2026 NForce One · Enterprise Workforce Platform
+            </span>
+          </motion.div>
         </div>
 
-        {/* Headline — sized off the panel's own width (container query units) so the
-            phrase always fits on one line instead of wrapping or overflowing. */}
-        {leftHeadline && (
-          <motion.h2
-            className="nf-auth-headline"
-            initial={reduced ? undefined : { opacity: 0, x: -60 }}
-            animate={reduced ? undefined : { opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-            style={{
-              position: 'relative',
-              zIndex: 2,
-              width: '100%',
-              fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-              fontWeight: 700,
-              lineHeight: 1.15,
-              letterSpacing: '-0.01em',
-              textAlign: 'center',
-              whiteSpace: 'nowrap',
-              marginBottom: 20,
-            }}
-          >
-            {headlineWords.map((word, i) => (
-              <span key={i} style={{ color: i % 2 === 0 ? 'var(--txt)' : 'var(--brand-bright)' }}>
-                {word}
-                {i < headlineWords.length - 1 ? ' ' : ''}
-              </span>
-            ))}
-          </motion.h2>
-        )}
+        {/* ══ RIGHT 40% — glass panel ══ */}
+        <div
+          className="nf-auth-panel"
+          style={{
+            position: 'relative',
+            background: 'rgba(6, 7, 20, 0.46)',
+            backdropFilter: 'blur(52px)',
+            WebkitBackdropFilter: 'blur(52px)',
+            borderLeft: '1px solid rgba(255,255,255,0.09)',
+            boxShadow: [
+              'inset 1px 0 0 rgba(255,255,255,0.07)',
+              '-32px 0 80px rgba(0,0,0,0.25)',
+            ].join(', '),
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100dvh',
+            overflow: 'hidden',
+            padding: '0 44px',
+            boxSizing: 'border-box',
+          }}
+        >
+          {/* Inner shimmer hit */}
+          <div aria-hidden="true" style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none',
+            background: 'linear-gradient(155deg, rgba(255,255,255,0.04) 0%, transparent 35%)',
+          }} />
 
-        <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: 440 }}>
+          {/* Mobile brand strip */}
           <div
-            className="nf-auth-form"
+            className="nf-auth-brandstrip"
             style={{
-              position: 'relative',
-              overflow: 'hidden',
-              background: 'linear-gradient(155deg, #262a32 0%, #14161a 100%)',
-              border: '1px solid rgba(255,255,255,.08)',
-              borderRadius: 20,
-              padding: '44px 40px',
-              boxShadow: [
-                '0 28px 70px -20px rgba(0,0,0,.65)',
-                '0 1px 0 0 rgba(255,255,255,.06) inset',
-              ].join(', '),
+              display: 'none',
+              position: 'absolute',
+              top: 0, left: 0, right: 0, height: 60,
+              alignItems: 'center', justifyContent: 'center', gap: 12,
+              borderBottom: '1px solid rgba(255,255,255,0.07)', zIndex: 3,
             }}
           >
-            {/* Brand accent strip along each edge of the card */}
-            <div
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                height: 2,
-                background: 'linear-gradient(90deg, transparent, var(--brand-bright), transparent)',
-              }}
-            />
-            <div
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: 2,
-                background: 'linear-gradient(90deg, transparent, var(--brand-bright), transparent)',
-              }}
-            />
-            <div
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                top: 0,
-                bottom: 0,
-                left: 0,
-                width: 2,
-                background: 'linear-gradient(180deg, transparent, var(--brand-bright), transparent)',
-              }}
-            />
-            <div
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                top: 0,
-                bottom: 0,
-                right: 0,
-                width: 2,
-                background: 'linear-gradient(180deg, transparent, var(--brand-bright), transparent)',
-              }}
-            />
-            {children}
+            <BrandMark size="sm" />
+            <span style={{
+              fontWeight: 700, fontSize: 14,
+              letterSpacing: '0.05em', textTransform: 'uppercase', color: '#fff',
+            }}>
+              NForce One
+            </span>
           </div>
+
+          {/* ── Form card ── */}
+          <motion.div
+            initial={reduced ? false : { opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={reduced ? { duration: 0 } : { duration: 0.55, delay: 0.08, ease: [0.23, 1, 0.32, 1] }}
+            style={{
+              position: 'relative', zIndex: 1,
+              width: '100%', maxWidth: 420,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 20,
+              padding: '40px 36px',
+              boxShadow: [
+                'inset 0 1px 0 rgba(255,255,255,0.1)',
+                '0 0 0 0.5px rgba(255,255,255,0.04)',
+                '0 24px 64px rgba(0,0,0,0.4)',
+              ].join(', '),
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+            }}
+          >
+            {children}
+          </motion.div>
         </div>
       </div>
 
-      {/*
-        These rules replace Tailwind arbitrary variants (max-[900px]:block /
-        :hidden) that were silently inert: a utility class loses to an inline
-        style for the same property, and `display` is set inline on both the
-        grid and the left panel. The result was that phones kept the 55/45
-        split and rendered the marketing panel squeezed into 55% of a 390px
-        screen. Overriding from a stylesheet with !important is what actually
-        wins against the inline style.
-
-        Every rule that changes layout lives inside the media query, so the
-        desktop split is untouched. The one base rule below only restates what
-        Tailwind's `hidden` was already doing to the mobile brand strip, so the
-        desktop rendering is identical either way.
-
-        The headline uses container query units (cqw), sized off `.nf-auth-right`'s
-        own content width via `container-type: inline-size`. That's what keeps
-        "Centralized Work & Utilization Management" on one line at any window
-        size — cqw scales with the actual space available in the right panel,
-        not the viewport, so it stays proportional whether the left marketing
-        panel is showing (900px+) or hidden (mobile, right panel goes full width).
-      */}
       <style>{`
-        .nf-auth-grid {
-          --txt: #FFFFFF;
-          --txt-mut: #C7CBD1;
-          --txt-dim: #B7BCC4;
+        @keyframes nf-blob-float-1 {
+          0%, 100% { transform: translate(0, 0)    scale(1);    }
+          33%       { transform: translate(55px, -35px) scale(1.06); }
+          66%       { transform: translate(-25px, 20px) scale(0.95); }
         }
-        .nf-auth-brandstrip { display: none; }
-        .nf-auth-right { container-type: inline-size; container-name: nf-auth-right; }
-        .nf-auth-headline { font-size: clamp(13px, 3.6cqw, 30px); }
-        @media (max-width: 900px) {
-          .nf-auth-grid      { grid-template-columns: 1fr !important; }
-          .nf-auth-left      { display: none !important; }
-          .nf-auth-brandstrip { display: flex; }
-          .nf-auth-form      { margin-top: 80px; padding: 32px 24px !important; }
+        @keyframes nf-blob-float-2 {
+          0%, 100% { transform: translate(0, 0)    scale(1);    }
+          45%       { transform: translate(-45px, 30px) scale(1.05); }
+          78%       { transform: translate(25px, -16px) scale(0.97); }
+        }
+        .nf-blob-1 { animation: nf-blob-float-1 22s ease-in-out infinite; }
+        .nf-blob-2 { animation: nf-blob-float-2 18s ease-in-out infinite; }
+
+        @media (prefers-reduced-motion: reduce) {
+          .nf-blob { animation: none !important; }
+        }
+        @media (max-width: 960px) {
+          .nf-auth-outer      { grid-template-columns: 1fr !important; }
+          .nf-auth-hero       { display: none !important; }
+          .nf-auth-panel      {
+            border-left: none !important;
+            height: 100dvh !important;
+            padding: 80px 24px 24px !important;
+          }
+          .nf-auth-brandstrip { display: flex !important; }
         }
       `}</style>
     </div>
