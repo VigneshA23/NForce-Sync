@@ -1,5 +1,6 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { BrandMark } from '../../components/BrandMark';
+import loginBg from '../../assets/login-bg.jpg';
 
 interface AuthLayoutProps {
   leftHeadline?: string;
@@ -20,19 +21,25 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         maxHeight: '100dvh',
         overflow: 'hidden',
         fontFamily: 'Inter, "Segoe UI", sans-serif',
-        background: [
-          'radial-gradient(ellipse 70% 60% at 12% 25%, rgba(88,28,235,0.32) 0%, transparent 62%)',
-          'radial-gradient(ellipse 55% 50% at 82% 72%, rgba(49,46,129,0.36) 0%, transparent 58%)',
-          'radial-gradient(ellipse 45% 38% at 5% 82%,  rgba(109,40,217,0.18) 0%, transparent 52%)',
-          'radial-gradient(ellipse 35% 30% at 60% 5%,  rgba(67,20,180,0.14) 0%, transparent 50%)',
-          'linear-gradient(158deg, #09061a 0%, #07051a 35%, #0c0720 65%, #080518 100%)',
-        ].join(', '),
+        backgroundColor: '#04050e',
+        backgroundImage: `url(${loginBg})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
       }}
     >
-      {/* Subtle noise shimmer */}
+      {/* Dark overlay */}
+      <div aria-hidden="true" style={{
+        position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none',
+        background: 'rgba(4,5,14,0.72)',
+      }} />
+
+      {/* Gradient tint */}
       <div aria-hidden="true" style={{
         position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
-        background: 'linear-gradient(140deg, rgba(255,255,255,0.032) 0%, transparent 40%, rgba(255,255,255,0.015) 100%)',
+        background: [
+          'radial-gradient(ellipse 65% 55% at 15% 30%, rgba(91,33,182,0.24) 0%, transparent 65%)',
+          'radial-gradient(ellipse 50% 45% at 80% 75%, rgba(49,46,129,0.18) 0%, transparent 60%)',
+        ].join(', '),
       }} />
 
       {/* 60 / 40 grid */}
