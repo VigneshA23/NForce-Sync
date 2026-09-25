@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import { BrandMark } from '../../components/BrandMark';
 import loginBg from '../../assets/login-bg.jpg';
 
@@ -12,10 +13,21 @@ interface AuthLayoutProps {
 
 export function AuthLayout({ children }: AuthLayoutProps) {
   const reduced = useReducedMotion();
+  const [bgReady, setBgReady] = useState(false);
+
+  useEffect(() => {
+    const img = new window.Image();
+    img.onload = () => setBgReady(true);
+    img.onerror = () => setBgReady(true); // animate anyway on error
+    img.src = loginBg;
+  }, []);
 
   return (
-    <div
+    <motion.div
       data-theme="dark"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: bgReady ? 1 : 0 }}
+      transition={{ duration: 0.45, ease: 'easeOut' }}
       style={{
         position: 'relative',
         height: '100dvh',
@@ -287,8 +299,8 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           style={{
             position: 'relative',
             background: 'rgba(6, 7, 20, 0.46)',
-            backdropFilter: 'blur(52px)',
-            WebkitBackdropFilter: 'blur(52px)',
+            backdropFilter: 'blur(28px)',
+            WebkitBackdropFilter: 'blur(28px)',
             borderLeft: '1px solid rgba(255,255,255,0.09)',
             boxShadow: [
               'inset 1px 0 0 rgba(255,255,255,0.07)',
@@ -384,6 +396,6 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           .nf-auth-brandstrip { display: flex !important; }
         }
       `}</style>
-    </div>
+    </motion.div>
   );
 }
