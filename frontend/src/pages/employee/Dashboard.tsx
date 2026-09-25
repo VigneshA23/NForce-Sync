@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, Clock, CheckCircle2, TrendingUp, Activity,
   ArrowRight, ChevronLeft, ChevronRight, CalendarDays, FolderKanban,
-  MessageSquare, CalendarX,
+  MessageSquare, CalendarX, XCircle, FileEdit,
 } from 'lucide-react';
 import {
   useDashboardSummary, useEmployeeDashboardStats, useEmployeeProjects,
@@ -870,25 +870,42 @@ function BlockersPanel({ tasks, onSelect }: { tasks: BlockedTask[]; onSelect: (t
 
 // ── Recent activity strip ──────────────────────────────────────────────────────
 
+const RECENT_ENTRY_ICON: Record<string, React.ElementType> = {
+  APPROVED: CheckCircle2, SUBMITTED: Clock, DRAFT: FileEdit,
+  REJECTED: XCircle, MISSED: XCircle,
+};
+
 function RecentEntryRow({ entry, weekday, dateStr, utilAccent, accent }: {
   entry: RecentEntry; weekday: string; dateStr: string; utilAccent: string; accent: string;
 }) {
   const [hovered, setHovered] = React.useState(false);
+  const Icon = RECENT_ENTRY_ICON[entry.status] ?? Clock;
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        display: 'grid', gridTemplateColumns: '4px 72px 1fr auto auto',
+        display: 'grid', gridTemplateColumns: '36px 72px 1fr auto auto',
         gap: 12, alignItems: 'center',
-        padding: '10px 16px 10px 12px',
-        background: hovered ? 'var(--raised)' : 'transparent',
-        transition: 'background 0.15s',
+        margin: '0 10px 6px',
+        padding: '9px 12px',
+        borderRadius: 10,
+        border: `1px solid ${hovered ? `color-mix(in srgb, ${accent} 35%, var(--line))` : 'var(--line)'}`,
+        background: hovered ? `color-mix(in srgb, ${accent} 5%, var(--raised))` : 'var(--raised)',
+        boxShadow: hovered ? `0 3px 10px -4px color-mix(in srgb, ${accent} 45%, transparent)` : 'none',
+        transform: hovered ? 'translateY(-1px)' : 'none',
+        transition: 'background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s',
         cursor: 'default',
       }}
     >
-      {/* Status accent bar */}
-      <span style={{ width: 4, height: 36, borderRadius: 3, background: accent, flexShrink: 0, alignSelf: 'stretch', display: 'block' }} />
+      {/* Status icon */}
+      <div style={{
+        width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: `color-mix(in srgb, ${accent} 14%, transparent)`,
+      }}>
+        <Icon size={15} color={accent} />
+      </div>
       {/* Date block */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--txt-dim)' }}>{weekday}</span>
