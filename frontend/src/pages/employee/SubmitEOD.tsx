@@ -73,12 +73,12 @@ const HALF_LEAVE_LABELS: Record<string, string> = {
 const FALLBACK_HOURS_PER_DAY = 8;
 
 /**
- * Hard bounds for one day's logged hours, both inclusive. Distinct from the configured working
- * hours cap, which is only a reference — going over THAT is overtime and allowed. These bound what is
- * plausible for a day: an entry totalling 0 records nothing, and more than 24 is a typo.
- * Mirrored server-side in EodService.
+ * Hard ceiling for one day's logged hours. Distinct from the configured working hours cap, which
+ * is only a reference — going over THAT is overtime and allowed. This bounds what is plausible
+ * for a day: more than 24 hours is a typo. The floor for a Working Day/half-leave day is
+ * dailyHoursCap/halfDayHoursCap (the configured Standard Working Hours), not a fixed number — see
+ * requiredMinHours below. Mirrored server-side in EodService.
  */
-const MIN_HOURS_PER_DAY = 2;
 const MAX_HOURS_PER_DAY = 24;
 
 /** Per-use duration limits for a time adjustment. Mirrored server-side in EodService. */
@@ -738,6 +738,12 @@ export default function SubmitEOD() {
   const effectiveLoggedHours = totalMinutesLogged / 60;
   const overtimeHrs  = Math.max(0, effectiveLoggedHours - expectedHrs);
   const hasOvertime  = !isNonWorkDay && overtimeHrs > 0.001;
+  // Pre-emptively disables Submit (not just an error after clicking) once logged hours are below
+  // the day's required target. `expectedHrs` IS the required minimum for a Working Day/half-leave
+  // day (it's 0 only for Weekend, which has no floor) — see validate()'s requiredMinHours, which
+  // computes the identical value for the server-mirrored backstop check on submit.
+  const hoursShort   = !isNonWorkDay && !isWeekend && effectiveLoggedHours < expectedHrs - 0.001;
+  const hoursShortBy = Math.max(0, expectedHrs - effectiveLoggedHours);
 
   /** Live impact line. Exact wording matches the approved prototype. */
   function adjBanner(): string {
@@ -937,19 +943,21 @@ export default function SubmitEOD() {
       }
     });
     // Exceeding the day's EXPECTED hours is overtime, surfaced to the manager on submit, never a
-    // reason to block. These are different: they bound what is plausible for a day. A half-day
-    // leave's floor is half of dailyHoursCap rather than the flat MIN_HOURS_PER_DAY — OT hours
-    // logged on top never lower it (see halfDayHoursCap above / EodService.validateLoggedDay). A
-    // Weekend has no floor at all — anything logged there is pure overtime, never counted against
-    // a minimum (mirrors EodService.validateLoggedDay skipping WEEKEND the same way it already
-    // skips LEAVE). A time adjustment's minutes count toward logged hours here too, same as the
-    // "hrs expected" indicator and the backend's validateLoggedDay — effectiveLoggedHours, not
-    // the raw task-only totalHours.
-    const requiredMinHours = isHalfLeave ? halfDayHoursCap : MIN_HOURS_PER_DAY;
+    // reason to block. These are different: they bound what is required/plausible for a day. A
+    // Working Day's floor is the full dailyHoursCap (the configured Standard Working Hours); a
+    // half-day leave's floor is half of it — OT hours logged on top never lower either (see
+    // halfDayHoursCap above / EodService.validateLoggedDay). A Weekend has no floor at all —
+    // anything logged there is pure overtime, never counted against a minimum (mirrors
+    // EodService.validateLoggedDay skipping WEEKEND the same way it already skips LEAVE). A time
+    // adjustment's minutes count toward logged hours here too, same as the "hrs expected"
+    // indicator and the backend's validateLoggedDay — effectiveLoggedHours, not the raw
+    // task-only totalHours. This same check also disables the Submit button pre-emptively — see
+    // hoursShort below — so in practice this branch is a defence-in-depth backstop.
+    const requiredMinHours = isHalfLeave ? halfDayHoursCap : dailyHoursCap;
     if (!isWeekend && effectiveLoggedHours < requiredMinHours - 0.001) {
       errs.push(isHalfLeave
         ? `Minimum ${requiredMinHours.toFixed(1)} hours required for ${HALF_LEAVE_LABELS[dayType]} - you've logged ${effectiveLoggedHours.toFixed(2)} hours.`
-        : `Total hours (${effectiveLoggedHours.toFixed(2)}) must be at least ${MIN_HOURS_PER_DAY} for a single day.`);
+        : `Minimum ${requiredMinHours.toFixed(1)} hours required for a working day - you've logged ${effectiveLoggedHours.toFixed(2)} hours.`);
     }
     if (effectiveLoggedHours > MAX_HOURS_PER_DAY + 0.001) {
       errs.push(`Total hours (${effectiveLoggedHours.toFixed(2)}) cannot exceed ${MAX_HOURS_PER_DAY} for a single day.`);
@@ -1241,7 +1249,8 @@ export default function SubmitEOD() {
           {isReadOnly && adjType && adjMins > 0 && (
             <div style={{
               marginTop: 20, padding: '14px 18px', borderRadius: 8,
-              background: 'rgba(76,141,214,.08)', border: '1px solid rgba(76,141,214,.3)',
+              background: 'color-mix(in srgb, var(--brand-bright) 8%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--brand-bright) 30%, transparent)',
             }}>
               <Label>Time adjustment</Label>
               <div style={{ fontSize: 13, color: 'var(--txt)', marginTop: 2 }}>
@@ -1282,7 +1291,8 @@ export default function SubmitEOD() {
               {adjEnabled && (
                 <div style={{
                   marginTop: 12, padding: '16px 18px', borderRadius: 8,
-                  background: 'rgba(76,141,214,.08)', border: '1px solid rgba(76,141,214,.3)',
+                  background: 'color-mix(in srgb, var(--brand-bright) 8%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--brand-bright) 30%, transparent)',
                 }}>
                   {/* Shift timings — read-only, from the existing shift assignment */}
                   <Label>Shift timings</Label>
@@ -1322,7 +1332,7 @@ export default function SubmitEOD() {
                           checked={adjType === t.value}
                           disabled={adjExhausted}
                           onChange={() => handleAdjTypeChange(t.value)}
-                          style={{ width: 'auto', accentColor: 'var(--info)', cursor: adjExhausted ? 'not-allowed' : 'pointer' }}
+                          style={{ width: 'auto', accentColor: 'var(--brand)', cursor: adjExhausted ? 'not-allowed' : 'pointer' }}
                         />
                         <span>{t.label}</span>
                       </label>
@@ -1357,8 +1367,9 @@ export default function SubmitEOD() {
                   {/* Live calculated impact */}
                   <div style={{
                     padding: '10px 12px', borderRadius: 6, marginBottom: 12, fontSize: 13,
-                    background: 'rgba(76,141,214,.08)', border: '1px solid rgba(76,141,214,.3)',
-                    color: 'var(--info)',
+                    background: 'color-mix(in srgb, var(--brand-bright) 8%, transparent)',
+                    border: '1px solid color-mix(in srgb, var(--brand-bright) 30%, transparent)',
+                    color: 'var(--brand-bright)',
                   }}>
                     {adjBanner()}
                   </div>
@@ -1369,7 +1380,7 @@ export default function SubmitEOD() {
                     onClick={() => setShowBalance(s => !s)}
                     style={{
                       background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                      fontSize: 12, color: 'var(--info)', borderBottom: '1px dashed var(--line2)',
+                      fontSize: 12, color: 'var(--brand-bright)', borderBottom: '1px dashed var(--line2)',
                     }}
                   >
                     View available balance
@@ -1522,32 +1533,46 @@ export default function SubmitEOD() {
 
           {/* Action buttons */}
           {isEditable && (
-            <div style={{ display: 'flex', gap: 10, marginTop: 28, justifyContent: 'flex-end' }}>
-              <button
-                onClick={handleSaveDraft}
-                disabled={draftMutation.isPending || submitMutation.isPending}
-                style={{
-                  padding: '9px 20px', borderRadius: 6,
-                  background: 'var(--raised2)', border: '1px solid var(--line2)',
-                  color: 'var(--txt)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                  opacity: draftMutation.isPending ? 0.6 : 1,
-                }}
-              >
-                {draftMutation.isPending ? 'Saving…' : 'Save draft'}
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={draftMutation.isPending || submitMutation.isPending}
-                style={{
-                  padding: '9px 22px', borderRadius: 6,
-                  background: 'var(--brand)', border: '1px solid var(--brand-deep)',
-                  color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  opacity: submitMutation.isPending ? 0.6 : 1,
-                  boxShadow: '0 2px 8px color-mix(in srgb, var(--brand) 35%, transparent)',
-                }}
-              >
-                {submitMutation.isPending ? 'Submitting…' : 'Submit report'}
-              </button>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, marginTop: 28 }}>
+              {/* Submit stays disabled (not just an error after clicking) until logged hours meet
+                  the day's required target — see hoursShort above. */}
+              {hoursShort && (
+                <div style={{ fontSize: 12, color: 'var(--warn)', fontWeight: 500 }}>
+                  Log {hoursShortBy.toFixed(1)} more hour{hoursShortBy > 1.001 ? 's' : ''} to submit
+                  {' '}({effectiveLoggedHours.toFixed(1)} / {expectedHrs.toFixed(1)} hrs)
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={handleSaveDraft}
+                  disabled={draftMutation.isPending || submitMutation.isPending}
+                  style={{
+                    padding: '9px 20px', borderRadius: 6,
+                    background: 'var(--raised2)', border: '1px solid var(--line2)',
+                    color: 'var(--txt)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                    opacity: draftMutation.isPending ? 0.6 : 1,
+                  }}
+                >
+                  {draftMutation.isPending ? 'Saving…' : 'Save draft'}
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={draftMutation.isPending || submitMutation.isPending || hoursShort}
+                  title={hoursShort ? `Log ${hoursShortBy.toFixed(1)} more hour(s) to submit` : undefined}
+                  style={{
+                    padding: '9px 22px', borderRadius: 6,
+                    background: hoursShort ? 'var(--raised2)' : 'var(--brand)',
+                    border: `1px solid ${hoursShort ? 'var(--line2)' : 'var(--brand-deep)'}`,
+                    color: hoursShort ? 'var(--txt-dim)' : '#fff',
+                    fontSize: 13, fontWeight: 600,
+                    cursor: hoursShort ? 'not-allowed' : 'pointer',
+                    opacity: submitMutation.isPending ? 0.6 : 1,
+                    boxShadow: hoursShort ? 'none' : '0 2px 8px color-mix(in srgb, var(--brand) 35%, transparent)',
+                  }}
+                >
+                  {submitMutation.isPending ? 'Submitting…' : 'Submit report'}
+                </button>
+              </div>
             </div>
           )}
         </>

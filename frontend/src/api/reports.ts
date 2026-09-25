@@ -12,6 +12,10 @@ export interface EodByEmployeeEntryDto {
   /** Belongs to the DAY, so every task row of that day repeats it; the UI prints it once. */
   timeAdjustmentType: string | null;
   timeAdjustmentMinutes: number | null;
+  /** WORKING_DAY / FIRST_HALF_LEAVE / SECOND_HALF_LEAVE / LEAVE / HOLIDAY / WEEKEND — same
+   *  per-day repetition as the time-adjustment fields above. Drives the Required Hrs shown
+   *  once per day via requiredHoursForDay (lib/requiredHours.ts). */
+  dayType: string | null;
 }
 
 export interface EodByEmployeeRowDto {

@@ -27,16 +27,24 @@ knowledge:
       - "All tasks must have a non-negative hours value"
       - "Blocked tasks must include a blocker reason"
       - "Minimum {hours} hours required for {First Half Leave|Second Half Leave} — you've logged {hours} hours."
-      - "Total hours ({hours}) must be at least 2 for a single day."
+      - "Minimum {hours} hours required for a working day — you've logged {hours} hours."
       - "Total hours ({hours}) cannot exceed 24 for a single day."
     body: |
       When submit is refused, it's almost always one of: the date is in the future; the entry
       isn't actually editable anymore (it's already Submitted or Approved); a Working Day has no
       task rows; a task is missing its category, project, or status; a Blocked task has no
       blocker reason; a Leave row has a project set (it shouldn't); or the total logged hours for
-      the day fall outside what's allowed for that day type — at least 2 hours for a Working Day
-      (or half the standard day for a Half Leave day), and never more than 24 hours in a single
-      day. None of these apply on a Holiday, which skips this validation entirely.
+      the day fall short of what's required for that day type — the full Standard Working Hours
+      (Business Rules → Time & Attendance, e.g. 8 hours) for a Working Day, or half of it for a
+      Half Leave day — or exceed 24 hours in a single day. An approved time adjustment (late
+      arrival, early leave, intervening time-off) counts its minutes toward this total, so an
+      employee who logs "shift hours minus the approved adjustment" still meets the requirement —
+      e.g. task hours of 6 plus an approved 2-hour early-leave adjustment satisfies an 8-hour day.
+      The Submit button itself stays disabled with a "log N more hour(s) to submit" hint (which
+      already accounts for any active adjustment) until the requirement is met, on top of this
+      server-side check. None of these apply on a Holiday or a full Leave day, which skip this
+      validation entirely; a Weekend has no minimum either (only the 24-hour ceiling still
+      applies).
 
   - knowledgeId: error.eod.time-adjustment-validation
     type: ERROR

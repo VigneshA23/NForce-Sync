@@ -202,7 +202,8 @@ public class TeamEodByEmployeeReportService {
                             hours,
                             entry.getTimeAdjustmentType() != null
                                     ? entry.getTimeAdjustmentType().name() : null,
-                            entry.getTimeAdjustmentMinutes()));
+                            entry.getTimeAdjustmentMinutes(),
+                            entry.getDayType() != null ? entry.getDayType().name() : null));
                 }
             }
 
