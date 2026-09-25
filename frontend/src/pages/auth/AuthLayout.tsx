@@ -174,51 +174,31 @@ export function AuthLayout({ children }: AuthLayoutProps) {
             boxSizing: 'border-box',
           }}
         >
+          {/* Panel texture: gradient + dot grid */}
           <div aria-hidden="true" style={{
             position: 'absolute', inset: 0, pointerEvents: 'none',
-            background: 'linear-gradient(155deg, rgba(255,255,255,0.035) 0%, transparent 35%)',
+            backgroundImage: [
+              'linear-gradient(155deg, rgba(255,255,255,0.03) 0%, transparent 30%)',
+              'radial-gradient(rgba(255,255,255,0.055) 1px, transparent 1px)',
+            ].join(', '),
+            backgroundSize: 'auto, 24px 24px',
+          }} />
+
+          {/* Static depth glow — bottom warmth */}
+          <div aria-hidden="true" style={{
+            position: 'absolute', bottom: '-15%', left: '50%',
+            transform: 'translateX(-50%)',
+            width: '130%', height: '55%',
+            borderRadius: '50%',
+            background: 'radial-gradient(ellipse, rgba(177,17,22,0.16) 0%, rgba(100,10,10,0.05) 50%, transparent 70%)',
+            filter: 'blur(44px)',
+            pointerEvents: 'none',
           }} />
 
           {/* Top accent edge */}
           <div aria-hidden="true" style={{
             position: 'absolute', top: 0, left: 0, right: 0, height: 1, pointerEvents: 'none',
-            background: 'linear-gradient(90deg, transparent 0%, rgba(228,55,61,0.45) 35%, rgba(228,55,61,0.45) 65%, transparent 100%)',
-          }} />
-
-          {/* Ambient orb — red/brand, bottom-left drift */}
-          <div aria-hidden="true" style={{
-            position: 'absolute',
-            width: 400, height: 400,
-            bottom: '5%', left: '-15%',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(177,17,22,0.22) 0%, rgba(177,17,22,0.07) 45%, transparent 70%)',
-            filter: 'blur(48px)',
-            pointerEvents: 'none',
-            animation: reduced ? undefined : 'nf-orb-a 14s ease-in-out infinite',
-          }} />
-
-          {/* Ambient orb — purple, top-right drift */}
-          <div aria-hidden="true" style={{
-            position: 'absolute',
-            width: 320, height: 320,
-            top: '4%', right: '-10%',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(91,33,182,0.22) 0%, rgba(49,46,129,0.08) 45%, transparent 70%)',
-            filter: 'blur(52px)',
-            pointerEvents: 'none',
-            animation: reduced ? undefined : 'nf-orb-b 20s ease-in-out infinite',
-          }} />
-
-          {/* Ambient orb — accent red, mid-right float */}
-          <div aria-hidden="true" style={{
-            position: 'absolute',
-            width: 180, height: 180,
-            top: '38%', right: '12%',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(228,55,61,0.12) 0%, transparent 65%)',
-            filter: 'blur(32px)',
-            pointerEvents: 'none',
-            animation: reduced ? undefined : 'nf-orb-c 26s ease-in-out infinite',
+            background: 'linear-gradient(90deg, transparent 0%, rgba(228,55,61,0.55) 35%, rgba(228,55,61,0.55) 65%, transparent 100%)',
           }} />
 
           {/* Mobile brand strip */}
@@ -270,23 +250,80 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           to   { opacity: 1; }
         }
 
-        /* Ambient orbs */
-        @keyframes nf-orb-a {
-          0%, 100% { transform: translate(0px, 0px) scale(1); }
-          33%      { transform: translate(22px, -32px) scale(1.09); }
-          66%      { transform: translate(-14px, 18px) scale(0.93); }
+        /* ── Input: gradient border wrapper ── */
+        .nf-input-wrap {
+          position: relative;
+          border-radius: 9px;
+          isolation: isolate;
         }
-        @keyframes nf-orb-b {
-          0%, 100% { transform: translate(0px, 0px) scale(1); }
-          50%      { transform: translate(-26px, 38px) scale(1.14); }
+        .nf-input-wrap::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          padding: 1px;
+          background: rgba(255,255,255,0.1);
+          -webkit-mask:
+            linear-gradient(#fff 0 0) content-box,
+            linear-gradient(#fff 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          pointer-events: none;
+          transition: background 0.3s;
+          z-index: 2;
         }
-        @keyframes nf-orb-c {
-          0%, 100% { transform: translate(0px, 0px) scale(1); }
-          30%      { transform: translate(28px, 14px) scale(0.87); }
-          70%      { transform: translate(-10px, -22px) scale(1.08); }
+        .nf-input-wrap:focus-within::before {
+          background: linear-gradient(
+            120deg,
+            rgba(228,55,61,0.9)  0%,
+            rgba(255,130,130,0.7) 20%,
+            rgba(177,17,22,0.5)  45%,
+            rgba(255,100,100,0.8) 65%,
+            rgba(228,55,61,0.9)  100%
+          );
+          background-size: 250% 250%;
+          animation: nf-border-flow 2.8s ease infinite;
+        }
+        @keyframes nf-border-flow {
+          0%   { background-position: 0%   50%; }
+          50%  { background-position: 100% 50%; }
+          100% { background-position: 0%   50%; }
         }
 
-        /* Card border breathing glow */
+        /* ── Input inner field ── */
+        .nf-input-inner {
+          display: block;
+          width: 100%;
+          background: rgba(8,9,24,0.86);
+          border: none;
+          border-radius: 8px;
+          padding: 12px 14px;
+          color: #fff;
+          font-size: 14px;
+          font-family: Inter, "Segoe UI", sans-serif;
+          outline: none;
+          box-sizing: border-box;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+          transition: background 0.25s, box-shadow 0.25s;
+          position: relative;
+          z-index: 1;
+        }
+        .nf-input-inner:focus {
+          background: rgba(10,8,26,0.94);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,0.12),
+            inset 0 0 28px rgba(228,55,61,0.07);
+        }
+        .nf-input-inner::placeholder {
+          color: rgba(255,255,255,0.2);
+        }
+
+        /* ── Label brightens on focus ── */
+        .nf-field:focus-within .nf-label {
+          color: rgba(228,55,61,0.85) !important;
+        }
+
+        /* ── Card border breathing glow ── */
         @keyframes nf-card-glow {
           0%, 100% {
             box-shadow:
@@ -295,14 +332,14 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           }
           50% {
             box-shadow:
-              inset 0 1px 0 rgba(255,255,255,0.13),
-              0 24px 64px rgba(0,0,0,0.42),
-              0 0 0 1px rgba(177,17,22,0.2),
-              0 0 32px rgba(177,17,22,0.12);
+              inset 0 1px 0 rgba(255,255,255,0.15),
+              0 24px 64px rgba(0,0,0,0.44),
+              0 0 0 1px rgba(228,55,61,0.28),
+              0 0 40px rgba(228,55,61,0.16);
           }
         }
 
-        /* Submit button shimmer sweep */
+        /* ── Submit button shimmer sweep ── */
         @keyframes nf-shimmer {
           0%   { transform: translateX(-130%) skewX(-18deg); }
           100% { transform: translateX(230%)  skewX(-18deg); }
@@ -315,16 +352,17 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           content: '';
           position: absolute;
           top: 0; left: 0; width: 60%; height: 100%;
-          background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%);
+          background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.22) 50%, transparent 100%);
           transform: translateX(-130%) skewX(-18deg);
           pointer-events: none;
         }
         .nf-submit-btn:not(:disabled):hover::after {
-          animation: nf-shimmer 0.65s ease-out forwards;
+          animation: nf-shimmer 0.6s ease-out forwards;
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .nf-auth-root    { animation: none; }
+          .nf-auth-root { animation: none; }
+          .nf-input-wrap:focus-within::before { animation: none; }
           .nf-submit-btn::after { display: none; }
         }
         @media (max-width: 960px) {
