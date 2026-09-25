@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  AlertCircle, Clock, CheckCircle2, TrendingUp, Zap, Activity,
+  AlertCircle, Clock, CheckCircle2, TrendingUp, Activity,
   ArrowRight, ChevronLeft, ChevronRight, CalendarDays, FolderKanban,
   MessageSquare, CalendarX,
 } from 'lucide-react';
@@ -9,13 +9,14 @@ import {
   useDashboardSummary, useEmployeeDashboardStats, useEmployeeProjects,
   useHolidaysForYear, useUtilizationDetail,
 } from '../../api/employee';
+import { useEodInbox } from '../../api/eodClarification';
 import type {
   CalendarDay, BlockedTask, RecentEntry, PendingCorrectionDto, EmployeeProjectDto, HolidayDto,
 } from '../../api/employee';
 import { useAuth } from '../../lib/auth';
-import { UtilPctDonut, CategoryDonut, SegmentDonut } from '../../components/UtilizationDonut';
+import { UtilPctDonut, SegmentDonut } from '../../components/UtilizationDonut';
 import { GlobalLoader } from '../../components/GlobalLoader';
-import { KpiCard } from '../../components/KpiCard';
+import { KpiCard, ClickableKpi } from '../../components/KpiCard';
 import { HeroBanner } from '../../components/dashboard/HeroBanner';
 import { utilColor, fmtPct } from '../../lib/rules';
 import { formatDate, formatDateTime, formatTime12h, toLocalISODate, todayISO } from '../../lib/date';
@@ -174,20 +175,37 @@ const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const CELL_PX  = 52;
 const CELL_GAP = 5;
 
-function navBtnStyle(disabled: boolean): React.CSSProperties {
-  return {
-    display: 'inline-flex', alignItems: 'center', gap: 4,
-    padding: '5px 12px', borderRadius: 6,
-    background: disabled ? 'transparent' : 'var(--raised2)',
-    border: `1px solid ${disabled ? 'transparent' : 'var(--line)'}`,
-    color: disabled ? 'var(--line2)' : 'var(--txt-mut)',
-    cursor: disabled ? 'default' : 'pointer',
-    fontSize: 11, fontWeight: 600, flexShrink: 0,
-  };
+function NavButton({ disabled, onClick, children }: { disabled: boolean; onClick: () => void; children: React.ReactNode }) {
+  const [hovered, setHovered] = React.useState(false);
+  const [pressed, setPressed] = React.useState(false);
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => { setHovered(false); setPressed(false); }}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        padding: '6px 14px', borderRadius: 8,
+        background: disabled ? 'transparent' : pressed ? 'var(--brand)' : hovered ? 'color-mix(in srgb, var(--brand) 12%, var(--raised2))' : 'var(--raised2)',
+        border: `1px solid ${disabled ? 'transparent' : pressed ? 'var(--brand)' : hovered ? 'color-mix(in srgb, var(--brand) 40%, var(--line))' : 'var(--line)'}`,
+        color: disabled ? 'var(--line2)' : pressed ? '#fff' : hovered ? 'var(--brand-bright)' : 'var(--txt-mut)',
+        cursor: disabled ? 'default' : 'pointer',
+        fontSize: 11, fontWeight: 600, flexShrink: 0,
+        transition: 'all 0.15s ease',
+        transform: pressed && !disabled ? 'scale(0.96)' : 'scale(1)',
+        boxShadow: hovered && !disabled && !pressed ? '0 2px 8px color-mix(in srgb, var(--brand) 20%, transparent)' : 'none',
+      }}
+    >
+      {children}
+    </button>
+  );
 }
 
 function CalendarHeatmap({
-  days, monthOffset, onPrev, onNext, maxOffset, minOffset, todayStr,
+  days, monthOffset, onPrev, onNext, maxOffset, minOffset, todayStr, isLoading,
 }: {
   days: CalendarDay[];
   monthOffset: number;
@@ -196,6 +214,7 @@ function CalendarHeatmap({
   maxOffset: number;
   minOffset: number;
   todayStr: string;
+  isLoading?: boolean;
 }) {
   const firstDate  = days[0]?.date;
   const monthLabel = firstDate
@@ -232,19 +251,29 @@ function CalendarHeatmap({
     >
       {/* Navigation */}
       <div style={{ display: 'flex', alignItems: 'center', width: gridWidth, marginBottom: 16 }}>
-        <button onClick={onPrev} disabled={prevDisabled} style={navBtnStyle(prevDisabled)}>
+        <NavButton onClick={onPrev} disabled={prevDisabled}>
           <ChevronLeft size={13} /> Previous
-        </button>
+        </NavButton>
         <span style={{
           flex: 1, textAlign: 'center',
           fontSize: 14, fontWeight: 700, color: 'var(--txt)',
           fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', letterSpacing: '-0.01em',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
           {monthLabel}
+          {isLoading && (
+            <span style={{
+              width: 12, height: 12, borderRadius: '50%',
+              border: '2px solid var(--line2)',
+              borderTopColor: 'var(--brand-bright)',
+              display: 'inline-block',
+              animation: 'nf-r-spin 0.7s linear infinite',
+            }} />
+          )}
         </span>
-        <button onClick={onNext} disabled={nextDisabled} style={navBtnStyle(nextDisabled)}>
+        <NavButton onClick={onNext} disabled={nextDisabled}>
           Next <ChevronRight size={13} />
-        </button>
+        </NavButton>
       </div>
 
       {/* Day-of-week headers */}
@@ -292,15 +321,15 @@ function CalendarHeatmap({
                 gap: 3, cursor: 'default',
                 transition: 'filter 0.1s',
                 boxShadow: isToday
-                  ? '0 0 0 2px color-mix(in srgb, var(--brand-bright) 45%, transparent)'
+                  ? '0 0 0 2px var(--brand-bright), 0 0 8px 2px color-mix(in srgb, var(--brand-bright) 40%, transparent)'
                   : undefined,
               }}
               onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.filter = 'brightness(1.2)'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.filter = ''; }}
             >
               <span style={{
-                fontSize: 13, fontWeight: 600, lineHeight: 1,
-                color: cellTextColor(day, isToday), fontVariantNumeric: 'tabular-nums',
+                fontSize: isToday ? 14 : 13, fontWeight: isToday ? 800 : 600, lineHeight: 1,
+                color: isToday ? '#fff' : cellTextColor(day, isToday), fontVariantNumeric: 'tabular-nums',
               }}>
                 {dayNum}
               </span>
@@ -317,22 +346,22 @@ function CalendarHeatmap({
 
       {/* Legend */}
       <div style={{
-        marginTop: 16, display: 'flex', gap: 12, flexWrap: 'wrap',
-        fontSize: 9, color: 'var(--txt-dim)', width: gridWidth,
+        marginTop: 16, display: 'flex', gap: 14, flexWrap: 'wrap',
+        fontSize: 12, color: 'var(--txt)', fontWeight: 500, width: gridWidth,
       }}>
         {[
-          { bg: DAY_COLORS.APPROVED.bg,  label: 'Approved' },
-          { bg: DAY_COLORS.SUBMITTED.bg, label: 'Pending' },
-          { bg: DAY_COLORS.REJECTED.bg,  label: 'Rejected' },
-          { bg: DAY_COLORS.MISSED.bg,    label: 'Missed' },
-          { bg: DAY_COLORS.HOLIDAY.bg,   label: 'Holiday' },
-          { bg: DAY_COLORS.WEEKEND.bg,   label: 'Weekly off' },
-          { bg: DAY_COLORS.EMPTY.bg,     label: 'No entry', border: '1px solid var(--line)' },
-        ].map(({ bg, label, border }) => (
-          <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          { bg: DAY_COLORS.APPROVED.bg,  border: DAY_COLORS.APPROVED.text,  label: 'Approved' },
+          { bg: DAY_COLORS.SUBMITTED.bg, border: DAY_COLORS.SUBMITTED.text, label: 'Pending' },
+          { bg: DAY_COLORS.REJECTED.bg,  border: DAY_COLORS.REJECTED.text,  label: 'Rejected' },
+          { bg: DAY_COLORS.MISSED.bg,    border: DAY_COLORS.MISSED.text,    label: 'Missed' },
+          { bg: DAY_COLORS.HOLIDAY.bg,   border: DAY_COLORS.HOLIDAY.text,   label: 'Holiday' },
+          { bg: DAY_COLORS.WEEKEND.bg,   border: 'var(--line2)',             label: 'Weekly off' },
+          { bg: DAY_COLORS.EMPTY.bg,     border: 'var(--line)',              label: 'No entry' },
+        ].map(({ bg, border, label }) => (
+          <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{
-              width: 9, height: 9, borderRadius: 2, flexShrink: 0,
-              background: bg, border: border ?? 'none', boxSizing: 'border-box',
+              width: 12, height: 12, borderRadius: 3, flexShrink: 0,
+              background: bg, border: `1.5px solid ${border}`, boxSizing: 'border-box',
             }} />
             {label}
           </span>
@@ -368,10 +397,10 @@ function MonthStatsPanel({ days }: { days: CalendarDay[] }) {
           size={76}
           centerValue={`${completePct}%`}
           segments={[
-            { label: 'Approved',     value: approved,    color: 'var(--ok)' },
-            { label: 'Pending',      value: submitted,   color: 'var(--warn)' },
-            { label: 'Needs action', value: needsAction, color: 'var(--risk)' },
-            { label: 'Missed',       value: missed,       color: 'var(--risk)' },
+            { label: 'Approved',  value: approved,    color: DAY_COLORS.APPROVED.bg },
+            { label: 'Pending',   value: submitted,   color: DAY_COLORS.SUBMITTED.bg },
+            { label: 'Rejected',  value: needsAction, color: DAY_COLORS.REJECTED.bg },
+            { label: 'Missed',    value: missed,      color: DAY_COLORS.MISSED.bg },
           ]}
         />
         <div>
@@ -385,25 +414,28 @@ function MonthStatsPanel({ days }: { days: CalendarDay[] }) {
       </div>
 
       {/* Breakdown rows */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
         {([
-          { color: 'var(--ok)',      count: approved,    label: 'Approved' },
-          { color: 'var(--warn)',    count: submitted,   label: 'Pending review' },
-          { color: 'var(--risk)',    count: needsAction, label: 'Needs action' },
-          { color: 'var(--risk)',    count: missed,      label: 'Missed' },
-          { color: 'var(--cat-4)', count: holiday,     label: 'Holiday' },
-          { color: 'var(--txt-dim)', count: empty,       label: 'Not submitted' },
-          { color: 'var(--line2)',   count: upcoming,    label: 'Upcoming' },
-        ] as { color: string; count: number; label: string }[]).map(({ color, count, label }) => (
+          { bg: DAY_COLORS.APPROVED.bg,  tc: DAY_COLORS.APPROVED.text,  count: approved,    label: 'Approved' },
+          { bg: DAY_COLORS.SUBMITTED.bg, tc: DAY_COLORS.SUBMITTED.text, count: submitted,   label: 'Pending' },
+          { bg: DAY_COLORS.REJECTED.bg,  tc: DAY_COLORS.REJECTED.text,  count: needsAction, label: 'Rejected' },
+          { bg: DAY_COLORS.MISSED.bg,    tc: DAY_COLORS.MISSED.text,    count: missed,      label: 'Missed' },
+          { bg: DAY_COLORS.HOLIDAY.bg,   tc: DAY_COLORS.HOLIDAY.text,   count: holiday,     label: 'Holiday' },
+          { bg: DAY_COLORS.EMPTY.bg,     tc: 'var(--txt-dim)',           count: empty,       label: 'No entry' },
+          { bg: DAY_COLORS.WEEKEND.bg,   tc: 'var(--txt-dim)',           count: upcoming,    label: 'Upcoming' },
+        ] as { bg: string; tc: string; count: number; label: string }[]).map(({ bg, tc, count, label }) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
-            <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--txt-mut)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
             <span style={{
-              fontSize: 12, fontVariantNumeric: 'tabular-nums',
-              color: count === 0 ? 'var(--txt-dim)' : 'var(--txt)', fontWeight: count > 0 ? 600 : 400,
-              minWidth: 28, textAlign: 'right',
+              width: 11, height: 11, borderRadius: 3, flexShrink: 0,
+              background: bg, border: `1.5px solid ${tc}`, boxSizing: 'border-box',
+            }} />
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: 'var(--txt)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+            <span style={{
+              fontSize: 14, fontVariantNumeric: 'tabular-nums',
+              color: count === 0 ? 'var(--txt-dim)' : tc, fontWeight: count > 0 ? 700 : 400,
+              minWidth: 52, textAlign: 'right',
             }}>
-              {count}d
+              {count} {count === 1 ? 'day' : 'days'}
             </span>
           </div>
         ))}
@@ -605,7 +637,14 @@ function AssignedProjectsPanel({ projects }: { projects: EmployeeProjectDto[] })
 // holidays are backed by a real endpoint. Weekend visibility already lives on the
 // monthly calendar heatmap above, so this panel doesn't repeat it.
 
+const HOLIDAYS_PER_PAGE = 5;
+
 function HolidaysPanel({ holidays, year }: { holidays: HolidayDto[]; year: number }) {
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(holidays.length / HOLIDAYS_PER_PAGE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageHolidays = holidays.slice(safePage * HOLIDAYS_PER_PAGE, (safePage + 1) * HOLIDAYS_PER_PAGE);
+
   return (
     <Card pad={0}>
       <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -622,8 +661,8 @@ function HolidaysPanel({ holidays, year }: { holidays: HolidayDto[]; year: numbe
           No holidays configured for {year}
         </div>
       ) : (
-        <div style={{ maxHeight: 240, overflowY: 'auto' }}>
-          {holidays.map(h => {
+        <>
+          {pageHolidays.map(h => {
             const d = new Date(h.holidayDate + 'T12:00:00');
             const dayOfWeek = d.toLocaleDateString('en-GB', { weekday: 'short' });
             return (
@@ -639,7 +678,47 @@ function HolidaysPanel({ holidays, year }: { holidays: HolidayDto[]; year: numbe
               </div>
             );
           })}
-        </div>
+          {pageCount > 1 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 12px', borderTop: '1px solid var(--line)',
+            }}>
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={safePage === 0}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '5px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: 6,
+                  background: 'var(--raised2)', border: '1px solid var(--line2)',
+                  color: safePage === 0 ? 'var(--txt-dim)' : 'var(--txt)',
+                  cursor: safePage === 0 ? 'default' : 'pointer',
+                  opacity: safePage === 0 ? 0.5 : 1,
+                  transition: 'opacity 0.15s',
+                }}
+              >
+                <ChevronLeft size={13} aria-hidden /> Prev
+              </button>
+              <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
+                {safePage + 1} / {pageCount}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
+                disabled={safePage === pageCount - 1}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '5px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: 6,
+                  background: 'var(--raised2)', border: '1px solid var(--line2)',
+                  color: safePage === pageCount - 1 ? 'var(--txt-dim)' : 'var(--txt)',
+                  cursor: safePage === pageCount - 1 ? 'default' : 'pointer',
+                  opacity: safePage === pageCount - 1 ? 0.5 : 1,
+                  transition: 'opacity 0.15s',
+                }}
+              >
+                Next <ChevronRight size={13} aria-hidden />
+              </button>
+            </div>
+          )}
+        </>
       )}
       <div style={{ padding: '8px 16px', fontSize: 10, color: 'var(--txt-dim)', borderTop: '1px solid var(--line)' }}>
         Weekends are shown on the monthly calendar above.
@@ -651,14 +730,12 @@ function HolidaysPanel({ holidays, year }: { holidays: HolidayDto[]; year: numbe
 // ── Weekly / Monthly Utilization cards ──────────────────────────────────────────
 
 function UtilPeriodCard({
-  title, avgUtilPct, approvedHours, availableHours, productiveHours, benchHours, breakdown, onViewFull,
+  title, avgUtilPct, approvedHours, availableHours, breakdown, onViewFull,
 }: {
   title: string;
   avgUtilPct: number | null;
   approvedHours: number;
   availableHours: number;
-  productiveHours: number;
-  benchHours: number;
   breakdown?: { label: string; pct: number | null }[];
   onViewFull: () => void;
 }) {
@@ -688,8 +765,6 @@ function UtilPeriodCard({
           </div>
         </div>
       </div>
-
-      <CategoryDonut productiveHours={productiveHours} benchHours={benchHours} />
 
       {breakdown && (
         <div style={{ marginTop: 16 }}>
@@ -795,6 +870,56 @@ function BlockersPanel({ tasks, onSelect }: { tasks: BlockedTask[]; onSelect: (t
 
 // ── Recent activity strip ──────────────────────────────────────────────────────
 
+function RecentEntryRow({ entry, weekday, dateStr, utilAccent, accent }: {
+  entry: RecentEntry; weekday: string; dateStr: string; utilAccent: string; accent: string;
+}) {
+  const [hovered, setHovered] = React.useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'grid', gridTemplateColumns: '4px 72px 1fr auto auto',
+        gap: 12, alignItems: 'center',
+        padding: '10px 16px 10px 12px',
+        background: hovered ? 'var(--raised)' : 'transparent',
+        transition: 'background 0.15s',
+        cursor: 'default',
+      }}
+    >
+      {/* Status accent bar */}
+      <span style={{ width: 4, height: 36, borderRadius: 3, background: accent, flexShrink: 0, alignSelf: 'stretch', display: 'block' }} />
+      {/* Date block */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--txt-dim)' }}>{weekday}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>{dateStr}</span>
+      </div>
+      {/* Status badge */}
+      <div><StatusBadge status={entry.status} /></div>
+      {/* Util % — only for approved */}
+      {entry.status === 'APPROVED'
+        ? <span style={{
+            padding: '3px 9px', borderRadius: 12,
+            background: `color-mix(in srgb, ${utilAccent} 12%, transparent)`,
+            border: `1px solid color-mix(in srgb, ${utilAccent} 30%, transparent)`,
+            fontSize: 11, color: utilAccent, fontWeight: 700,
+            fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+          }}>
+            {fmtPct(entry.utilizationPct ?? null)}
+          </span>
+        : <span />
+      }
+      {/* Hours */}
+      <span style={{
+        fontSize: 13, fontWeight: 600, color: 'var(--txt)',
+        fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+      }}>
+        {entry.totalHours.toFixed(1)}h
+      </span>
+    </div>
+  );
+}
+
 function RecentActivity({ entries }: { entries: RecentEntry[] }) {
   const navigate = useNavigate();
   const display = entries.slice(0, 5);
@@ -820,43 +945,26 @@ function RecentActivity({ entries }: { entries: RecentEntry[] }) {
       </div>
 
       {display.length === 0 ? (
-        <div style={{ padding: '20px 16px', fontSize: 12, color: 'var(--txt-dim)', textAlign: 'center' }}>
+        <div style={{ padding: '24px 16px', fontSize: 13, color: 'var(--txt-dim)', textAlign: 'center' }}>
           No recent entries
         </div>
       ) : (
-        display.map((entry) => {
-          const d = new Date(entry.date + 'T12:00:00');
-          const dateLabel = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-          const utilAccent = utilColor(entry.utilizationPct ?? null);
-          return (
-            <div key={entry.id} className="nf-r-pairs" style={{
-              padding: '10px 16px', borderTop: '1px solid var(--line)',
-              display: 'grid', gridTemplateColumns: '150px 1fr auto auto',
-              gap: 12, alignItems: 'center',
-            }}>
-              <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
-                {dateLabel}
-              </div>
-              <StatusBadge status={entry.status} />
-              {entry.status === 'APPROVED'
-                ? <span style={{
-                    display: 'inline-flex', width: 'fit-content',
-                    padding: '2px 8px', borderRadius: 10,
-                    background: `color-mix(in srgb, ${utilAccent} 12%, transparent)`,
-                    border: `1px solid color-mix(in srgb, ${utilAccent} 30%, transparent)`,
-                    fontSize: 11, color: utilAccent, 
-                    fontWeight: 600, fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    {fmtPct(entry.utilizationPct ?? null)}
-                  </span>
-                : <span />
-              }
-              <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
-                {entry.totalHours.toFixed(1)}h
-              </span>
-            </div>
-          );
-        })
+        <div style={{ padding: '4px 0 8px' }}>
+          {display.map((entry) => {
+            const d = new Date(entry.date + 'T12:00:00');
+            const weekday = d.toLocaleDateString('en-GB', { weekday: 'short' });
+            const dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            const utilAccent = utilColor(entry.utilizationPct ?? null);
+            const statusAccent: Record<string, string> = {
+              APPROVED: 'var(--ok)', SUBMITTED: 'var(--warn)',
+              REJECTED: 'var(--risk)', MISSED: 'var(--risk)', DRAFT: 'var(--line2)',
+            };
+            const accent = statusAccent[entry.status] ?? 'var(--line2)';
+            return (
+              <RecentEntryRow key={entry.id} entry={entry} weekday={weekday} dateStr={dateStr} utilAccent={utilAccent} accent={accent} />
+            );
+          })}
+        </div>
       )}
     </Card>
   );
@@ -984,7 +1092,7 @@ export default function Dashboard() {
     return { calendarFrom: monthOffset === 0 ? undefined : from, calendarTo: monthOffset === 0 ? undefined : to };
   }, [monthOffset]);
 
-  const { data, isPending, isError, refetch } = useDashboardSummary(calendarFrom, calendarTo);
+  const { data, isPending, isError, isFetching, refetch } = useDashboardSummary(calendarFrom, calendarTo);
   useHashScroll(!isPending);
 
   const weekStart   = useMemo(() => currentWeekStartISO(), []);
@@ -997,6 +1105,7 @@ export default function Dashboard() {
   const { data: dashStats }   = useEmployeeDashboardStats(user?.id);
   const { data: projects }    = useEmployeeProjects(user?.id);
   const { data: holidays }    = useHolidaysForYear(holidayYear);
+  const { data: openClarifications } = useEodInbox('employee', true);
 
   if (isPending) return <GlobalLoader fullScreen={false} />;
 
@@ -1029,15 +1138,11 @@ export default function Dashboard() {
 
   const { cutoffStatus, quickStats, blockedTasks, recentEntries, calendarData } = data;
 
-  const today      = new Date(cutoffStatus.today + 'T12:00:00');
-  const todayLabel = today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   // Trusts the API's isWeekend flag (honors the admin-configured weekend rule) rather than
   // recomputing Sat/Sun locally.
   const isWeekend  = calendarData.find(d => d.date === cutoffStatus.today)?.isWeekend ?? false;
 
-  const streakLabel = quickStats.streak === 0
-    ? 'No streak'
-    : `${quickStats.streak} day${quickStats.streak === 1 ? '' : 's'}`;
+  const needsReplyCount = (openClarifications ?? []).filter(i => i.status === 'NEEDS_RESPONSE').length;
 
   const dsiLabel = quickStats.daysSinceLastIssue < 0
     ? 'No issues'
@@ -1052,8 +1157,6 @@ export default function Dashboard() {
         <HeroBanner />
       </div>
 
-      <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: '-8px 0 20px' }}>{todayLabel}</p>
-
       {/* Today's EOD status — always visible */}
       <TodayStatusCard
         status={dashStats?.todayStatus.status ?? (cutoffStatus.entryStatus ?? 'MISSING')}
@@ -1064,35 +1167,50 @@ export default function Dashboard() {
 
       {/* KPI tiles — full-width row */}
       <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16, marginBottom: 20 }}>
-        <KpiCard
-          icon={<Clock size={18} />}
-          label="This week approved"
-          value={`${quickStats.weekApprovedHours.toFixed(1)}h`}
-          accent="var(--info)"
-        />
-        <KpiCard
-          icon={<TrendingUp size={18} />}
-          label="Month avg utilization"
-          value={fmtPct(quickStats.monthAvgUtil)}
-          accent={monthAvgColor}
-        />
-        <KpiCard
-          icon={<Zap size={18} />}
-          label="Approved streak"
-          value={streakLabel}
-          accent={quickStats.streak >= 5 ? 'var(--ok)' : quickStats.streak > 0 ? 'var(--info)' : 'var(--txt-dim)'}
-          trend={quickStats.streak >= 5 ? { label: '🔥 On a roll', positive: true } : undefined}
-        />
-        <KpiCard
-          icon={<Activity size={18} />}
-          label="Last issue"
-          value={dsiLabel}
-          accent={
-            quickStats.daysSinceLastIssue < 0 || quickStats.daysSinceLastIssue > 7 ? 'var(--ok)'
-            : quickStats.daysSinceLastIssue <= 2 ? 'var(--risk)' : 'var(--warn)'
-          }
-          trend={quickStats.daysSinceLastIssue < 0 ? { label: 'in past 90 days', positive: true } : undefined}
-        />
+        <ClickableKpi onClick={() => navigate('/utilization')}>
+          <KpiCard
+            icon={<Clock size={18} />}
+            label="This week approved"
+            value={`${quickStats.weekApprovedHours.toFixed(1)}h`}
+            accent="var(--info)"
+            style={{ height: '100%' }}
+          />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate('/utilization')}>
+          <KpiCard
+            icon={<TrendingUp size={18} />}
+            label="Month avg utilization"
+            value={fmtPct(quickStats.monthAvgUtil)}
+            accent={monthAvgColor}
+            style={{ height: '100%' }}
+          />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate('/employee/eod-inbox')}>
+          <KpiCard
+            icon={<MessageSquare size={18} />}
+            label="EOD inbox"
+            value={needsReplyCount === 0 ? 'All clear' : `${needsReplyCount} open`}
+            accent={needsReplyCount > 0 ? 'var(--risk)' : 'var(--ok)'}
+            trend={needsReplyCount > 0
+              ? { label: 'Team Lead awaiting reply', positive: false }
+              : { label: 'No pending replies', positive: true }
+            }
+            style={{ height: '100%' }}
+          />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate('/blockers')}>
+          <KpiCard
+            icon={<Activity size={18} />}
+            label="Last issue"
+            value={dsiLabel}
+            accent={
+              quickStats.daysSinceLastIssue < 0 || quickStats.daysSinceLastIssue > 7 ? 'var(--ok)'
+              : quickStats.daysSinceLastIssue <= 2 ? 'var(--risk)' : 'var(--warn)'
+            }
+            trend={quickStats.daysSinceLastIssue < 0 ? { label: 'in past 90 days', positive: true } : undefined}
+            style={{ height: '100%' }}
+          />
+        </ClickableKpi>
       </div>
 
       {/* Calendar card + Right panel */}
@@ -1127,6 +1245,7 @@ export default function Dashboard() {
                 maxOffset={MAX_MONTH_OFFSET}
                 minOffset={minMonthOffset}
                 todayStr={cutoffStatus.today}
+                isLoading={isFetching}
               />
             </div>
 
@@ -1169,8 +1288,6 @@ export default function Dashboard() {
           avgUtilPct={weekUtil?.currentPeriod.avgUtilPct ?? null}
           approvedHours={weekUtil?.currentPeriod.totalApproved ?? 0}
           availableHours={weekUtil?.currentPeriod.totalAvailable ?? 0}
-          productiveHours={weekUtil?.categoryBreakdown.productiveHours ?? 0}
-          benchHours={weekUtil?.categoryBreakdown.benchHours ?? 0}
           onViewFull={() => navigate('/utilization')}
         />
         <UtilPeriodCard
@@ -1178,8 +1295,6 @@ export default function Dashboard() {
           avgUtilPct={monthUtil?.currentPeriod.avgUtilPct ?? null}
           approvedHours={monthUtil?.currentPeriod.totalApproved ?? 0}
           availableHours={monthUtil?.currentPeriod.totalAvailable ?? 0}
-          productiveHours={monthUtil?.categoryBreakdown.productiveHours ?? 0}
-          benchHours={monthUtil?.categoryBreakdown.benchHours ?? 0}
           breakdown={monthUtil?.weeklyTrend.map(w => ({
             label: new Date(w.weekStart + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
             pct: w.avgUtilPct,

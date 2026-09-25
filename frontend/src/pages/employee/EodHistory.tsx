@@ -93,6 +93,21 @@ const PAGE_SIZE = 10;
  */
 type DateFilterStatus = 'none' | 'valid' | 'invalid';
 
+function StatusDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      aria-label="Filter by status"
+      style={{ ...selectStyle, minWidth: 140 }}
+    >
+      {STATUS_FILTERS.map(f => (
+        <option key={f.value} value={f.value}>{f.label}</option>
+      ))}
+    </select>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function EodHistory() {
@@ -388,15 +403,8 @@ export default function EodHistory() {
           </div>
         </div>
         <div>
-          <label style={labelStyle} htmlFor="status-filter">Status</label>
-          <select
-            id="status-filter"
-            value={statusFilter}
-            onChange={e => resetPage(setStatusFilter)(e.target.value)}
-            style={selectStyle}
-          >
-            {STATUS_FILTERS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-          </select>
+          <label style={labelStyle}>Status</label>
+          <StatusDropdown value={statusFilter} onChange={resetPage(setStatusFilter)} />
         </div>
         <div>
           <label style={labelStyle} htmlFor="date-from">From</label>

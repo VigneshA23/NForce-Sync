@@ -89,10 +89,13 @@ export function useEmployeeBlocker(taskId: number | undefined) {
 // Full blocker history for the dedicated "My Blockers" page — polled unconditionally (not
 // gated on the selected date range) so a Team Lead's status change always reaches this page
 // without a manual refresh, same cadence as useEmployeeBlocker above.
-export function useEmployeeBlockers(range: DateRange) {
+export function useEmployeeBlockers(range?: DateRange) {
+  const params: DateRange = range?.from
+    ? range
+    : { from: '2000-01-01', to: '2099-12-31' };
   return useQuery({
-    queryKey: ['employee', 'blockers', range.from, range.to],
-    queryFn: () => api.get<BlockedTask[]>('/employee/blockers', { params: range }).then(r => r.data),
+    queryKey: ['employee', 'blockers', params.from, params.to],
+    queryFn: () => api.get<BlockedTask[]>('/employee/blockers', { params }).then(r => r.data),
     staleTime: 15_000,
     refetchInterval: 30_000,
     placeholderData: keepPreviousData,

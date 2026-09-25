@@ -26,7 +26,7 @@ function fmtShortDate(iso: string): string {
   return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-type DateMode = 'today' | 'yesterday' | 'range';
+type DateMode = 'all' | 'today' | 'yesterday' | 'range';
 
 function yesterdayISO(): string {
   const d = new Date();
@@ -44,7 +44,8 @@ function DateFilterButton({ mode, range, onChange }: {
   const [draftFrom, setDraftFrom] = useState(range.from);
   const [draftTo, setDraftTo] = useState(range.to);
 
-  const label = mode === 'today' ? `Today, ${fmtShortDate(todayISO)}`
+  const label = mode === 'all' ? 'All time'
+    : mode === 'today' ? `Today, ${fmtShortDate(todayISO)}`
     : mode === 'yesterday' ? `Yesterday, ${fmtShortDate(range.from)}`
     : range.from === range.to ? fmtShortDate(range.from) : `${fmtShortDate(range.from)} – ${fmtShortDate(range.to)}`;
 
@@ -71,6 +72,16 @@ function DateFilterButton({ mode, range, onChange }: {
             boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
           }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <button
+                onClick={() => { onChange('all', { from: '', to: '' }); setOpen(false); }}
+                style={{
+                  flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
+                  background: mode === 'all' ? 'var(--info)' : 'var(--raised2)',
+                  color: mode === 'all' ? '#fff' : 'var(--txt)', border: '1px solid var(--line2)',
+                }}
+              >
+                All time
+              </button>
               <button
                 onClick={() => { onChange('today', { from: todayISO, to: todayISO }); setOpen(false); }}
                 style={{
@@ -164,7 +175,7 @@ function DateFilterButton({ mode, range, onChange }: {
                 // Either side can be cleared independently (see From/To "X" buttons above) —
                 // an empty side falls back to the other so a single-ended selection still
                 // resolves to a real range; clearing both reverts to the Today default.
-                if (draftFrom === '' && draftTo === '') { onChange('today', { from: todayISO, to: todayISO }); setOpen(false); return; }
+                if (draftFrom === '' && draftTo === '') { onChange('all', { from: '', to: '' }); setOpen(false); return; }
                 const from = draftFrom || draftTo;
                 const to = draftTo || draftFrom;
                 onChange('range', { from, to });
@@ -189,61 +200,37 @@ function DateFilterButton({ mode, range, onChange }: {
 
 // ── single-select project filter dropdown ───────────────────────────────────────
 
+const filterSelectStyle: React.CSSProperties = {
+  background: 'var(--shell)',
+  border: '1px solid var(--line2)',
+  borderRadius: 6,
+  padding: '9px 12px',
+  color: 'var(--txt)',
+  fontSize: 13,
+  outline: 'none',
+  cursor: 'pointer',
+  fontFamily: 'Inter, sans-serif',
+  minWidth: 150,
+};
+
 function SingleSelectDropdown({ label, value, options, onChange }: {
   label: string;
   value: string | null;
   options: string[];
   onChange: (v: string | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div style={{ position: 'relative' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px',
-          borderRadius: 8, fontSize: 12.5, fontWeight: 500, color: 'var(--txt)',
-          background: 'var(--raised2)', border: '1px solid var(--line2)', cursor: 'pointer', whiteSpace: 'nowrap',
-        }}
-      >
-        {label}: {value ?? 'All'}
-        <ChevronDown size={12} aria-hidden="true" />
-      </button>
-      {open && (
-        <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div className="nf-r-popover" style={{
-            position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, minWidth: 180,
-            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 6,
-            boxShadow: '0 12px 28px rgba(0,0,0,0.35)', maxHeight: 260, overflowY: 'auto',
-          }}>
-            <button
-              onClick={() => { onChange(null); setOpen(false); }}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6,
-                background: value == null ? 'var(--raised2)' : 'transparent', border: 'none',
-                color: 'var(--txt)', fontSize: 12.5, cursor: 'pointer',
-              }}
-            >
-              All
-            </button>
-            {options.map(opt => (
-              <button
-                key={opt}
-                onClick={() => { onChange(opt); setOpen(false); }}
-                style={{
-                  display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6,
-                  background: value === opt ? 'var(--raised2)' : 'transparent', border: 'none',
-                  color: 'var(--txt)', fontSize: 12.5, cursor: 'pointer',
-                }}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+    <select
+      value={value ?? ''}
+      onChange={e => onChange(e.target.value === '' ? null : e.target.value)}
+      aria-label={`Filter by ${label}`}
+      style={filterSelectStyle}
+    >
+      <option value="">All {label}s</option>
+      {options.map(opt => (
+        <option key={opt} value={opt}>{opt}</option>
+      ))}
+    </select>
   );
 }
 
@@ -252,25 +239,62 @@ function SingleSelectDropdown({ label, value, options, onChange }: {
 function StatCard({ icon, label, value, caption, accent }: {
   icon: React.ReactNode; label: string; value: number; caption: string; accent: string;
 }) {
+  const [hov, setHov] = useState(false);
   return (
-    <Card>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        background: 'var(--panel)',
+        border: `1px solid ${hov ? `color-mix(in srgb, ${accent} 45%, var(--line))` : 'var(--line)'}`,
+        borderRadius: 12,
+        padding: '16px 18px',
+        position: 'relative',
+        overflow: 'hidden',
+        transform: hov ? 'translateY(-3px) scale(1.01)' : 'translateY(0) scale(1)',
+        transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.18s ease, box-shadow 0.18s ease',
+        boxShadow: hov
+          ? `0 8px 24px -4px color-mix(in srgb, ${accent} 25%, transparent), 0 2px 8px color-mix(in srgb, ${accent} 10%, transparent)`
+          : '0 1px 4px rgba(0,0,0,0.06)',
+        cursor: 'default',
+      }}
+    >
+      <div aria-hidden="true" style={{
+        position: 'absolute', top: -16, right: -16, width: 72, height: 72, borderRadius: '50%',
+        background: `radial-gradient(circle, color-mix(in srgb, ${accent} 28%, transparent), transparent 70%)`,
+        opacity: hov ? 1 : 0.5, transition: 'opacity 0.25s ease', pointerEvents: 'none',
+      }} />
+      <div aria-hidden="true" style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+        background: `linear-gradient(90deg, transparent, color-mix(in srgb, ${accent} 50%, transparent) 50%, transparent)`,
+        opacity: hov ? 0.6 : 0, transition: 'opacity 0.25s ease',
+        borderRadius: '12px 12px 0 0', pointerEvents: 'none',
+      }} />
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{
-          width: 40, height: 40, borderRadius: 8, flexShrink: 0,
-          background: `color-mix(in srgb, ${accent} 18%, transparent)`,
+          width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+          background: `color-mix(in srgb, ${accent} 14%, var(--raised2, transparent))`,
+          boxShadow: `0 0 0 1px color-mix(in srgb, ${accent} 20%, transparent)${hov ? `, 0 0 12px color-mix(in srgb, ${accent} 30%, transparent)` : ''}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
+          transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease',
+          transform: hov ? 'scale(1.12)' : 'scale(1)',
         }}>
           {icon}
         </div>
-        <div>
-          <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', fontWeight: 600, marginBottom: 2 }}>{label}</div>
-          <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
-            {value}
-          </div>
-          <div style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{caption}</div>
-        </div>
       </div>
-    </Card>
+
+      <div style={{
+        fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
+        fontSize: 24, fontWeight: 700, color: accent,
+        letterSpacing: '-0.02em', lineHeight: 1,
+        fontVariantNumeric: 'tabular-nums', marginBottom: 5,
+      }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--txt-mut)', fontWeight: 500, marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 10.5, color: 'var(--txt-dim)' }}>{caption}</div>
+    </div>
   );
 }
 
@@ -438,14 +462,14 @@ export default function MyBlockers() {
   const highlightParam = searchParams.get('highlight');
   const highlightId = highlightParam ? Number(highlightParam) : null;
 
-  const todayISO = localTodayISO();
-  const [dateMode, setDateMode] = useState<DateMode>('today');
-  const [range, setRange] = useState<DateRange>({ from: todayISO, to: todayISO });
+  const [dateMode, setDateMode] = useState<DateMode>('all');
+  const [range, setRange] = useState<DateRange>({ from: '', to: '' });
 
-  const { data: blockers, isPending, isError, refetch } = useEmployeeBlockers(range);
+  const { data: blockers, isPending, isError, refetch } = useEmployeeBlockers(dateMode === 'all' ? undefined : range);
 
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<BlockedTask['status'] | ''>('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
@@ -463,6 +487,7 @@ export default function MyBlockers() {
   const filtered = useMemo(() => {
     let list = blockers ?? [];
     if (projectFilter) list = list.filter(b => b.projectName === projectFilter);
+    if (statusFilter) list = list.filter(b => b.status === statusFilter);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(b =>
@@ -476,9 +501,9 @@ export default function MyBlockers() {
       const bT = new Date(b.entryDate).getTime();
       return sortDir === 'desc' ? bT - aT : aT - bT;
     });
-  }, [blockers, projectFilter, search, sortDir]);
+  }, [blockers, projectFilter, statusFilter, search, sortDir]);
 
-  useEffect(() => { setPage(1); }, [search, projectFilter]);
+  useEffect(() => { setPage(1); }, [search, projectFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -561,7 +586,7 @@ export default function MyBlockers() {
 
         {/* Filter bar */}
         <Card style={{ padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 180 }}>
+          <div style={{ position: 'relative', flex: '0 1 300px', minWidth: 180 }}>
             <Search size={14} aria-hidden="true" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-dim)' }} />
             <input
               value={search}
@@ -570,10 +595,31 @@ export default function MyBlockers() {
               style={{
                 width: '100%', padding: '7px 10px 7px 32px', fontSize: 12.5, borderRadius: 8,
                 background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
+                outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box',
               }}
             />
           </div>
           <SingleSelectDropdown label="Project" value={projectFilter} options={projectOptions} onChange={setProjectFilter} />
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value as BlockedTask['status'] | '')}
+            aria-label="Filter by status"
+            style={filterSelectStyle}
+          >
+            <option value="">All Statuses</option>
+            <option value="NEEDS_RESPONSE">Needs Response</option>
+            <option value="ACKNOWLEDGED">Acknowledged</option>
+            <option value="RESOLVED">Resolved</option>
+          </select>
+          <select
+            value={sortDir}
+            onChange={e => setSortDir(e.target.value as 'asc' | 'desc')}
+            aria-label="Sort order"
+            style={{ ...filterSelectStyle, marginLeft: 'auto' }}
+          >
+            <option value="desc">Latest first</option>
+            <option value="asc">Oldest first</option>
+          </select>
         </Card>
 
         {/* Table */}
@@ -589,12 +635,7 @@ export default function MyBlockers() {
           }}>
             <span>Blocker</span>
             <span>Project</span>
-            <button
-              onClick={() => setSortDir(d => (d === 'desc' ? 'asc' : 'desc'))}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--risk)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', padding: 0 }}
-            >
-              Reported On
-            </button>
+            <span>Reported On</span>
             <span>Status</span>
           </div>
 

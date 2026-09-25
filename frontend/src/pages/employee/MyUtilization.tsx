@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import {
-  ComposedChart, Area, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
-  PieChart, Pie, Cell,
 } from 'recharts';
 import {
   RefreshCw, TrendingUp, Clock, CheckCircle2, Activity, CalendarRange,
@@ -13,7 +12,6 @@ import { UtilBar, UtilLegend } from '../../components/UtilBar';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { RULES, utilColor, utilState, fmtPct } from '../../lib/rules';
 import { todayISO, toLocalISODate } from '../../lib/date';
-import { totalHours } from '../../lib/hoursBreakdown';
 import { useHashScroll } from '../../lib/useHashScroll';
 
 // ── Date range helpers ─────────────────────────────────────────────────────────
@@ -72,29 +70,64 @@ function KpiTile({
   sub?: string;
   accent?: string;
 }) {
+  const [hov, setHov] = useState(false);
   return (
-    <Card className="nf-util-card nf-util-kpi" pad={16}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        background: 'var(--panel)',
+        border: `1px solid ${hov ? `color-mix(in srgb, ${accent} 45%, var(--line))` : 'var(--line)'}`,
+        borderRadius: 12,
+        padding: '16px 18px',
+        position: 'relative',
+        overflow: 'hidden',
+        transform: hov ? 'translateY(-3px) scale(1.01)' : 'translateY(0) scale(1)',
+        transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.18s ease, box-shadow 0.18s ease',
+        boxShadow: hov
+          ? `0 8px 24px -4px color-mix(in srgb, ${accent} 25%, transparent), 0 2px 8px color-mix(in srgb, ${accent} 10%, transparent)`
+          : '0 1px 4px rgba(0,0,0,0.06)',
+        cursor: 'default',
+        minWidth: 0,
+      }}
+    >
+      <div aria-hidden="true" style={{
+        position: 'absolute', top: -16, right: -16, width: 72, height: 72, borderRadius: '50%',
+        background: `radial-gradient(circle, color-mix(in srgb, ${accent} 28%, transparent), transparent 70%)`,
+        opacity: hov ? 1 : 0.5, transition: 'opacity 0.25s ease', pointerEvents: 'none',
+      }} />
+      <div aria-hidden="true" style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+        background: `linear-gradient(90deg, transparent, color-mix(in srgb, ${accent} 50%, transparent) 50%, transparent)`,
+        opacity: hov ? 0.6 : 0, transition: 'opacity 0.25s ease',
+        borderRadius: '12px 12px 0 0', pointerEvents: 'none',
+      }} />
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{
           width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-          background: `color-mix(in srgb, ${accent} 14%, var(--raised2))`,
+          background: `color-mix(in srgb, ${accent} 14%, var(--raised2, transparent))`,
+          boxShadow: `0 0 0 1px color-mix(in srgb, ${accent} 20%, transparent)${hov ? `, 0 0 12px color-mix(in srgb, ${accent} 30%, transparent)` : ''}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
+          transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease',
+          transform: hov ? 'scale(1.12)' : 'scale(1)',
         }}>
           {icon}
         </div>
       </div>
+
       <div style={{
         fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
         fontSize: 24, fontWeight: 700, color: accent,
         letterSpacing: '-0.02em', lineHeight: 1,
-        fontVariantNumeric: 'tabular-nums', marginBottom: 6,
+        fontVariantNumeric: 'tabular-nums', marginBottom: 5,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
         {value}
       </div>
-      <div style={{ fontSize: 11, color: 'var(--txt-mut)', fontWeight: 500 }}>{label}</div>
-      {sub && <div style={{ fontSize: 10, color: 'var(--txt-dim)', marginTop: 4 }}>{sub}</div>}
-    </Card>
+      <div style={{ fontSize: 11.5, color: 'var(--txt-mut)', fontWeight: 500 }}>{label}</div>
+      {sub && <div style={{ fontSize: 10.5, color: 'var(--txt-dim)', marginTop: 3 }}>{sub}</div>}
+    </div>
   );
 }
 
@@ -112,12 +145,15 @@ function TrendChart({ weeks }: { weeks: WeekTrend[] }) {
     approved: w.totalApproved,
   }));
 
-  // Custom dot: hide when util is null
+  // Custom dot: hollow gray circle for missing weeks, solid colored dot for real data
   const CustomDot = (props: {
     cx?: number; cy?: number; value?: number | null; r?: number;
   }) => {
     const { cx, cy, value } = props;
-    if (value == null || cx == null || cy == null) return <g />;
+    if (cx == null || cy == null) return <g />;
+    if (value == null) {
+      return <circle cx={cx} cy={cy} r={3} fill="var(--panel)" stroke="var(--txt-dim)" strokeWidth={1.5} opacity={0.5} />;
+    }
     const color = utilColor(value);
     return <circle cx={cx} cy={cy} r={4} fill={color} stroke="var(--panel)" strokeWidth={2} />;
   };
@@ -127,7 +163,7 @@ function TrendChart({ weeks }: { weeks: WeekTrend[] }) {
   }) => {
     if (!active || !payload?.length) return null;
     const util = payload[0]?.value;
-    const color = utilColor(util ?? null);
+    const color = util != null ? utilColor(util) : 'var(--txt-dim)';
     return (
       <div style={{
         background: 'var(--raised)', border: '1px solid var(--line2)',
@@ -135,7 +171,7 @@ function TrendChart({ weeks }: { weeks: WeekTrend[] }) {
       }}>
         <div style={{ color: 'var(--txt-mut)', marginBottom: 4 }}>Week of {label}</div>
         <div style={{ color, fontWeight: 600 }}>
-          {fmtPct(util ?? null)}
+          {util != null ? fmtPct(util) : 'No data this week'}
         </div>
       </div>
     );
@@ -175,6 +211,16 @@ function TrendChart({ weeks }: { weeks: WeekTrend[] }) {
           <ReferenceLine y={RULES.util.under} stroke="var(--warn)"   strokeDasharray="4 4" strokeOpacity={0.6} />
           <ReferenceLine y={RULES.util.over}  stroke="var(--risk)"   strokeDasharray="4 4" strokeOpacity={0.6} />
           <Tooltip content={<CustomTooltip />} />
+          <Line
+            type="monotone"
+            dataKey="util"
+            stroke="var(--line2)"
+            strokeWidth={1.5}
+            strokeDasharray="5 4"
+            connectNulls={true}
+            dot={false}
+            activeDot={false}
+          />
           <Area
             type="monotone" dataKey="util"
             stroke="var(--info)" strokeWidth={2}
@@ -185,100 +231,6 @@ function TrendChart({ weeks }: { weeks: WeekTrend[] }) {
           />
         </ComposedChart>
       </ResponsiveContainer>
-    </div>
-  );
-}
-
-// ── Donut chart ────────────────────────────────────────────────────────────────
-
-const DONUT_COLORS = ['var(--ok)', 'var(--txt-dim)'];
-
-function DonutChart({ productive, bench }: {
-  productive: number; bench: number;
-}) {
-  const total = totalHours(productive, bench);
-  const data = [
-    { name: 'Productive', value: productive },
-    { name: 'Bench',      value: bench },
-  ].filter(d => d.value > 0);
-
-  if (total === 0) {
-    return (
-      <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ fontSize: 12, color: 'var(--txt-dim)' }}>No data</span>
-      </div>
-    );
-  }
-
-  // Stacked layout (donut centered above, legend rows spanning the full card
-  // width below) rather than side-by-side — the card sits in a narrow fixed
-  // column, and a row layout left too little width for the legend text,
-  // pushing Productive / Bench past the card boundary.
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, minWidth: 0 }}>
-      <div style={{ position: 'relative', width: 140, height: 140, flexShrink: 0 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data} cx="50%" cy="50%"
-              innerRadius={42} outerRadius={64}
-              paddingAngle={3} dataKey="value"
-              strokeWidth={0}
-            >
-              {data.map((entry, idx) => {
-                const colorIdx = ['Productive', 'Bench'].indexOf(entry.name);
-                return <Cell key={entry.name} fill={DONUT_COLORS[colorIdx < 0 ? idx : colorIdx]} />;
-              })}
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex',
-          flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <span style={{
-            fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 20, fontWeight: 700,
-            color: 'var(--txt)', letterSpacing: '-0.02em', lineHeight: 1,
-          }}>
-            {total.toFixed(1)}h
-          </span>
-          <span style={{ fontSize: 9, color: 'var(--txt-dim)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Total
-          </span>
-        </div>
-      </div>
-
-      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
-        {[
-          { label: 'Productive', value: productive, color: DONUT_COLORS[0] },
-          { label: 'Bench',      value: bench,       color: DONUT_COLORS[1] },
-        ].map(({ label, value, color }) => (
-          <div key={label} style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            gap: 8, minWidth: 0,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, overflow: 'hidden' }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
-              <span style={{
-                fontSize: 11, color: 'var(--txt-mut)',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
-                {label}
-              </span>
-            </div>
-            <div style={{
-              fontSize: 11,
-              color: 'var(--txt)', fontVariantNumeric: 'tabular-nums',
-              flexShrink: 0, whiteSpace: 'nowrap',
-            }}>
-              {value.toFixed(1)}h
-              <span style={{ color: 'var(--txt-dim)', marginLeft: 4, fontSize: 10 }}>
-                ({total > 0 ? Math.round((value / total) * 100) : 0}%)
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -601,26 +553,16 @@ export default function MyUtilization() {
         </Card>
       </div>
 
-      {/* Donut + history */}
-      <div className="nf-util-breakdown-row" style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, marginBottom: 0 }}>
-        <Card className="nf-util-card">
-          <SectionLabel id="hours-breakdown" icon={<Activity size={13} color="var(--txt-mut)" />}>Hours Breakdown</SectionLabel>
-          <DonutChart
-            productive={categoryBreakdown.productiveHours}
-            bench={categoryBreakdown.benchHours}
-          />
-        </Card>
-
-        <Card className="nf-util-card" pad={0}>
-          <div style={{ padding: '14px 20px 10px' }}>
-            <SectionLabel id="daily-history" icon={<Clock size={13} color="var(--txt-mut)" />}>Daily History</SectionLabel>
-          </div>
-          <div style={{ padding: '0 20px 16px' }}>
-            <HistoryTable rows={history} />
-          </div>
-          <UtilLegend />
-        </Card>
-      </div>
+      {/* Daily History — full width */}
+      <Card className="nf-util-card" pad={0}>
+        <div style={{ padding: '14px 20px 10px' }}>
+          <SectionLabel id="daily-history" icon={<Clock size={13} color="var(--txt-mut)" />}>Daily History</SectionLabel>
+        </div>
+        <div style={{ padding: '0 20px 16px' }}>
+          <HistoryTable rows={history} />
+        </div>
+        <UtilLegend />
+      </Card>
 
       <style>{`
         .nf-util-card { transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease; }
@@ -633,7 +575,6 @@ export default function MyUtilization() {
 
         @media (max-width: 1024px) {
           .nf-util-trend-row { grid-template-columns: 1fr !important; }
-          .nf-util-breakdown-row { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 560px) {
           .nf-util-kpis { grid-template-columns: repeat(2, 1fr) !important; }
