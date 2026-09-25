@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  AlertTriangle, UserX, CheckCircle2, Search, ChevronDown, ChevronLeft, ChevronRight, RefreshCw,
-  X, Folder, Clock, CalendarDays, Calendar,
+  AlertTriangle, UserX, CheckCircle2, Search, RefreshCw,
+  X, Folder, Clock, CalendarDays,
 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { BlockerThreadView } from '../../components/BlockerThread';
+import { Pagination } from '../../components/Pagination';
+import { DateFilterButton, fmtShortDate, type DateFilterMode as DateMode } from '../../components/BlockerDateFilterButton';
 import { useEmployeeBlockers, useEmployeeBlocker, type BlockedTask } from '../../api/employee';
 import type { DateRange } from '../../api/teamLead';
-import { todayISO as localTodayISO, toLocalISODate } from '../../lib/date';
 
 // Mirrors pages/lead/Blockers.tsx's list + side-panel layout, trimmed to the fields
 // BlockedTask carries (this is always "my own" blockers — no employeeName/avatar/replyCount).
@@ -19,184 +20,6 @@ import { todayISO as localTodayISO, toLocalISODate } from '../../lib/date';
 const BLOCKER_TABLE_COLUMNS = '2.2fr 1fr 1.2fr 1fr';
 // Under the 1074px desktop content width, so this never scrolls on desktop.
 const BLOCKER_TABLE_MIN_WIDTH = 640;
-
-// ── date helpers (page-local, same convention as lead/Blockers.tsx) ────────────────
-
-function fmtShortDate(iso: string): string {
-  return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-type DateMode = 'all' | 'today' | 'yesterday' | 'range';
-
-function yesterdayISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return toLocalISODate(d);
-}
-
-function DateFilterButton({ mode, range, onChange }: {
-  mode: DateMode;
-  range: DateRange;
-  onChange: (mode: DateMode, range: DateRange) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const todayISO = localTodayISO();
-  const [draftFrom, setDraftFrom] = useState(range.from);
-  const [draftTo, setDraftTo] = useState(range.to);
-
-  const label = mode === 'all' ? 'All time'
-    : mode === 'today' ? `Today, ${fmtShortDate(todayISO)}`
-    : mode === 'yesterday' ? `Yesterday, ${fmtShortDate(range.from)}`
-    : range.from === range.to ? fmtShortDate(range.from) : `${fmtShortDate(range.from)} – ${fmtShortDate(range.to)}`;
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <button
-        onClick={() => { setDraftFrom(range.from); setDraftTo(range.to); setOpen(o => !o); }}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px',
-          fontSize: 12.5, fontWeight: 600, color: 'var(--txt)', background: 'var(--raised)',
-          border: '1px solid var(--line)', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
-        }}
-      >
-        <Calendar size={13} aria-hidden="true" />
-        {label}
-        <ChevronDown size={12} aria-hidden="true" />
-      </button>
-      {open && (
-        <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div className="nf-r-popover" style={{
-            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 300,
-            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
-            boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
-          }}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-              <button
-                onClick={() => { onChange('all', { from: '', to: '' }); setOpen(false); }}
-                style={{
-                  flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                  background: mode === 'all' ? 'var(--info)' : 'var(--raised2)',
-                  color: mode === 'all' ? '#fff' : 'var(--txt)', border: '1px solid var(--line2)',
-                }}
-              >
-                All time
-              </button>
-              <button
-                onClick={() => { onChange('today', { from: todayISO, to: todayISO }); setOpen(false); }}
-                style={{
-                  flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                  background: mode === 'today' ? 'var(--info)' : 'var(--raised2)',
-                  color: mode === 'today' ? '#fff' : 'var(--txt)', border: '1px solid var(--line2)',
-                }}
-              >
-                Today
-              </button>
-              <button
-                onClick={() => { const y = yesterdayISO(); onChange('yesterday', { from: y, to: y }); setOpen(false); }}
-                style={{
-                  flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                  background: mode === 'yesterday' ? 'var(--info)' : 'var(--raised2)',
-                  color: mode === 'yesterday' ? '#fff' : 'var(--txt)', border: '1px solid var(--line2)',
-                }}
-              >
-                Yesterday
-              </button>
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-              Custom range
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
-              <div style={{ flex: 1, minWidth: 130 }}>
-                <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>From</div>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="date" value={draftFrom} max={todayISO}
-                    onChange={(e) => setDraftFrom(e.target.value)}
-                    style={{
-                      width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
-                      background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                      boxSizing: 'border-box', paddingRight: 44,
-                    }}
-                  />
-                  {draftFrom && (
-                    <button
-                      type="button"
-                      aria-label="Clear from date"
-                      onClick={() => setDraftFrom('')}
-                      style={{
-                        position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)',
-                        background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
-                        display: 'flex', padding: 4, borderRadius: 4,
-                      }}
-                    >
-                      <X size={12} aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div style={{ flex: 1, minWidth: 130 }}>
-                <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>To</div>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="date" value={draftTo} max={todayISO}
-                    onChange={(e) => setDraftTo(e.target.value)}
-                    style={{
-                      width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
-                      background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                      boxSizing: 'border-box', paddingRight: 44,
-                    }}
-                  />
-                  {draftTo && (
-                    <button
-                      type="button"
-                      aria-label="Clear to date"
-                      onClick={() => setDraftTo('')}
-                      style={{
-                        position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)',
-                        background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
-                        display: 'flex', padding: 4, borderRadius: 4,
-                      }}
-                    >
-                      <X size={12} aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-            {draftFrom !== '' && draftTo !== '' && draftFrom > draftTo && (
-              <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
-                From date cannot be later than To date.
-              </div>
-            )}
-            <button
-              onClick={() => {
-                if (draftFrom !== '' && draftTo !== '' && draftFrom > draftTo) return;
-                // Either side can be cleared independently (see From/To "X" buttons above) —
-                // an empty side falls back to the other so a single-ended selection still
-                // resolves to a real range; clearing both reverts to the Today default.
-                if (draftFrom === '' && draftTo === '') { onChange('all', { from: '', to: '' }); setOpen(false); return; }
-                const from = draftFrom || draftTo;
-                const to = draftTo || draftFrom;
-                onChange('range', { from, to });
-                setOpen(false);
-              }}
-              disabled={draftFrom !== '' && draftTo !== '' && draftFrom > draftTo}
-              style={{
-                width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
-                background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                cursor: (draftFrom !== '' && draftTo !== '' && draftFrom > draftTo) ? 'not-allowed' : 'pointer',
-                opacity: (draftFrom !== '' && draftTo !== '' && draftFrom > draftTo) ? 0.6 : 1,
-              }}
-            >
-              Apply
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 // ── single-select project filter dropdown ───────────────────────────────────────
 
@@ -574,7 +397,10 @@ export default function MyBlockers() {
               Blockers you've reported and your Team Lead's replies.
             </p>
           </div>
-          <DateFilterButton mode={dateMode} range={range} onChange={(m, r) => { setDateMode(m); setRange(r); }} />
+          <DateFilterButton
+            mode={dateMode} range={range} showAllOption enforceNotFuture={false}
+            onChange={(m, r) => { setDateMode(m); setRange(r); }}
+          />
         </div>
 
         {/* KPI row */}
@@ -654,35 +480,10 @@ export default function MyBlockers() {
           </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: '1px solid var(--line)' }}>
-            <span style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
-              {filtered.length === 0
-                ? 'Showing 0 of 0 results'
-                : `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} results`}
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                style={{ display: 'flex', padding: 5, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}
-              >
-                <ChevronLeft size={14} aria-hidden="true" />
-              </button>
-              <span style={{
-                minWidth: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: 6, background: 'var(--risk)', color: '#fff', fontSize: 12, fontWeight: 700,
-              }}>
-                {page}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                style={{ display: 'flex', padding: 5, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.5 : 1 }}
-              >
-                <ChevronRight size={14} aria-hidden="true" />
-              </button>
-            </div>
-          </div>
+          <Pagination
+            page={page} totalPages={totalPages} totalItems={filtered.length} pageSize={PAGE_SIZE}
+            onPageChange={setPage} itemLabel="results"
+          />
         </Card>
       </div>
 

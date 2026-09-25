@@ -30,6 +30,26 @@ function basePath(scope: ConversationScope): string {
   return scope === 'lead' ? '/team-lead/blockers' : '/employee/blockers';
 }
 
+/** Edit an existing reply's message text — restricted server-side to the reply's own sender. */
+export function useEditBlockerReply(taskId: number, scope: ConversationScope) {
+  const qc = useQueryClient();
+  return useMutation({
+    // basePath(scope) already ends in "/blockers" (see above) — no second "/blockers" here.
+    mutationFn: ({ replyId, message }: { replyId: number; message: string }) =>
+      api.put(`${basePath(scope)}/replies/${replyId}`, { message }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: threadKey(scope, taskId) }),
+  });
+}
+
+/** Delete an existing reply — restricted server-side to the reply's own sender. */
+export function useDeleteBlockerReply(taskId: number, scope: ConversationScope) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (replyId: number) => api.delete(`${basePath(scope)}/replies/${replyId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: threadKey(scope, taskId) }),
+  });
+}
+
 // Attachment bytes are fetched on demand (not inlined into the thread response) — cached
 // as an object URL per attachment. Not explicitly revoked on cache eviction since another
 // mounted <img>/link may still reference the same cached URL; the per-session attachment

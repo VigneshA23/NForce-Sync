@@ -18,6 +18,8 @@ import {
   useEodInbox, useSetClarificationStatus, useMarkClarificationRead, type EodInboxItemDto, type ClarificationStatusValue,
 } from '../../api/eodClarification';
 import { formatDate as fmtDate } from '../../lib/date';
+import { DateFilterButton, type DateFilterMode } from '../../components/BlockerDateFilterButton';
+import type { DateRange } from '../../api/teamLead';
 
 function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
   return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
@@ -165,15 +167,26 @@ export default function EodInbox() {
   const [sort, setSort] = useState<EodInboxSort>('latest');
   const [page, setPage] = useState(1);
   const appliedHighlightRef = useRef(false);
+  // Same Today/Yesterday/Custom-range/All-time picker as Blockers — defaults to All time (no
+  // filter) rather than Blockers' own Today default, since a clarification opened days or weeks
+  // ago is still just as actionable and an inbox that looks emptied out on first load would read
+  // as a bug, not a feature.
+  const [dateMode, setDateMode] = useState<DateFilterMode>('all');
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
 
   useEffect(() => {
     setPage(1);
-  }, [filter, search, employeeFilter, projectFilter, categoryFilter, sort]);
+  }, [filter, search, employeeFilter, projectFilter, categoryFilter, sort, dateMode, dateRange]);
 
   const allItems = useMemo(() => {
     const merged = [...(openQuery.data ?? []), ...(resolvedQuery.data ?? [])];
-    return merged.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
-  }, [openQuery.data, resolvedQuery.data]);
+    // Filters on the EOD entry's own date, same field the Employee EOD Inbox's equivalent
+    // filter already used — entryDate is a plain yyyy-MM-dd, so no timezone-sensitive
+    // conversion is needed the way openedAt (a full instant) would require.
+    const dateFiltered = dateMode === 'all' ? merged
+      : merged.filter(i => i.entryDate >= dateRange.from && i.entryDate <= dateRange.to);
+    return dateFiltered.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+  }, [openQuery.data, resolvedQuery.data, dateMode, dateRange]);
 
   // A ?highlight= link only carries the eodEntryId, so resolve it to that entry's clarification
   // once the list has loaded, then apply just once (a later refetch shouldn't re-jump selection
@@ -263,6 +276,10 @@ export default function EodInbox() {
               EOD entries with a clarification you've requested — they stay out of Approvals until resolved.
             </p>
           </div>
+          <DateFilterButton
+            mode={dateMode} range={dateRange} showAllOption enforceNotFuture={false}
+            onChange={(m, r) => { setDateMode(m); setDateRange(r); }}
+          />
         </div>
 
         <EodInboxStatusPills filter={filter} onFilterChange={setFilter} counts={counts} />

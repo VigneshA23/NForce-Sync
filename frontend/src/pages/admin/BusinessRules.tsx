@@ -16,6 +16,7 @@ import { Modal } from '../../components/Modal';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { DropdownMenu } from '../../components/DropdownMenu';
 import { TimeStepperInput } from '../../components/TimeStepperInput';
+import { Pagination } from '../../components/Pagination';
 import { useToast } from '../../lib/toast';
 
 // ── Shared styles (matches OrganizationMasters.tsx idiom) ──────────────────────
@@ -966,7 +967,12 @@ interface HolidayTableProps {
   onOpenMenuChange: (id: number | null) => void;
 }
 
+const HOLIDAY_PAGE_SIZE = 10;
+
 function HolidayTable({ data, isPending, isError, onEdit, onDelete, openMenuId, onOpenMenuChange }: HolidayTableProps) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil((data?.length ?? 0) / HOLIDAY_PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
   return (
     <div style={{ background: 'var(--shell)', border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden' }}>
       {isPending && (
@@ -985,7 +991,7 @@ function HolidayTable({ data, isPending, isError, onEdit, onDelete, openMenuId, 
           <tbody>
             {data.length === 0 ? (
               <tr><td colSpan={3} style={{ padding: '30px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>No holidays added yet.</td></tr>
-            ) : data.map((holiday) => (
+            ) : data.slice((pageSafe - 1) * HOLIDAY_PAGE_SIZE, pageSafe * HOLIDAY_PAGE_SIZE).map((holiday) => (
               <tr key={holiday.id}>
                 <td style={tdStyle}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
@@ -1011,6 +1017,12 @@ function HolidayTable({ data, isPending, isError, onEdit, onDelete, openMenuId, 
             ))}
           </tbody>
         </table>
+      )}
+      {data && data.length > 0 && (
+        <Pagination
+          page={pageSafe} totalPages={totalPages} totalItems={data.length} pageSize={HOLIDAY_PAGE_SIZE}
+          onPageChange={setPage} itemLabel="holidays"
+        />
       )}
     </div>
   );

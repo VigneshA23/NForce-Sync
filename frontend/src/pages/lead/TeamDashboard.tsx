@@ -2,27 +2,29 @@ import { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Ban, Calendar, ChevronDown, ChevronRight, ClipboardCheck,
-  Flag, Gauge, Hourglass, Loader2, Scale,
+  Ban, ChevronDown, ChevronRight, ClipboardCheck,
+  Flag, Gauge, Hourglass, Scale,
 } from 'lucide-react';
+import { DateRangeSelector } from '../../components/DateRangeSelector';
 import {
   ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts';
-import { todayISO as localTodayISO } from '../../lib/date';
+import { todayISO as localTodayISO, formatDateShort, formatDateRange } from '../../lib/date';
 import { useAuth } from '../../lib/auth';
 import { getEntry } from '../../api/eod';
 import { usePendingApprovalsCount } from '../../api/approvals';
 import { readStoredDateFilter, resolveTeamDashboardDateFilter, writeStoredDateFilter } from '../../lib/teamDashboardDateFilter';
 import {
   useTeamLeadBlockers, useTeamLeadSummary, useTeamLeadTrend, useTeamMemberStatuses,
-  type DateRange, type MemberEodStatus, type MemberEodStatusDto, type TeamBlockerDto, type TeamLeadSummaryDto,
+  type MemberEodStatus, type MemberEodStatusDto, type TeamBlockerDto, type TeamLeadSummaryDto,
   type TrendPointDto,
 } from '../../api/teamLead';
 import { ReporteeScopePicker } from '../../components/ReporteeScopePicker';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { Card, KpiCard, ClickableKpi } from '../../components/KpiCard';
 import { HeroBanner } from '../../components/dashboard/HeroBanner';
+import { Pagination } from '../../components/Pagination';
 
 // ── status config ──────────────────────────────────────────────────────────────
 // SUBMITTED here means the entry has been through review and is APPROVED (backend
@@ -44,14 +46,6 @@ const STATUS_PRIORITY: Record<MemberEodStatus, number> = {
 
 function fmtPct(pct: number | null): string {
   return pct === null ? '—' : `${Math.round(pct)}%`;
-}
-
-function fmtShortDate(iso: string): string {
-  return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function rangeLabel(range: DateRange, fmt: (iso: string) => string): string {
-  return range.from === range.to ? fmt(range.from) : `${fmt(range.from)} – ${fmt(range.to)}`;
 }
 
 // "52.3" open hours -> "2d 4h". Same unit (openHours) the app already uses elsewhere for
@@ -450,20 +444,13 @@ function UtilizationOverviewRing({ summary }: { summary: TeamLeadSummaryDto }) {
 
 // ── main ─────────────────────────────────────────────────────────────────────────────
 
-const ROSTER_COLLAPSED_COUNT = 6;
+const ROSTER_PAGE_SIZE = 6;
 const BLOCKERS_COLLAPSED_COUNT = 2;
 
 // Roster table — header row and body rows must share one template or the
 // columns desync. Min width stays under the desktop content width.
 const ROSTER_TABLE_COLUMNS = '1.8fr 1.4fr 110px';
 const ROSTER_TABLE_MIN_WIDTH = 520;
-
-function agoLabel(ms: number): string {
-  const mins = Math.max(0, Math.round(ms / 60_000));
-  if (mins < 1) return 'just now';
-  if (mins === 1) return '1 min ago';
-  return `${mins} mins ago`;
-}
 
 export default function TeamDashboard() {
   const navigate = useNavigate();
@@ -496,12 +483,8 @@ export default function TeamDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [draftFrom, setDraftFrom] = useState(todayISO);
-  const [draftTo, setDraftTo] = useState(todayISO);
-
   const anchorDate = range.to;
-  const dateSelectorLabel = mode === 'today' ? `Today, ${fmtShortDate(todayISO)}` : mode === 'yesterday' ? `Yesterday, ${fmtShortDate(range.from)}` : rangeLabel(range, fmtShortDate);
+  const dateSelectorLabel = mode === 'today' ? `Today, ${formatDateShort(todayISO)}` : mode === 'yesterday' ? `Yesterday, ${formatDateShort(range.from)}` : formatDateRange(range);
   const panelRangeLabel = mode === 'today' ? 'Today' : mode === 'yesterday' ? 'Yesterday' : 'Custom Range';
 
   function selectQuick(kind: 'today' | 'yesterday') {
@@ -511,29 +494,20 @@ export default function TeamDashboard() {
     next.delete('to');
     setSearchParams(next, { replace: true });
     writeStoredDateFilter(userId, { mode: kind });
-    setPickerOpen(false);
   }
 
-  function applyRange() {
-    if (draftFrom > draftTo) return;
+  function applyRange(from: string, to: string) {
     const next = new URLSearchParams(searchParams);
     next.set('mode', 'range');
-    next.set('from', draftFrom);
-    next.set('to', draftTo);
+    next.set('from', from);
+    next.set('to', to);
     setSearchParams(next, { replace: true });
-    writeStoredDateFilter(userId, { mode: 'range', from: draftFrom, to: draftTo });
-    setPickerOpen(false);
-  }
-
-  function openPicker() {
-    setDraftFrom(range.from);
-    setDraftTo(range.to);
-    setPickerOpen(true);
+    writeStoredDateFilter(userId, { mode: 'range', from, to });
   }
 
   const {
     data: summary, isPending: summaryPending, isFetching: summaryFetching, isError: summaryError,
-    refetch: refetchSummary, dataUpdatedAt,
+    refetch: refetchSummary,
   } = useTeamLeadSummary(range, isToday, true, teamLeadId);
   const { data: members, isPending: membersPending, isFetching: membersFetching, isError: membersError, refetch: refetchMembers } = useTeamMemberStatuses(range, isToday, teamLeadId);
   const { data: blockers, isPending: blockersPending, isFetching: blockersFetching } = useTeamLeadBlockers(range, isToday, false, teamLeadId);
@@ -547,20 +521,14 @@ export default function TeamDashboard() {
   const pendingApprovalsCount = usePendingApprovalsCount(true, range);
 
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
-  const [nowTick, setNowTick] = useState(() => Date.now());
-  const [rosterExpanded, setRosterExpanded] = useState(false);
+  const [rosterPage, setRosterPage] = useState(1);
   const [blockersExpanded, setBlockersExpanded] = useState(false);
 
+  // Reset the roster back to page 1 and collapse the blockers list back to its default row
+  // count whenever the selected date/range changes (a fresh load already starts this way via
+  // the initial state above).
   useEffect(() => {
-    const id = setInterval(() => setNowTick(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Collapse the roster and blockers list back to their default row counts whenever the
-  // selected date/range changes (a fresh load already starts collapsed via the initial
-  // state above).
-  useEffect(() => {
-    setRosterExpanded(false);
+    setRosterPage(1);
     setBlockersExpanded(false);
   }, [range.from, range.to]);
 
@@ -569,7 +537,10 @@ export default function TeamDashboard() {
     return [...members].sort((a, b) => STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status]);
   }, [members]);
 
-  const visibleMembers = rosterExpanded ? sortedMembers : sortedMembers.slice(0, ROSTER_COLLAPSED_COUNT);
+  const rosterTotalPages = Math.max(1, Math.ceil(sortedMembers.length / ROSTER_PAGE_SIZE));
+  const rosterPageSafe = Math.min(rosterPage, rosterTotalPages);
+
+  const visibleMembers = sortedMembers.slice((rosterPageSafe - 1) * ROSTER_PAGE_SIZE, rosterPageSafe * ROSTER_PAGE_SIZE);
 
   const topOverloaded = useMemo(() => {
     const overloaded = (members ?? []).filter(m => m.overloaded);
@@ -634,97 +605,10 @@ export default function TeamDashboard() {
       {/* Header controls — date filter + review-approvals action */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => (pickerOpen ? setPickerOpen(false) : openPicker())}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '9px 14px', fontSize: 12.5, fontWeight: 600,
-                color: 'var(--txt)', background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8,
-                cursor: 'pointer', whiteSpace: 'nowrap',
-              }}
-            >
-              <Calendar size={13} aria-hidden="true" />
-              {dateSelectorLabel}
-              {isRefreshing
-                ? <Loader2 size={12} aria-hidden="true" style={{ animation: 'spin 1s linear infinite' }} />
-                : <ChevronDown size={12} aria-hidden="true" />}
-            </button>
-
-            {pickerOpen && (
-              <>
-                <div onClick={() => setPickerOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-                <div className="nf-r-popover" style={{
-                  position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 260,
-                  background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
-                  boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
-                }}>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                    <button
-                      onClick={() => selectQuick('today')}
-                      style={{
-                        flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                        background: mode === 'today' ? 'var(--info)' : 'var(--raised2)',
-                        color: mode === 'today' ? '#fff' : 'var(--txt)',
-                        border: '1px solid var(--line2)',
-                      }}
-                    >
-                      Today
-                    </button>
-                    <button
-                      onClick={() => selectQuick('yesterday')}
-                      style={{
-                        flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                        background: mode === 'yesterday' ? 'var(--info)' : 'var(--raised2)',
-                        color: mode === 'yesterday' ? '#fff' : 'var(--txt)',
-                        border: '1px solid var(--line2)',
-                      }}
-                    >
-                      Yesterday
-                    </button>
-                  </div>
-
-                  <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                    Custom range
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>From</div>
-                      <input
-                        type="date" value={draftFrom} max={todayISO}
-                        onChange={(e) => setDraftFrom(e.target.value)}
-                        style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
-                      />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>To</div>
-                      <input
-                        type="date" value={draftTo} max={todayISO}
-                        onChange={(e) => setDraftTo(e.target.value)}
-                        style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
-                      />
-                    </div>
-                  </div>
-                  {draftFrom > draftTo && (
-                    <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
-                      From date cannot be later than To date.
-                    </div>
-                  )}
-                  <button
-                    onClick={applyRange}
-                    disabled={draftFrom > draftTo}
-                    style={{
-                      width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
-                      background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                      cursor: draftFrom > draftTo ? 'not-allowed' : 'pointer', opacity: draftFrom > draftTo ? 0.6 : 1,
-                    }}
-                  >
-                    Apply
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <DateRangeSelector
+            mode={mode} range={range} todayISO={todayISO} label={dateSelectorLabel}
+            onSelectQuick={selectQuick} onApplyRange={applyRange} isRefreshing={isRefreshing}
+          />
 
           <button
             onClick={() => navigate(`/team/approvals?from=${range.from}&to=${range.to}`)}
@@ -788,9 +672,15 @@ export default function TeamDashboard() {
           </ClickableKpi>
       </div>
 
-      {/* Mid section: Team Status table + right stack */}
-      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 16, marginBottom: 16, alignItems: 'start' }}>
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
+      {/* Mid section: Team Status table + right stack. Stretch (the grid default, so no
+          alignItems override) rather than start-aligned: Team Status and the Blockers
+          Today/Team Utilization stack next to it rarely have the same natural height, and
+          start-aligning left whichever is shorter ending well above the taller one, exposing
+          bare shell background beside it. Both sides get a trailing flex:1 spacer as their
+          last child so the extra stretched height lands there instead of distorting a real
+          card or opening a gap between visible content and its own footer. */}
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 16, marginBottom: 16 }}>
+        <Card style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Team Status</div>
             <button
@@ -801,7 +691,7 @@ export default function TeamDashboard() {
             </button>
           </div>
           {/* Header and rows share one scroll region so columns stay aligned
-              while swiping; the "view all" footer sits outside it. */}
+              while swiping; the pagination footer sits outside it. */}
           <div className="nf-r-scroll">
           <div className="nf-r-scroll-inner" style={{ '--nf-r-min': ROSTER_TABLE_MIN_WIDTH + 'px' } as React.CSSProperties}>
           <div style={{ display: 'grid', gridTemplateColumns: ROSTER_TABLE_COLUMNS, gap: 12, padding: '8px 20px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -825,17 +715,16 @@ export default function TeamDashboard() {
           )}
           </div>
           </div>
-          {sortedMembers.length > ROSTER_COLLAPSED_COUNT && (
-            <div style={{ padding: '12px 20px', textAlign: 'center', borderTop: '1px solid var(--line)' }}>
-              <button
-                onClick={() => setRosterExpanded(e => !e)}
-                style={{ fontSize: 12, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              >
-                {rosterExpanded ? 'Show less' : 'View all members'}
-                {rosterExpanded ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
-              </button>
-            </div>
+          {rosterTotalPages > 1 && (
+            <Pagination
+              page={rosterPageSafe} totalPages={rosterTotalPages} totalItems={sortedMembers.length}
+              pageSize={ROSTER_PAGE_SIZE} onPageChange={setRosterPage} itemLabel="members"
+            />
           )}
+          {/* Absorbs whatever extra height this card's stretch (see the grid comment above)
+              adds beyond its own rows + pagination, so that space lands below everything
+              instead of as a gap between the last row and the pagination footer. */}
+          <div style={{ flex: 1 }} />
         </Card>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -887,6 +776,10 @@ export default function TeamDashboard() {
             </div>
             {trendPending ? <Skel h={220} /> : <WeeklyUtilChart points={trend?.avgUtilization ?? []} />}
           </Card>
+          {/* Absorbs whatever extra height this stack's stretch (see the grid comment above)
+              adds beyond its own two cards, so that space lands below both instead of
+              stretching either one to an oversized, awkward height. */}
+          <div style={{ flex: 1 }} />
         </div>
       </div>
 
@@ -915,13 +808,6 @@ export default function TeamDashboard() {
           </div>
           <UtilizationOverviewRing summary={summary} />
         </Card>
-      </div>
-
-      {/* Footer — status text only. The RefreshCw icon this used to pair with wasn't wired to
-          any click handler (refreshing already happens via the top date filter/live polling),
-          so it read as a redundant, non-functional refresh button. */}
-      <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--txt-dim)' }}>
-        Last updated: {agoLabel(nowTick - dataUpdatedAt)}
       </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

@@ -226,6 +226,19 @@ html[data-font-size="Large"]   #root { zoom: 1.15; }
   border-radius: 3px;
 }
 
+/* ─── Toolbar status <select> — no bright ring on a plain click ─── */
+/* A native <select> matches :focus-visible on mouse click too, not just keyboard tabbing
+   (unlike a text <input>, which has its own visible "focused" affordance — the blinking
+   caret — so browsers only ring it for keyboard use). That made the "Filter by status"
+   toolbar dropdown flash the same bright brand-bright ring as a keyboard focus every time
+   it was clicked, next to a search input beside it that never does. Scoped to this control
+   only (not every <select> in the app) and swapped for a calm border-color change instead of
+   an accent-colored ring, so it reads as a normal toolbar dropdown. */
+.nf-toolbar-select:focus-visible {
+  outline: none;
+  border-color: var(--line);
+}
+
 /* ─── Chart focus ring suppression (recharts) ───────────────────── */
 /* Recharts renders its chart root <svg class="recharts-surface"> (and, for
  * Pie charts, an inner <g class="recharts-pie">) with tabIndex/role set by

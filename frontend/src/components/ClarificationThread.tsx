@@ -1,7 +1,9 @@
 import {
-  useClarificationThread, useSendClarificationReply, usePmClarificationThread, fetchClarificationAttachmentUrl,
+  useClarificationThread, useSendClarificationReply, useEditClarificationReply, useDeleteClarificationReply,
+  usePmClarificationThread, fetchClarificationAttachmentUrl,
   type ClarificationScope,
 } from '../api/eodClarification';
+import { useAuth } from '../lib/auth';
 import { ThreadView } from './BlockerThread';
 
 /**
@@ -23,10 +25,15 @@ export function ClarificationThreadView({ entryId, scope, replyToLabel, visibili
   isLocked?: boolean;
   readOnly?: boolean;
 }) {
+  const { user } = useAuth();
   const writable = useClarificationThread(entryId, scope ?? 'lead', !readOnly && scope != null);
   const readOnlyQuery = usePmClarificationThread(entryId, !!readOnly);
   const { data: messages, isPending } = readOnly ? readOnlyQuery : writable;
   const sendReply = useSendClarificationReply(entryId, scope ?? 'lead');
+  // Harmless to wire up even when readOnly (no request fires unless invoked) — just never
+  // passed down to ThreadView below, the same way PM's view never gets an onSend either.
+  const editReply = useEditClarificationReply(entryId, scope ?? 'lead');
+  const deleteReply = useDeleteClarificationReply(entryId, scope ?? 'lead');
   const attachmentScope = readOnly ? 'pm' : (scope ?? 'lead');
 
   return (
@@ -42,6 +49,9 @@ export function ClarificationThreadView({ entryId, scope, replyToLabel, visibili
       fetchAttachmentUrl={id => fetchClarificationAttachmentUrl(attachmentScope, id)}
       attachmentUrlQueryKey={id => ['eod-clarification-attachment-blob', attachmentScope, id]}
       hideComposer={readOnly}
+      currentUserId={readOnly ? undefined : user?.id}
+      onEditMessage={readOnly ? undefined : (replyId, message) => editReply.mutateAsync({ replyId, message })}
+      onDeleteMessage={readOnly ? undefined : replyId => deleteReply.mutateAsync(replyId)}
     />
   );
 }

@@ -121,6 +121,46 @@ public class BlockerConversationService {
         return BlockerReplyDto.from(saved, task, attachmentsFor(saved.getId()));
     }
 
+    // Edit/delete are restricted to the reply's own sender (never "any Team Lead"/"any
+    // employee on the task") — requireOwnReply enforces that on top of the existing
+    // requireLeadOwnsTask/requireEmployeeOwnsTask task-level access check.
+
+    public void editReplyAsLead(Long replyId, String actingEmail, String message) {
+        AppUser lead = requireUser(actingEmail);
+        BlockerReply reply = requireReply(replyId);
+        requireLeadOwnsTask(reply.getTask(), lead);
+        requireOwnReply(reply, lead);
+        requireNotResolved(reply.getTask());
+        updateMessage(reply, message);
+    }
+
+    public void deleteReplyAsLead(Long replyId, String actingEmail) {
+        AppUser lead = requireUser(actingEmail);
+        BlockerReply reply = requireReply(replyId);
+        requireLeadOwnsTask(reply.getTask(), lead);
+        requireOwnReply(reply, lead);
+        requireNotResolved(reply.getTask());
+        deleteReplyInternal(reply);
+    }
+
+    public void editReplyAsEmployee(Long replyId, String actingEmail, String message) {
+        AppUser employee = requireUser(actingEmail);
+        BlockerReply reply = requireReply(replyId);
+        requireEmployeeOwnsTask(reply.getTask(), employee);
+        requireOwnReply(reply, employee);
+        requireNotResolved(reply.getTask());
+        updateMessage(reply, message);
+    }
+
+    public void deleteReplyAsEmployee(Long replyId, String actingEmail) {
+        AppUser employee = requireUser(actingEmail);
+        BlockerReply reply = requireReply(replyId);
+        requireEmployeeOwnsTask(reply.getTask(), employee);
+        requireOwnReply(reply, employee);
+        requireNotResolved(reply.getTask());
+        deleteReplyInternal(reply);
+    }
+
     // Loads the raw bytes for one attachment, checking the caller owns the parent blocker
     // the same way reading/posting to its thread is checked — a Team Lead can download an
     // attachment only from a blocker belonging to one of their own reports, and an employee
@@ -222,6 +262,32 @@ public class BlockerConversationService {
     private BlockerReplyAttachment requireAttachment(Long attachmentId) {
         return attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attachment not found"));
+    }
+
+    private BlockerReply requireReply(Long replyId) {
+        return replyRepository.findById(replyId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Reply not found"));
+    }
+
+    private void requireOwnReply(BlockerReply reply, AppUser actor) {
+        if (!reply.getSender().getId().equals(actor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only edit or delete your own message");
+        }
+    }
+
+    private void updateMessage(BlockerReply reply, String message) {
+        if (message == null || message.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message cannot be empty");
+        }
+        reply.setMessage(message.trim());
+        replyRepository.save(reply);
+    }
+
+    // Attachments have no ON DELETE CASCADE (see V47) — deleted explicitly first so the reply
+    // row's delete never hits a dangling FK from an attachment still pointing at it.
+    private void deleteReplyInternal(BlockerReply reply) {
+        attachmentRepository.deleteByReplyId(reply.getId());
+        replyRepository.delete(reply);
     }
 
     private EodTask requireTask(Long taskId) {

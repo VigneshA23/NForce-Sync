@@ -26,6 +26,7 @@ import { DatePicker } from '../../components/DatePicker';
 import { useToast } from '../../lib/toast';
 import { useBodyScrollLock } from '../../lib/useBodyScrollLock';
 import { focusNextOnEnter } from '../../lib/formFocus';
+import { GENDER_OPTIONS } from '../../lib/illustration';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -129,6 +130,13 @@ const inputFocusStyle: React.CSSProperties = {
   ...inputStyle, borderColor: 'var(--brand-bright)',
   boxShadow: '0 0 0 3px color-mix(in srgb, var(--brand-bright) 14%, transparent)',
 };
+// Employee ID's "NF-" prefix is rendered as a separate, absolutely-positioned label rather
+// than editable text in the input, so this reserves the same amount of left padding in both
+// its resting and focused state — using plain inputStyle/inputFocusStyle on focus/blur (as
+// every other field does) would reset padding-left back to 12px on blur, sliding typed
+// digits underneath the "NF-" label.
+const employeeIdInputStyle: React.CSSProperties = { ...inputStyle, paddingLeft: 34 };
+const employeeIdInputFocusStyle: React.CSSProperties = { ...inputFocusStyle, paddingLeft: 34 };
 // The closed <select> box renders using the <select> element's OWN color (confirmed via
 // computed styles — it does not pick up the currently-selected <option>'s style), so the
 // muted placeholder look requires dimming the <select> itself while unselected. That color
@@ -525,15 +533,18 @@ interface CreateForm extends Omit<CreateUserPayload, 'role'> {
 }
 
 const EMPLOYEE_ID_PATTERN = /^NF-\d{8}$/;
+/** Fixed, non-editable prefix — see the Employee ID field below. */
+const EMPLOYEE_ID_PREFIX = 'NF-';
 
 const EMPTY_CREATE: CreateForm = {
   fullName: '',
   email: '',
-  employeeCode: '',
+  employeeCode: EMPLOYEE_ID_PREFIX,
   role: '',
   joiningDate: '',
   workMode: '',
   employmentType: '',
+  gender: '',
   departmentId: undefined,
   designationId: undefined,
   locationId: undefined,
@@ -629,6 +640,7 @@ function AddModal({
       locationId:    form.locationId    ?? null,
       shiftId:       form.shiftId       ?? null,
       managerId:     form.managerId ?? null,
+      gender:        form.gender || undefined,
     };
     mutation.mutate(payload);
   }
@@ -735,17 +747,34 @@ function AddModal({
             <FieldError msg={errors.role} />
           </Field>
 
-          {/* Employee ID — manually entered, format NF-######## */}
+          {/* Employee ID — format NF-########. "NF-" is a fixed label, not editable text: the
+              actual <input> only ever holds the digits after it (masked to digits-only, capped
+              at 8), so the prefix can't be deleted, overtyped, or left partial. form.employeeCode
+              itself keeps holding the FULL "NF-########" string throughout — validate(),
+              handleSubmit's payload, and the success screen below are all unchanged, reading it
+              exactly as before. */}
           <Field label="Employee ID *">
-            <input
-              style={inputStyle}
-              value={form.employeeCode}
-              placeholder="Enter employee ID"
-              onChange={e => set('employeeCode', e.target.value.toUpperCase())}
-              onKeyDown={focusNextOnEnter}
-              onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-              onBlur={e => Object.assign(e.target.style, inputStyle)}
-            />
+            <div style={{ position: 'relative' }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+                  color: 'var(--txt)', fontSize: 13, fontFamily: 'Inter, sans-serif', pointerEvents: 'none',
+                }}
+              >
+                {EMPLOYEE_ID_PREFIX}
+              </span>
+              <input
+                style={employeeIdInputStyle}
+                value={form.employeeCode.slice(EMPLOYEE_ID_PREFIX.length)}
+                placeholder="20240040"
+                inputMode="numeric"
+                onChange={e => set('employeeCode', EMPLOYEE_ID_PREFIX + e.target.value.replace(/\D/g, '').slice(0, 8))}
+                onKeyDown={focusNextOnEnter}
+                onFocus={e => Object.assign(e.target.style, employeeIdInputFocusStyle)}
+                onBlur={e => Object.assign(e.target.style, employeeIdInputStyle)}
+              />
+            </div>
             <FieldError msg={errors.employeeCode} />
           </Field>
 
@@ -785,6 +814,21 @@ function AddModal({
               {WORK_MODES.map(m => <option key={m.value} value={m.value} style={realOptionStyle}>{m.label}</option>)}
             </select>
             <FieldError msg={errors.workMode} />
+          </Field>
+
+          {/* Gender — optional, same 4-option list as Profile's own "Select Gender" control
+              (see lib/illustration.ts). Feeds the same hero-banner illustration this user will
+              see once logged in — set here so it's already correct from their first login
+              instead of defaulting to the neutral illustration until they visit Profile. */}
+          <Field label="Gender">
+            <select
+              style={selectStyle(!!form.gender)}
+              value={form.gender ?? ''}
+              onChange={e => set('gender', e.target.value)}
+            >
+              <option value="" style={placeholderOptionStyle}>Select gender</option>
+              {GENDER_OPTIONS.map(g => <option key={g} value={g} style={realOptionStyle}>{g}</option>)}
+            </select>
           </Field>
 
           {/* Department — plain fixed dropdown (no free-text entry). Optional:

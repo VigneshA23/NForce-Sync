@@ -14,9 +14,10 @@ import type { EodEntryDto } from '../../api/eod';
 import {
   sumHours, hrs, entryProjects, entryCategories,
   daySummary, timeAdjustmentLabel, formatRelative, extractError, initials,
-  Card, Btn, Chip, AuditTrail, SubmissionDetailModal,
+  Card, Chip, AuditTrail, SubmissionDetailModal,
 } from '../approvals/shared';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { Pagination } from '../../components/Pagination';
 
 // This page deliberately shares its submission detail modal with the Team Lead's Approvals
 // page (../Approvals.tsx) via ../approvals/shared — see that module's header comment.
@@ -118,9 +119,7 @@ function EntryRow({
 
           {entry.tasks.length > 0 && (
             <div
-              onClick={onOpenDetails}
-              title="View submission details"
-              style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)', cursor: 'pointer' }}
+              style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)' }}
             >
               {entry.tasks.map(t => (
                 <div key={t.id} style={{
@@ -152,8 +151,21 @@ function EntryRow({
         </div>
 
         {/* No Approve/Reject here by design — deciding an entry means opening it and reading the
-            work first, so those actions live only in the submission detail modal. */}
+            work first, so those actions live only in the submission detail modal, reached via
+            this explicit Review button (not a whole-card click, which risked opening the modal
+            on an accidental tap anywhere in the row) — same pattern as the Team Lead's Approvals
+            page (pages/Approvals.tsx). */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+          <button
+            onClick={onOpenDetails}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+              padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+              background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff', cursor: 'pointer',
+            }}
+          >
+            Review
+          </button>
           <button
             onClick={onToggleExpand}
             title="View submission history"
@@ -188,6 +200,8 @@ function EntryRow({
 type Tab = 'pending' | 'escalated' | 'approved' | 'rejected';
 type SortMode = 'oldest' | 'latest' | 'hours' | 'name';
 
+const PAGE_SIZE = 10;
+
 export default function ApprovalsPM() {
   const { data: pending, isPending: pendingLoading, isError: pendingError, refetch } = usePendingApprovals();
   const { data: approved, isPending: approvedLoading } = useDecidedApprovals('APPROVED');
@@ -212,6 +226,7 @@ export default function ApprovalsPM() {
   const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [detailsEntryId, setDetailsEntryId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
 
   const modalApprove = useApprove();
 
@@ -261,6 +276,10 @@ export default function ApprovalsPM() {
 
   const detailsEntry = baseList.find(e => e.id === detailsEntryId) ?? null;
 
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  const paged = visible.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+
   async function handleDetailApprove(entryId: number) {
     try {
       await modalApprove.mutateAsync({ entryId });
@@ -306,6 +325,7 @@ export default function ApprovalsPM() {
 
   function switchTab(t: Tab) {
     setTab(t);
+    setPage(1);
   }
 
   if (pendingError) {
@@ -331,10 +351,12 @@ export default function ApprovalsPM() {
         </div>
       </div>
 
-      {/* Escalation banner */}
+      {/* Escalation banner — informational only. Opening an approval is always the row-level
+          Review button now (see EntryRow); the Escalated tab just below is how you get to this
+          set of rows, so a second "jump there" action here would be redundant. */}
       {escalatedCount > 0 && tab !== 'escalated' && (
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap',
+          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
           background: 'color-mix(in srgb, var(--warn) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warn) 40%, transparent)',
           borderRadius: 12, padding: '13px 18px', marginBottom: 16,
         }}>
@@ -344,7 +366,6 @@ export default function ApprovalsPM() {
               <strong>{escalatedCount} entr{escalatedCount !== 1 ? 'ies' : 'y'}</strong> need your review. Assigned Team Lead hasn't responded within SLA.
             </div>
           </div>
-          <Btn variant="warn" onClick={() => switchTab('escalated')}>Review now →</Btn>
         </div>
       )}
 
@@ -449,7 +470,7 @@ export default function ApprovalsPM() {
            of that only fragmented the queue and buried the sort order. Each row still names the
            Team Lead it's awaiting (see EntryRow's tlStatusNote). */
         <Card style={{ padding: 0, overflow: 'hidden' }}>
-          {visible.map(entry => (
+          {paged.map(entry => (
             <EntryRow
               key={entry.id}
               entry={entry}
@@ -459,6 +480,10 @@ export default function ApprovalsPM() {
               clarificationRequested={clarifiedEntryIds.has(entry.id)}
             />
           ))}
+          <Pagination
+            page={pageSafe} totalPages={totalPages} totalItems={visible.length} pageSize={PAGE_SIZE}
+            onPageChange={setPage} itemLabel="entries"
+          />
         </Card>
       )}
 

@@ -67,7 +67,8 @@ export default function MyProjects() {
   const list = useMemo(() => projects ?? [], [projects]);
 
   // Background refetch only — the initial load already renders its own skeleton via isPending,
-  // so this only covers the icon-spin/disabled state on the Refresh button.
+  // so this only covers the icon-spin/disabled state on the panel's Retry-on-error button (no
+  // header Refresh button on this page — see showRefreshButton={false} below).
   const isRefreshing = !isPending && isFetching;
 
   async function handleRefresh() {
@@ -101,6 +102,7 @@ export default function MyProjects() {
         boldNameLink
         compactToolbar
         teamColumn="lead"
+        showRefreshButton={false}
       />
 
       <ProjectDetailsModal

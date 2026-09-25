@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  Search, ChevronDown, ChevronRight, Download, Calendar,
+  Search, ChevronDown, ChevronRight, Calendar,
   Briefcase, FolderKanban, Clock, CalendarCheck, CalendarDays, Globe, Timer, Hourglass,
 } from 'lucide-react';
 import {
@@ -18,6 +18,7 @@ import {
 import { useMyLeadProjects } from '../../api/teamLeadProjects';
 import { RingGauge } from '../../components/RingGauge';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { Pagination } from '../../components/Pagination';
 import { ReporteeScopePicker } from '../../components/ReporteeScopePicker';
 
 // ── status derivation ───────────────────────────────────────────────────────────
@@ -555,8 +556,8 @@ type ProjectFilter = string;
 type StatusFilter = 'ALL' | StatusKey;
 type SortMode = 'util-desc' | 'util-asc' | 'name-asc';
 
-/** Rows shown before collapsing behind "View all members". */
-const MEMBER_LIST_CAP = 8;
+/** Team Members list page size. */
+const MEMBERS_PAGE_SIZE = 11;
 
 // Deep-link from a KPI tile elsewhere (e.g. Team Dashboard's "Over-allocated" tile) —
 // `?status=under`/`?status=over` seeds the same filter the on-page dropdown offers.
@@ -582,7 +583,7 @@ export default function TeamUtilization() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => initialStatusFromUrl(searchParams.get('status')));
   const [sort, setSort] = useState<SortMode>('util-desc');
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [showAllMembers, setShowAllMembers] = useState(false);
+  const [membersPage, setMembersPage] = useState(1);
 
   const range = useMemo(() => ({ from: dateISO, to: dateISO }), [dateISO]);
   const { data: statuses, isPending: statusesLoading, isError, refetch } = useTeamMemberStatuses(range, false, isSuperAdmin ? teamLeadId : undefined);
@@ -649,6 +650,12 @@ export default function TeamUtilization() {
 
   const selected = visible.find(m => m.employeeId === selectedId) ?? null;
 
+  // Clamped rather than reset-on-filter-change: a filter/search edit that shrinks the list
+  // just lands on the new last page instead of needing its own effect to snap back to page 1.
+  const membersTotalPages = Math.max(1, Math.ceil(visible.length / MEMBERS_PAGE_SIZE));
+  const membersPageSafe = Math.min(membersPage, membersTotalPages);
+  const pagedMembers = visible.slice((membersPageSafe - 1) * MEMBERS_PAGE_SIZE, membersPageSafe * MEMBERS_PAGE_SIZE);
+
   // Team-level summary — computed from all members (not just visible) for a consistent header.
   const teamSummary = useMemo(() => {
     const withPct = members.filter(m => m.pct !== null);
@@ -705,18 +712,6 @@ export default function TeamUtilization() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <DateSelector dateISO={dateISO} onChange={setDateISO} />
-          {/* No export pipeline exists anywhere in the app yet (same disabled affordance as
-              the Team Dashboard's Quick Actions "Export Report" tile) — presented, not wired. */}
-          <button
-            disabled
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8,
-              fontSize: 12.5, fontWeight: 600, color: 'var(--txt-dim)',
-              background: 'var(--raised)', border: '1px solid var(--line)', cursor: 'not-allowed', opacity: 0.6,
-            }}
-          >
-            <Download size={13} aria-hidden="true" /> Export Report
-          </button>
         </div>
       </div>
 
@@ -811,12 +806,20 @@ export default function TeamUtilization() {
         </div>
       )}
 
-      {/* Two-column layout */}
-      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+      {/* Two-column layout — stretch (the grid default, so no alignItems override) rather than
+          start-aligned: the Team Members card is naturally shorter than the Detail Panel once it
+          picks up its Weekly Trend chart + extra info rows, and start-aligning left the shorter
+          card's border ending well above the taller panel's, exposing bare shell background in
+          the gap below it. Stretching both to the row's full height makes both sides terminate at
+          the same boundary — but the stretch itself must land AFTER the visible content (rows +
+          pagination footer), not on the row list, or the extra height shows up as dead air between
+          the last row and the footer instead. See the trailing spacer below Pagination. */}
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: 16 }}>
         {/* Left: Team Members list */}
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
+        <Card style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {/* Header and rows share one scroll region so columns stay aligned
-              while swiping; the footer below sits outside it. */}
+              while swiping; the footer below sits outside it. Natural height (no flex-grow)
+              so it never stretches past its actual rows — see the spacer below Pagination. */}
           <div className="nf-r-scroll">
           <div className="nf-r-scroll-inner" style={{ '--nf-r-min': MEMBER_TABLE_MIN_WIDTH + 'px' } as React.CSSProperties}>
           <div style={{ display: 'grid', gridTemplateColumns: MEMBER_TABLE_COLUMNS, gap: 14, alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
@@ -833,7 +836,7 @@ export default function TeamUtilization() {
               <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>Try clearing the search or filters.</div>
             </div>
           ) : (
-            (showAllMembers ? visible : visible.slice(0, MEMBER_LIST_CAP)).map(m => (
+            pagedMembers.map(m => (
               <MemberRow
                 key={m.employeeId}
                 member={m}
@@ -846,19 +849,14 @@ export default function TeamUtilization() {
           </div>
           </div>
 
-          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--txt-dim)' }}>
-            <span>
-              Showing {visible.length === 0 ? 0 : 1} to {Math.min(showAllMembers ? visible.length : MEMBER_LIST_CAP, visible.length)} of {visible.length} members
-            </span>
-            {visible.length > MEMBER_LIST_CAP && (
-              <button
-                onClick={() => setShowAllMembers(v => !v)}
-                style={{ background: 'none', border: 'none', color: 'var(--info)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}
-              >
-                {showAllMembers ? 'Show less' : 'View all members'}
-              </button>
-            )}
-          </div>
+          <Pagination
+            page={membersPageSafe} totalPages={membersTotalPages} totalItems={visible.length} pageSize={MEMBERS_PAGE_SIZE}
+            onPageChange={setMembersPage} itemLabel="members"
+          />
+          {/* Absorbs whatever extra height this card's stretch (see the grid comment above)
+              adds beyond its own rows + footer, so that space lands below everything instead
+              of as a gap between the last row and the pagination footer. */}
+          <div style={{ flex: 1 }} />
         </Card>
 
         {/* Right: detail panel */}

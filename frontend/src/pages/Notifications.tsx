@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Bell, CheckCheck, Loader2, AlertCircle, ChevronLeft, ChevronRight, Check,
+  Bell, CheckCheck, Loader2, AlertCircle, Check,
   UserPlus, KeyRound, ClipboardCheck, XCircle, RefreshCcw, Info, Clock,
   AlertTriangle, FolderKanban, CalendarDays, MessageSquare, Users, Megaphone,
   Search, RefreshCw, Inbox, ArrowUpRight,
 } from 'lucide-react';
+import { Pagination } from '../components/Pagination';
 import {
   fetchNotifications,
   markNotificationRead,
@@ -673,39 +674,11 @@ export default function Notifications() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, flexShrink: 0 }}>
-          <span style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
-            Page {page + 1} of {totalPages}
-          </span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button
-              onClick={() => { setPage(p => p - 1); setSelectedId(null); }}
-              disabled={page === 0}
-              style={{
-                padding: '6px 10px', background: 'transparent',
-                border: '1px solid var(--line)', borderRadius: 6,
-                cursor: page === 0 ? 'not-allowed' : 'pointer',
-                color: page === 0 ? 'var(--line2)' : 'var(--txt-mut)',
-                display: 'flex', alignItems: 'center',
-              }}
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <button
-              onClick={() => { setPage(p => p + 1); setSelectedId(null); }}
-              disabled={page >= totalPages - 1}
-              style={{
-                padding: '6px 10px', background: 'transparent',
-                border: '1px solid var(--line)', borderRadius: 6,
-                cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer',
-                color: page >= totalPages - 1 ? 'var(--line2)' : 'var(--txt-mut)',
-                display: 'flex', alignItems: 'center',
-              }}
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
+        <Pagination
+          page={page + 1} totalPages={totalPages} totalItems={total} pageSize={PAGE_SIZE}
+          onPageChange={p => { setPage(p - 1); setSelectedId(null); }} itemLabel="notifications"
+          style={{ padding: 0, borderTop: 'none', marginTop: 12, flexShrink: 0 }}
+        />
       )}
 
       <style>{`

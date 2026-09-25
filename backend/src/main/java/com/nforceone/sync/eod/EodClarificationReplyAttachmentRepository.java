@@ -21,4 +21,8 @@ public interface EodClarificationReplyAttachmentRepository extends JpaRepository
     // not a combined one — each feature's own attachments count only against itself.
     @Query("SELECT COALESCE(SUM(a.fileSize), 0) FROM EodClarificationReplyAttachment a")
     long sumFileSize();
+
+    // Deleting a reply (edit/delete feature) must clear its attachments first — no ON DELETE
+    // CASCADE on this FK (see V88), so leaving one behind would fail the reply's own delete.
+    void deleteByReplyId(Long replyId);
 }

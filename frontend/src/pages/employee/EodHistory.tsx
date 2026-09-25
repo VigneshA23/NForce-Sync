@@ -3,10 +3,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle, Clock, XCircle, ChevronRight, AlertTriangle,
-  Search, ArrowUp, ArrowDown, ChevronLeft, Calendar as CalendarIcon,
+  Search, ArrowUp, ArrowDown, Calendar as CalendarIcon,
 } from 'lucide-react';
 import { listEntries, getDayDefaults } from '../../api/eod';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { Pagination } from '../../components/Pagination';
 import type { EodHistoryEntryDto } from '../../api/eod';
 import { formatDate as formatDateDDMMYYYY, formatDateTime } from '../../lib/date';
 import { timeAdjustmentLabel } from '../approvals/shared';
@@ -332,13 +333,6 @@ export default function EodHistory() {
     }
   }
 
-  // Weekday kept (useful in a history list scanned day-by-day), date portion
-  // standardized to DD-MM-YYYY.
-  function formatDate(iso: string) {
-    const weekday = new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short' });
-    return `${weekday}, ${formatDateDDMMYYYY(iso)}`;
-  }
-
   function handleView(entry: EodHistoryEntryDto) {
     navigate(`/eod/submit?date=${entry.entryDate}`);
   }
@@ -385,10 +379,13 @@ export default function EodHistory() {
 
       {/* Toolbar — native select, matching the working filter pattern in admin/AuditLog.tsx */}
       <div className="nf-r-toolbar" style={{
-        display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap',
+        display: 'flex', gap: 16, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap',
         padding: '14px 16px', background: 'var(--panel)',
         border: '1px solid var(--line)', borderRadius: 10,
       }}>
+        {/* Search stays pinned left; Status/From/To center in whatever space is left, rather
+            than all of Search/Status/From/To sharing one centered group (that pulled Search
+            away from the left edge too). */}
         <div>
           <label style={labelStyle} htmlFor="eod-search">Search</label>
           <div style={{ position: 'relative' }}>
@@ -402,6 +399,10 @@ export default function EodHistory() {
             />
           </div>
         </div>
+        <div style={{
+          display: 'flex', flex: '1 1 auto', gap: 10, alignItems: 'flex-end',
+          justifyContent: 'center', flexWrap: 'wrap',
+        }}>
         <div>
           <label style={labelStyle}>Status</label>
           <StatusDropdown value={statusFilter} onChange={resetPage(setStatusFilter)} />
@@ -481,9 +482,10 @@ export default function EodHistory() {
             </button>
           </div>
         )}
+        </div>
         {/* Sorting lives on the Date column header instead of a filter-bar control — the arrow
             there shows which direction is active, which a separate button could not. */}
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--txt-dim)' }}>
+        <span style={{ fontSize: 12, color: 'var(--txt-dim)', flexShrink: 0 }}>
           {dateFilterStatus === 'invalid'
             ? '0 entries'
             : `${filtered.length} ${filtered.length === 1 ? 'entry' : 'entries'}`}
@@ -569,7 +571,7 @@ export default function EodHistory() {
           }}>
             {['Date', 'Project', 'Task Summary', 'Hours', 'Status', 'Submitted at', ''].map((h, i) => {
               const headerStyle: React.CSSProperties = {
-                fontSize: 10, fontWeight: 600, color: 'var(--txt-dim)',
+                fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)',
                 textTransform: 'uppercase', letterSpacing: '0.08em',
               };
               if (h !== 'Date') return <div key={i} style={headerStyle}>{h}</div>;
@@ -622,7 +624,7 @@ export default function EodHistory() {
             >
               <div>
                 <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
-                  {formatDate(entry.entryDate)}
+                  {formatDateDDMMYYYY(entry.entryDate)}
                 </div>
                 {/* A time adjustment changes the day's expected hours, so it belongs next to the
                     day rather than only on the approver's screen. Half-day leave shown the same
@@ -678,30 +680,13 @@ export default function EodHistory() {
           </div>
           </div>
 
-          {/* Pagination */}
+          {/* Pagination — shared component, same pattern as Blockers */}
           {pageCount > 1 && (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 16px', borderTop: '1px solid var(--line)',
-            }}>
-              <button
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={pageSafe === 0}
-                style={pagerBtnStyle(pageSafe === 0)}
-              >
-                <ChevronLeft size={13} /> Prev
-              </button>
-              <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
-                Page {pageSafe + 1} of {pageCount}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
-                disabled={pageSafe >= pageCount - 1}
-                style={pagerBtnStyle(pageSafe >= pageCount - 1)}
-              >
-                Next <ChevronRight size={13} />
-              </button>
-            </div>
+            <Pagination
+              page={pageSafe + 1} totalPages={pageCount} totalItems={filtered.length} pageSize={PAGE_SIZE}
+              onPageChange={p => setPage(p - 1)} itemLabel="results"
+              style={{ padding: '12px 16px' }}
+            />
           )}
         </div>
       )}
@@ -759,15 +744,3 @@ const selectStyle: React.CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'Inter, sans-serif',
 };
-
-function pagerBtnStyle(disabled: boolean): React.CSSProperties {
-  return {
-    display: 'inline-flex', alignItems: 'center', gap: 4,
-    padding: '5px 10px', borderRadius: 6,
-    background: disabled ? 'transparent' : 'var(--raised2)',
-    border: `1px solid ${disabled ? 'transparent' : 'var(--line2)'}`,
-    color: disabled ? 'var(--line2)' : 'var(--txt-mut)',
-    cursor: disabled ? 'default' : 'pointer',
-    fontSize: 11, fontWeight: 600,
-  };
-}

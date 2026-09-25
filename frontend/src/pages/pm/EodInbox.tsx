@@ -7,6 +7,7 @@ import { StatusBadge } from '../../components/StatusDropdown';
 import { EodInboxStatusPills, EodInboxFilterToolbar, EodInboxTable } from '../../components/EodInboxCard';
 import { EodDetailPanel } from '../../components/EodDetailPanel';
 import { toggleFilterVal } from '../../components/FilterDropdown';
+import { DateFilterButton, type DateFilterMode } from '../../components/BlockerDateFilterButton';
 import {
   eodInboxMatchesSearch, eodInboxMatchesFilters, sortEodInboxRows,
   type EodInboxFilter, type EodInboxRowView, type EodInboxSort,
@@ -14,6 +15,7 @@ import {
 import { CLARIFICATION_STATUS_META } from '../../lib/clarificationStatus';
 import { useEodInbox, useMarkClarificationRead, type EodInboxItemDto } from '../../api/eodClarification';
 import { formatDate as fmtDate } from '../../lib/date';
+import type { DateRange } from '../../api/teamLead';
 
 function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
   return <div className="skeleton" style={{ height: h, width: w, borderRadius: 4 }} />;
@@ -106,15 +108,25 @@ export default function PmEodInbox() {
   const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<EodInboxSort>('latest');
   const [page, setPage] = useState(1);
+  // Same Today/Yesterday/Custom-range/All-time picker as Blockers — defaults to All time (no
+  // filter) rather than Blockers' own Today default, since a clarification opened days or weeks
+  // ago is still just as relevant and an inbox that looks emptied out on first load would read
+  // as a bug, not a feature.
+  const [dateMode, setDateMode] = useState<DateFilterMode>('all');
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
 
   useEffect(() => {
     setPage(1);
-  }, [filter, search, employeeFilter, projectFilter, categoryFilter, sort]);
+  }, [filter, search, employeeFilter, projectFilter, categoryFilter, sort, dateMode, dateRange]);
 
   const allItems = useMemo(() => {
     const merged = [...(openQuery.data ?? []), ...(resolvedQuery.data ?? [])];
-    return merged.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
-  }, [openQuery.data, resolvedQuery.data]);
+    // Filters on the EOD entry's own date, same field the Employee/Team Lead EOD Inbox pages'
+    // equivalent filter uses.
+    const dateFiltered = dateMode === 'all' ? merged
+      : merged.filter(i => i.entryDate >= dateRange.from && i.entryDate <= dateRange.to);
+    return dateFiltered.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+  }, [openQuery.data, resolvedQuery.data, dateMode, dateRange]);
 
   const rows: EodInboxRowView[] = useMemo(() => allItems.map(item => ({ item })), [allItems]);
 
@@ -182,13 +194,19 @@ export default function PmEodInbox() {
           which otherwise blows this column wider than its assigned track once the 3-panel layout
           allocates it less space, forcing the toolbar/table to wrap instead of shrinking. */}
       <div style={{ minWidth: 0 }}>
-        <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-            EOD Inbox
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-            Read-only view of EOD clarification conversations across every team touching your projects.
-          </p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+              EOD Inbox
+            </h1>
+            <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
+              Read-only view of EOD clarification conversations across every team touching your projects.
+            </p>
+          </div>
+          <DateFilterButton
+            mode={dateMode} range={dateRange} showAllOption enforceNotFuture={false}
+            onChange={(m, r) => { setDateMode(m); setDateRange(r); }}
+          />
         </div>
 
         <EodInboxStatusPills filter={filter} onFilterChange={setFilter} counts={counts} />

@@ -6,11 +6,12 @@ import {
 import {
   TrendingUp, TrendingDown, Activity, RefreshCw, Layers,
   Calendar, Download, Lightbulb, AlertTriangle, Users, ArrowUp, ArrowDown, Minus,
-  CheckCircle2, Award, FolderKanban, ChevronLeft, ChevronRight, X,
+  CheckCircle2, Award, FolderKanban, X,
 } from 'lucide-react';
 import { UtilBar } from '../../components/UtilBar';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { SegmentDonut } from '../../components/UtilizationDonut';
+import { Pagination } from '../../components/Pagination';
 import { fmtPct, utilColor, utilState, RULES } from '../../lib/rules';
 import { todayISO, toLocalISODate } from '../../lib/date';
 import { roundHours } from '../../lib/hoursBreakdown';
@@ -681,26 +682,6 @@ function AlertsPanel({ projectRows, resourceRows }: { projectRows: ProjectUtiliz
 
 const CATEGORY_PAGE_SIZE = 4;
 
-function PageArrowButton({ direction, disabled, onClick }: { direction: 'left' | 'right'; disabled: boolean; onClick: () => void }) {
-  const Icon = direction === 'left' ? ChevronLeft : ChevronRight;
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={direction === 'left' ? 'Previous page' : 'Next page'}
-      style={{
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: 22, height: 22, padding: 0, borderRadius: 5,
-        background: 'var(--raised2)', border: '1px solid var(--line2)',
-        color: disabled ? 'var(--txt-dim)' : 'var(--txt)',
-        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      <Icon size={13} aria-hidden="true" />
-    </button>
-  );
-}
-
 function CategoryTable({ rows }: { rows: { category: string; hours: number; pctOfTotal: number }[] }) {
   const [page, setPage] = useState(0);
   const pages = Math.ceil(rows.length / CATEGORY_PAGE_SIZE);
@@ -738,11 +719,11 @@ function CategoryTable({ rows }: { rows: { category: string; hours: number; pctO
         {[0, 25, 50, 75, 100].map(v => <span key={v}>{v}%</span>)}
       </div>
       {pages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-          <span style={{ fontSize: 10.5, color: 'var(--txt-dim)' }}>Page {page + 1} of {pages}</span>
-          <PageArrowButton direction="left" disabled={page === 0} onClick={() => setPage(p => p - 1)} />
-          <PageArrowButton direction="right" disabled={page === pages - 1} onClick={() => setPage(p => p + 1)} />
-        </div>
+        <Pagination
+          page={page + 1} totalPages={pages} totalItems={rows.length} pageSize={CATEGORY_PAGE_SIZE}
+          onPageChange={p => setPage(p - 1)} itemLabel="categories"
+          style={{ padding: '10px 0 0', borderTop: 'none', marginTop: 2 }}
+        />
       )}
     </div>
   );

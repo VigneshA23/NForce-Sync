@@ -62,6 +62,18 @@ export function formatDate(input: string | Date): string {
   return `${day}-${month}-${d.getFullYear()}`;
 }
 
+/** `yyyy-MM-dd` → "24 Sep 2026" — the short form used on a date-range picker's own trigger
+ *  button (see DateRangeSelector), distinct from formatDate's DD-MM-YYYY used everywhere else. */
+export function formatDateShort(iso: string): string {
+  return parseAsLocalDate(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** A `{from,to}` range as one label: a single day collapses to just that day instead of
+ *  "X – X". Shared by every page offering the Today/Yesterday/Custom-range picker. */
+export function formatDateRange(range: { from: string; to: string }): string {
+  return range.from === range.to ? formatDateShort(range.from) : `${formatDateShort(range.from)} – ${formatDateShort(range.to)}`;
+}
+
 /**
  * Display-layer only: renders a 24-hour `HH:mm` or `HH:mm:ss` string (the
  * shape the backend stores/sends for `LocalTime` fields — cutoff time, shift

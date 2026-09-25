@@ -10,7 +10,10 @@ import {
 import { useOpenClarification, useEodInbox } from '../api/eodClarification';
 import { FilterDropdown } from '../components/FilterDropdown';
 import { useToast } from '../lib/toast';
-import { formatDate as fmtDate } from '../lib/date';
+import {
+  formatDate as fmtDate, todayISO as localTodayISO, yesterdayISO as localYesterdayISO,
+  formatDateShort, formatDateRange,
+} from '../lib/date';
 import type { EodEntryDto } from '../api/eod';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -19,6 +22,8 @@ import {
   Card, Chip, AuditTrail, SubmissionDetailModal,
 } from './approvals/shared';
 import { GlobalLoader } from '../components/GlobalLoader';
+import { Pagination } from '../components/Pagination';
+import { DateRangeSelector, type QuickRangeMode } from '../components/DateRangeSelector';
 
 // Matches the PM Approvals page's helper of the same name, so the two screens describe the same
 // stretch of inactivity identically.
@@ -118,14 +123,11 @@ function EntryRow({
             )}
           </div>
 
-          {/* A task-less full-day Leave still needs to be openable — this box is the only way to
-              reach the Approve/Reject modal for a single entry. Holiday's task-less rendering
-              (nothing shown, not clickable) is left exactly as it was. */}
+          {/* A task-less full-day Leave still renders this box too — it's no longer clickable
+              itself (see the explicit Review button below), just the task/leave summary. */}
           {(entry.tasks.length > 0 || entry.dayType === 'LEAVE') && (
             <div
-              onClick={onOpenDetails}
-              title="View submission details"
-              style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)', cursor: 'pointer' }}
+              style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)' }}
             >
               {entry.tasks.length > 0 ? entry.tasks.map(t => (
                 <div key={t.id} style={{
@@ -164,8 +166,20 @@ function EntryRow({
         </div>
 
         {/* No Approve/Reject here by design — deciding an entry means opening it and reading the
-            work first, so those actions live only in the submission detail modal. */}
+            work first, so those actions live only in the submission detail modal, reached via
+            this explicit Review button (not a whole-card click, which risked opening the modal
+            on an accidental tap anywhere in the row). */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+          <button
+            onClick={onOpenDetails}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+              padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+              background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff', cursor: 'pointer',
+            }}
+          >
+            Review
+          </button>
           <button
             onClick={onToggleExpand}
             title="View audit trail"
@@ -186,17 +200,50 @@ function EntryRow({
 type Tab = 'pending' | 'approved' | 'rejected';
 type SortMode = 'oldest' | 'latest' | 'hours' | 'name';
 
+const PAGE_SIZE = 10;
+
 export default function Approvals() {
   // Arriving from the Team Dashboard's "Review approvals" button carries the dashboard's
   // selected date/range as ?from=&to= so the count seen there matches what's shown here —
   // both `from` and `to` must be present to apply the filter (a partial pair is ignored).
   // With no params (direct nav via sidebar), the Pending tab shows every pending entry
   // regardless of any dashboard date filter.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const fromParam = searchParams.get('from');
   const toParam = searchParams.get('to');
   const range: PendingApprovalsRange | undefined = fromParam && toParam ? { from: fromParam, to: toParam } : undefined;
+
+  // Same Today/Yesterday/Custom-range picker as the Team Dashboard, writing the exact ?from=&to=
+  // pair it already reads above — "no params" (the default, direct-nav view) has no Today/
+  // Yesterday/Range mode of its own, so it's represented as its own "All dates" label rather than
+  // forcing an arbitrary default range onto a view that previously showed everything.
+  const todayISO = localTodayISO();
+  const yesterdayISO = localYesterdayISO();
+  const dateMode: QuickRangeMode = !range ? 'range'
+    : range.from === todayISO && range.to === todayISO ? 'today'
+      : range.from === yesterdayISO && range.to === yesterdayISO ? 'yesterday'
+        : 'range';
+  const dateLabel = !range ? 'All dates'
+    : dateMode === 'today' ? `Today, ${formatDateShort(todayISO)}`
+      : dateMode === 'yesterday' ? `Yesterday, ${formatDateShort(range.from)}`
+        : formatDateRange(range);
+
+  function setDateRange(from: string, to: string) {
+    const next = new URLSearchParams(searchParams);
+    next.set('from', from);
+    next.set('to', to);
+    setSearchParams(next, { replace: true });
+    setPage(1);
+  }
+
+  function clearDateRange() {
+    const next = new URLSearchParams(searchParams);
+    next.delete('from');
+    next.delete('to');
+    setSearchParams(next, { replace: true });
+    setPage(1);
+  }
 
   // Set by the Team Status table's "Pending" click — identifies which entry to scroll to
   // and highlight, so it's unmistakable which one was clicked.
@@ -227,6 +274,7 @@ export default function Approvals() {
   const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [detailsEntryId, setDetailsEntryId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
 
   // A `?highlight=` link — the Team Status table's "Pending" click, or an "EOD submitted"
   // notification — means "go straight to this one": EntryRow's own effect scrolls/highlights the
@@ -281,6 +329,10 @@ export default function Approvals() {
 
   // Looked up from baseList (not `visible`) so the modal survives a filter change while open.
   const detailsEntry = baseList.find(e => e.id === detailsEntryId) ?? null;
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  const paged = visible.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
 
   async function handleDetailApprove(entryId: number) {
     try {
@@ -344,6 +396,7 @@ export default function Approvals() {
 
   function switchTab(t: Tab) {
     setTab(t);
+    setPage(1);
   }
 
   if (pendingError) {
@@ -367,6 +420,34 @@ export default function Approvals() {
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>Review and act on your team's EOD submissions</p>
         </div>
+        {/* Date filter only ever affects the Pending query (see usePendingApprovals above) —
+            Approved/Rejected have no date param to filter by, so the picker stays hidden there
+            rather than showing a control that would silently do nothing. */}
+        {tab === 'pending' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <DateRangeSelector
+              mode={dateMode} range={range ?? { from: todayISO, to: todayISO }} todayISO={todayISO}
+              label={dateLabel} onSelectQuick={kind => setDateRange(kind === 'today' ? todayISO : yesterdayISO, kind === 'today' ? todayISO : yesterdayISO)}
+              onApplyRange={setDateRange}
+            />
+            {range && (
+              <button
+                type="button"
+                onClick={clearDateRange}
+                aria-label="Clear date filter"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '9px 12px',
+                  background: 'transparent', border: '1px solid var(--line2)', borderRadius: 8,
+                  color: 'var(--txt-mut)', fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--txt)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--txt-mut)'; }}
+              >
+                <X size={13} aria-hidden="true" /> Clear
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -456,7 +537,7 @@ export default function Approvals() {
         </Card>
       ) : (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
-          {visible.map(entry => (
+          {paged.map(entry => (
             <EntryRow
               key={entry.id}
               entry={entry}
@@ -467,6 +548,10 @@ export default function Approvals() {
               clarificationRequested={clarifiedEntryIds.has(entry.id)}
             />
           ))}
+          <Pagination
+            page={pageSafe} totalPages={totalPages} totalItems={visible.length} pageSize={PAGE_SIZE}
+            onPageChange={setPage} itemLabel="entries"
+          />
         </Card>
       )}
 

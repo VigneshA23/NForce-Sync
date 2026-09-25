@@ -6,13 +6,10 @@ import {
   AlertTriangle, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown, X,
   Calendar as CalendarIcon,
 } from 'lucide-react';
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-} from 'recharts';
 import { KpiCard, ClickableKpi } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { HeroBanner } from '../../components/dashboard/HeroBanner';
-import { useIsPhone } from '../../lib/useMediaQuery';
+import { Pagination } from '../../components/Pagination';
 import { useAuth } from '../../lib/auth';
 import { searchUsers } from '../../api/admin';
 import {
@@ -52,10 +49,10 @@ const thStyle: React.CSSProperties = {
   zIndex: 1,
 };
 
-// Header row (~38px) + 10 data rows (~41px each) — caps long tables (e.g. the QA-automation-
-// heavy project/missing-EOD lists) to a scannable page-height chunk instead of a mile-long
-// scroll, while keeping every row reachable via the table's own scrollbar.
-const SCROLL_TABLE_MAX_HEIGHT = 448;
+// Rows per page for the Project-wise Utilization / Resource Utilization / Missing EOD tables
+// below — the shared Pagination component handles the rest, so these no longer need their own
+// internal scroll-to-see-more container.
+const DASHBOARD_TABLE_PAGE_SIZE = 5;
 
 const tdStyle: React.CSSProperties = {
   padding: '12px 16px',
@@ -70,15 +67,6 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, ...style }}>
       {children}
-    </div>
-  );
-}
-
-function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--line)' }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>{title}</div>
-      {subtitle && <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 2 }}>{subtitle}</div>}
     </div>
   );
 }
@@ -722,6 +710,7 @@ function ProjectUtilizationTable({ rows }: { rows: ProjectUtilizationRowDto[] })
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
   const [sort, setSort] = useState<{ key: ProjectSortKey; dir: SortDir }>({ key: 'projectName', dir: 'asc' });
+  const [page, setPage] = useState(1);
 
   function toggle(key: ProjectSortKey) {
     setSort(prev => (prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
@@ -739,6 +728,12 @@ function ProjectUtilizationTable({ rows }: { rows: ProjectUtilizationRowDto[] })
     return copy;
   }, [rows, debouncedSearch, sort]);
 
+  // Clamped rather than reset-on-filter-change: a search/sort edit that shrinks the list just
+  // lands on the new last page instead of needing its own effect to snap back to page 1.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / DASHBOARD_TABLE_PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  const paged = filtered.slice((pageSafe - 1) * DASHBOARD_TABLE_PAGE_SIZE, pageSafe * DASHBOARD_TABLE_PAGE_SIZE);
+
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
       <SectionHeaderWithSearch
@@ -748,7 +743,8 @@ function ProjectUtilizationTable({ rows }: { rows: ProjectUtilizationRowDto[] })
       {rows.length === 0 ? (
         <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No data for the selected filters.</div>
       ) : (
-        <div style={{ overflow: 'auto', maxHeight: SCROLL_TABLE_MAX_HEIGHT }}>
+        <>
+        <div style={{ overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
@@ -760,7 +756,7 @@ function ProjectUtilizationTable({ rows }: { rows: ProjectUtilizationRowDto[] })
               </tr>
             </thead>
             <tbody>
-              {filtered.map(r => (
+              {paged.map(r => (
                 <tr key={r.projectId}>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{r.projectName}</td>
                   <td style={tdStyle}>{fmtHours(r.plannedHours)}</td>
@@ -777,6 +773,13 @@ function ProjectUtilizationTable({ rows }: { rows: ProjectUtilizationRowDto[] })
             </tbody>
           </table>
         </div>
+        {filtered.length > 0 && (
+          <Pagination
+            page={pageSafe} totalPages={totalPages} totalItems={filtered.length} pageSize={DASHBOARD_TABLE_PAGE_SIZE}
+            onPageChange={setPage} itemLabel="projects"
+          />
+        )}
+        </>
       )}
     </Card>
   );
@@ -790,6 +793,7 @@ function ResourceUtilizationTable({ rows }: { rows: ResourceUtilizationRowDto[] 
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
   const [sort, setSort] = useState<{ key: ResourceSortKey; dir: SortDir }>({ key: 'employeeName', dir: 'asc' });
+  const [page, setPage] = useState(1);
 
   function toggle(key: ResourceSortKey) {
     setSort(prev => (prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
@@ -807,6 +811,12 @@ function ResourceUtilizationTable({ rows }: { rows: ResourceUtilizationRowDto[] 
     return copy;
   }, [rows, debouncedSearch, sort]);
 
+  // Clamped rather than reset-on-filter-change: a search/sort edit that shrinks the list just
+  // lands on the new last page instead of needing its own effect to snap back to page 1.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / DASHBOARD_TABLE_PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  const paged = filtered.slice((pageSafe - 1) * DASHBOARD_TABLE_PAGE_SIZE, pageSafe * DASHBOARD_TABLE_PAGE_SIZE);
+
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
       <SectionHeaderWithSearch
@@ -816,7 +826,8 @@ function ResourceUtilizationTable({ rows }: { rows: ResourceUtilizationRowDto[] 
       {rows.length === 0 ? (
         <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No data for the selected filters.</div>
       ) : (
-        <div style={{ overflow: 'auto', maxHeight: SCROLL_TABLE_MAX_HEIGHT }}>
+        <>
+        <div style={{ overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
@@ -828,7 +839,7 @@ function ResourceUtilizationTable({ rows }: { rows: ResourceUtilizationRowDto[] 
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r, i) => (
+              {paged.map((r, i) => (
                 <tr key={`${r.employeeId}-${r.projectName}-${i}`}>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{r.employeeName}</td>
                   <td style={tdStyle}>{r.projectName}</td>
@@ -843,6 +854,13 @@ function ResourceUtilizationTable({ rows }: { rows: ResourceUtilizationRowDto[] 
             </tbody>
           </table>
         </div>
+        {filtered.length > 0 && (
+          <Pagination
+            page={pageSafe} totalPages={totalPages} totalItems={filtered.length} pageSize={DASHBOARD_TABLE_PAGE_SIZE}
+            onPageChange={setPage} itemLabel="employees"
+          />
+        )}
+        </>
       )}
     </Card>
   );
@@ -853,11 +871,18 @@ function ResourceUtilizationTable({ rows }: { rows: ResourceUtilizationRowDto[] 
 function MissingEodTable({ rows }: { rows: MissingEodRowDto[] }) {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
+  const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
     const term = debouncedSearch.trim().toLowerCase();
     return term === '' ? rows : rows.filter(r => r.employeeName.toLowerCase().includes(term));
   }, [rows, debouncedSearch]);
+
+  // Clamped rather than reset-on-filter-change: a search edit that shrinks the list just lands
+  // on the new last page instead of needing its own effect to snap back to page 1.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / DASHBOARD_TABLE_PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  const paged = filtered.slice((pageSafe - 1) * DASHBOARD_TABLE_PAGE_SIZE, pageSafe * DASHBOARD_TABLE_PAGE_SIZE);
 
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
@@ -868,7 +893,8 @@ function MissingEodTable({ rows }: { rows: MissingEodRowDto[] }) {
       {rows.length === 0 ? (
         <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>No missing submissions in this range.</div>
       ) : (
-        <div style={{ overflow: 'auto', maxHeight: SCROLL_TABLE_MAX_HEIGHT }}>
+        <>
+        <div style={{ overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
@@ -881,7 +907,7 @@ function MissingEodTable({ rows }: { rows: MissingEodRowDto[] }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(r => {
+              {paged.map(r => {
                 const cfg = MISSING_STATUS_CFG[r.status];
                 return (
                   <tr key={r.employeeId}>
@@ -900,6 +926,13 @@ function MissingEodTable({ rows }: { rows: MissingEodRowDto[] }) {
             </tbody>
           </table>
         </div>
+        {filtered.length > 0 && (
+          <Pagination
+            page={pageSafe} totalPages={totalPages} totalItems={filtered.length} pageSize={DASHBOARD_TABLE_PAGE_SIZE}
+            onPageChange={setPage} itemLabel="employees"
+          />
+        )}
+        </>
       )}
     </Card>
   );
@@ -911,8 +944,6 @@ export default function ProjectDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isSuperAdmin = user!.role === 'superadmin';
-  // Recharts measures axis width in JS, so this one can't be done in CSS.
-  const isPhone = useIsPhone();
   // From/To default to the 1st of the current month through today, computed fresh off the
   // real local date (never a fixed month/year) — and are never persisted to storage, so this
   // plain useState re-derives that same default on every fresh mount, including the one that
@@ -960,9 +991,7 @@ export default function ProjectDashboard() {
     );
   }
 
-  const { cards, projectUtilization, resourceUtilization, missingEod, taskCategoryBreakdown } = data;
-
-  const categoryChartData = taskCategoryBreakdown.map(c => ({ name: c.category, hours: c.hours }));
+  const { cards, projectUtilization, resourceUtilization, missingEod } = data;
 
   return (
     <div>
@@ -1001,27 +1030,6 @@ export default function ProjectDashboard() {
           <KpiCard icon={<Gauge size={17} aria-hidden="true" />} label="Overall Utilization" value={fmtPct(cards.overallUtilizationPct)} accent={utilColor(cards.overallUtilizationPct)} />
         </ClickableKpi>
       </div>
-
-      <Card style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
-        <SectionHeader title="Utilization by Task Category" subtitle="Approved hours grouped by task category" />
-        <div style={{ padding: '20px 16px', height: Math.max(200, categoryChartData.length * 34) }}>
-          {categoryChartData.length === 0 ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--txt-dim)', fontSize: 13 }}>No data for the selected filters.</div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={categoryChartData} layout="vertical" margin={{ left: 20, right: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--txt-dim)' }} unit="h" />
-                {/* 140px of category labels leaves only ~160px for the bars on a
-                    phone, so give the labels less and the data more down there. */}
-                <YAxis type="category" dataKey="name" tick={{ fontSize: isPhone ? 10 : 12, fill: 'var(--txt-mut)' }} width={isPhone ? 84 : 140} />
-                <Tooltip cursor={false} contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8, fontSize: 12 }} formatter={((v: number) => [`${v.toFixed(1)}h`, 'Hours']) as never} />
-                <Bar dataKey="hours" fill="var(--info)" radius={[0, 4, 4, 0]} isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </Card>
 
       <div style={{ display: 'grid', gap: 20 }}>
         <ProjectUtilizationTable rows={projectUtilization} />

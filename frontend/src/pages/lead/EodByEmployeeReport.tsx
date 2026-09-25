@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, ChevronUp, Download, RefreshCw, Search, Users } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, Download, RefreshCw, Search } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { FilterSelect } from '../../components/FilterSelect';
 import { TimeAdjustmentBadge } from '../../components/TimeAdjustmentBadge';
 import { RequiredHoursBadge } from '../../components/RequiredHoursBadge';
+import { Pagination } from '../../components/Pagination';
 import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
 import { useTeamReportFilters, useTeamEodByEmployeeReport, exportTeamEodByEmployee } from '../../api/teamReports';
@@ -123,7 +124,6 @@ interface Filters {
   to: string;
   projectId: string;
   client: string;
-  status: string;
   employeeQuery: string;
 }
 
@@ -143,7 +143,7 @@ function filterId(v: string): number | undefined {
 function defaultFilters(): Filters {
   return {
     from: '', to: '',
-    projectId: '', client: '', status: '', employeeQuery: '',
+    projectId: '', client: '', employeeQuery: '',
   };
 }
 
@@ -336,19 +336,6 @@ function FilterBar({
           </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>EOD Status</FieldLabel>
-          <FilterSelect
-            value={filters.status} onChange={v => set('status', v)}
-            style={selectStyle(filters.status)} label="EOD status"
-          >
-            <option value="" disabled>Select EOD Status…</option>
-            <option style={OPTION_STYLE} value={ALL}>All statuses</option>
-            <option style={OPTION_STYLE} value="SUBMITTED">Submitted</option>
-            <option style={OPTION_STYLE} value="LATE">Late</option>
-            <option style={OPTION_STYLE} value="MISSING">Missing</option>
-          </FilterSelect>
-        </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Employee</FieldLabel>
           <EmployeeSearch
             query={filters.employeeQuery}
@@ -534,11 +521,11 @@ function RosterFlow({
           })
         )}
         {employees.length > ROSTER_PAGE_SIZE && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} style={{ background: 'none', border: 'none', color: page === 0 ? 'var(--txt-dim)' : 'var(--brand-bright)', cursor: page === 0 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>Prev</button>
-            <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>Page {page + 1} / {pageCount}</span>
-            <button onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1} style={{ background: 'none', border: 'none', color: page >= pageCount - 1 ? 'var(--txt-dim)' : 'var(--brand-bright)', cursor: page >= pageCount - 1 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>Next</button>
-          </div>
+          <Pagination
+            page={page + 1} totalPages={pageCount} totalItems={employees.length} pageSize={ROSTER_PAGE_SIZE}
+            onPageChange={p => setPage(p - 1)} itemLabel="employees"
+            style={{ padding: '12px 16px' }}
+          />
         )}
       </Card>
 
@@ -564,7 +551,6 @@ function RosterFlow({
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                <StatusChip status={selected.status} />
                 <button
                   onClick={() => onExport(`emp-${selected.employeeId}`, [selected.employeeId])}
                   disabled={exportingKey === `emp-${selected.employeeId}`}
@@ -642,8 +628,20 @@ function RosterFlow({
 const TEAM_PAGE_SIZE = 12;
 
 // Header row and body rows must share one template or the columns desync.
-const TEAM_ENTRY_COLUMNS = '120px 110px 1fr 1fr 70px';
-const TEAM_ENTRY_MIN_WIDTH = 580;
+const TEAM_ENTRY_COLUMNS = '1.4fr 100px 1.1fr 1.3fr 60px';
+
+// Employee summary row (and its header) — same "one template, shared by header and rows"
+// rule as TEAM_ENTRY_COLUMNS above. Fixed-width Entries/Hours/Status/Download so those columns
+// stay aligned across rows regardless of the employee name's or project list's own length,
+// which is what a flex row with a single trailing spacer could not guarantee. Wide enough
+// (720px) that it's also the floor for the expanded entry sub-rows sharing the same group —
+// TEAM_ENTRY_COLUMNS' own 580px need never sets the floor on its own.
+const TEAM_SUMMARY_COLUMNS = 'minmax(190px,1.5fr) minmax(150px,1.3fr) 78px 64px 100px 50px';
+const TEAM_SUMMARY_MIN_WIDTH = 720;
+
+const summaryHeaderCellStyle: React.CSSProperties = {
+  fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em',
+};
 
 function TeamFlow({
   employees, isLoading, onExport, exportingKey,
@@ -654,8 +652,9 @@ function TeamFlow({
   exportingKey: string | null;
 }) {
   const [page, setPage] = useState(0);
+  // Tracks which employees are expanded — no global show/hide toggle, each row's own caret
+  // (see `toggle` below) is the only way in or out, starting collapsed.
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [showAll, setShowAll] = useState(true);
   const workingHoursPerDay = useWorkingHoursPerDay();
 
   useEffect(() => { setPage(0); }, [employees.length]);
@@ -669,20 +668,10 @@ function TeamFlow({
     setExpanded(next);
   }
 
-  function isOpen(id: number): boolean {
-    return showAll ? !expanded.has(id) : expanded.has(id);
-  }
-
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', borderBottom: '1px solid var(--line)', background: 'var(--raised)' }}>
         <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--txt)' }}>Everyone's EOD entries</span>
-        <button
-          onClick={() => { setShowAll(s => !s); setExpanded(new Set()); }}
-          style={{ background: 'none', border: '1px solid var(--line2)', borderRadius: 8, color: 'var(--brand-bright)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '6px 12px' }}
-        >
-          {showAll ? 'Hide entries' : 'Show entries'}
-        </button>
       </div>
 
       {isLoading ? (
@@ -694,24 +683,42 @@ function TeamFlow({
         // columns; the minWidth on each group keeps that employee's summary row
         // and its expanded entry rows on the same horizontal track.
         <div className="nf-r-scroll" style={{ maxHeight: 560, overflowY: 'auto' }}>
+          {/* Column headers — shares TEAM_SUMMARY_COLUMNS with every summary row below and pins to
+              the top of this same scroll region so it survives vertical scrolling too. */}
+          <div className="nf-r-scroll-inner" style={{ '--nf-r-min': TEAM_SUMMARY_MIN_WIDTH + 'px' } as React.CSSProperties}>
+            <div style={{
+              display: 'grid', gridTemplateColumns: TEAM_SUMMARY_COLUMNS, gap: 10, alignItems: 'center',
+              padding: '8px 16px', borderBottom: '1px solid var(--line)',
+              position: 'sticky', top: 0, background: 'var(--panel)', zIndex: 1,
+            }}>
+              <div style={summaryHeaderCellStyle}>Employee</div>
+              <div style={summaryHeaderCellStyle}>Projects</div>
+              <div style={{ ...summaryHeaderCellStyle, textAlign: 'right' }}>Entries</div>
+              <div style={{ ...summaryHeaderCellStyle, textAlign: 'right' }}>Hours</div>
+              <div style={{ ...summaryHeaderCellStyle, textAlign: 'center' }}>Status</div>
+              <div style={{ ...summaryHeaderCellStyle, textAlign: 'center' }}>Download</div>
+            </div>
+          </div>
           {pageRows.map(r => {
-            const open = isOpen(r.employeeId);
+            const open = expanded.has(r.employeeId);
             const entriesAsc = [...r.entries].sort((a, b) => a.date.localeCompare(b.date));
             return (
-              <div key={r.employeeId} className="nf-r-scroll-inner" style={{ borderBottom: '1px solid var(--line)', '--nf-r-min': TEAM_ENTRY_MIN_WIDTH + 'px' } as React.CSSProperties}>
+              <div key={r.employeeId} className="nf-r-scroll-inner" style={{ borderBottom: '1px solid var(--line)', '--nf-r-min': TEAM_SUMMARY_MIN_WIDTH + 'px' } as React.CSSProperties}>
                 <div
                   onClick={() => toggle(r.employeeId)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', cursor: 'pointer' }}
+                  style={{ display: 'grid', gridTemplateColumns: TEAM_SUMMARY_COLUMNS, gap: 10, alignItems: 'center', padding: '9px 16px', cursor: 'pointer' }}
                 >
-                  {open ? <ChevronDown size={14} style={{ color: 'var(--txt-dim)' }} aria-hidden="true" /> : <ChevronRight size={14} style={{ color: 'var(--txt-dim)' }} aria-hidden="true" />}
-                  <div style={{
-                    width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700,
-                    background: 'var(--raised2)', color: 'var(--txt)', border: '1px solid var(--line2)',
-                  }}>
-                    {initials(r.employeeName)}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                    {open ? <ChevronDown size={14} style={{ color: 'var(--txt-dim)', flexShrink: 0 }} aria-hidden="true" /> : <ChevronRight size={14} style={{ color: 'var(--txt-dim)', flexShrink: 0 }} aria-hidden="true" />}
+                    <div style={{
+                      width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700,
+                      background: 'var(--raised2)', color: 'var(--txt)', border: '1px solid var(--line2)',
+                    }}>
+                      {initials(r.employeeName)}
+                    </div>
+                    <span style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.employeeName}</span>
                   </div>
-                  <span style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--txt)', minWidth: 140 }}>{r.employeeName}</span>
                   {/* The codes themselves, not a "2 projects" count — the count told you there was
                       something to know without telling you what it was, and this column already
                       printed the code whenever there happened to be exactly one. Long lists
@@ -721,24 +728,27 @@ function TeamFlow({
                       ? `Assigned to ${r.projectCodes.join(', ')}`
                       : 'No project assignments in this range'}
                     style={{
-                      fontSize: 11, color: 'var(--txt-mut)', maxWidth: 220,
+                      fontSize: 11, color: 'var(--txt-mut)',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}
                   >
                     {r.projectCodes.length > 0 ? r.projectCodes.join(', ') : '—'}
                   </span>
-                  <div style={{ flex: 1 }} />
-                  <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{r.entryCount} {r.entryCount === 1 ? 'entry' : 'entries'}</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)' }}>{hrs(r.totalHours)}</span>
-                  <StatusChip status={r.status} />
-                  <button
-                    onClick={e => { e.stopPropagation(); onExport(`emp-${r.employeeId}`, [r.employeeId]); }}
-                    disabled={exportingKey === `emp-${r.employeeId}`}
-                    title="Download this employee's EOD"
-                    style={{ background: 'none', border: 'none', color: exportingKey === `emp-${r.employeeId}` ? 'var(--txt-dim)' : 'var(--brand-bright)', cursor: exportingKey === `emp-${r.employeeId}` ? 'not-allowed' : 'pointer', padding: 4, display: 'flex', flexShrink: 0 }}
-                  >
-                    <Download size={13} aria-hidden="true" />
-                  </button>
+                  <span style={{ fontSize: 11.5, color: 'var(--txt-dim)', textAlign: 'right' }}>{r.entryCount}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)', textAlign: 'right' }}>{hrs(r.totalHours)}</span>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <StatusChip status={r.status} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); onExport(`emp-${r.employeeId}`, [r.employeeId]); }}
+                      disabled={exportingKey === `emp-${r.employeeId}`}
+                      title="Download this employee's EOD"
+                      style={{ background: 'none', border: 'none', color: exportingKey === `emp-${r.employeeId}` ? 'var(--txt-dim)' : 'var(--brand-bright)', cursor: exportingKey === `emp-${r.employeeId}` ? 'not-allowed' : 'pointer', padding: 4, display: 'flex' }}
+                    >
+                      <Download size={13} aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
                 {open && entriesAsc.length > 0 && (
                   <div style={{
@@ -784,11 +794,11 @@ function TeamFlow({
       )}
 
       {employees.length > TEAM_PAGE_SIZE && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-          <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} style={{ background: 'none', border: 'none', color: page === 0 ? 'var(--txt-dim)' : 'var(--brand-bright)', cursor: page === 0 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>Prev</button>
-          <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>Page {page + 1} of {pageCount}</span>
-          <button onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1} style={{ background: 'none', border: 'none', color: page >= pageCount - 1 ? 'var(--txt-dim)' : 'var(--brand-bright)', cursor: page >= pageCount - 1 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>Next</button>
-        </div>
+        <Pagination
+          page={page + 1} totalPages={pageCount} totalItems={employees.length} pageSize={TEAM_PAGE_SIZE}
+          onPageChange={p => setPage(p - 1)} itemLabel="employees"
+          style={{ padding: '12px 16px' }}
+        />
       )}
     </Card>
   );
@@ -811,7 +821,6 @@ export default function LeadEodByEmployeeReport() {
     to: filters.to,
     projectId: filterId(filters.projectId),
     client: filterValue(filters.client),
-    status: filterValue(filters.status),
     employeeQuery: filterValue(filters.employeeQuery),
   }, hasRange);
 
@@ -845,7 +854,6 @@ export default function LeadEodByEmployeeReport() {
         to: filters.to,
         projectId: filterId(filters.projectId),
         client: filterValue(filters.client),
-        status: filterValue(filters.status),
         employeeQuery: filterValue(filters.employeeQuery),
         employeeIds,
         format,
@@ -908,11 +916,6 @@ export default function LeadEodByEmployeeReport() {
       ) : (
         <TeamFlow employees={employees} isLoading={isLoading} onExport={runExport} exportingKey={exportingKey} />
       )}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 11.5, color: 'var(--txt-dim)' }}>
-        <Users size={13} aria-hidden="true" />
-        Scoped to your direct reports.
-      </div>
     </div>
   );
 }

@@ -248,6 +248,30 @@ public class EodClarificationService {
         return EodClarificationReplyDto.from(saved, clarification, attachmentsFor(saved.getId()));
     }
 
+    /** Editing/deleting is restricted to the reply's own sender — unlike read/reply access, which
+     *  requireCanReply already unifies across the owning employee and owning TL, ownership of a
+     *  specific message is still per-sender: either side can read the thread, but neither can
+     *  touch a message the other one sent. */
+    public void editReply(Long replyId, String actingEmail, String message) {
+        AppUser actor = requireUser(actingEmail);
+        EodClarificationReply reply = requireReply(replyId);
+        EodEntry entry = reply.getClarification().getEodEntry();
+        EodClarificationAccessPolicy.requireCanReply(actor, entry);
+        requireOwnReply(reply, actor);
+        requireClarificationNotResolved(reply.getClarification());
+        updateMessage(reply, message);
+    }
+
+    public void deleteReply(Long replyId, String actingEmail) {
+        AppUser actor = requireUser(actingEmail);
+        EodClarificationReply reply = requireReply(replyId);
+        EodEntry entry = reply.getClarification().getEodEntry();
+        EodClarificationAccessPolicy.requireCanReply(actor, entry);
+        requireOwnReply(reply, actor);
+        requireClarificationNotResolved(reply.getClarification());
+        deleteReplyInternal(reply);
+    }
+
     /** Loads the raw bytes for one attachment — read access is the same EodClarificationAccessPolicy
      *  check as the thread itself (owning employee, owning TL, scoped PM, or Superadmin), so this
      *  one method covers all three roles' download endpoints rather than Blockers' role-split pair
@@ -467,5 +491,40 @@ public class EodClarificationService {
     private EodEntry requireEntry(Long entryId) {
         return entryRepository.findWithDetailsById(entryId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "EOD entry not found"));
+    }
+
+    private EodClarificationReply requireReply(Long replyId) {
+        return replyRepository.findById(replyId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Reply not found"));
+    }
+
+    private void requireOwnReply(EodClarificationReply reply, AppUser actor) {
+        if (!reply.getSender().getId().equals(actor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only edit or delete your own message");
+        }
+    }
+
+    // Same terminal rule new replies already respect (see reply()'s findByEodEntryIdAndStatusNot
+    // lookup) — a RESOLVED round's history stays fixed rather than editable/deletable after close.
+    private void requireClarificationNotResolved(EodClarification clarification) {
+        if (clarification.getStatus() == EodClarification.Status.RESOLVED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This clarification has been marked resolved. Editing is disabled.");
+        }
+    }
+
+    private void updateMessage(EodClarificationReply reply, String message) {
+        if (message == null || message.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message cannot be empty");
+        }
+        reply.setMessage(message.trim());
+        replyRepository.save(reply);
+    }
+
+    // Attachments have no ON DELETE CASCADE (see V88) — deleted explicitly first so the reply
+    // row's delete never hits a dangling FK from an attachment still pointing at it.
+    private void deleteReplyInternal(EodClarificationReply reply) {
+        attachmentRepository.deleteByReplyId(reply.getId());
+        replyRepository.delete(reply);
     }
 }

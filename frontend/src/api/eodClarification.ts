@@ -115,6 +115,25 @@ export function useSendClarificationReply(entryId: number, scope: ClarificationS
   });
 }
 
+/** Edit an existing reply's message text — restricted server-side to the reply's own sender. */
+export function useEditClarificationReply(entryId: number, scope: ClarificationScope) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ replyId, message }: { replyId: number; message: string }) =>
+      api.put(`${basePath(scope)}/eod/clarification/replies/${replyId}`, { message }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: threadKey(scope, entryId) }),
+  });
+}
+
+/** Delete an existing reply — restricted server-side to the reply's own sender. */
+export function useDeleteClarificationReply(entryId: number, scope: ClarificationScope) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (replyId: number) => api.delete(`${basePath(scope)}/eod/clarification/replies/${replyId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: threadKey(scope, entryId) }),
+  });
+}
+
 // Attachment bytes fetched on demand, mirroring useBlockerAttachmentUrl — cached as an object URL
 // per attachment, not explicitly revoked (same tradeoff, see that hook's comment). Covers all
 // three thread scopes, including 'pm' (its own read-only route), unlike ClarificationScope which

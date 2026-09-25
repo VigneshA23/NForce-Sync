@@ -3,6 +3,7 @@ import { Plus, RefreshCw, Pencil, Trash2 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { DropdownMenu } from '../../components/DropdownMenu';
+import { Pagination } from '../../components/Pagination';
 import { ReporteeScopePicker } from '../../components/ReporteeScopePicker';
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../../lib/toast';
@@ -18,6 +19,8 @@ import {
 } from '../../components/projects/MyProjectsShared';
 
 type CategoryStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
+
+const CATEGORIES_PAGE_SIZE = 10;
 
 // ── New Category modal ────────────────────────────────────────────────────────
 
@@ -299,6 +302,7 @@ function CategoryPanel({ readOnly = false }: { readOnly?: boolean }) {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<CategoryStatusFilter>('ALL');
+  const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -310,6 +314,12 @@ function CategoryPanel({ readOnly = false }: { readOnly?: boolean }) {
       return matchesSearch && matchesStatus;
     });
   }, [data, search, statusFilter]);
+
+  // Clamped rather than reset-on-filter-change: a filter/search edit that shrinks the list
+  // just lands on the new last page instead of needing its own effect to snap back to page 1.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / CATEGORIES_PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  const pagedCategories = filtered.slice((pageSafe - 1) * CATEGORIES_PAGE_SIZE, pageSafe * CATEGORIES_PAGE_SIZE);
 
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
@@ -399,7 +409,7 @@ function CategoryPanel({ readOnly = false }: { readOnly?: boolean }) {
                 </td>
               </tr>
             ) : (
-              filtered.map((c: ProjectCategoryDto) => (
+              pagedCategories.map((c: ProjectCategoryDto) => (
                 <tr key={c.id}>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{c.name}</td>
                   <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{c.description ?? '-'}</td>
@@ -424,6 +434,13 @@ function CategoryPanel({ readOnly = false }: { readOnly?: boolean }) {
             )}
           </tbody>
         </table>
+      )}
+
+      {data && data.length > 0 && (
+        <Pagination
+          page={pageSafe} totalPages={totalPages} totalItems={filtered.length} pageSize={CATEGORIES_PAGE_SIZE}
+          onPageChange={setPage} itemLabel="categories"
+        />
       )}
 
       <EditCategoryModal category={editTarget} onClose={() => setEditTarget(null)} />
@@ -571,7 +588,8 @@ export default function MyProjects() {
   const list = useMemo(() => projects ?? [], [projects]);
 
   // Background refetch only — the initial load already renders its own skeleton via isPending,
-  // so this only covers the icon-spin/disabled state on the Refresh button.
+  // so this only covers the icon-spin/disabled state on the panel's Retry-on-error button (no
+  // header Refresh button on this page — see showRefreshButton={false} below).
   const isRefreshing = !isPending && isFetching;
 
   // Pulls the latest projects/status/client/team-size data from the backend rather than
@@ -623,6 +641,7 @@ export default function MyProjects() {
           onOpenDetails={setDetailsProjectId}
           boldNameLink
           compactToolbar
+          showRefreshButton={false}
         />
       )}
 

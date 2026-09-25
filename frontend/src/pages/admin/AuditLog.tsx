@@ -2,13 +2,14 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  FileText, Shield, Info, RefreshCw, ChevronLeft, ChevronRight,
+  FileText, Shield, Info, RefreshCw,
   ChevronDown, ChevronUp, ChevronsUpDown, X,
   ListChecks, PlusCircle, PencilLine, Trash2, PowerCircle, PauseCircle, MoreHorizontal,
 } from 'lucide-react';
 import { Card, KpiCard } from '../../components/KpiCard';
 import { Avatar, avatarColor } from '../../components/BlockerThread';
 import { DatePicker } from '../../components/DatePicker';
+import { Pagination } from '../../components/Pagination';
 import { listAuditLog, getAuditSummary } from '../../api/admin';
 import type { AuditLogDto, AuditFilters } from '../../api/admin';
 import {
@@ -292,20 +293,6 @@ export default function AuditLog() {
     { key: 'other',      label: 'Other',       value: summary.other,      accent: '#9B6DFF',    icon: <MoreHorizontal size={17} aria-hidden="true" /> },
   ] : [];
 
-  const showingFrom = data && data.totalElements > 0 ? data.number * data.size + 1 : 0;
-  const showingTo = data ? Math.min((data.number + 1) * data.size, data.totalElements) : 0;
-
-  // Windowed page numbers — up to 5 around the current page, always showing first/last.
-  const pageNumbers = useMemo(() => {
-    if (!data || data.totalPages <= 1) return [];
-    const total = data.totalPages;
-    const current = data.number;
-    const window = 2;
-    const nums = new Set<number>([0, total - 1]);
-    for (let i = current - window; i <= current + window; i++) if (i >= 0 && i < total) nums.add(i);
-    return [...nums].sort((a, b) => a - b);
-  }, [data]);
-
   return (
     <div style={{ display: 'grid', gridTemplateColumns: selectedEntry ? '1fr 320px' : '1fr', gap: 16, alignItems: 'start' }}>
       <div style={{ minWidth: 0 }}>
@@ -528,36 +515,11 @@ export default function AuditLog() {
 
           {/* Pagination */}
           {data && data.totalPages > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid var(--line)', flexWrap: 'wrap', gap: 10 }}>
-              <span style={{ fontSize: 12, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
-                Showing {showingFrom} – {showingTo} of {data.totalElements} logs
-              </span>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <button onClick={() => setPage(p => p - 1)} disabled={data.number === 0} style={pageBtnStyle(data.number === 0)} aria-label="Previous page">
-                  <ChevronLeft size={14} aria-hidden="true" />
-                </button>
-                {pageNumbers.map((n, i) => (
-                  <span key={n} style={{ display: 'flex', alignItems: 'center' }}>
-                    {i > 0 && pageNumbers[i - 1] !== n - 1 && <span style={{ padding: '0 4px', color: 'var(--txt-dim)', fontSize: 12 }}>…</span>}
-                    <button
-                      onClick={() => setPage(n)}
-                      style={{
-                        minWidth: 28, height: 28, padding: '0 6px', borderRadius: 6,
-                        background: n === data.number ? 'var(--brand)' : 'var(--raised2)',
-                        border: '1px solid var(--line2)',
-                        color: n === data.number ? '#fff' : 'var(--txt)',
-                        fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                      }}
-                    >
-                      {n + 1}
-                    </button>
-                  </span>
-                ))}
-                <button onClick={() => setPage(p => p + 1)} disabled={data.number >= data.totalPages - 1} style={pageBtnStyle(data.number >= data.totalPages - 1)} aria-label="Next page">
-                  <ChevronRight size={14} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
+            <Pagination
+              page={data.number + 1} totalPages={data.totalPages} totalItems={data.totalElements} pageSize={data.size}
+              onPageChange={p => setPage(p - 1)} itemLabel="logs"
+              style={{ padding: '12px 16px' }}
+            />
           )}
         </div>
       </div>
@@ -593,14 +555,3 @@ const tdStyle: React.CSSProperties = {
   fontSize: 12,
   verticalAlign: 'top',
 };
-
-const pageBtnStyle = (disabled: boolean): React.CSSProperties => ({
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  width: 28, height: 28,
-  background: disabled ? 'var(--raised)' : 'var(--raised2)',
-  border: '1px solid var(--line2)',
-  borderRadius: 6,
-  color: disabled ? 'var(--txt-dim)' : 'var(--txt)',
-  cursor: disabled ? 'not-allowed' : 'pointer',
-  opacity: disabled ? 0.5 : 1,
-});

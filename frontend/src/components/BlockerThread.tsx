@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Paperclip, Smile, AtSign, Eye, Search, File as FileIcon, X, Download, AlertCircle } from 'lucide-react';
 import {
-  useBlockerThread, useSendBlockerReply, fetchBlockerAttachmentUrl,
+  Paperclip, Smile, AtSign, Eye, Search, File as FileIcon, X, Download, AlertCircle,
+  Pencil, Trash2, Copy,
+} from 'lucide-react';
+import {
+  useBlockerThread, useSendBlockerReply, useEditBlockerReply, useDeleteBlockerReply, fetchBlockerAttachmentUrl,
   type ConversationScope,
 } from '../api/blockerConversation';
 import type { DateRange } from '../api/teamLead';
+import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import { GlobalLoader } from './GlobalLoader';
+import { DropdownMenu, type DropdownMenuItem } from './DropdownMenu';
+import { ConfirmModal } from './ConfirmModal';
 import {
   ALLOWED_ATTACHMENT_TYPES, ALLOWED_ATTACHMENT_TYPES_LABEL, MAX_ATTACHMENT_BYTES, validateAttachmentFile,
 } from '../lib/eodAttachments';
@@ -93,6 +99,7 @@ export interface GenericThreadAttachment {
 
 export interface GenericThreadMessage {
   id: number;
+  senderId: number;
   senderName: string;
   senderRole: 'EMPLOYEE' | 'TEAM_LEAD';
   createdAt: string;
@@ -159,13 +166,80 @@ function GenericAttachmentView({ attachment, fetchAttachmentUrl, attachmentUrlQu
   );
 }
 
-function GenericConversationMessage({ m, fetchAttachmentUrl, attachmentUrlQueryKey }: {
+function GenericConversationMessage({
+  m, fetchAttachmentUrl, attachmentUrlQueryKey, currentUserId, onEdit, onDelete, locked,
+}: {
   m: GenericThreadMessage;
   fetchAttachmentUrl: FetchAttachmentUrl;
   attachmentUrlQueryKey: AttachmentUrlQueryKey;
+  /** Signed-in user's id — an action menu only ever shows Edit/Delete on that user's OWN
+   *  messages, never the other side's, regardless of role. */
+  currentUserId?: number;
+  /** Omitted entirely for a read-only surface (e.g. PM's EOD Inbox view) — see ThreadView's
+   *  `hideComposer`, which this mirrors: no edit/delete wiring at all, not just a disabled one. */
+  onEdit?: (replyId: number, message: string) => Promise<unknown>;
+  onDelete?: (replyId: number) => Promise<unknown>;
+  /** Thread closed (blocker resolved / clarification resolved) — Edit/Delete drop out of the
+   *  menu the same way the reply box itself locks, but Copy still works on closed history. */
+  locked?: boolean;
 }) {
   const isTeamLead = m.senderRole === 'TEAM_LEAD';
   const { date, time } = fmtDateTimeParts(m.createdAt);
+  const { show: toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(m.message);
+  const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const isOwn = currentUserId != null && m.senderId === currentUserId;
+  const canManage = isOwn && !locked;
+
+  function copyMessage() {
+    navigator.clipboard.writeText(m.message)
+      .then(() => toast('Message copied to clipboard', 'success'))
+      .catch(() => toast('Could not copy message', 'error'));
+  }
+
+  function startEdit() {
+    setEditText(m.message);
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    const trimmed = editText.trim();
+    if (!trimmed || !onEdit) return;
+    setSaving(true);
+    try {
+      await onEdit(m.id, trimmed);
+      setEditing(false);
+    } catch {
+      toast('Failed to save changes. Please try again.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!onDelete) return;
+    setDeleting(true);
+    try {
+      await onDelete(m.id);
+      setConfirmingDelete(false);
+    } catch {
+      toast('Failed to delete message. Please try again.', 'error');
+      setDeleting(false);
+    }
+  }
+
+  const menuItems: DropdownMenuItem[] = [
+    // Nothing to copy off an attachment-only reply (empty text) — Copy and Edit both gate on
+    // m.message for the same reason.
+    ...(m.message ? [{ key: 'copy', label: 'Copy', icon: Copy, onSelect: copyMessage }] : []),
+    ...(canManage && onEdit && m.message ? [{ key: 'edit', label: 'Edit', icon: Pencil, onSelect: startEdit }] : []),
+    ...(canManage && onDelete ? [{ key: 'delete', label: 'Delete', icon: Trash2, color: 'var(--risk)', onSelect: () => setConfirmingDelete(true) }] : []),
+  ];
+
   return (
     // Spacing here (gap/margins/avatar size/bubble padding) trimmed slightly from the original —
     // each message this shaves a few px off directly buys back room for more of the thread to be
@@ -178,16 +252,62 @@ function GenericConversationMessage({ m, fetchAttachmentUrl, attachmentUrlQueryK
             {m.senderName} <span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}>({isTeamLead ? 'Team Lead' : 'Employee'})</span>
           </span>
           <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>{date} {time}</span>
-        </div>
-        {m.message && (
-          <div style={{
-            fontSize: 12.5, color: 'var(--txt-mut)', lineHeight: 1.4, padding: '6px 10px', borderRadius: 8,
-            background: isTeamLead ? 'color-mix(in srgb, var(--ok) 8%, transparent)' : 'var(--raised2)',
-            border: `1px solid ${isTeamLead ? 'color-mix(in srgb, var(--ok) 22%, transparent)' : 'var(--line2)'}`,
-            marginBottom: m.attachments.length ? 6 : 0,
-          }}>
-            {m.message}
+          <div style={{ marginLeft: 'auto' }}>
+            {menuItems.length > 0 && (
+              <DropdownMenu items={menuItems} ariaLabel={`Actions for ${m.senderName}'s message`} />
+            )}
           </div>
+        </div>
+        {editing ? (
+          <div style={{ marginBottom: m.attachments.length ? 6 : 0 }}>
+            <textarea
+              autoFocus
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              rows={2}
+              style={{
+                width: '100%', resize: 'none', padding: '6px 10px', borderRadius: 8, fontSize: 12.5,
+                background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
+                fontFamily: 'inherit', boxSizing: 'border-box', display: 'block', marginBottom: 6,
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={saveEdit}
+                disabled={saving || !editText.trim()}
+                style={{
+                  padding: '5px 12px', fontSize: 11.5, fontWeight: 600, borderRadius: 6,
+                  background: 'var(--risk)', border: '1px solid var(--risk)', color: '#fff',
+                  cursor: saving || !editText.trim() ? 'default' : 'pointer', opacity: saving || !editText.trim() ? 0.6 : 1,
+                }}
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                disabled={saving}
+                style={{
+                  padding: '5px 12px', fontSize: 11.5, fontWeight: 600, borderRadius: 6,
+                  background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          m.message && (
+            <div style={{
+              fontSize: 12.5, color: 'var(--txt-mut)', lineHeight: 1.4, padding: '6px 10px', borderRadius: 8,
+              background: isTeamLead ? 'color-mix(in srgb, var(--ok) 8%, transparent)' : 'var(--raised2)',
+              border: `1px solid ${isTeamLead ? 'color-mix(in srgb, var(--ok) 22%, transparent)' : 'var(--line2)'}`,
+              marginBottom: m.attachments.length ? 6 : 0,
+            }}>
+              {m.message}
+            </div>
+          )
         )}
         {m.attachments.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -195,6 +315,16 @@ function GenericConversationMessage({ m, fetchAttachmentUrl, attachmentUrlQueryK
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        open={confirmingDelete}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={confirmDelete}
+        title="Delete message"
+        message="Delete this message? This cannot be undone."
+        confirmLabel="Delete"
+        isPending={deleting}
+      />
     </div>
   );
 }
@@ -210,6 +340,7 @@ export function ThreadView({
   messages, isPending, replyToLabel, visibilityNote, isLocked, lockedMessage,
   onSend, isSending, fetchAttachmentUrl, attachmentUrlQueryKey,
   maxAttachmentsPerReply = MAX_ATTACHMENTS_PER_REPLY, hideComposer,
+  currentUserId, onEditMessage, onDeleteMessage,
 }: {
   messages: GenericThreadMessage[] | undefined;
   isPending: boolean;
@@ -228,6 +359,12 @@ export function ThreadView({
    *  that isn't part of the conversation on either side (e.g. PM's read-only EOD Inbox view,
    *  which already shows its own "view only" notice elsewhere in the panel). */
   hideComposer?: boolean;
+  /** Signed-in user's id, and the edit/delete mutations — all three omitted together on a
+   *  read-only surface (mirrors hideComposer), which drops Edit/Delete from every message's
+   *  menu app-wide without a separate readOnly flag to thread through. */
+  currentUserId?: number;
+  onEditMessage?: (replyId: number, message: string) => Promise<unknown>;
+  onDeleteMessage?: (replyId: number) => Promise<unknown>;
 }) {
   const { show: toast } = useToast();
   const [draft, setDraft] = useState('');
@@ -344,7 +481,12 @@ export function ThreadView({
         ) : (messages ?? []).length === 0 ? (
           <div style={{ fontSize: 12.5, color: 'var(--txt-dim)' }}>No messages yet.</div>
         ) : (
-          (messages ?? []).map(m => <GenericConversationMessage key={m.id} m={m} fetchAttachmentUrl={fetchAttachmentUrl} attachmentUrlQueryKey={attachmentUrlQueryKey} />)
+          (messages ?? []).map(m => (
+            <GenericConversationMessage
+              key={m.id} m={m} fetchAttachmentUrl={fetchAttachmentUrl} attachmentUrlQueryKey={attachmentUrlQueryKey}
+              currentUserId={currentUserId} onEdit={onEditMessage} onDelete={onDeleteMessage} locked={isLocked}
+            />
+          ))
         )}
       </div>
 
@@ -571,8 +713,11 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
   range?: DateRange;
   isLocked?: boolean;
 }) {
+  const { user } = useAuth();
   const { data: messages, isPending } = useBlockerThread(taskId, scope);
   const sendReply = useSendBlockerReply(taskId, scope, range);
+  const editReply = useEditBlockerReply(taskId, scope);
+  const deleteReply = useDeleteBlockerReply(taskId, scope);
   return (
     <ThreadView
       messages={messages}
@@ -585,6 +730,9 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
       isSending={sendReply.isPending}
       fetchAttachmentUrl={id => fetchBlockerAttachmentUrl(scope, id)}
       attachmentUrlQueryKey={id => ['blocker-attachment-blob', scope, id]}
+      currentUserId={user?.id}
+      onEditMessage={(replyId, message) => editReply.mutateAsync({ replyId, message })}
+      onDeleteMessage={replyId => deleteReply.mutateAsync(replyId)}
     />
   );
 }

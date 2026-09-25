@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Bell, ChevronLeft, ChevronRight, Search, Users } from 'lucide-react';
+import { AlertTriangle, Bell, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { FilterSelect } from '../../components/FilterSelect';
+import { Pagination } from '../../components/Pagination';
 import { Modal } from '../../components/Modal';
 import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
@@ -667,15 +668,11 @@ export default function MissingEodReport() {
           </div>
           </div>
           {employees.length > PAGE_SIZE && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '10px 16px', borderTop: '1px solid var(--line)' }}>
-              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} style={{ background: 'none', border: 'none', color: page === 0 ? 'var(--txt-dim)' : 'var(--brand-bright)', cursor: page === 0 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                <ChevronLeft size={13} aria-hidden="true" /> Prev
-              </button>
-              <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>Page {page + 1} / {pageCount}</span>
-              <button onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1} style={{ background: 'none', border: 'none', color: page >= pageCount - 1 ? 'var(--txt-dim)' : 'var(--brand-bright)', cursor: page >= pageCount - 1 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                Next <ChevronRight size={13} aria-hidden="true" />
-              </button>
-            </div>
+            <Pagination
+              page={page + 1} totalPages={pageCount} totalItems={employees.length} pageSize={PAGE_SIZE}
+              onPageChange={p => setPage(p - 1)} itemLabel="employees"
+              style={{ padding: '10px 16px' }}
+            />
           )}
         </Card>
       )}

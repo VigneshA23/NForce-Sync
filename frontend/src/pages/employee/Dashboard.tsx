@@ -18,6 +18,7 @@ import { UtilPctDonut, SegmentDonut } from '../../components/UtilizationDonut';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { KpiCard, ClickableKpi } from '../../components/KpiCard';
 import { HeroBanner } from '../../components/dashboard/HeroBanner';
+import { Pagination } from '../../components/Pagination';
 import { utilColor, fmtPct } from '../../lib/rules';
 import { formatDate, formatDateTime, formatTime12h, toLocalISODate, todayISO } from '../../lib/date';
 import { useHashScroll } from '../../lib/useHashScroll';
@@ -679,44 +680,11 @@ function HolidaysPanel({ holidays, year }: { holidays: HolidayDto[]; year: numbe
             );
           })}
           {pageCount > 1 && (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '8px 12px', borderTop: '1px solid var(--line)',
-            }}>
-              <button
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={safePage === 0}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  padding: '5px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: 6,
-                  background: 'var(--raised2)', border: '1px solid var(--line2)',
-                  color: safePage === 0 ? 'var(--txt-dim)' : 'var(--txt)',
-                  cursor: safePage === 0 ? 'default' : 'pointer',
-                  opacity: safePage === 0 ? 0.5 : 1,
-                  transition: 'opacity 0.15s',
-                }}
-              >
-                <ChevronLeft size={13} aria-hidden /> Prev
-              </button>
-              <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
-                {safePage + 1} / {pageCount}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
-                disabled={safePage === pageCount - 1}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  padding: '5px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: 6,
-                  background: 'var(--raised2)', border: '1px solid var(--line2)',
-                  color: safePage === pageCount - 1 ? 'var(--txt-dim)' : 'var(--txt)',
-                  cursor: safePage === pageCount - 1 ? 'default' : 'pointer',
-                  opacity: safePage === pageCount - 1 ? 0.5 : 1,
-                  transition: 'opacity 0.15s',
-                }}
-              >
-                Next <ChevronRight size={13} aria-hidden />
-              </button>
-            </div>
+            <Pagination
+              page={safePage + 1} totalPages={pageCount} totalItems={holidays.length} pageSize={HOLIDAYS_PER_PAGE}
+              onPageChange={p => setPage(p - 1)} itemLabel="holidays"
+              style={{ padding: '8px 12px' }}
+            />
           )}
         </>
       )}

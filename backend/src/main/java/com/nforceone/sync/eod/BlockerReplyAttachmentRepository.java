@@ -21,4 +21,8 @@ public interface BlockerReplyAttachmentRepository extends JpaRepository<BlockerR
     // a NullPointerException here.
     @Query("SELECT COALESCE(SUM(a.fileSize), 0) FROM BlockerReplyAttachment a")
     long sumFileSize();
+
+    // Deleting a reply (edit/delete feature) must clear its attachments first — no ON DELETE
+    // CASCADE on this FK (see V47), so leaving one behind would fail the reply's own delete.
+    void deleteByReplyId(Long replyId);
 }

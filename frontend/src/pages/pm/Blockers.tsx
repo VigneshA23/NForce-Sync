@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  AlertTriangle, Clock, Search, ChevronDown, RefreshCw,
+  AlertTriangle, Clock, Search, RefreshCw,
   X, Folder, Users, UserX, CheckCircle2, ListChecks, CalendarDays, Info,
-  ChevronLeft, ChevronRight, Calendar, Download,
+  Download,
 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { Avatar, avatarColor } from '../../components/BlockerThread';
 import { FilterDropdown, SortDropdown, toggleFilterVal } from '../../components/FilterDropdown';
+import { Pagination } from '../../components/Pagination';
+import { DateFilterButton, fmtShortDate, type DateFilterMode as DateMode } from '../../components/BlockerDateFilterButton';
 import { usePmBlockers, usePmBlockersFilters, type PmBlockerDto } from '../../api/pmBlockers';
-import type { DateRange } from '../../api/teamLead';
-import { todayISO as localTodayISO, toLocalISODate } from '../../lib/date';
 import { getBlockerRangeSubtitle, readStoredDateFilter, resolveBlockersDateFilter, writeStoredDateFilter } from '../../lib/pmBlockersDateFilter';
 
 // ── Table layout ───────────────────────────────────────────────────────────────
@@ -21,10 +21,8 @@ const BLOCKER_TABLE_COLUMNS = '32px 2fr 1.1fr 1.1fr 1fr 0.8fr 0.9fr';
 const BLOCKER_TABLE_MIN_WIDTH = 920;
 
 // ── date helpers (mirrors pages/lead/Blockers.tsx's page-local formatting) ─────────
-
-function fmtShortDate(iso: string): string {
-  return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
+// fmtShortDate itself now comes from the shared BlockerDateFilterButton module (see import
+// above) — kept here only where it differs (fmtDateTimeParts/fmtRelativeDays below).
 
 function fmtDateTimeParts(iso: string): { date: string; time: string } {
   const d = new Date(iso);
@@ -58,16 +56,6 @@ function fmtDuration(hours: number): string {
   return h > 0 ? `${d}d ${h}h` : `${d}d`;
 }
 
-// ── date filter (page-local, same picker UI as the Team Lead Blockers page) ────────
-
-type DateMode = 'today' | 'yesterday' | 'range';
-
-function yesterdayISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return toLocalISODate(d);
-}
-
 // Mirrors getBlockerRangeSubtitle's mode-aware wording (lib/pmBlockersDateFilter.ts) but for
 // the "Total Blockers" tile, which counts every status (not just open) — kept as its own
 // page-local function rather than sharing that helper, since "open" wouldn't be accurate here.
@@ -77,197 +65,6 @@ function totalBlockersCaption(mode: DateMode, from: string, to: string): string 
   return from === to
     ? `Across blockers on ${fmtShortDate(from)}`
     : `Across blockers from ${fmtShortDate(from)} to ${fmtShortDate(to)}`;
-}
-
-function DateFilterButton({ mode, range, onChange, loading }: {
-  mode: DateMode;
-  range: DateRange;
-  onChange: (mode: DateMode, range: DateRange) => void;
-  loading: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const todayISO = localTodayISO();
-  const [draftFrom, setDraftFrom] = useState(range.from);
-  const [draftTo, setDraftTo] = useState(range.to);
-
-  // Native <input type="date"> min/max constraints trigger the browser's own validation
-  // bubble (e.g. "Value must be 26-08-2026 or earlier") on top of our inline error message —
-  // so min/max is intentionally omitted from the inputs below and enforced here in JS instead,
-  // keeping the inline message as the single source of validation feedback.
-  const orderInvalid = draftFrom !== '' && draftTo !== '' && draftFrom > draftTo;
-  const futureInvalid = (draftFrom !== '' && draftFrom > todayISO) || (draftTo !== '' && draftTo > todayISO);
-  const rangeInvalid = orderInvalid || futureInvalid;
-
-  const label = mode === 'today' ? `Today, ${fmtShortDate(todayISO)}`
-    : mode === 'yesterday' ? `Yesterday, ${fmtShortDate(range.from)}`
-    : range.from === range.to ? fmtShortDate(range.from) : `${fmtShortDate(range.from)} – ${fmtShortDate(range.to)}`;
-
-  return (
-    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <button
-        // Disabled while the previous selection's data is still loading — closing the trigger
-        // is what stops a user from firing a second, overlapping request before the first
-        // settles (there's nowhere else to reopen the picker from).
-        disabled={loading}
-        onClick={() => { setDraftFrom(range.from); setDraftTo(range.to); setOpen(o => !o); }}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px',
-          fontSize: 12.5, fontWeight: 600, color: 'var(--txt)', background: 'var(--raised)',
-          border: '1px solid var(--line)', borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer',
-          whiteSpace: 'nowrap', opacity: loading ? 0.7 : 1,
-        }}
-      >
-        {loading
-          ? <RefreshCw size={13} aria-hidden="true" className="nf-r-spin" />
-          : <Calendar size={13} aria-hidden="true" />}
-        {label}
-        <ChevronDown size={12} aria-hidden="true" />
-      </button>
-      {mode === 'range' && (
-        <button
-          type="button"
-          aria-label="Clear custom range"
-          disabled={loading}
-          onClick={() => onChange('today', { from: todayISO, to: todayISO })}
-          style={{
-            background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: loading ? 'not-allowed' : 'pointer',
-            display: 'flex', padding: 2, opacity: loading ? 0.5 : 1,
-          }}
-        >
-          <X size={13} aria-hidden="true" />
-        </button>
-      )}
-      {open && !loading && (
-        <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div className="nf-r-popover" style={{
-            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 300,
-            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
-            boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
-          }}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-              <button
-                onClick={() => { onChange('today', { from: todayISO, to: todayISO }); setOpen(false); }}
-                style={{
-                  flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                  background: mode === 'today' ? 'var(--info)' : 'var(--raised2)',
-                  color: mode === 'today' ? '#fff' : 'var(--txt)', border: '1px solid var(--line2)',
-                }}
-              >
-                Today
-              </button>
-              <button
-                onClick={() => { const y = yesterdayISO(); onChange('yesterday', { from: y, to: y }); setOpen(false); }}
-                style={{
-                  flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                  background: mode === 'yesterday' ? 'var(--info)' : 'var(--raised2)',
-                  color: mode === 'yesterday' ? '#fff' : 'var(--txt)', border: '1px solid var(--line2)',
-                }}
-              >
-                Yesterday
-              </button>
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-              Custom range
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
-              <div style={{ flex: 1, minWidth: 130 }}>
-                <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>From</div>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="date" value={draftFrom}
-                    onChange={(e) => setDraftFrom(e.target.value)}
-                    onInvalid={(e) => e.preventDefault()}
-                    style={{
-                      width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
-                      background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                      boxSizing: 'border-box', paddingRight: 44,
-                    }}
-                  />
-                  {draftFrom && (
-                    <button
-                      type="button"
-                      aria-label="Clear from date"
-                      onClick={() => setDraftFrom('')}
-                      style={{
-                        position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)',
-                        background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
-                        display: 'flex', padding: 4, borderRadius: 4,
-                      }}
-                    >
-                      <X size={12} aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div style={{ flex: 1, minWidth: 130 }}>
-                <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6, textAlign: 'center' }}>To</div>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="date" value={draftTo}
-                    onChange={(e) => setDraftTo(e.target.value)}
-                    onInvalid={(e) => e.preventDefault()}
-                    style={{
-                      width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
-                      background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                      boxSizing: 'border-box', paddingRight: 44,
-                    }}
-                  />
-                  {draftTo && (
-                    <button
-                      type="button"
-                      aria-label="Clear to date"
-                      onClick={() => setDraftTo('')}
-                      style={{
-                        position: 'absolute', right: 22, top: '50%', transform: 'translateY(-50%)',
-                        background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer',
-                        display: 'flex', padding: 4, borderRadius: 4,
-                      }}
-                    >
-                      <X size={12} aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-            {orderInvalid && (
-              <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
-                From date must be earlier than To date.
-              </div>
-            )}
-            {!orderInvalid && futureInvalid && (
-              <div style={{ fontSize: 11, color: 'var(--risk)', fontWeight: 600, marginBottom: 10 }} role="alert">
-                Date cannot be later than today.
-              </div>
-            )}
-            <button
-              onClick={() => {
-                if (rangeInvalid) return;
-                // Either side can be cleared independently (see From/To "X" buttons above) —
-                // an empty side falls back to the other so a single-ended selection still
-                // resolves to a real range; clearing both reverts to the Today default,
-                // same as the "Clear custom range" X next to the filter button.
-                if (draftFrom === '' && draftTo === '') { onChange('today', { from: todayISO, to: todayISO }); setOpen(false); return; }
-                const from = draftFrom || draftTo;
-                const to = draftTo || draftFrom;
-                onChange('range', { from, to });
-                setOpen(false);
-              }}
-              disabled={rangeInvalid}
-              style={{
-                width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
-                background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                cursor: rangeInvalid ? 'not-allowed' : 'pointer',
-                opacity: rangeInvalid ? 0.6 : 1,
-              }}
-            >
-              Apply
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
 }
 
 // ── KPI stat card (same shape as the Team Lead Blockers page's StatCard) ───────────
@@ -637,7 +434,11 @@ export default function PmBlockers() {
               mode={dateMode}
               range={range}
               loading={isRefetching}
+              showClearRangeButton
               onChange={(m, r) => {
+                // 'all' is never actually passed here — this page doesn't set showAllOption —
+                // but the shared component's type covers it; narrow it away up front.
+                if (m === 'all') return;
                 const next = new URLSearchParams(searchParams);
                 next.set('mode', m);
                 if (m === 'range') {
@@ -799,35 +600,10 @@ export default function PmBlockers() {
           </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: '1px solid var(--line)' }}>
-            <span style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
-              {filtered.length === 0
-                ? 'Showing 0 of 0 blockers'
-                : `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} blockers`}
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                style={{ display: 'flex', padding: 5, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}
-              >
-                <ChevronLeft size={14} aria-hidden="true" />
-              </button>
-              <span style={{
-                minWidth: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: 6, background: 'var(--info)', color: '#fff', fontSize: 12, fontWeight: 700,
-              }}>
-                {page}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                style={{ display: 'flex', padding: 5, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.5 : 1 }}
-              >
-                <ChevronRight size={14} aria-hidden="true" />
-              </button>
-            </div>
-          </div>
+          <Pagination
+            page={page} totalPages={totalPages} totalItems={filtered.length} pageSize={PAGE_SIZE}
+            onPageChange={setPage} itemLabel="blockers"
+          />
         </Card>
       </div>
 

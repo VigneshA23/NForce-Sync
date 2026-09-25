@@ -1,5 +1,6 @@
-import { CalendarDays, ChevronLeft, ChevronRight, MessageCircle, Search, X as XIcon } from 'lucide-react';
+import { CalendarDays, MessageCircle, Search, X as XIcon } from 'lucide-react';
 import { Card } from './KpiCard';
+import { Pagination } from './Pagination';
 import { Avatar, avatarColor, TL_AVATAR_BG } from './BlockerThread';
 import { StatusBadge } from './StatusDropdown';
 import { FilterDropdown, SortDropdown } from './FilterDropdown';
@@ -296,35 +297,10 @@ export function EodInboxTable({
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: '1px solid var(--line)' }}>
-        <span style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
-          {rows.length === 0
-            ? 'Showing 0 of 0 results'
-            : `Showing ${(page - 1) * EOD_INBOX_PAGE_SIZE + 1} to ${Math.min(page * EOD_INBOX_PAGE_SIZE, rows.length)} of ${rows.length} results`}
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button
-            onClick={() => onPageChange(Math.max(1, page - 1))}
-            disabled={page <= 1}
-            style={{ display: 'flex', padding: 5, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}
-          >
-            <ChevronLeft size={14} aria-hidden="true" />
-          </button>
-          <span style={{
-            minWidth: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 6, background: 'var(--brand)', color: '#fff', fontSize: 12, fontWeight: 700,
-          }}>
-            {page}
-          </span>
-          <button
-            onClick={() => onPageChange(Math.min(totalPages, page + 1))}
-            disabled={page >= totalPages}
-            style={{ display: 'flex', padding: 5, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.5 : 1 }}
-          >
-            <ChevronRight size={14} aria-hidden="true" />
-          </button>
-        </div>
-      </div>
+      <Pagination
+        page={page} totalPages={totalPages} totalItems={rows.length} pageSize={EOD_INBOX_PAGE_SIZE}
+        onPageChange={onPageChange} itemLabel="results"
+      />
     </Card>
   );
 }

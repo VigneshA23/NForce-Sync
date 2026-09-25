@@ -144,6 +144,7 @@ public class UserService {
         user.setEmploymentType(request.employmentType() != null ? request.employmentType() : "FULL_TIME");
         user.setWorkMode(request.workMode() != null ? request.workMode() : "ONSITE");
         user.setJoiningDate(request.joiningDate());
+        user.setGender(request.gender());
 
         // Manager assignment
         AppUser manager = null;

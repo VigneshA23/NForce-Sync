@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react';
 import { RefreshCw, AlertTriangle, Search, X } from 'lucide-react';
 import type { ProjectFullDto } from '../../api/projects';
 import { GlobalLoader } from '../GlobalLoader';
+import { Pagination } from '../Pagination';
+
+const PROJECTS_PAGE_SIZE = 10;
 
 // ── Shared "My Projects" building blocks ─────────────────────────────────────────
 // Extracted from pages/lead/MyProjects.tsx so the Employee "My Projects" page (and any
@@ -163,6 +166,7 @@ export function StatusFilterSelect({ value, onChange, options, ariaLabel, defaul
         value={value}
         onChange={e => onChange(e.target.value)}
         aria-label={ariaLabel}
+        className="nf-toolbar-select"
         style={{ ...inputStyle, width: 170, fontWeight: 400 }}
       >
         {options.map(o => (
@@ -202,6 +206,11 @@ export function ProjectsPanel({
   // project's Team Lead name ("Team Lead"). Defaults keep the Team Lead "My Projects" page
   // unchanged.
   teamColumn = 'size',
+  // Employee "My Projects" only: hides the manual refresh icon button in the panel header.
+  // `onRefresh`/`isRefreshing` still back the Retry button in the error state below, which is
+  // unaffected — this only controls the top-right header control. Defaults keep the Team Lead
+  // "My Projects" page unchanged.
+  showRefreshButton = true,
 }: {
   projects: ProjectFullDto[];
   isPending: boolean;
@@ -214,9 +223,11 @@ export function ProjectsPanel({
   boldNameLink?: boolean;
   compactToolbar?: boolean;
   teamColumn?: 'size' | 'lead';
+  showRefreshButton?: boolean;
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>('ALL');
+  const [page, setPage] = useState(1);
 
   // Project-only search — matches the project's own name/code, not client, Team Lead,
   // Project Manager, or any other assignment metadata.
@@ -230,6 +241,12 @@ export function ProjectsPanel({
       return matchesSearch && matchesStatus;
     });
   }, [projects, search, statusFilter]);
+
+  // Clamped rather than reset-on-filter-change: a filter/search edit that shrinks the list
+  // just lands on the new last page instead of needing its own effect to snap back to page 1.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PROJECTS_PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  const paged = filtered.slice((pageSafe - 1) * PROJECTS_PAGE_SIZE, pageSafe * PROJECTS_PAGE_SIZE);
 
   // Drives the toolbar's single Clear button — visible the moment either filter is active,
   // not just when status is set (see StatusFilterSelect's showOwnClear={false} below, which
@@ -249,21 +266,23 @@ export function ProjectsPanel({
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
           Assigned Projects{projects.length > 0 ? ` (${projects.length})` : ''}
         </span>
-        <button
-          onClick={onRefresh}
-          disabled={isRefreshing}
-          aria-label={isRefreshing ? 'Refreshing…' : 'Refresh'}
-          title="Refresh"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: 'transparent', border: '1px solid var(--line2)',
-            cursor: isRefreshing ? 'not-allowed' : 'pointer',
-            color: 'var(--txt-mut)', padding: '7px 10px', borderRadius: 6, fontSize: 12,
-            opacity: isRefreshing ? 0.7 : 1,
-          }}
-        >
-          <RefreshCw size={13} aria-hidden="true" style={isRefreshing ? { animation: 'spin 0.8s linear infinite' } : undefined} />
-        </button>
+        {showRefreshButton && (
+          <button
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            aria-label={isRefreshing ? 'Refreshing…' : 'Refresh'}
+            title="Refresh"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: 'transparent', border: '1px solid var(--line2)',
+              cursor: isRefreshing ? 'not-allowed' : 'pointer',
+              color: 'var(--txt-mut)', padding: '7px 10px', borderRadius: 6, fontSize: 12,
+              opacity: isRefreshing ? 0.7 : 1,
+            }}
+          >
+            <RefreshCw size={13} aria-hidden="true" style={isRefreshing ? { animation: 'spin 0.8s linear infinite' } : undefined} />
+          </button>
+        )}
       </div>
 
       {!isPending && !isError && projects.length > 0 && (
@@ -359,7 +378,7 @@ export function ProjectsPanel({
                 </td>
               </tr>
             ) : (
-              filtered.map(p => (
+              paged.map(p => (
                 <tr
                   key={p.id}
                   onClick={() => onSelect(p.id)}
@@ -406,6 +425,12 @@ export function ProjectsPanel({
           </tbody>
         </table>
         </div>
+      )}
+      {!isPending && !isError && projects.length > 0 && (
+        <Pagination
+          page={pageSafe} totalPages={totalPages} totalItems={filtered.length} pageSize={PROJECTS_PAGE_SIZE}
+          onPageChange={setPage} itemLabel="projects"
+        />
       )}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

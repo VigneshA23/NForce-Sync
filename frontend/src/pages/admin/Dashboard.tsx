@@ -9,6 +9,9 @@ import { describeAuditEvent, formatRelative, AUDIT_CATEGORY_ICONS, AUDIT_CATEGOR
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { Card, KpiCard, ClickableKpi } from '../../components/KpiCard';
 import { HeroBanner } from '../../components/dashboard/HeroBanner';
+import { Pagination } from '../../components/Pagination';
+
+const RECENT_ACTIVITY_PAGE_SIZE = 9;
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
@@ -39,6 +42,7 @@ export default function AdminDashboard() {
   // Computed once per mount, not on every render (Date.now() is impure) — used to
   // deep-link "View all N →" to the same 24h window the KPI count reflects.
   const [since24h] = useState(() => new Date(Date.now() - 24 * 3600 * 1000).toISOString());
+  const [activityPage, setActivityPage] = useState(1);
 
   // Admin stats rarely change mid-session; override global 30s with 5-minute cache
   // to avoid a Neon round-trip (~600-800ms) on every navigation back to this page.
@@ -78,6 +82,11 @@ export default function AdminDashboard() {
   // the page.
   const roleEntries = Object.entries(stats.usersByRole ?? {}).filter(([, v]) => v > 0);
   const recentEvents = stats.recentAuditEvents ?? [];
+  const activityTotalPages = Math.max(1, Math.ceil(recentEvents.length / RECENT_ACTIVITY_PAGE_SIZE));
+  const activityPageSafe = Math.min(activityPage, activityTotalPages);
+  const pagedEvents = recentEvents.slice(
+    (activityPageSafe - 1) * RECENT_ACTIVITY_PAGE_SIZE, activityPageSafe * RECENT_ACTIVITY_PAGE_SIZE,
+  );
 
   return (
     <div>
@@ -85,8 +94,10 @@ export default function AdminDashboard() {
         <HeroBanner subtitle="Platform health at a glance." />
       </div>
 
-      {/* KPI row — its own full-width row below the hero/quick-actions row. */}
-      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16, marginBottom: 24 }}>
+      {/* KPI row — its own full-width row below the hero/quick-actions row. Four columns at
+          desktop widths (matching the banner's width above); .nf-r-kpis' own media queries
+          already collapse this to 2-up then 1-up below 1024px/380px. */}
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16, marginBottom: 24 }}>
         <ClickableKpi onClick={() => navigate('/admin/users?status=ALL')}>
           <KpiCard icon={<Users size={18} />} label="Total Users" value={stats.totalUsers} accent="var(--txt)" />
         </ClickableKpi>
@@ -113,16 +124,19 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Recent audit events — admin/config-level only, see AdminStatsController.
-            height:100% + flex column so the list fills whatever height the grid row
-            stretched this card to (matching the taller Users by Role card) instead of
-            capping at a fixed maxHeight and leaving blank space above "View all". */}
+            height:100% + flex column so the card fills whatever height the grid row
+            stretched it to (matching the taller Users by Role card); the "View all" link's
+            own marginTop:auto (below) is what absorbs that extra height, not this list —
+            capped to RECENT_ACTIVITY_PAGE_SIZE rows + Pagination now, instead of an
+            internal scroll region. */}
         <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 16 }}>Recent Activity</div>
           {recentEvents.length === 0
             ? <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>No recent activity</div>
             : (
-              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: 10 }}>
-                {recentEvents.map((event) => {
+              <>
+              <div>
+                {pagedEvents.map((event) => {
                   const { message, category } = describeAuditEvent(event);
                   const Icon = AUDIT_CATEGORY_ICONS[category];
                   return (
@@ -148,6 +162,14 @@ export default function AdminDashboard() {
                   );
                 })}
               </div>
+              {activityTotalPages > 1 && (
+                <Pagination
+                  page={activityPageSafe} totalPages={activityTotalPages} totalItems={recentEvents.length}
+                  pageSize={RECENT_ACTIVITY_PAGE_SIZE} onPageChange={setActivityPage} itemLabel="events"
+                  style={{ padding: '12px 0 0', borderTop: 'none' }}
+                />
+              )}
+              </>
             )}
           <Link
             to={`/admin/audit?from=${encodeURIComponent(since24h)}`}

@@ -5,6 +5,7 @@ import com.nforceone.sync.eod.BlockerReplyAttachment;
 import com.nforceone.sync.eod.EodClarificationReplyAttachment;
 import com.nforceone.sync.eod.EodClarificationService;
 import com.nforceone.sync.eod.dto.BlockerReplyDto;
+import com.nforceone.sync.eod.dto.EditReplyRequest;
 import com.nforceone.sync.eod.dto.EodClarificationMessageRequest;
 import com.nforceone.sync.eod.dto.EodClarificationReplyDto;
 import com.nforceone.sync.eod.dto.EodClarificationStatusDto;
@@ -17,6 +18,7 @@ import com.nforceone.sync.teamlead.dto.TeamBlockerDto;
 import com.nforceone.sync.teamlead.dto.TeamLeadSummaryDto;
 import com.nforceone.sync.teamlead.dto.TeamMemberDetailDto;
 import com.nforceone.sync.teamlead.dto.ThresholdsDto;
+import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -127,6 +129,16 @@ public class TeamLeadController {
         return conversationService.postReplyAsLead(taskId, actingEmail(), message, files);
     }
 
+    @PutMapping("/blockers/replies/{replyId}")
+    public void editBlockerReply(@PathVariable Long replyId, @Valid @RequestBody EditReplyRequest body) {
+        conversationService.editReplyAsLead(replyId, actingEmail(), body.message());
+    }
+
+    @DeleteMapping("/blockers/replies/{replyId}")
+    public void deleteBlockerReply(@PathVariable Long replyId) {
+        conversationService.deleteReplyAsLead(replyId, actingEmail());
+    }
+
     @GetMapping("/blockers/attachments/{attachmentId}")
     public ResponseEntity<byte[]> downloadBlockerAttachment(@PathVariable Long attachmentId) {
         BlockerReplyAttachment attachment = conversationService.getAttachmentForLead(attachmentId, actingEmail());
@@ -180,6 +192,16 @@ public class TeamLeadController {
             @RequestParam(required = false) String message,
             @RequestParam(required = false) List<MultipartFile> files) {
         return clarificationService.reply(entryId, actingEmail(), message, files);
+    }
+
+    @PutMapping("/eod/clarification/replies/{replyId}")
+    public void editClarificationReply(@PathVariable Long replyId, @Valid @RequestBody EditReplyRequest body) {
+        clarificationService.editReply(replyId, actingEmail(), body.message());
+    }
+
+    @DeleteMapping("/eod/clarification/replies/{replyId}")
+    public void deleteClarificationReply(@PathVariable Long replyId) {
+        clarificationService.deleteReply(replyId, actingEmail());
     }
 
     @GetMapping("/eod/attachments/{attachmentId}")

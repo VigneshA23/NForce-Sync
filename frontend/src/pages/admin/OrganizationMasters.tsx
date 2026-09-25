@@ -14,6 +14,7 @@ import type {
 } from '../../api/admin';
 import { Modal } from '../../components/Modal';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { Pagination } from '../../components/Pagination';
 import { useToast } from '../../lib/toast';
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -358,12 +359,17 @@ interface OrgTableProps<T extends { id: number; active: boolean }> {
   countLabel?: string;
 }
 
+const ORG_TABLE_PAGE_SIZE = 10;
+
 function OrgTable<T extends { id: number; active: boolean }>({
   data, isPending, isError, onRefetch, nameKey, onToggle, isTogglePending, onDelete, isDeletePending,
   countKey, countLabel,
 }: OrgTableProps<T>) {
+  const [page, setPage] = useState(1);
   const showCount = countKey != null && countLabel != null;
   const columnCount = showCount ? 4 : 3;
+  const totalPages = Math.max(1, Math.ceil((data?.length ?? 0) / ORG_TABLE_PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
   return (
     <div style={{
       background: 'var(--panel)',
@@ -385,22 +391,6 @@ function OrgTable<T extends { id: number; active: boolean }>({
             </span>
           )}
         </div>
-        <button
-          onClick={onRefetch}
-          aria-label="Refresh"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--txt-dim)',
-            padding: 6,
-            display: 'flex',
-            alignItems: 'center',
-            borderRadius: 5,
-          }}
-        >
-          <RefreshCw size={14} aria-hidden="true" />
-        </button>
       </div>
 
       {isPending && (
@@ -440,7 +430,7 @@ function OrgTable<T extends { id: number; active: boolean }>({
                 </td>
               </tr>
             ) : (
-              data.map((item) => (
+              data.slice((pageSafe - 1) * ORG_TABLE_PAGE_SIZE, pageSafe * ORG_TABLE_PAGE_SIZE).map((item) => (
                 <tr
                   key={item.id}
                   style={{ transition: 'background 0.1s' }}
@@ -527,6 +517,12 @@ function OrgTable<T extends { id: number; active: boolean }>({
           </tbody>
         </table>
         </div>
+      )}
+      {data && data.length > 0 && (
+        <Pagination
+          page={pageSafe} totalPages={totalPages} totalItems={data.length} pageSize={ORG_TABLE_PAGE_SIZE}
+          onPageChange={setPage} itemLabel="entries"
+        />
       )}
     </div>
   );

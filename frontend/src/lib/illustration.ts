@@ -7,6 +7,11 @@
  */
 export type IllustrationKey = 'female' | 'male' | 'neutral';
 
+/** Canonical gender options offered by every "Select Gender" control in the app (Profile, Add
+ *  User) — kept in one place so a value typed here is guaranteed to be one resolveIllustrationKey
+ *  actually recognizes, rather than two option lists silently drifting apart. */
+export const GENDER_OPTIONS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
+
 export function resolveIllustrationKey(gender: string | null | undefined): IllustrationKey {
   const normalized = gender?.trim().toLowerCase();
   if (normalized === 'female') return 'female';

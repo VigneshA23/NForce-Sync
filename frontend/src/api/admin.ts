@@ -87,6 +87,7 @@ export interface CreateUserPayload {
   workMode?: string;
   joiningDate?: string;
   shiftId?: number | null;
+  gender?: string;
   // Reporting line
   managerId?: number | null;
 }

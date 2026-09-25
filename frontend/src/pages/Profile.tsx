@@ -10,6 +10,7 @@ import { ImageCropper } from '../components/ImageCropper';
 import { Card } from '../components/KpiCard';
 import { useHashScroll } from '../lib/useHashScroll';
 import { GlobalLoader } from '../components/GlobalLoader';
+import { GENDER_OPTIONS } from '../lib/illustration';
 
 // Shared card shadow — a bit more "lift" than a flat border on its own, barely visible on dark
 // panels and a gentle depth cue on light ones.
@@ -34,7 +35,6 @@ const BANNER_MAX_BYTES = 2 * 1024 * 1024;
 const BANNER_ACCEPTED_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png']);
 
 const WORK_MODES = ['ONSITE', 'HYBRID', 'REMOTE'] as const;
-const GENDERS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
 
 const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
   FULL_TIME:  'Full-time',
@@ -464,7 +464,7 @@ export default function Profile() {
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-mut)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Gender</label>
                 <select value={field('gender')} onChange={e => set('gender')(e.target.value)} style={{ ...INPUT_STYLE }}>
                   <option value="">Select…</option>
-                  {GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+                  {GENDER_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
               <EditField label="Personal Email" value={field('personalEmail')} onChange={set('personalEmail')} type="email" placeholder="personal@email.com" />
