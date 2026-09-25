@@ -924,7 +924,7 @@ export function Shell() {
                 textDecoration: 'none',
               }}
             >
-              <Bell size={17} aria-hidden="true" />
+              <Bell size={22} aria-hidden="true" />
               {bellBadge > 0 && (
                 <span
                   aria-hidden="true"
