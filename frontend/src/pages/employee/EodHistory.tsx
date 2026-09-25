@@ -5,11 +5,12 @@ import {
   CheckCircle, Clock, XCircle, ChevronRight, AlertTriangle,
   Search, ArrowUp, ArrowDown, ChevronLeft, Calendar as CalendarIcon,
 } from 'lucide-react';
-import { listEntries } from '../../api/eod';
+import { listEntries, getDayDefaults } from '../../api/eod';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import type { EodHistoryEntryDto } from '../../api/eod';
 import { formatDate as formatDateDDMMYYYY, formatDateTime } from '../../lib/date';
 import { timeAdjustmentLabel } from '../approvals/shared';
+import { requiredHoursForDay, HALF_LEAVE_LABELS } from '../../lib/requiredHours';
 import {
   MIN_ISO_DATE, MAX_ISO_DATE, maskDateInput, parseStrictDDMMYYYY, isoToDDMMYYYY,
   isRangeValid, todayIsoLocal,
@@ -165,6 +166,15 @@ export default function EodHistory() {
     // a stray refetch (e.g. window refocus) while the fields sit in an invalid state.
     enabled: dateFilterStatus !== 'invalid',
   });
+
+  // Standard Working Hours is a singleton Business Rules value, not date-varying — one fetch
+  // (any date) covers every row's Required Hrs calculation below.
+  const { data: dayDefaults } = useQuery({
+    queryKey: ['eod', 'day-defaults', 'history-required-hours'],
+    queryFn: () => getDayDefaults(todayIsoLocal()),
+    staleTime: 5 * 60 * 1000,
+  });
+  const workingHoursPerDay = dayDefaults?.workingHoursPerDay ?? 8;
 
   const totalHours = (entry: EodHistoryEntryDto) =>
     entry.tasks.reduce((sum, t) => sum + (Number(t.hours) || 0), 0);
@@ -607,10 +617,16 @@ export default function EodHistory() {
                   {formatDate(entry.entryDate)}
                 </div>
                 {/* A time adjustment changes the day's expected hours, so it belongs next to the
-                    day rather than only on the approver's screen. */}
+                    day rather than only on the approver's screen. Half-day leave shown the same
+                    way, right beside it, since both explain the required-hours target. */}
                 {timeAdjustmentLabel(entry) && (
                   <div style={{ fontSize: 11, color: 'var(--info)', marginTop: 2 }}>
                     {timeAdjustmentLabel(entry)}
+                  </div>
+                )}
+                {entry.dayType && HALF_LEAVE_LABELS[entry.dayType] && (
+                  <div style={{ fontSize: 11, color: 'var(--info)', marginTop: 2 }}>
+                    {HALF_LEAVE_LABELS[entry.dayType]}
                   </div>
                 )}
                 {entry.reviewerComment && (
@@ -626,7 +642,21 @@ export default function EodHistory() {
                 {taskSummary(entry)}
               </div>
               <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
-                {totalHours(entry).toFixed(1)}h
+                {(() => {
+                  const logged = totalHours(entry);
+                  const required = requiredHoursForDay(entry.dayType, workingHoursPerDay);
+                  if (required <= 0) return `${logged.toFixed(1)}h`;
+                  const short = logged < required - 0.001;
+                  const halfLeaveLabel = entry.dayType ? HALF_LEAVE_LABELS[entry.dayType] : undefined;
+                  return (
+                    <span
+                      title={halfLeaveLabel ? `${halfLeaveLabel} — required ${required.toFixed(1)}h` : undefined}
+                      style={short ? { color: 'var(--warn)', fontWeight: 600 } : undefined}
+                    >
+                      {logged.toFixed(1)} / {required.toFixed(1)}h
+                    </span>
+                  );
+                })()}
               </div>
               <div><StatusBadge status={entry.status} /></div>
               <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>

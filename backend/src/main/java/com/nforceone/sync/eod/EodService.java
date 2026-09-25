@@ -49,11 +49,11 @@ public class EodService {
     private static final BigDecimal FALLBACK_HOURS_PER_DAY = BigDecimal.valueOf(8);
 
     /**
-     * Hard bounds on hours logged for one day, both inclusive. Neither is the expected-hours
-     * reference — going over THAT is overtime and permitted. These catch data-entry mistakes: a
-     * day contains only 24 hours, and an entry totalling 0 records nothing worth submitting.
+     * Hard ceiling on hours logged for one day. Not the expected-hours reference — going over
+     * THAT is overtime and permitted. This catches data-entry mistakes: a day contains only 24
+     * hours. The floor for a WORKING_DAY/half-leave day is dailyHoursCap()/halfDayHoursCap() —
+     * the Super Admin's configured Standard Working Hours — enforced in validateLoggedDay below.
      */
-    private static final BigDecimal MIN_HOURS_PER_DAY = BigDecimal.valueOf(2);
     private static final BigDecimal MAX_HOURS_PER_DAY = BigDecimal.valueOf(24);
 
     /**
@@ -356,10 +356,22 @@ public class EodService {
         return missing;
     }
 
-    /** Weekend rule mirrors UtilizationService/the reports: Saturday and Sunday are non-working. */
+    /**
+     * Honors the Super Admin's configured Weekend Rule (SAT_SUN vs SUN_ONLY, same as
+     * EmployeeDashboardService.isWeekend) — Sunday is always off; Saturday only counts under
+     * SAT_SUN. Deliberately NOT the same as UtilizationService/the Missing EOD reports, which
+     * still hardcode Sat+Sun regardless of this setting — that's a separate, pre-existing
+     * inconsistency out of scope here; only Submit EOD's day-type default and missing-EOD scan
+     * (both driven by this method) need to honor the configured rule for this feature.
+     */
     private boolean isWeekend(LocalDate d) {
-        return d.getDayOfWeek() == java.time.DayOfWeek.SATURDAY
-            || d.getDayOfWeek() == java.time.DayOfWeek.SUNDAY;
+        java.time.DayOfWeek dow = d.getDayOfWeek();
+        if (dow == java.time.DayOfWeek.SUNDAY) return true;
+        if (dow != java.time.DayOfWeek.SATURDAY) return false;
+        BusinessRuleConfig config = configRepository.findById(BUSINESS_RULE_CONFIG_ID).orElse(null);
+        BusinessRuleConfig.WeekendRule rule = config != null && config.getWeekendRule() != null
+                ? config.getWeekendRule() : BusinessRuleConfig.WeekendRule.SAT_SUN;
+        return rule == BusinessRuleConfig.WeekendRule.SAT_SUN;
     }
 
     /** Identical to the helper in the Missing EOD report services — see the note there. */
@@ -506,34 +518,40 @@ public class EodService {
             total = total.add(task.getHours());
         }
 
+        // An approved time adjustment (late arrival/early leave/intervening) credits its minutes
+        // toward the hours-logged side of the min/max checks below, exactly like SubmitEOD.tsx's
+        // effectiveLoggedHours — otherwise an employee who correctly logs "shift hours minus the
+        // approved adjustment" (which the frontend tells them satisfies the day) gets rejected
+        // here, since raw task hours alone fall short of the full-day floor by design.
+        BigDecimal effectiveTotal = total;
+        Integer adjMinutes = entry.getTimeAdjustmentMinutes();
+        if (entry.getTimeAdjustmentType() != null && adjMinutes != null) {
+            effectiveTotal = effectiveTotal.add(
+                    BigDecimal.valueOf(adjMinutes).divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP));
+        }
+
         // Exceeding the day's EXPECTED hours is overtime, flagged in applyOvertime, never a
-        // rejection. These two are different: they bound what is physically plausible for a day,
-        // catching a 0-hour submission at one end and a typo at the other. Both are inclusive.
-        // The minimum applies to WORKING_DAY (flat 2h floor) and to the two half-leave types
-        // (half of Standard Working Hours — OT, if any, is computed on top of this in
-        // applyOvertime and never lowers it). On a full LEAVE day the hours are optional — the
-        // absence is the record, so a leave row left at 0 is legitimate. A WEEKEND has no baseline
-        // at all — any hours logged are pure overtime (applyOvertime), so there is nothing to
-        // floor against either. The maximum still applies to every day type, since no amount of
-        // leave (or weekend overtime) makes a day longer than 24 hours.
+        // rejection. These two are different: they bound what is physically plausible/required for
+        // a day. The minimum applies to WORKING_DAY (the full Standard Working Hours — dailyHoursCap())
+        // and to the two half-leave types (half of it — halfDayHoursCap(); OT, if any, is computed
+        // on top of this in applyOvertime and never lowers it). On a full LEAVE day the hours are
+        // optional — the absence is the record, so a leave row left at 0 is legitimate. A WEEKEND
+        // has no baseline at all — any hours logged are pure overtime (applyOvertime), so there is
+        // nothing to floor against either. The maximum still applies to every day type, since no
+        // amount of leave (or weekend overtime) makes a day longer than 24 hours.
         if (entry.getDayType() != EodEntry.DayType.LEAVE && entry.getDayType() != EodEntry.DayType.WEEKEND) {
-            if (HALF_LEAVE_TYPES.contains(entry.getDayType())) {
-                BigDecimal minimum = halfDayHoursCap();
-                if (total.compareTo(minimum) < 0) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "Minimum " + minimum.stripTrailingZeros().toPlainString() + " hours required for "
-                                    + dayTypeLabel(entry.getDayType()) + " — you've logged "
-                                    + total.stripTrailingZeros().toPlainString() + " hours.");
-                }
-            } else if (total.compareTo(MIN_HOURS_PER_DAY) < 0) {
+            boolean halfLeave = HALF_LEAVE_TYPES.contains(entry.getDayType());
+            BigDecimal minimum = halfLeave ? halfDayHoursCap() : dailyHoursCap();
+            if (effectiveTotal.compareTo(minimum) < 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Total hours (" + total.stripTrailingZeros().toPlainString()
-                                + ") must be at least 2 for a single day.");
+                        "Minimum " + minimum.stripTrailingZeros().toPlainString() + " hours required for "
+                                + (halfLeave ? dayTypeLabel(entry.getDayType()) : "a working day")
+                                + " — you've logged " + effectiveTotal.stripTrailingZeros().toPlainString() + " hours.");
             }
         }
-        if (total.compareTo(MAX_HOURS_PER_DAY) > 0) {
+        if (effectiveTotal.compareTo(MAX_HOURS_PER_DAY) > 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Total hours (" + total.stripTrailingZeros().toPlainString()
+                    "Total hours (" + effectiveTotal.stripTrailingZeros().toPlainString()
                             + ") cannot exceed 24 for a single day.");
         }
     }

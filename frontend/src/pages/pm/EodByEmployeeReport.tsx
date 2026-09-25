@@ -1,13 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, ChevronUp, Download, RefreshCw, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { FilterSelect } from '../../components/FilterSelect';
 import { TimeAdjustmentBadge } from '../../components/TimeAdjustmentBadge';
+import { RequiredHoursBadge } from '../../components/RequiredHoursBadge';
 import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
 import { useProjectDashboardFilters } from '../../api/projectDashboard';
-import { exportEodByEmployee, useEodByEmployeeReport, type EodByEmployeeRowDto, type ExportFormat } from '../../api/reports';
+import { getDayDefaults } from '../../api/eod';
+import { exportEodByEmployee, useEodByEmployeeReport, type EodByEmployeeRowDto, type EodByEmployeeEntryDto, type ExportFormat } from '../../api/reports';
+
+// Standard Working Hours is a singleton Business Rules value, not date-varying — one fetch
+// (any date) covers the Required Hrs badge for every day in the report.
+function useWorkingHoursPerDay(): number {
+  const { data } = useQuery({
+    queryKey: ['eod', 'day-defaults', 'report-required-hours'],
+    queryFn: () => getDayDefaults(todayISO()),
+    staleTime: 5 * 60 * 1000,
+  });
+  return data?.workingHoursPerDay ?? 8;
+}
+
+/** Sum of every row's hours sharing entry `date` — the day's logged total, for the shortfall
+ *  comparison in RequiredHoursBadge (each row only carries its own task's hours). */
+function loggedHoursForDate(entries: EodByEmployeeEntryDto[], date: string): number {
+  return entries.filter(e => e.date === date).reduce((sum, e) => sum + (Number(e.hours) || 0), 0);
+}
 
 const EXPORT_FORMATS: { key: ExportFormat; label: string }[] = [
   { key: 'EXCEL', label: 'Excel' },
@@ -421,6 +441,7 @@ function RosterFlow({
   const [page, setPage] = useState(0);
   const [dateSort, setDateSort] = useState<'asc' | 'desc'>('desc');
   const [checked, setChecked] = useState<Set<number>>(new Set());
+  const workingHoursPerDay = useWorkingHoursPerDay();
 
   function toggleChecked(id: number) {
     const next = new Set(checked);
@@ -605,6 +626,11 @@ function RosterFlow({
                       <>
                         <div>{formatDate(e.date)}</div>
                         <TimeAdjustmentBadge entry={e} />
+                        <RequiredHoursBadge
+                          dayType={e.dayType}
+                          workingHoursPerDay={workingHoursPerDay}
+                          loggedHours={loggedHoursForDate(sortedEntries, e.date)}
+                        />
                       </>
                     ) : ''}
                   </div>
@@ -628,7 +654,7 @@ function RosterFlow({
 const TEAM_PAGE_SIZE = 12;
 
 // Header row and body rows must share one template or the columns desync.
-const TEAM_ENTRY_COLUMNS = '1.4fr 100px 1.1fr 1.3fr 60px';
+const TEAM_ENTRY_COLUMNS = '120px 110px 1fr 1fr 70px';
 const TEAM_ENTRY_MIN_WIDTH = 580;
 
 function TeamFlow({
@@ -642,6 +668,7 @@ function TeamFlow({
   const [page, setPage] = useState(0);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [showAll, setShowAll] = useState(true);
+  const workingHoursPerDay = useWorkingHoursPerDay();
 
   useEffect(() => { setPage(0); }, [employees.length]);
 
@@ -725,6 +752,17 @@ function TeamFlow({
                     <Download size={13} aria-hidden="true" />
                   </button>
                 </div>
+                {open && entriesAsc.length > 0 && (
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: TEAM_ENTRY_COLUMNS,
+                    padding: '4px 16px 4px 52px', fontSize: 9.5, fontWeight: 700,
+                    letterSpacing: '0.06em', color: 'var(--txt-dim)', textTransform: 'uppercase',
+                    borderTop: '1px solid var(--line)',
+                  }}>
+                    <span>Designation</span><span>Date</span><span>Project</span><span>Category</span>
+                    <span style={{ textAlign: 'right' }}>Hours</span>
+                  </div>
+                )}
                 {open && entriesAsc.map((e, i) => (
                   <div key={i} style={{
                     display: 'grid', gridTemplateColumns: TEAM_ENTRY_COLUMNS,
@@ -738,6 +776,11 @@ function TeamFlow({
                         <>
                           <span style={{ display: 'block' }}>{formatDate(e.date)}</span>
                           <TimeAdjustmentBadge entry={e} />
+                          <RequiredHoursBadge
+                            dayType={e.dayType}
+                            workingHoursPerDay={workingHoursPerDay}
+                            loggedHours={loggedHoursForDate(entriesAsc, e.date)}
+                          />
                         </>
                       ) : ''}
                     </span>

@@ -23,18 +23,22 @@ knowledge:
 
       - Working Day: needs at least one task row, a work location, and a next-day plan. Each task
         needs a category, hours (0 or more), a status, and — unless it's a Leave category row — a
-        project. A Blocked task also needs a blocker reason. Total hours for the day must be at
-        least 2 and at most 24; there is no upper cap that rejects a long day, only a floor.
+        project. A Blocked task also needs a blocker reason. Total hours for the day must reach the
+        Standard Working Hours configured in Business Rules → Time & Attendance (8 hours by
+        default) and cannot exceed 24; the Submit button itself stays disabled with a "log N more
+        hour(s)" hint until that minimum is met, on top of the same check enforced server-side.
       - Holiday: carries no task rows and no work location at all — nothing to fill in, and every
         task/hours check is skipped.
       - Weekend: has no work location and no minimum-hours floor, but you can still log optional
         task rows — any hours logged there are pure overtime. A next-day plan is not required.
+        Whether a Saturday defaults to Weekend at all depends on the configured Weekend Rule
+        (Saturday+Sunday off, or Sunday only) — Sunday is always non-working.
       - Leave (full day): no work location required, but a next-day plan is still required. Leave
         rows cannot have a project set.
       - First Half Leave / Second Half Leave: the other half of the day is still worked, so these
         carry task rows, a work location and a next-day plan like a Working Day, but the minimum
         hours floor is half of the standard day (e.g. 4 hours on an 8-hour standard day) instead
-        of the full 2-hour Working Day floor.
+        of the full Working Day requirement.
 
       Total hours can never be too high to reject a submission — extra hours are handled as
       overtime, not blocked.
