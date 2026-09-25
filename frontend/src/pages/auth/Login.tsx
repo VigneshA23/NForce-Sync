@@ -428,14 +428,16 @@ const inputStyle: React.CSSProperties = {
   color: '#fff',
   fontSize: 14,
   outline: 'none',
-  transition: 'border-color 0.15s',
+  transition: 'border-color 0.18s, box-shadow 0.18s',
   fontFamily: 'Inter, sans-serif',
   boxSizing: 'border-box',
+  boxShadow: '0 0 0 3px transparent',
 };
 
 const inputFocusStyle: React.CSSProperties = {
   ...inputStyle,
-  borderColor: 'rgba(228,55,61,0.55)',
+  borderColor: 'rgba(228,55,61,0.6)',
+  boxShadow: '0 0 0 3px rgba(228,55,61,0.14)',
 };
 
 const eyeButtonStyle: React.CSSProperties = {
