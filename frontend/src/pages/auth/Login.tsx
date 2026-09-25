@@ -262,56 +262,57 @@ export default function Login() {
         {/* Credentials form */}
         <form onSubmit={handleCredentialSubmit} noValidate>
           <motion.div variants={reduced ? undefined : itemVariants}>
-            <div style={{ marginBottom: 16 }}>
-              <label htmlFor={emailId} style={labelStyle}>Email</label>
-              <input
-                ref={emailRef}
-                id={emailId}
-                type="email"
-                autoComplete="email"
-                placeholder="you@nforceone.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                aria-invalid={hasError}
-                aria-describedby={hasError ? errorId : undefined}
-                style={inputStyle}
-                onFocus={(e) => Object.assign(e.target.style, inputFocusStyle)}
-                onBlur={(e)  => Object.assign(e.target.style, inputStyle)}
-              />
+            <div className="nf-field" style={{ marginBottom: 16 }}>
+              <label htmlFor={emailId} style={labelStyle} className="nf-label">Email</label>
+              <div className="nf-input-wrap">
+                <input
+                  ref={emailRef}
+                  id={emailId}
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@nforceone.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  aria-invalid={hasError}
+                  aria-describedby={hasError ? errorId : undefined}
+                  className="nf-input-inner"
+                />
+              </div>
             </div>
           </motion.div>
 
           <motion.div variants={reduced ? undefined : itemVariants}>
-            <div style={{ marginBottom: 16 }}>
-              <label htmlFor={passId} style={labelStyle}>
+            <div className="nf-field" style={{ marginBottom: 16 }}>
+              <label htmlFor={passId} style={labelStyle} className="nf-label">
                 {(viaResetLink || viaNewUserLink) ? 'Current (Temporary) Password' : 'Password'}
               </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  ref={passwordRef}
-                  id={passId}
-                  type={showPass ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  aria-invalid={hasError}
-                  aria-describedby={hasError ? errorId : undefined}
-                  style={{ ...inputStyle, paddingRight: 46 }}
-                  onFocus={(e) => Object.assign(e.target.style, { ...inputFocusStyle, paddingRight: '46px' })}
-                  onBlur={(e)  => Object.assign(e.target.style, { ...inputStyle,      paddingRight: '46px' })}
-                />
-                <button
-                  type="button"
-                  aria-label={showPass ? 'Hide password' : 'Show password'}
-                  onClick={() => setShowPass((v) => !v)}
-                  style={eyeButtonStyle}
-                >
-                  {showPass
-                    ? <Eye     size={15} aria-hidden="true" />
-                    : <EyeOff  size={15} aria-hidden="true" />
-                  }
-                </button>
+              <div className="nf-input-wrap">
+                <div style={{ position: 'relative' }}>
+                  <input
+                    ref={passwordRef}
+                    id={passId}
+                    type={showPass ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    aria-invalid={hasError}
+                    aria-describedby={hasError ? errorId : undefined}
+                    className="nf-input-inner"
+                    style={{ paddingRight: 46 }}
+                  />
+                  <button
+                    type="button"
+                    aria-label={showPass ? 'Hide password' : 'Show password'}
+                    onClick={() => setShowPass((v) => !v)}
+                    style={eyeButtonStyle}
+                  >
+                    {showPass
+                      ? <Eye     size={15} aria-hidden="true" />
+                      : <EyeOff  size={15} aria-hidden="true" />
+                    }
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>
@@ -419,26 +420,6 @@ const labelStyle: React.CSSProperties = {
   textTransform: 'uppercase',
 };
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: 'rgba(255,255,255,0.04)',
-  border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: 8,
-  padding: '12px 14px',
-  color: '#fff',
-  fontSize: 14,
-  outline: 'none',
-  transition: 'border-color 0.18s, box-shadow 0.18s',
-  fontFamily: 'Inter, sans-serif',
-  boxSizing: 'border-box',
-  boxShadow: '0 0 0 3px transparent',
-};
-
-const inputFocusStyle: React.CSSProperties = {
-  ...inputStyle,
-  borderColor: 'rgba(228,55,61,0.6)',
-  boxShadow: '0 0 0 3px rgba(228,55,61,0.14)',
-};
 
 const eyeButtonStyle: React.CSSProperties = {
   position: 'absolute',
