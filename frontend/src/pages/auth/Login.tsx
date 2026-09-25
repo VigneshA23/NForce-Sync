@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Eye, EyeOff, AlertCircle, Lock } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { AuthLayout } from './AuthLayout';
 import { useAuth, ROLE_LANDING, buildAuthUser } from '../../lib/auth';
@@ -10,7 +10,7 @@ import { useCountdown, formatCountdown } from '../../lib/useCountdown';
 
 function MicrosoftIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true" focusable="false">
+    <svg width="16" height="16" viewBox="0 0 21 21" aria-hidden="true" focusable="false">
       <rect x="0"  y="0"  width="10" height="10" fill="#F25022" />
       <rect x="11" y="0"  width="10" height="10" fill="#7FBA00" />
       <rect x="0"  y="11" width="10" height="10" fill="#00A4EF" />
@@ -21,7 +21,7 @@ function MicrosoftIcon() {
 
 const containerVariants = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.04 } },
+  show: { transition: { staggerChildren: 0.045 } },
 };
 
 const itemVariants = {
@@ -35,41 +35,37 @@ export default function Login() {
   const reduced = useReducedMotion();
   const [searchParams] = useSearchParams();
 
-  const emailId  = useId();
-  const passId   = useId();
-  const errorId  = useId();
+  const emailId      = useId();
+  const passId       = useId();
+  const errorId      = useId();
+  const rememberMeId = useId();
 
   const [email, setEmail]           = useState('');
   const [password, setPassword]     = useState('');
   const [showPass, setShowPass]     = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError]           = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // Attempts left before this account locks, straight from the server — the client no longer
-  // keeps its own tally, which used to be shared across every email typed into this form.
   const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
-  // Epoch ms when the lock lifts; drives the inline countdown and disables the submit button.
   const [lockedUntilMs, setLockedUntilMs] = useState<number | null>(null);
-  // Set when the resetToken in the URL turns out to be invalid or expired. It never
-  // authenticates anything; the user still has to type both fields and submit through normal login.
   const [resetLinkNotice, setResetLinkNotice] = useState<string | null>(null);
-  // True when a valid resetToken was found in the URL — drives the "Current (Temporary) Password"
-  // label. Email and password stay empty either way; the user always types both manually.
   const [viaResetLink, setViaResetLink] = useState(false);
-  // True when arriving from the new-user invite email's "Sign in to NForce Sync" link
-  // (?newUser=1). Same label change as viaResetLink, no token to validate — fields stay empty
-  // and normal /auth/login + mustChangePassword redirect handle the rest untouched.
   const viaNewUserLink = searchParams.get('newUser') === '1';
 
   const lockRemaining = useCountdown(lockedUntilMs);
   const isLocked = lockRemaining > 0;
 
-  const emailRef = useRef<HTMLInputElement>(null);
+  const emailRef    = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
 
-  // Once the window elapses, drop the banner so the form is usable again without a reload.
   useEffect(() => {
     if (lockedUntilMs != null && lockRemaining === 0) setLockedUntilMs(null);
   }, [lockRemaining, lockedUntilMs]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('nf_sync_remember_email');
+    if (saved) { setEmail(saved); setRememberMe(true); }
+  }, []);
 
   useEffect(() => {
     const resetToken = searchParams.get('resetToken');
@@ -102,11 +98,13 @@ export default function Login() {
 
     try {
       const { token, user: serverUser, mustChangePassword } = await login(email, password);
-      // mustChangePassword arrives top-level on the login response as well as on the user
-      // object — pass it through explicitly. Dropping it lets the user into the app with a
-      // temp-password token, which JwtFilter then 403s on every request (empty dropdowns).
       const authUser = buildAuthUser(serverUser, mustChangePassword);
       setAttemptsLeft(null);
+      if (rememberMe) {
+        localStorage.setItem('nf_sync_remember_email', email.trim());
+      } else {
+        localStorage.removeItem('nf_sync_remember_email');
+      }
       loginWithCredentials(token, authUser);
       navigate(
         authUser.mustChangePassword ? '/force-change-password' : ROLE_LANDING[authUser.role],
@@ -115,7 +113,6 @@ export default function Login() {
     } catch (err) {
       const locked = asLockedError(err);
       if (locked) {
-        // Hand the countdown to the lock screen, which owns the "what now?" options.
         navigate('/locked', {
           replace: true,
           state: { email: email.trim(), retryAfterSeconds: locked.retryAfterSeconds },
@@ -123,8 +120,6 @@ export default function Login() {
         return;
       }
 
-      // Only a 401 is a credential failure. A network error or a 500 used to land here too and
-      // was counted as a failed attempt, which could lock someone out over a backend hiccup.
       const remaining = attemptsRemainingFrom(err);
       setAttemptsLeft(remaining);
 
@@ -143,143 +138,85 @@ export default function Login() {
 
   const hasError = Boolean(error);
 
-  // Reached only via an invalid/used/expired resetToken link. No form, no other banners —
-  // the link is dead either way (same status-check endpoint, no separate "expired" branch),
-  // so the only way forward is requesting a new one.
   if (resetLinkNotice) {
     return (
-      <AuthLayout
-        leftHeadline="Centralized Work & Utilization Management"
-        showStats
-      >
-        <div>
-          <div style={{ marginBottom: 28 }}>
-            <h1
-              style={{
-                fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-                fontSize: 26,
-                fontWeight: 700,
-                letterSpacing: '-0.01em',
-                color: 'var(--txt)',
-                marginBottom: 6,
-              }}
-            >
-              Change your password
-            </h1>
-          </div>
+      <AuthLayout leftHeadline="Centralized Work & Utilization Management" showStats>
+        <motion.div
+          variants={reduced ? undefined : containerVariants}
+          initial={reduced ? undefined : 'hidden'}
+          animate={reduced ? undefined : 'show'}
+        >
+          <motion.div variants={reduced ? undefined : itemVariants} style={{ marginBottom: 28 }}>
+            <div style={accentLineStyle} />
+            <h1 style={headingStyle}>Change your password</h1>
+          </motion.div>
 
-          <div
+          <motion.div
+            variants={reduced ? undefined : itemVariants}
             role="alert"
             aria-live="polite"
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 10,
-              padding: '12px 14px',
-              borderRadius: 8,
-              background: 'rgba(228,55,61,.10)',
-              border: '1px solid rgba(228,55,61,.25)',
-              color: 'var(--risk)',
-              fontSize: 13,
-              marginBottom: 20,
-            }}
+            style={errorBannerStyle}
           >
-            <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1, color: 'var(--risk)' }} aria-hidden="true" />
+            <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1, color: 'var(--risk)' }} aria-hidden="true" />
             <span>{resetLinkNotice}</span>
-          </div>
+          </motion.div>
 
-          <button
-            type="button"
-            onClick={() => navigate('/forgot')}
-            style={submitButtonStyle}
-            onMouseEnter={(e) => Object.assign(e.currentTarget.style, submitButtonHoverStyle)}
-            onMouseLeave={(e) => Object.assign(e.currentTarget.style, submitButtonStyle)}
-          >
-            Request a new reset link
-          </button>
-        </div>
+          <motion.div variants={reduced ? undefined : itemVariants}>
+            <button
+              type="button"
+              onClick={() => navigate('/forgot')}
+              className="nf-submit-btn"
+              style={submitButtonStyle}
+              onMouseEnter={(e) => Object.assign(e.currentTarget.style, submitButtonHoverStyle)}
+              onMouseLeave={(e) => Object.assign(e.currentTarget.style, submitButtonStyle)}
+            >
+              Request a new reset link
+            </button>
+          </motion.div>
+        </motion.div>
       </AuthLayout>
     );
   }
 
   return (
-    <AuthLayout
-      leftHeadline="Centralized Work & Utilization Management"
-      showStats
-    >
+    <AuthLayout leftHeadline="Centralized Work & Utilization Management" showStats>
       <motion.div
         variants={reduced ? undefined : containerVariants}
         initial={reduced ? undefined : 'hidden'}
         animate={reduced ? undefined : 'show'}
       >
-        {/* Title */}
-        <motion.div variants={reduced ? undefined : itemVariants} style={{ marginBottom: 28 }}>
-          <h1
-            style={{
-              fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-              fontSize: 26,
-              fontWeight: 700,
-              letterSpacing: '-0.01em',
-              color: 'var(--txt)',
-              marginBottom: 6,
-            }}
-          >
-            Welcome back
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.5 }}>
+        {/* Header */}
+        <motion.div variants={reduced ? undefined : itemVariants} style={{ marginBottom: 32 }}>
+          <div style={accentLineStyle} />
+          <h1 style={headingStyle}>Welcome back</h1>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.42)', lineHeight: 1.58, margin: 0 }}>
             Sign in to submit and review EOD reports.
           </p>
         </motion.div>
 
-        {/* SSO button — visual only, not yet connected */}
+        {/* Microsoft SSO */}
         <motion.div variants={reduced ? undefined : itemVariants}>
           <button
             type="button"
             disabled
-            aria-label="Microsoft SSO, coming soon"
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              padding: '12px 16px',
-              background: 'var(--brand)',
-              color: 'rgba(255,255,255,.9)',
-              border: 'none',
-              borderRadius: 8,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'not-allowed',
-              opacity: 0.75,
-              marginBottom: 4,
-            }}
+            aria-label="Continue with Microsoft"
+            style={ssoButtonStyle}
           >
             <MicrosoftIcon />
-            Continue with Microsoft SSO
+            <span>Continue with Microsoft SSO</span>
           </button>
         </motion.div>
 
         {/* OR divider */}
         <motion.div variants={reduced ? undefined : itemVariants}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              color: '#D6D9DE',
-              fontSize: 12,
-              margin: '20px 0',
-            }}
-          >
-            <span style={{ flex: 1, height: 1, background: 'var(--line)', display: 'block' }} />
-            or use company credentials
-            <span style={{ flex: 1, height: 1, background: 'var(--line)', display: 'block' }} />
+          <div style={dividerStyle}>
+            <span style={dividerLineStyle} />
+            <span style={dividerTextStyle}>or use company credentials</span>
+            <span style={dividerLineStyle} />
           </div>
         </motion.div>
 
-        {/* Lockout banner — shown when this account is still inside its cooldown window.
-            Ticks down to 00:00, at which point the form re-enables on its own. */}
+        {/* Lock banner */}
         {isLocked && (
           <motion.div
             initial={reduced ? undefined : { opacity: 0, y: -6 }}
@@ -287,25 +224,12 @@ export default function Login() {
             transition={{ duration: 0.2 }}
             role="status"
             aria-live="polite"
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 10,
-              padding: '12px 14px',
-              borderRadius: 8,
-              background: 'rgba(228,55,61,.10)',
-              border: '1px solid rgba(228,55,61,.25)',
-              color: '#f4a5a8',
-              fontSize: 13,
-              marginBottom: 18,
-            }}
+            style={errorBannerStyle}
           >
-            <Lock size={15} style={{ flexShrink: 0, marginTop: 1, color: 'var(--risk)' }} aria-hidden="true" />
+            <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1, color: 'var(--risk)' }} aria-hidden="true" />
             <span>
               Account temporarily locked. Try again in{' '}
-              <strong>
-                {formatCountdown(lockRemaining)}
-              </strong>
+              <strong>{formatCountdown(lockRemaining)}</strong>
               , or{' '}
               <a
                 href="/forgot"
@@ -328,20 +252,9 @@ export default function Login() {
             role="alert"
             aria-live="polite"
             id={errorId}
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 10,
-              padding: '12px 14px',
-              borderRadius: 8,
-              background: 'rgba(228,55,61,.10)',
-              border: '1px solid rgba(228,55,61,.25)',
-              color: 'var(--risk)',
-              fontSize: 13,
-              marginBottom: 18,
-            }}
+            style={errorBannerStyle}
           >
-            <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1, color: 'var(--risk)' }} aria-hidden="true" />
+            <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1, color: 'var(--risk)' }} aria-hidden="true" />
             <span>{error}</span>
           </motion.div>
         )}
@@ -349,10 +262,8 @@ export default function Login() {
         {/* Credentials form */}
         <form onSubmit={handleCredentialSubmit} noValidate>
           <motion.div variants={reduced ? undefined : itemVariants}>
-            <div style={{ marginBottom: 14 }}>
-              <label htmlFor={emailId} style={labelStyle}>
-                Email
-              </label>
+            <div style={{ marginBottom: 16 }}>
+              <label htmlFor={emailId} style={labelStyle}>Email</label>
               <input
                 ref={emailRef}
                 id={emailId}
@@ -365,13 +276,13 @@ export default function Login() {
                 aria-describedby={hasError ? errorId : undefined}
                 style={inputStyle}
                 onFocus={(e) => Object.assign(e.target.style, inputFocusStyle)}
-                onBlur={(e) => Object.assign(e.target.style, inputStyle)}
+                onBlur={(e)  => Object.assign(e.target.style, inputStyle)}
               />
             </div>
           </motion.div>
 
           <motion.div variants={reduced ? undefined : itemVariants}>
-            <div style={{ marginBottom: 14 }}>
+            <div style={{ marginBottom: 16 }}>
               <label htmlFor={passId} style={labelStyle}>
                 {(viaResetLink || viaNewUserLink) ? 'Current (Temporary) Password' : 'Password'}
               </label>
@@ -386,51 +297,46 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   aria-invalid={hasError}
                   aria-describedby={hasError ? errorId : undefined}
-                  style={{ ...inputStyle, paddingRight: 44 }}
-                  onFocus={(e) => Object.assign(e.target.style, { ...inputFocusStyle, paddingRight: '44px' })}
-                  onBlur={(e) => Object.assign(e.target.style, { ...inputStyle, paddingRight: '44px' })}
+                  style={{ ...inputStyle, paddingRight: 46 }}
+                  onFocus={(e) => Object.assign(e.target.style, { ...inputFocusStyle, paddingRight: '46px' })}
+                  onBlur={(e)  => Object.assign(e.target.style, { ...inputStyle,      paddingRight: '46px' })}
                 />
                 <button
                   type="button"
                   aria-label={showPass ? 'Hide password' : 'Show password'}
                   onClick={() => setShowPass((v) => !v)}
-                  style={{
-                    position: 'absolute',
-                    right: 10,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: 'var(--txt-dim)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: 4,
-                    borderRadius: 4,
-                  }}
+                  style={eyeButtonStyle}
                 >
-                  {/* Icon reflects the field's current state: open eye = password visible,
-                      slashed eye = hidden. (aria-label above names the action instead.) */}
                   {showPass
-                    ? <Eye size={15} aria-hidden="true" />
-                    : <EyeOff size={15} aria-hidden="true" />
+                    ? <Eye     size={15} aria-hidden="true" />
+                    : <EyeOff  size={15} aria-hidden="true" />
                   }
                 </button>
               </div>
             </div>
           </motion.div>
 
-          {/* Forgot link */}
+          {/* Remember me + Forgot link row */}
           <motion.div
             variants={reduced ? undefined : itemVariants}
-            style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 18, marginTop: -4 }}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, marginTop: -4 }}
           >
+            <label htmlFor={rememberMeId} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                id={rememberMeId}
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                style={{ accentColor: '#E4373D', width: 14, height: 14, cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)', userSelect: 'none' }}>Remember me</span>
+            </label>
             <a
               href="/forgot"
               onClick={(e) => { e.preventDefault(); navigate('/forgot'); }}
               style={mutedLinkStyle}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--brand-bright)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--txt-mut)')}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.72)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.38)')}
             >
               Forgot password?
             </a>
@@ -440,33 +346,39 @@ export default function Login() {
           <motion.div variants={reduced ? undefined : itemVariants}>
             <button
               type="submit"
+              className="nf-submit-btn"
               disabled={submitting || isLocked}
-              style={{ ...submitButtonStyle, opacity: isLocked ? 0.5 : 1, cursor: isLocked ? 'not-allowed' : 'pointer' }}
+              style={{
+                ...submitButtonStyle,
+                opacity: isLocked ? 0.45 : 1,
+                cursor: isLocked ? 'not-allowed' : 'pointer',
+              }}
               onMouseEnter={(e) => {
                 if (!submitting && !isLocked) Object.assign(e.currentTarget.style, submitButtonHoverStyle);
               }}
               onMouseLeave={(e) => Object.assign(e.currentTarget.style, {
                 ...submitButtonStyle,
-                opacity: isLocked ? 0.5 : 1,
+                opacity: isLocked ? 0.45 : 1,
                 cursor: isLocked ? 'not-allowed' : 'pointer',
               })}
             >
               {isLocked
-                ? `Locked: ${formatCountdown(lockRemaining)}`
+                ? `Locked · ${formatCountdown(lockRemaining)}`
                 : submitting ? 'Signing in…' : 'Sign in'}
             </button>
           </motion.div>
         </form>
 
-        {/* Attempt warning — count comes from the server, so it reflects this account only. */}
+        {/* Attempts warning */}
         {!isLocked && attemptsLeft != null && attemptsLeft > 0 && (
           <p
             style={{
               fontSize: 11,
-              color: 'var(--txt-dim)',
+              color: 'rgba(255,255,255,0.32)',
               textAlign: 'center',
-              marginTop: 16,
+              marginTop: 14,
               fontVariantNumeric: 'tabular-nums',
+              letterSpacing: '0.01em',
             }}
             aria-live="polite"
           >
@@ -478,39 +390,75 @@ export default function Login() {
   );
 }
 
+// ── Styles ──────────────────────────────────────────────────────────
+
+const accentLineStyle: React.CSSProperties = {
+  width: 40,
+  height: 2,
+  background: '#E4373D',
+  borderRadius: 1,
+  marginBottom: 20,
+};
+
+const headingStyle: React.CSSProperties = {
+  fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
+  fontSize: 26,
+  fontWeight: 700,
+  letterSpacing: '-0.03em',
+  color: '#fff',
+  margin: '0 0 6px',
+};
+
 const labelStyle: React.CSSProperties = {
   display: 'block',
-  fontSize: 12,
-  fontWeight: 550,
-  color: 'var(--txt-mut)',
-  marginBottom: 6,
+  fontSize: 11,
+  fontWeight: 600,
+  color: 'rgba(255,255,255,0.45)',
+  marginBottom: 8,
+  letterSpacing: '0.07em',
+  textTransform: 'uppercase',
 };
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  background: 'var(--shell)',
-  border: '1px solid var(--line2)',
-  borderRadius: 6,
-  padding: '10px 12px',
-  color: 'var(--txt)',
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: 8,
+  padding: '12px 14px',
+  color: '#fff',
   fontSize: 14,
   outline: 'none',
-  transition: 'border-color 0.15s, box-shadow 0.15s',
+  transition: 'border-color 0.15s',
   fontFamily: 'Inter, sans-serif',
+  boxSizing: 'border-box',
 };
 
 const inputFocusStyle: React.CSSProperties = {
   ...inputStyle,
-  borderColor: 'var(--brand-bright)',
-  boxShadow: '0 0 0 3px color-mix(in srgb, var(--brand-bright) 14%, transparent)',
+  borderColor: 'rgba(228,55,61,0.55)',
+};
+
+const eyeButtonStyle: React.CSSProperties = {
+  position: 'absolute',
+  right: 11,
+  top: '50%',
+  transform: 'translateY(-50%)',
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  color: 'rgba(255,255,255,0.35)',
+  display: 'flex',
+  alignItems: 'center',
+  padding: 4,
+  borderRadius: 4,
 };
 
 const mutedLinkStyle: React.CSSProperties = {
   fontSize: 12,
-  color: 'var(--txt-mut)',
+  color: 'rgba(255,255,255,0.38)',
   textDecoration: 'none',
   cursor: 'pointer',
-  transition: 'color 0.12s',
+  transition: 'color 0.14s',
 };
 
 const submitButtonStyle: React.CSSProperties = {
@@ -518,20 +466,77 @@ const submitButtonStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  padding: '11px 16px',
-  background: 'var(--brand)',
-  border: '1px solid var(--brand)',
+  gap: 8,
+  padding: '13px 16px',
+  background: '#E4373D',
+  border: 'none',
   borderRadius: 8,
   color: '#fff',
   fontSize: 14,
-  fontWeight: 550,
+  fontWeight: 600,
   cursor: 'pointer',
-  transition: 'all 0.14s',
+  transition: 'background 0.14s, transform 0.14s',
   fontFamily: 'Inter, sans-serif',
+  letterSpacing: '0.01em',
 };
 
 const submitButtonHoverStyle: React.CSSProperties = {
   ...submitButtonStyle,
-  borderColor: 'var(--brand-bright)',
-  background: 'var(--brand-bright)',
+  background: '#C82026',
+  transform: 'translateY(-1px)',
+};
+
+const ssoButtonStyle: React.CSSProperties = {
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 10,
+  padding: '13px 16px',
+  background: '#8B1A1A',
+  color: 'rgba(255,255,255,0.65)',
+  border: '1px solid rgba(228,55,61,0.3)',
+  borderRadius: 8,
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: 'not-allowed',
+  marginBottom: 4,
+  fontFamily: 'Inter, sans-serif',
+  letterSpacing: '0.01em',
+  opacity: 0.75,
+};
+
+const dividerStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 14,
+  margin: '20px 0',
+};
+
+const dividerLineStyle: React.CSSProperties = {
+  flex: 1,
+  height: 1,
+  background: 'rgba(255,255,255,0.07)',
+  display: 'block',
+};
+
+const dividerTextStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: 'rgba(255,255,255,0.22)',
+  letterSpacing: '0.1em',
+  textTransform: 'uppercase',
+};
+
+const errorBannerStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 9,
+  padding: '11px 13px',
+  borderRadius: 7,
+  background: 'rgba(228,55,61,0.08)',
+  border: '1px solid rgba(228,55,61,0.2)',
+  color: 'var(--risk)',
+  fontSize: 13,
+  marginBottom: 18,
+  lineHeight: 1.45,
 };
