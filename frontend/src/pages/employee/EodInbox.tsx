@@ -262,7 +262,6 @@ export default function EmployeeEodInbox() {
   const [sort, setSort] = useState<EodInboxSort>('latest');
   const [page, setPage] = useState(1);
   const appliedHighlightRef = useRef(false);
-  const todayStr = localTodayISO();
   const [dateMode, setDateMode] = useState<DateMode>('all');
   const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' });
 

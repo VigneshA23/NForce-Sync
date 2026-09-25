@@ -5,7 +5,5 @@
     { "source": "/api/:path*", "destination": "https://nforce-sync-production.up.railway.app/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
-  "git": {
-    "deploymentEnabled": true
-  }
+  "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = \"main\" ] || [ \"$VERCEL_GIT_COMMIT_REF\" = \"dev\" ]; then exit 1; fi; exit 0"
 }

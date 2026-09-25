@@ -462,7 +462,6 @@ export default function MyBlockers() {
   const highlightParam = searchParams.get('highlight');
   const highlightId = highlightParam ? Number(highlightParam) : null;
 
-  const todayISO = localTodayISO();
   const [dateMode, setDateMode] = useState<DateMode>('all');
   const [range, setRange] = useState<DateRange>({ from: '', to: '' });
 
