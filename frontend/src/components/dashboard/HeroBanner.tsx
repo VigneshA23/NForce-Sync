@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, Clock, TrendingUp } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { useGreeting, useLiveClock } from '../../lib/useGreeting';
+import { dashboardQuoteFor } from '../../lib/dashboardQuotes';
 import { fetchProfile } from '../../api/profile';
 import { resolveIllustrationKey } from '../../lib/illustration';
 import { HeroIllustration } from './illustrations';
@@ -47,6 +48,7 @@ export function HeroBanner({ subtitle = "Stay focused, you're making great progr
   const displayName = user?.name || 'there';
   const greeting = useGreeting(displayName);
   const { date, time } = useLiveClock();
+  const quote = dashboardQuoteFor(user?.role);
 
   // Same ['profile', email] query key Shell.tsx already warms for the avatar photo — reuses
   // that cache entry rather than issuing a second network call for gender.
@@ -103,8 +105,8 @@ export function HeroBanner({ subtitle = "Stay focused, you're making great progr
           <MiniCard icon={<Clock size={15} />} label="Current Time" value={time} />
           <MiniCard
             icon={<TrendingUp size={15} />}
-            label="Small steps, big progress!"
-            value="Keep up the great work!"
+            label={quote.label}
+            value={quote.value}
           />
         </div>
       </div>

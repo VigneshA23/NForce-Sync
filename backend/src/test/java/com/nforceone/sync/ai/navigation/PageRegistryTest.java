@@ -22,7 +22,7 @@ class PageRegistryTest {
 
     @Test
     void loadsAllExpectedPages() {
-        assertEquals(31, registry.size());
+        assertEquals(30, registry.size());
         assertTrue(registry.exists("dashboard"));
         assertTrue(registry.exists("eod-submit"));
         assertFalse(registry.exists("no-such-page"));

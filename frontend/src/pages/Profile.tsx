@@ -11,6 +11,8 @@ import { Card } from '../components/KpiCard';
 import { useHashScroll } from '../lib/useHashScroll';
 import { GlobalLoader } from '../components/GlobalLoader';
 import { GENDER_OPTIONS } from '../lib/illustration';
+import { DEFAULT_DIAL_CODE, defaultDialCodeForLocation } from '../lib/countryCodes';
+import { CountryCodeSelect } from '../components/CountryCodeSelect';
 
 // Shared card shadow — a bit more "lift" than a flat border on its own, barely visible on dark
 // panels and a gentle depth cue on light ones.
@@ -120,6 +122,63 @@ function EditField({ label, value, onChange, type = 'text', placeholder }: {
   );
 }
 
+/** Strips everything but digits and caps to `max` — the only transform a phone field's value
+ * ever goes through; the input's own `maxLength` backs this up for paste as well. */
+function digitsOnly(raw: string, max: number): string {
+  return raw.replace(/\D/g, '').slice(0, max);
+}
+
+const PHONE_DIGITS = 10;
+
+/** "9876543210" -> "98765 43210" — the format phone numbers are saved and displayed in
+ * everywhere else (paired with a "+<code> " prefix). Anything not exactly 10 digits is left
+ * alone; that shouldn't happen past handleSave's own validation. */
+function formatNationalNumber(digits: string): string {
+  return digits.length === PHONE_DIGITS ? `${digits.slice(0, 5)} ${digits.slice(5)}` : digits;
+}
+
+/** Splits a saved "+<code> <number>" string back into its parts for editing. Recognizes only
+ * our own save format (a "+"-prefixed code, then a space); anything else — a bare national
+ * number, or a legacy value saved before country codes existed — is treated as just the
+ * number, with no dial code recognized (the caller then falls back to a location-based or
+ * fixed default). */
+function parseStoredPhone(raw: string | null | undefined): { dialCode: string; number: string } {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return { dialCode: '', number: '' };
+  const spaceIdx = trimmed.indexOf(' ');
+  const codePart = spaceIdx > 0 ? trimmed.slice(0, spaceIdx) : '';
+  if (/^\+\d{1,4}$/.test(codePart)) {
+    return { dialCode: codePart, number: digitsOnly(trimmed.slice(spaceIdx + 1), PHONE_DIGITS) };
+  }
+  return { dialCode: '', number: digitsOnly(trimmed, PHONE_DIGITS) };
+}
+
+/** Phone field = a country-code <select> (dial code only, since the two contacts may be in
+ * different countries) beside the 10-digit national-number input. */
+function PhoneEditField({ label, dialCode, onDialCodeChange, number, onNumberChange, placeholder }: {
+  label: string;
+  dialCode: string;
+  onDialCodeChange: (v: string) => void;
+  number: string;
+  onNumberChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-mut)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>{label}</label>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <CountryCodeSelect value={dialCode} onChange={onDialCodeChange} ariaLabel={`${label} country code`} />
+        <input
+          type="tel" inputMode="numeric" maxLength={PHONE_DIGITS}
+          value={number} onChange={e => onNumberChange(e.target.value)}
+          placeholder={placeholder}
+          style={{ ...INPUT_STYLE, flex: '1 1 auto', minWidth: 0 }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function Profile() {
@@ -132,6 +191,11 @@ export default function Profile() {
 
   const [editing, setEditing] = useState(false);
   const [form, setForm]       = useState<UpdateProfilePayload>({});
+  // Dial codes live outside `form`/UpdateProfilePayload — the backend still just stores one
+  // combined "+<code> <number>" string per field (see handleSave) — so the two contacts can
+  // freely be in different countries without another payload field.
+  const [phoneCode,          setPhoneCode]          = useState(DEFAULT_DIAL_CODE);
+  const [emergencyPhoneCode, setEmergencyPhoneCode] = useState(DEFAULT_DIAL_CODE);
   const [uploading, setUploading] = useState(false);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
@@ -174,7 +238,12 @@ export default function Profile() {
 
   function startEdit() {
     if (!profile) return;
-    setForm(toForm(profile));
+    const phone = parseStoredPhone(profile.phone);
+    const emergencyPhone = parseStoredPhone(profile.emergencyContactPhone);
+    const locationDefault = defaultDialCodeForLocation(profile.locationName);
+    setForm({ ...toForm(profile), phone: phone.number, emergencyContactPhone: emergencyPhone.number });
+    setPhoneCode(phone.dialCode || locationDefault);
+    setEmergencyPhoneCode(emergencyPhone.dialCode || locationDefault);
     setEditing(true);
   }
 
@@ -184,14 +253,25 @@ export default function Profile() {
   }
 
   async function handleSave() {
+    const phone = form.phone ?? '';
+    if (phone && phone.length !== PHONE_DIGITS) {
+      showToast('error', `Primary Phone Number must be exactly ${PHONE_DIGITS} digits`);
+      return;
+    }
+    const emergencyPhone = form.emergencyContactPhone ?? '';
+    if (emergencyPhone && emergencyPhone.length !== PHONE_DIGITS) {
+      showToast('error', `Emergency Phone Number must be exactly ${PHONE_DIGITS} digits`);
+      return;
+    }
+
     const cleaned: UpdateProfilePayload = {};
-    if (form.phone !== undefined)               cleaned.phone = form.phone;
+    if (form.phone !== undefined)               cleaned.phone = phone ? `${phoneCode} ${formatNationalNumber(phone)}` : '';
     if (form.dateOfBirth)                       cleaned.dateOfBirth = form.dateOfBirth;
     if (form.gender)                            cleaned.gender = form.gender;
     if (form.personalEmail)                     cleaned.personalEmail = form.personalEmail;
     if (form.address)                           cleaned.address = form.address;
     if (form.emergencyContactName !== undefined) cleaned.emergencyContactName = form.emergencyContactName;
-    if (form.emergencyContactPhone !== undefined) cleaned.emergencyContactPhone = form.emergencyContactPhone;
+    if (form.emergencyContactPhone !== undefined) cleaned.emergencyContactPhone = emergencyPhone ? `${emergencyPhoneCode} ${formatNationalNumber(emergencyPhone)}` : '';
     if (form.workMode)                          cleaned.workMode = form.workMode;
     saveMutation.mutate(cleaned);
   }
@@ -284,6 +364,11 @@ export default function Profile() {
   }
   function set(key: keyof UpdateProfilePayload) {
     return (v: string) => setForm(f => ({ ...f, [key]: v }));
+  }
+  // Primary/Emergency phone: digits only, capped at 10 as typed (see digitsOnly) rather than
+  // rejected on submit — pasting a longer/lettered value gets the same treatment.
+  function setPhone(key: 'phone' | 'emergencyContactPhone') {
+    return (v: string) => setForm(f => ({ ...f, [key]: digitsOnly(v, PHONE_DIGITS) }));
   }
 
   // ── Loading / error states ─────────────────────────────────────────────────
@@ -458,7 +543,7 @@ export default function Profile() {
           <SectionHeader title="Personal Information" />
           {editing ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <EditField label="Phone" value={field('phone')} onChange={set('phone')} placeholder="+91 99999 99999" />
+              <PhoneEditField label="Phone" dialCode={phoneCode} onDialCodeChange={setPhoneCode} number={field('phone')} onNumberChange={setPhone('phone')} placeholder="9999999999" />
               <EditField label="Date of Birth" value={field('dateOfBirth')} onChange={set('dateOfBirth')} type="date" />
               <div>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-mut)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Gender</label>
@@ -519,7 +604,7 @@ export default function Profile() {
         {editing ? (
           <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <EditField label="Contact Name" value={field('emergencyContactName')} onChange={set('emergencyContactName')} placeholder="Full name" />
-            <EditField label="Contact Phone" value={field('emergencyContactPhone')} onChange={set('emergencyContactPhone')} placeholder="+91 99999 99999" />
+            <PhoneEditField label="Contact Phone" dialCode={emergencyPhoneCode} onDialCodeChange={setEmergencyPhoneCode} number={field('emergencyContactPhone')} onNumberChange={setPhone('emergencyContactPhone')} placeholder="9999999999" />
           </div>
         ) : (
           <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

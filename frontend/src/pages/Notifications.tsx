@@ -8,6 +8,7 @@ import {
   Search, RefreshCw, Inbox, ArrowUpRight,
 } from 'lucide-react';
 import { Pagination } from '../components/Pagination';
+import { useAuth } from '../lib/auth';
 import {
   fetchNotifications,
   markNotificationRead,
@@ -308,6 +309,11 @@ function NotificationListItem({
 // ── Detail pane ──────────────────────────────────────────────────────────────
 
 function NotificationDetailPane({ n }: { n: NotificationDto | null }) {
+  // PM: notifications are informational only here — no "open related page" action, per
+  // role-specific request. Every other role keeps the link to the approval/blocker/EOD entry.
+  const { user } = useAuth();
+  const canNavigate = user?.role !== 'pm';
+
   if (!n) {
     return (
       <div style={{
@@ -372,7 +378,7 @@ function NotificationDetailPane({ n }: { n: NotificationDto | null }) {
         {n.message || 'No additional details were provided for this notification.'}
       </p>
 
-      {n.link && (
+      {n.link && canNavigate && (
         <Link
           to={n.link}
           style={{
@@ -407,6 +413,12 @@ const selectStyle: React.CSSProperties = {
 };
 
 export default function Notifications() {
+  // PM: no "open related page" action anywhere on this page — see NotificationDetailPane's own
+  // canNavigate for the detail-pane link; this one gates the list row's BLOCKER_REPLY shortcut
+  // that otherwise skips the detail pane and navigates straight to the thread.
+  const { user } = useAuth();
+  const canNavigate = user?.role !== 'pm';
+
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
@@ -654,8 +666,9 @@ export default function Notifications() {
                       // Blocker replies always navigate straight to the conversation's side
                       // panel on click, even on wide screens — the master/detail preview
                       // pane doesn't apply since the useful "detail" is the live thread,
-                      // not a text summary.
-                      navigable={!isWide || n.type === 'BLOCKER_REPLY'}
+                      // not a text summary. Except for PM (canNavigate), which never gets an
+                      // "open related page" shortcut — it just selects, like every other type.
+                      navigable={!isWide || (canNavigate && n.type === 'BLOCKER_REPLY')}
                     />
                   ))}
                 </div>

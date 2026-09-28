@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Menu, X, Search, Bell, LogOut, UserCircle2, HelpCircle, Shield, FolderKanban, ChevronDown, KeyRound, Settings } from 'lucide-react';
+import { Menu, X, Search, Bell, LogOut, UserCircle2, HelpCircle, FolderKanban, ChevronDown, KeyRound, Settings } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { NAV, ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, navSubItemPath, isNavGroup } from '../lib/nav';
 import type { NavItem } from '../lib/nav';
@@ -954,54 +954,29 @@ export function Shell() {
 
             {/* Avatar — clickable, opens profile + sign-out dropdown */}
             <div ref={profileRef} style={{ position: 'relative', marginLeft: 4 }}>
-              {/* 32×32 wrapper: avatar circle + badge are siblings, badge positioned relative to this */}
-              <div style={{ position: 'relative', width: 32, height: 32 }}>
-                <button
-                  onClick={() => setProfileOpen(p => !p)}
-                  aria-label={`Account: ${user!.name}`}
-                  aria-expanded={profileOpen}
-                  aria-haspopup="menu"
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: '50%',
-                    background: 'var(--brand)',
-                    color: '#fff',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    border: '2px solid rgba(255,255,255,0.55)',
-                    boxSizing: 'border-box',
-                    display: 'grid',
-                    placeItems: 'center',
-                    cursor: 'pointer',
-                    padding: 0,
-                  }}
-                >
-                  <AvatarContent photo={photo} initials={user!.initials} />
-                </button>
-
-                {/* Super Admin / Admin shield badge — sibling of button, outside its grid context */}
-                {(role === 'superadmin' || role === 'admin') && (
-                  <span
-                    aria-label={role === 'superadmin' ? 'Super Admin session' : 'Admin session'}
-                    title={role === 'superadmin' ? 'Super Admin' : 'Admin'}
-                    style={{
-                      position: 'absolute',
-                      bottom: -1,
-                      right: -1,
-                      width: 14,
-                      height: 14,
-                      borderRadius: '50%',
-                      background: role === 'superadmin' ? '#1C0709' : '#161A3D',
-                      border: role === 'superadmin' ? '1.5px solid #3D0D15' : '1.5px solid #2A2F6B',
-                      display: 'grid',
-                      placeItems: 'center',
-                    }}
-                  >
-                    <Shield size={8} color={role === 'superadmin' ? 'var(--risk)' : '#6366F1'} aria-hidden="true" />
-                  </span>
-                )}
-              </div>{/* end 32×32 wrapper */}
+              <button
+                onClick={() => setProfileOpen(p => !p)}
+                aria-label={`Account: ${user!.name}`}
+                aria-expanded={profileOpen}
+                aria-haspopup="menu"
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  background: 'var(--brand)',
+                  color: '#fff',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  border: '2px solid rgba(255,255,255,0.55)',
+                  boxSizing: 'border-box',
+                  display: 'grid',
+                  placeItems: 'center',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                <AvatarContent photo={photo} initials={user!.initials} />
+              </button>
 
               {/* Profile dropdown */}
               {profileOpen && (

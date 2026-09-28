@@ -22,6 +22,7 @@ import type { UserDto, CreateUserPayload, UpdateUserPayload, DepartmentDto, Desi
 import { toRole } from '../../api/auth';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 import { Modal } from '../../components/Modal';
+import { Pagination } from '../../components/Pagination';
 import { DatePicker } from '../../components/DatePicker';
 import { useToast } from '../../lib/toast';
 import { useBodyScrollLock } from '../../lib/useBodyScrollLock';
@@ -1830,6 +1831,20 @@ export default function UserManagement() {
     setLocFilter('');
   }
 
+  // ── Pagination — 11 rows per page (see the shared Pagination component) ──────
+  const USERS_PAGE_SIZE = 11;
+  const [page, setPage] = useState(1);
+
+  // Jump back to page 1 whenever the filtered set changes shape — otherwise a
+  // narrower filter/search can leave the user stranded on a now-nonexistent page.
+  useEffect(() => { setPage(1); }, [statusFilter, roleFilter, deptFilter, locFilter, search, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil((filteredUsers?.length ?? 0) / USERS_PAGE_SIZE));
+  const pagedUsers = useMemo(
+    () => filteredUsers?.slice((page - 1) * USERS_PAGE_SIZE, page * USERS_PAGE_SIZE),
+    [filteredUsers, page],
+  );
+
   const [showAdd,          setShowAdd]          = useState(false);
   const [editTarget,       setEditTarget]        = useState<UserDto | null>(null);
   const [statusTarget,     setStatusTarget]      = useState<UserDto | null>(null);
@@ -1939,13 +1954,6 @@ export default function UserManagement() {
                 </span>
               )}
             </div>
-            <button
-              onClick={() => refetch()}
-              aria-label="Refresh users list"
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', padding: 6, display: 'flex', alignItems: 'center', borderRadius: 5 }}
-            >
-              <RefreshCw size={14} aria-hidden="true" />
-            </button>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -2099,7 +2107,7 @@ export default function UserManagement() {
                     </td>
                   </tr>
                 ) : (
-                  filteredUsers.map(user => (
+                  pagedUsers!.map(user => (
                     <tr
                       key={user.id}
                       style={{ opacity: user.status === 'ACTIVE' ? 1 : 0.65, transition: 'background 0.1s' }}
@@ -2184,6 +2192,13 @@ export default function UserManagement() {
               </tbody>
             </table>
           </div>
+        )}
+
+        {filteredUsers && filteredUsers.length > 0 && (
+          <Pagination
+            page={page} totalPages={totalPages} totalItems={filteredUsers.length} pageSize={USERS_PAGE_SIZE}
+            onPageChange={setPage} itemLabel="users"
+          />
         )}
       </div>
 

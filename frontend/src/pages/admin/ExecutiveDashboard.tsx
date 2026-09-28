@@ -162,13 +162,16 @@ export default function ExecutiveDashboard() {
   const [to, setTo] = useState(todayISO());
   const [dateError, setDateError] = useState<string | null>(null);
 
+  // Both ends are required by the endpoint, so nothing is requested once either is cleared.
+  const hasRange = from !== '' && to !== '';
+
   function handleFromChange(iso: string) {
-    if (iso > to) { setDateError("'From' date cannot be after 'To' date."); return; }
+    if (iso && to && iso > to) { setDateError("'From' date cannot be after 'To' date."); return; }
     setDateError(null);
     setFrom(iso);
   }
   function handleToChange(iso: string) {
-    if (iso < from) { setDateError("'To' date cannot be before 'From' date."); return; }
+    if (iso && from && iso < from) { setDateError("'To' date cannot be before 'From' date."); return; }
     setDateError(null);
     setTo(iso);
   }
@@ -176,7 +179,7 @@ export default function ExecutiveDashboard() {
   const { data, isPending, isError, refetch, isFetching } = useQuery({
     queryKey: ['executive', 'dashboard', from, to],
     queryFn: () => getExecutiveDashboard(from, to),
-    enabled: !dateError,
+    enabled: !dateError && hasRange,
     staleTime: 60 * 1000,
     placeholderData: (prev) => prev,
   });
@@ -217,22 +220,28 @@ export default function ExecutiveDashboard() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 12, color: 'var(--txt-mut)' }}>From</span>
-            <DatePicker value={from} onChange={handleFromChange} max={to} inputStyle={dateInputStyle()} />
+            <DatePicker value={from} onChange={handleFromChange} max={to || todayISO()} inputStyle={dateInputStyle()} clearable />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 12, color: 'var(--txt-mut)' }}>To</span>
-            <DatePicker value={to} onChange={handleToChange} min={from} max={todayISO()} inputStyle={dateInputStyle()} />
+            <DatePicker value={to} onChange={handleToChange} min={from} max={todayISO()} inputStyle={dateInputStyle()} clearable />
           </div>
           {isFetching && !isPending && <RefreshCw size={14} className="nf-r-spin" style={{ color: 'var(--txt-dim)' }} />}
           {dateError && <span style={{ fontSize: 12, color: 'var(--risk)' }}>{dateError}</span>}
         </div>
       </Card>
 
-      {isPending && (
+      {!hasRange && (
+        <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div style={{ fontSize: 13, color: 'var(--txt-mut)' }}>Choose a From date and a To date to view the dashboard.</div>
+        </Card>
+      )}
+
+      {hasRange && isPending && (
         <GlobalLoader fullScreen={false} compact label="Loading dashboard..." />
       )}
 
-      {isError && !isPending && (
+      {hasRange && isError && !isPending && (
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load Executive Dashboard data.</div>
           <button
@@ -244,7 +253,7 @@ export default function ExecutiveDashboard() {
         </Card>
       )}
 
-      {data && (
+      {hasRange && data && (
         <>
           {/* KPI row — EOD / Utilization. Workforce (Total/Active/Inactive Users) and
               Projects (Total/Active/On Hold) tiles were dropped: those counts are already
