@@ -247,7 +247,7 @@ function EodInboxTableRow({ row, index, selected, onClick }: {
 }
 
 export function EodInboxTable({
-  rows, page, onPageChange, selectedClarificationId, onSelect,
+  rows, page, onPageChange, selectedClarificationId, onSelect, pageSize = EOD_INBOX_PAGE_SIZE,
 }: {
   rows: EodInboxRowView[];
   page: number;
@@ -257,9 +257,12 @@ export function EodInboxTable({
    *  clicked, not every row for that entry. */
   selectedClarificationId: number | null;
   onSelect: (clarificationId: number) => void;
+  /** Defaults to EOD_INBOX_PAGE_SIZE — set to override just this call site's page size without
+   *  affecting the other roles' EOD Inbox (Employee, PM) that share this same table. */
+  pageSize?: number;
 }) {
-  const totalPages = Math.max(1, Math.ceil(rows.length / EOD_INBOX_PAGE_SIZE));
-  const pageItems = rows.slice((page - 1) * EOD_INBOX_PAGE_SIZE, page * EOD_INBOX_PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const pageItems = rows.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     // eod-inbox-table establishes a container-query context (see index.css): once the 3-panel
@@ -289,7 +292,7 @@ export function EodInboxTable({
             <EodInboxTableRow
               key={row.item.clarificationId}
               row={row}
-              index={(page - 1) * EOD_INBOX_PAGE_SIZE + i + 1}
+              index={(page - 1) * pageSize + i + 1}
               selected={row.item.clarificationId === selectedClarificationId}
               onClick={() => onSelect(row.item.clarificationId)}
             />
@@ -298,7 +301,7 @@ export function EodInboxTable({
       </div>
 
       <Pagination
-        page={page} totalPages={totalPages} totalItems={rows.length} pageSize={EOD_INBOX_PAGE_SIZE}
+        page={page} totalPages={totalPages} totalItems={rows.length} pageSize={pageSize}
         onPageChange={onPageChange} itemLabel="results"
       />
     </Card>

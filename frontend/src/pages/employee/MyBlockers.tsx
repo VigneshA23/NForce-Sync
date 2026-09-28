@@ -276,7 +276,7 @@ function DetailPanel({ b, onClose }: { b: BlockedTask; onClose: () => void }) {
 
 // ── skeleton / error ──────────────────────────────────────────────────────────────
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 // ── main ───────────────────────────────────────────────────────────────────────────
 

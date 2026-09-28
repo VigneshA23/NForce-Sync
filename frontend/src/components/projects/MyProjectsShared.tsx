@@ -4,7 +4,7 @@ import type { ProjectFullDto } from '../../api/projects';
 import { GlobalLoader } from '../GlobalLoader';
 import { Pagination } from '../Pagination';
 
-const PROJECTS_PAGE_SIZE = 10;
+const PROJECTS_PAGE_SIZE = 7;
 
 // ── Shared "My Projects" building blocks ─────────────────────────────────────────
 // Extracted from pages/lead/MyProjects.tsx so the Employee "My Projects" page (and any
