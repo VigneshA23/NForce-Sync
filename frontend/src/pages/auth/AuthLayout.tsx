@@ -1,6 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { BrandMark } from '../../components/BrandMark';
-import loginBg from '../../assets/login-bg.jpg';
 
 interface AuthLayoutProps {
   leftHeadline?: string;
@@ -21,149 +20,150 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         maxHeight: '100dvh',
         overflow: 'hidden',
         fontFamily: 'Inter, "Segoe UI", sans-serif',
-        backgroundColor: '#04050e',
-        backgroundImage: `url(${loginBg})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
+        backgroundColor: '#07080f',
       }}
     >
-      {/* Dark overlay */}
-      <div aria-hidden="true" style={{
-        position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none',
-        background: 'rgba(4,5,14,0.72)',
-      }} />
-
-      {/* Gradient tint */}
-      <div aria-hidden="true" style={{
-        position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
-        background: [
-          'radial-gradient(ellipse 65% 55% at 15% 30%, rgba(91,33,182,0.24) 0%, transparent 65%)',
-          'radial-gradient(ellipse 50% 45% at 80% 75%, rgba(49,46,129,0.18) 0%, transparent 60%)',
-        ].join(', '),
-      }} />
-
       {/* 60 / 40 grid */}
       <div
         className="nf-auth-outer"
         style={{
-          position: 'relative', zIndex: 2,
+          position: 'relative', zIndex: 1,
           display: 'grid',
           gridTemplateColumns: '60fr 40fr',
           height: '100dvh',
         }}
       >
 
-        {/* ══ LEFT 60% ══ */}
+        {/* ══ LEFT 60% — aurora hero ══ */}
         <div
           className="nf-auth-hero"
           style={{
+            position: 'relative',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            padding: '40px 52px',
+            padding: '44px 56px 36px',
             height: '100dvh',
             overflow: 'hidden',
             boxSizing: 'border-box',
           }}
         >
-          {/* Faint watermark */}
-          <div aria-hidden="true" style={{
-            position: 'absolute', bottom: -8, left: -10,
-            fontSize: 'clamp(100px, 15vw, 200px)',
-            fontWeight: 900, letterSpacing: '-0.06em',
-            color: 'rgba(255,255,255,0.025)',
-            lineHeight: 1, userSelect: 'none', pointerEvents: 'none',
-          }}>
-            SYNC
-          </div>
+          {/* ── Aurora gradient blobs ── */}
+          <div aria-hidden="true" className="nf-aurora-layer" style={{
+            position: 'absolute', inset: 0, zIndex: 0,
+            background: [
+              /* Brand red — top-left */
+              'radial-gradient(ellipse 75% 65% at 18% 18%, rgba(228,55,61,0.55) 0%, transparent 60%)',
+              /* Warm amber — bottom-left */
+              'radial-gradient(ellipse 60% 55% at 8% 85%, rgba(220,100,20,0.40) 0%, transparent 55%)',
+              /* Deep teal — top-right */
+              'radial-gradient(ellipse 65% 55% at 82% 12%, rgba(14,140,120,0.38) 0%, transparent 55%)',
+              /* Sapphire — bottom-right */
+              'radial-gradient(ellipse 70% 60% at 88% 88%, rgba(30,80,200,0.40) 0%, transparent 58%)',
+              /* Center dark base */
+              'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(7,8,15,0.6) 0%, transparent 80%)',
+            ].join(', '),
+          }} />
 
-          {/* Brand */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20, position: 'relative', zIndex: 1 }}>
+          {/* Noise grain overlay for texture */}
+          <svg aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, opacity: 0.055, pointerEvents: 'none' }}>
+            <filter id="nf-grain">
+              <feTurbulence type="fractalNoise" baseFrequency="0.68" numOctaves="3" stitchTiles="stitch" />
+              <feColorMatrix type="saturate" values="0" />
+            </filter>
+            <rect width="100%" height="100%" filter="url(#nf-grain)" />
+          </svg>
+
+          {/* Subtle dot grid */}
+          <div aria-hidden="true" style={{
+            position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none',
+            backgroundImage: 'radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+            maskImage: 'radial-gradient(ellipse 85% 85% at 50% 50%, rgba(0,0,0,0.6) 0%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 85% 85% at 50% 50%, rgba(0,0,0,0.6) 0%, transparent 100%)',
+          }} />
+
+          {/* Brand — top */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18, position: 'relative', zIndex: 10 }}>
             <BrandMark size="lg" />
             <div>
               <div style={{ lineHeight: 1.1 }}>
-                <span style={{ fontWeight: 700, fontSize: 26, letterSpacing: '-0.01em', color: '#fff' }}>
-                  NForce
-                </span>
-                <span style={{ fontWeight: 700, fontSize: 26, letterSpacing: '-0.01em', color: '#B11116', marginLeft: 5 }}>
-                  Sync
-                </span>
+                <span style={{ fontWeight: 700, fontSize: 26, letterSpacing: '-0.02em', color: '#fff' }}>NForce</span>
+                <span style={{ fontWeight: 700, fontSize: 26, letterSpacing: '-0.02em', color: '#E4373D', marginLeft: 5 }}>Sync</span>
               </div>
-              <div style={{
-                fontSize: 10, letterSpacing: '0.28em', textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.52)', marginTop: 7, fontWeight: 400,
-              }}>
+              <div style={{ fontSize: 10, letterSpacing: '0.26em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', marginTop: 6 }}>
                 EOD & Utilization
               </div>
             </div>
           </div>
 
-          {/* Headline */}
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            {/* Eyebrow */}
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-              <span style={{ display: 'inline-block', width: 28, height: 1.5, background: '#E4373D', borderRadius: 1 }} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#E4373D', letterSpacing: '0.2em', textTransform: 'uppercase' }}>
+          {/* Headline — center */}
+          <div style={{ position: 'relative', zIndex: 10 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+              <span style={{ display: 'inline-block', width: 32, height: 2, background: 'linear-gradient(90deg, #E4373D, rgba(228,55,61,0.3))', borderRadius: 2 }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#E4373D', letterSpacing: '0.22em', textTransform: 'uppercase' }}>
                 Enterprise Workforce Platform
               </span>
             </div>
 
-            <div style={{ fontSize: 'clamp(32px, 4.2vw, 58px)', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.05, color: '#fff' }}>
-              Centralized
-            </div>
-            <div style={{ fontSize: 'clamp(32px, 4.2vw, 58px)', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.05 }}>
-              <span style={{ color: '#E4373D' }}>Work</span>
-              <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: 300 }}> &amp; </span>
-              <span style={{ color: '#E4373D' }}>Utilization</span>
-            </div>
-            <div style={{
-              fontSize: 'clamp(32px, 4.2vw, 58px)', fontWeight: 800,
-              letterSpacing: '-0.03em', lineHeight: 1.05, color: '#fff', marginBottom: 28,
-            }}>
-              Management.
-            </div>
+            <h1 style={{ margin: 0, padding: 0, lineHeight: 1.04, letterSpacing: '-0.03em', fontWeight: 800 }}>
+              <span style={{ display: 'block', fontSize: 'clamp(36px, 4.6vw, 64px)', color: '#fff' }}>Centralized</span>
+              <span style={{ display: 'block', fontSize: 'clamp(36px, 4.6vw, 64px)' }}>
+                <span style={{ color: '#E4373D' }}>Work</span>
+                <span style={{ color: 'rgba(255,255,255,0.38)', fontWeight: 300 }}> &amp; </span>
+                <span style={{ color: '#E4373D' }}>Utilization</span>
+              </span>
+              <span style={{ display: 'block', fontSize: 'clamp(36px, 4.6vw, 64px)', color: '#fff' }}>Management.</span>
+            </h1>
 
             <p style={{
-              fontSize: 14, fontWeight: 400, color: 'rgba(255,255,255,0.36)',
-              lineHeight: 1.75, margin: '0 0 24px', maxWidth: 380, letterSpacing: '0.01em',
+              fontSize: 15, fontWeight: 400, color: 'rgba(255,255,255,0.42)',
+              lineHeight: 1.72, margin: '24px 0 0', maxWidth: 400, letterSpacing: '0.01em',
             }}>
-              Track EOD submissions and utilization across your entire team — all in one place.
+              Track EOD submissions and team utilization across your entire organization — all in one place.
             </p>
+          </div>
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {['EOD Reports', 'Utilization Tracking', 'Team Insights'].map((label) => (
+          {/* Feature badges + copyright — bottom */}
+          <div style={{ position: 'relative', zIndex: 10 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+              {[
+                { icon: '✓', label: 'Role-based approvals' },
+                { icon: '✓', label: 'Full audit trail' },
+                { icon: '✓', label: 'Weekend-aware utilization' },
+              ].map(({ icon, label }) => (
                 <span key={label} style={{
-                  fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.38)',
-                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 20, padding: '5px 12px', letterSpacing: '0.04em',
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.60)',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 20, padding: '6px 14px',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
                 }}>
+                  <span style={{ color: '#E4373D', fontWeight: 700, fontSize: 11 }}>{icon}</span>
                   {label}
                 </span>
               ))}
             </div>
-          </div>
-
-          {/* Copyright */}
-          <div style={{
-            position: 'relative', zIndex: 1, paddingTop: 20,
-            borderTop: '1px solid rgba(255,255,255,0.07)',
-          }}>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.04em' }}>
-              © 2026 NForce One · Enterprise Workforce Platform
-            </span>
+            <div style={{ paddingTop: 18, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.04em' }}>
+                © 2026 NForce One · Enterprise Workforce Platform
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* ══ RIGHT 40% — glass panel ══ */}
+        {/* ══ RIGHT 40% — glass login panel ══ */}
         <div
           className="nf-auth-panel"
           style={{
             position: 'relative',
-            background: 'rgba(6, 7, 20, 0.5)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
+            background: 'rgba(7,8,15,0.7)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
             borderLeft: '1px solid rgba(255,255,255,0.08)',
-            boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.06), -24px 0 60px rgba(0,0,0,0.2)',
+            boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.05), -20px 0 60px rgba(0,0,0,0.3)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -174,31 +174,28 @@ export function AuthLayout({ children }: AuthLayoutProps) {
             boxSizing: 'border-box',
           }}
         >
-          {/* Panel texture: gradient + dot grid */}
+          {/* Dot grid texture */}
           <div aria-hidden="true" style={{
             position: 'absolute', inset: 0, pointerEvents: 'none',
-            backgroundImage: [
-              'linear-gradient(155deg, rgba(255,255,255,0.03) 0%, transparent 30%)',
-              'radial-gradient(rgba(255,255,255,0.055) 1px, transparent 1px)',
-            ].join(', '),
-            backgroundSize: 'auto, 24px 24px',
+            backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)',
+            backgroundSize: '24px 24px',
           }} />
 
-          {/* Static depth glow — bottom warmth */}
+          {/* Bottom red warmth */}
           <div aria-hidden="true" style={{
-            position: 'absolute', bottom: '-15%', left: '50%',
+            position: 'absolute', bottom: '-18%', left: '50%',
             transform: 'translateX(-50%)',
-            width: '130%', height: '55%',
+            width: '140%', height: '52%',
             borderRadius: '50%',
-            background: 'radial-gradient(ellipse, rgba(177,17,22,0.16) 0%, rgba(100,10,10,0.05) 50%, transparent 70%)',
-            filter: 'blur(44px)',
+            background: 'radial-gradient(ellipse, rgba(177,17,22,0.13) 0%, transparent 70%)',
+            filter: 'blur(50px)',
             pointerEvents: 'none',
           }} />
 
-          {/* Top accent edge */}
+          {/* Top accent line */}
           <div aria-hidden="true" style={{
             position: 'absolute', top: 0, left: 0, right: 0, height: 1, pointerEvents: 'none',
-            background: 'linear-gradient(90deg, transparent 0%, rgba(228,55,61,0.55) 35%, rgba(228,55,61,0.55) 65%, transparent 100%)',
+            background: 'linear-gradient(90deg, transparent 0%, rgba(228,55,61,0.5) 35%, rgba(228,55,61,0.5) 65%, transparent 100%)',
           }} />
 
           {/* Mobile brand strip */}
@@ -213,11 +210,11 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           >
             <BrandMark size="sm" />
             <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#fff' }}>
-              NForce One
+              NForce Sync
             </span>
           </div>
 
-          {/* Form card — ONLY animation on the page */}
+          {/* Form card */}
           <motion.div
             initial={reduced ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -225,13 +222,13 @@ export function AuthLayout({ children }: AuthLayoutProps) {
             style={{
               position: 'relative', zIndex: 1,
               width: '100%', maxWidth: 420,
-              background: 'rgba(255,255,255,0.045)',
-              border: '1px solid rgba(255,255,255,0.1)',
+              background: 'rgba(12,13,24,0.90)',
+              border: '1px solid rgba(255,255,255,0.10)',
               borderRadius: 20,
               padding: '40px 36px',
               boxShadow: [
-                'inset 0 1px 0 rgba(255,255,255,0.1)',
-                '0 24px 64px rgba(0,0,0,0.4)',
+                'inset 0 1px 0 rgba(255,255,255,0.08)',
+                '0 20px 60px rgba(0,0,0,0.5)',
               ].join(', '),
               animation: reduced ? undefined : 'nf-card-glow 5s ease-in-out infinite 1s',
             }}
@@ -243,11 +240,22 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
       <style>{`
         .nf-auth-root {
-          animation: nf-fadein 0.35s ease-out both;
+          animation: nf-fadein 0.4s ease-out both;
         }
         @keyframes nf-fadein {
           from { opacity: 0; }
           to   { opacity: 1; }
+        }
+
+        /* Aurora slow shift */
+        .nf-aurora-layer {
+          animation: nf-aurora 16s ease-in-out infinite alternate;
+        }
+        @keyframes nf-aurora {
+          0%   { transform: scale(1)    translate(0%,  0%); }
+          30%  { transform: scale(1.06) translate(-2%, 2%); }
+          60%  { transform: scale(0.97) translate(2%, -1%); }
+          100% { transform: scale(1.03) translate(-1%, 1.5%); }
         }
 
         /* ── Input: gradient border wrapper ── */
@@ -290,7 +298,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           100% { background-position: 0%   50%; }
         }
 
-        /* ── Input inner field ── */
+        /* ── Input inner ── */
         .nf-input-inner {
           display: block;
           width: 100%;
@@ -323,31 +331,28 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           color: rgba(228,55,61,0.85) !important;
         }
 
-        /* ── Card border breathing glow ── */
+        /* ── Card border glow ── */
         @keyframes nf-card-glow {
           0%, 100% {
             box-shadow:
-              inset 0 1px 0 rgba(255,255,255,0.10),
-              0 24px 64px rgba(0,0,0,0.40);
+              inset 0 1px 0 rgba(255,255,255,0.08),
+              0 20px 60px rgba(0,0,0,0.50);
           }
           50% {
             box-shadow:
-              inset 0 1px 0 rgba(255,255,255,0.15),
-              0 24px 64px rgba(0,0,0,0.44),
-              0 0 0 1px rgba(228,55,61,0.28),
-              0 0 40px rgba(228,55,61,0.16);
+              inset 0 1px 0 rgba(255,255,255,0.13),
+              0 20px 60px rgba(0,0,0,0.52),
+              0 0 0 1px rgba(228,55,61,0.25),
+              0 0 36px rgba(228,55,61,0.12);
           }
         }
 
-        /* ── Submit button shimmer sweep ── */
+        /* ── Submit button shimmer ── */
         @keyframes nf-shimmer {
           0%   { transform: translateX(-130%) skewX(-18deg); }
           100% { transform: translateX(230%)  skewX(-18deg); }
         }
-        .nf-submit-btn {
-          position: relative;
-          overflow: hidden;
-        }
+        .nf-submit-btn { position: relative; overflow: hidden; }
         .nf-submit-btn::after {
           content: '';
           position: absolute;
@@ -361,7 +366,8 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .nf-auth-root { animation: none; }
+          .nf-auth-root       { animation: none; }
+          .nf-aurora-layer    { animation: none; }
           .nf-input-wrap:focus-within::before { animation: none; }
           .nf-submit-btn::after { display: none; }
         }
