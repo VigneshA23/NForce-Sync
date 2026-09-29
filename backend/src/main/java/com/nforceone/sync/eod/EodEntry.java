@@ -68,6 +68,19 @@ public class EodEntry {
     @Column(columnDefinition = "TEXT")
     private String remarks;
 
+    // Set at draft creation from the submitter's role. Stored so routing survives role changes.
+    // PROJECT_GROUPED is the default for all rows created before V100.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "entry_form", nullable = false, length = 20)
+    private EntryForm entryForm = EntryForm.PROJECT_GROUPED;
+
+    // Non-null only when entryForm = PLAIN_LOG.
+    @Column(name = "log_summary", columnDefinition = "TEXT")
+    private String logSummary;
+
+    @Column(name = "log_total_hours", precision = 5, scale = 2)
+    private BigDecimal logTotalHours;
+
     @Column(name = "submitted_at")
     private OffsetDateTime submittedAt;
 
@@ -85,7 +98,14 @@ public class EodEntry {
         // CHANGES_REQUESTED removed in V44 — REJECTED already returns the entry to the employee
         // for edit and resubmit, so the two were functionally identical. Existing rows were
         // migrated to REJECTED.
-        DRAFT, SUBMITTED, APPROVED, REJECTED, MISSED
+        // PARTIALLY_APPROVED added V98 — some project pieces approved, others still pending.
+        DRAFT, SUBMITTED, APPROVED, PARTIALLY_APPROVED, REJECTED, MISSED
+    }
+
+    // PROJECT_GROUPED: standard employee form, tasks split by project, multi-piece approval.
+    // PLAIN_LOG: simple daily summary for PM/Admin/Reporting Manager, single piece to their RM.
+    public enum EntryForm {
+        PROJECT_GROUPED, PLAIN_LOG
     }
 
     /**

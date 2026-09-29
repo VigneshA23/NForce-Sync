@@ -4,7 +4,7 @@
 **Backup branch:** `backup/pre-role-restructure-2026-09-28` (pushed to origin)
 **DB export:** manual pg_dump taken 2026-09-28 — confirm file exists before Phase 8
 **Source doc:** `docs/NForce_Sync_Approvals_and_Roles_Team_Guide.docx` (v1.0)
-**Status:** Planning complete. Phase 1 not started.
+**Status:** Phase 1 complete (2026-09-28). Phases 2–9 pending.
 
 ---
 

@@ -504,7 +504,7 @@ public class ProjectDashboardService {
         if (entry == null) return true;
         if (isLeaveOnlyEntry(entry, leaveCategoryId)) return false;
         return switch (entry.getStatus()) {
-            case APPROVED, SUBMITTED -> false;
+            case APPROVED, SUBMITTED, PARTIALLY_APPROVED -> false;
             case DRAFT, REJECTED, MISSED -> true;
         };
     }

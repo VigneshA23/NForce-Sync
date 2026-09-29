@@ -532,7 +532,7 @@ public class TeamLeadService {
 
         return switch (entry.getStatus()) {
             case APPROVED -> "SUBMITTED";
-            case SUBMITTED -> "PENDING_APPROVAL";
+            case SUBMITTED, PARTIALLY_APPROVED -> "PENDING_APPROVAL";
             case DRAFT, REJECTED, MISSED -> "MISSING";
         };
     }

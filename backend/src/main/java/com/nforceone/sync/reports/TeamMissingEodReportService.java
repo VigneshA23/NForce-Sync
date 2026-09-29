@@ -290,7 +290,7 @@ public class TeamMissingEodReportService {
     private boolean isMissing(EodEntry entry) {
         if (entry == null) return true;
         return switch (entry.getStatus()) {
-            case APPROVED, SUBMITTED -> false;
+            case APPROVED, SUBMITTED, PARTIALLY_APPROVED -> false;
             case DRAFT, REJECTED, MISSED -> true;
         };
     }
