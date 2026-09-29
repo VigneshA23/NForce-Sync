@@ -252,11 +252,17 @@ public class EodService {
         EodEntry saved = entryRepository.save(entry);
 
         // Route and persist per-project approval pieces (Phase 2).
-        // Only create pieces on first submission (managerId was null before this submit).
-        // On resubmit after rejection, delete old pieces then re-route.
+        // On resubmission after rejection, stamp the current-cycle pieces with superseded_at
+        // rather than deleting them. Their action records (who acted, when, rejection comment)
+        // are preserved as a full audit trail for every past submission cycle.
+        // findByEodEntryId returns current-cycle pieces only (superseded_at IS NULL).
         List<EodProjectApproval> existingPieces = projectApprovalRepository.findByEodEntryId(saved.getId());
         if (!existingPieces.isEmpty()) {
-            projectApprovalRepository.deleteAll(existingPieces);
+            OffsetDateTime supersededAt = saved.getSubmittedAt();
+            for (EodProjectApproval piece : existingPieces) {
+                piece.setSupersededAt(supersededAt);
+            }
+            projectApprovalRepository.saveAll(existingPieces);
         }
         BusinessRuleConfig config = configRepository.findById(BUSINESS_RULE_CONFIG_ID)
                 .orElseThrow(() -> new ResponseStatusException(

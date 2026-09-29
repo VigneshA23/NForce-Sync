@@ -51,6 +51,11 @@ public class EodProjectApproval {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
+    // Null = current-cycle piece. Non-null = superseded at this timestamp when the employee
+    // resubmitted the entry. Matches the app_user.deleted_at soft-delete convention.
+    @Column(name = "superseded_at")
+    private OffsetDateTime supersededAt;
+
     public enum ApproverType {
         LEAD, REPORTING_MANAGER, PM, ADMIN_GROUP, AUTO_APPROVED
     }

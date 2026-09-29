@@ -23,6 +23,11 @@ public class ApprovalPieceController {
         return pieceService.getPendingForActor(actingEmail());
     }
 
+    @GetMapping("/entry/{entryId}/pieces")
+    public List<ApprovalPieceDto> getPiecesForEntry(@PathVariable Long entryId) {
+        return pieceService.getPiecesForEntry(entryId, actingEmail());
+    }
+
     @PostMapping("/pieces/{pieceId}/approve")
     public ApprovalPieceDto approve(@PathVariable Long pieceId,
                                      @RequestBody(required = false) ApprovePieceRequest request) {

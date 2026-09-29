@@ -48,6 +48,31 @@ public class ApprovalPieceService {
         return pieces.stream().map(ApprovalPieceDto::from).toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<ApprovalPieceDto> getPiecesForEntry(Long entryId, String callerEmail) {
+        AppUser caller = requireUserByEmail(callerEmail);
+
+        EodEntry entry = entryRepository.findById(entryId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "EOD entry not found: " + entryId));
+
+        List<EodProjectApproval> pieces = pieceRepository.findByEodEntryIdWithDetails(entryId);
+
+        if (caller.getRole() != AppUser.Role.SUPERADMIN) {
+            boolean isOwner    = caller.getId().equals(entry.getEmployee().getId());
+            boolean isApprover = pieces.stream()
+                    .anyMatch(p -> p.getApprover() != null &&
+                                   p.getApprover().getId().equals(caller.getId()));
+
+            if (!isOwner && !isApprover) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Access denied: not the entry owner, an approver, or a Super Admin");
+            }
+        }
+
+        return pieces.stream().map(ApprovalPieceDto::from).toList();
+    }
+
     public ApprovalPieceDto approve(Long pieceId, String actorEmail, String comment) {
         AppUser actor = requireUserByEmail(actorEmail);
         EodProjectApproval piece = requirePieceById(pieceId);
