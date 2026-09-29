@@ -2,6 +2,10 @@ package com.nforceone.sync.eod;
 
 import com.nforceone.sync.approval.ApprovalAction;
 import com.nforceone.sync.approval.ApprovalActionRepository;
+import com.nforceone.sync.approval2.ApprovalPieceRouter;
+import com.nforceone.sync.approval2.ApprovalPieceSpec;
+import com.nforceone.sync.approval2.EodProjectApproval;
+import com.nforceone.sync.approval2.EodProjectApprovalRepository;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.businessrules.BusinessRuleConfig;
@@ -86,6 +90,8 @@ public class EodService {
     private final com.nforceone.sync.businessrules.HolidayRepository holidayRepository;
     private final EodAttachmentService attachmentService;
     private final com.nforceone.sync.notification.NotificationService notificationService;
+    private final ApprovalPieceRouter approvalPieceRouter;
+    private final EodProjectApprovalRepository projectApprovalRepository;
 
     public EodService(EodEntryRepository entryRepository,
                       EodTaskRepository taskRepository,
@@ -97,7 +103,9 @@ public class EodService {
                       ShiftDefinitionRepository shiftRepository,
                       com.nforceone.sync.businessrules.HolidayRepository holidayRepository,
                       EodAttachmentService attachmentService,
-                      com.nforceone.sync.notification.NotificationService notificationService) {
+                      com.nforceone.sync.notification.NotificationService notificationService,
+                      ApprovalPieceRouter approvalPieceRouter,
+                      EodProjectApprovalRepository projectApprovalRepository) {
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
         this.userRepository    = userRepository;
@@ -109,6 +117,8 @@ public class EodService {
         this.holidayRepository = holidayRepository;
         this.attachmentService = attachmentService;
         this.notificationService = notificationService;
+        this.approvalPieceRouter = approvalPieceRouter;
+        this.projectApprovalRepository = projectApprovalRepository;
     }
 
     public EodEntryDto saveDraft(SaveEodRequest request, String actingEmail) {
@@ -240,6 +250,33 @@ public class EodService {
         }
 
         EodEntry saved = entryRepository.save(entry);
+
+        // Route and persist per-project approval pieces (Phase 2).
+        // Only create pieces on first submission (managerId was null before this submit).
+        // On resubmit after rejection, delete old pieces then re-route.
+        List<EodProjectApproval> existingPieces = projectApprovalRepository.findByEodEntryId(saved.getId());
+        if (!existingPieces.isEmpty()) {
+            projectApprovalRepository.deleteAll(existingPieces);
+        }
+        BusinessRuleConfig config = configRepository.findById(BUSINESS_RULE_CONFIG_ID)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR, "Business rule config missing"));
+        List<ApprovalPieceSpec> specs = approvalPieceRouter.route(saved, config);
+        OffsetDateTime frozenAt = saved.getSubmittedAt();
+        for (ApprovalPieceSpec spec : specs) {
+            EodProjectApproval piece = new EodProjectApproval();
+            piece.setEodEntry(saved);
+            piece.setProject(spec.project());
+            piece.setApprover(spec.approver());
+            piece.setApproverType(spec.approverType());
+            piece.setStatus(spec.status());
+            piece.setFrozenAt(frozenAt);
+            if (spec.status() == EodProjectApproval.Status.APPROVED) {
+                piece.setActedAt(frozenAt);
+            }
+            piece.setCreatedAt(frozenAt);
+            projectApprovalRepository.save(piece);
+        }
 
         // No manager assigned → nobody to notify (matches the rest of the module: an
         // unmanaged employee's entry is only ever actionable by a SUPERADMIN, who works off the
