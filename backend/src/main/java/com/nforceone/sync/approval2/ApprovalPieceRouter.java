@@ -72,10 +72,10 @@ public class ApprovalPieceRouter {
 
     private ApprovalPieceSpec routeProjectPiece(Project project, AppUser employee,
                                                   AppUser reportingManager) {
-        AppUser lead = project.getPm();
+        AppUser lead = project.getLead();
 
         if (lead == null) {
-            return new ApprovalPieceSpec(project, project.getProjectManager(),
+            return new ApprovalPieceSpec(project, project.getPm(),
                     EodProjectApproval.ApproverType.PM,
                     EodProjectApproval.Status.PENDING);
         }

@@ -214,9 +214,9 @@ interface ProjectFormState {
   startDate: string;
   endDate: string;
   /** The project's Team Lead, held as a string because it is bound to a <select>. */
-  pmId: string;
+  leadId: string;
   /** The overseeing PM — what scopes their Approvals queue, dashboard and reports. */
-  projectManagerId: string;
+  pmId: string;
 }
 
 /**
@@ -338,7 +338,7 @@ function dayAfterISO(iso: string): string | undefined {
 
 const EMPTY_PROJECT_FORM: ProjectFormState = {
   code: '', name: '', client: '', projectTypeId: '',
-  status: 'ACTIVE', startDate: todayISO(), endDate: '', pmId: '', projectManagerId: '',
+  status: 'ACTIVE', startDate: todayISO(), endDate: '', leadId: '', pmId: '',
 };
 
 /** Inline validation message shown directly under the field it belongs to. */
@@ -381,8 +381,8 @@ function ProjectModal({ open, onClose, editing }: {
       status: editing.status,
       startDate: editing.startDate ?? '',
       endDate: editing.endDate ?? '',
+      leadId: editing.leadId != null ? String(editing.leadId) : '',
       pmId: editing.pmId != null ? String(editing.pmId) : '',
-      projectManagerId: editing.projectManagerId != null ? String(editing.projectManagerId) : '',
     } : EMPTY_PROJECT_FORM);
     setStartDateInvalid(false);
     setEndDateInvalid(false);
@@ -395,14 +395,14 @@ function ProjectModal({ open, onClose, editing }: {
   // holder as an extra option so editing an unrelated field can't silently reassign the project —
   // the server likewise accepts the unchanged holder.
   const leadOptions = leads ?? [];
-  const currentLeadMissing = editing?.pmId != null
-    && !leadOptions.some(l => l.id === editing.pmId);
+  const currentLeadMissing = editing?.leadId != null
+    && !leadOptions.some(l => l.id === editing.leadId);
 
   // Same grandfathering for the overseeing PM: a deactivated PM stays selectable on projects they
   // already hold, so an unrelated edit can't silently move oversight.
   const managerOptions = projectManagers ?? [];
-  const currentManagerMissing = editing?.projectManagerId != null
-    && !managerOptions.some(m => m.id === editing.projectManagerId);
+  const currentManagerMissing = editing?.pmId != null
+    && !managerOptions.some(m => m.id === editing.pmId);
 
   // Project types come from the Organization Master; a project already on a deactivated one keeps
   // it (option rendered below), matching the server's grandfathering.
@@ -427,8 +427,8 @@ function ProjectModal({ open, onClose, editing }: {
   if (form.name.trim() === '')       fieldErrors.name = 'Name is required.';
   if (form.projectTypeId === '')     fieldErrors.projectTypeId = 'Select a project type.';
   if (showClient && form.client.trim() === '') fieldErrors.client = 'Client name is required for this project type.';
-  if (form.pmId === '')              fieldErrors.pmId = 'Select a team lead.';
-  if (form.projectManagerId === '')  fieldErrors.projectManagerId = 'Select a project manager.';
+  if (form.leadId === '')            fieldErrors.leadId = 'Select a team lead.';
+  if (form.pmId === '')              fieldErrors.pmId = 'Select a project manager.';
   if (form.startDate === '')         fieldErrors.startDate = 'Start date is required.';
   if (badDateOrder)                  fieldErrors.endDate = 'End Date must be after Start Date.';
   else if (endDateRequired && form.endDate === '') fieldErrors.endDate = 'Required when status is Completed.';
@@ -487,8 +487,8 @@ function ProjectModal({ open, onClose, editing }: {
             status: form.status,
             startDate: form.startDate,
             endDate: form.endDate || null,
+            leadId: Number(form.leadId),
             pmId: Number(form.pmId),
-            projectManagerId: Number(form.projectManagerId),
           },
         });
         showToast('success', 'Project updated');
@@ -500,8 +500,8 @@ function ProjectModal({ open, onClose, editing }: {
           projectTypeId: Number(form.projectTypeId),
           startDate: form.startDate,
           endDate: form.endDate || null,
+          leadId: Number(form.leadId),
           pmId: Number(form.pmId),
-          projectManagerId: Number(form.projectManagerId),
         });
         showToast('success', 'Project created');
       }
@@ -594,33 +594,33 @@ function ProjectModal({ open, onClose, editing }: {
         <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
             <label style={labelStyle}>Team Lead *</label>
-            <select style={inputStyle} value={form.pmId}
-              onChange={e => setForm(f => ({ ...f, pmId: e.target.value }))}>
+            <select style={inputStyle} value={form.leadId}
+              onChange={e => setForm(f => ({ ...f, leadId: e.target.value }))}>
               <option value="">Select Team Lead…</option>
               {currentLeadMissing && (
-                <option value={String(editing!.pmId)}>{editing!.pmName} (current)</option>
+                <option value={String(editing!.leadId)}>{editing!.leadName} (current)</option>
               )}
               {leadOptions.map(l => (
                 <option key={l.id} value={l.id}>{l.fullName} ({l.employeeCode})</option>
               ))}
             </select>
-            <FieldError msg={errorFor('pmId')} />
+            <FieldError msg={errorFor('leadId')} />
           </div>
           <div>
             <label style={labelStyle}>Project Manager *</label>
-            <select style={inputStyle} value={form.projectManagerId}
-              onChange={e => setForm(f => ({ ...f, projectManagerId: e.target.value }))}>
+            <select style={inputStyle} value={form.pmId}
+              onChange={e => setForm(f => ({ ...f, pmId: e.target.value }))}>
               <option value="">Select Project Manager…</option>
               {currentManagerMissing && (
-                <option value={String(editing!.projectManagerId)}>
-                  {editing!.projectManagerName} (current)
+                <option value={String(editing!.pmId)}>
+                  {editing!.pmName} (current)
                 </option>
               )}
               {managerOptions.map(m => (
                 <option key={m.id} value={m.id}>{m.fullName} ({m.employeeCode})</option>
               ))}
             </select>
-            <FieldError msg={errorFor('projectManagerId')} />
+            <FieldError msg={errorFor('pmId')} />
           </div>
         </div>
         <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
@@ -721,8 +721,8 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
     return (data ?? []).filter(p =>
       (term === '' || p.name.toLowerCase().includes(term))
       && (statusFilter === '' || p.status === statusFilter)
-      && (leadFilter === '' || String(p.pmId) === leadFilter)
-      && (pmFilter === '' || String(p.projectManagerId) === pmFilter),
+      && (leadFilter === '' || String(p.leadId) === leadFilter)
+      && (pmFilter === '' || String(p.pmId) === pmFilter),
     );
   }, [data, debouncedSearch, statusFilter, leadFilter, pmFilter]);
 
@@ -744,11 +744,11 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
     [filtered, page],
   );
 
-  // Project Manager options, same derivation as leadOptions below but keyed off projectManagerId.
+  // Project Manager options, same derivation as leadOptions below but keyed off pmId.
   const pmOptions = useMemo(() => {
     const byId = new Map<number, string>();
     for (const p of data ?? []) {
-      if (p.projectManagerId != null) byId.set(p.projectManagerId, p.projectManagerName ?? `#${p.projectManagerId}`);
+      if (p.pmId != null) byId.set(p.pmId, p.pmName ?? `#${p.pmId}`);
     }
     return [...byId.entries()]
       .map(([id, name]) => ({ id, name }))
@@ -760,7 +760,7 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
   const leadOptions = useMemo(() => {
     const byId = new Map<number, string>();
     for (const p of data ?? []) {
-      if (p.pmId != null) byId.set(p.pmId, p.pmName ?? `#${p.pmId}`);
+      if (p.leadId != null) byId.set(p.leadId, p.leadName ?? `#${p.leadId}`);
     }
     return [...byId.entries()]
       .map(([id, name]) => ({ id, name }))
@@ -928,7 +928,7 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
                       </span>
                     )}
                   </td>
-                  <td style={tdStyle}>{p.pmName ?? '-'}</td>
+                  <td style={tdStyle}>{p.leadName ?? '-'}</td>
                   <td style={tdStyle}>{p.allocatedHeadcount}</td>
                   <td style={tdStyle}><StatusBadge status={p.status} /></td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
@@ -1029,7 +1029,7 @@ function AllocationModal({ open, onClose, projects }: {
    */
   const allocatableProjects = useMemo(() => {
     if (!selectedEmployee?.managerId) return [];
-    return activeProjects.filter(p => p.pmId === selectedEmployee.managerId);
+    return activeProjects.filter(p => p.leadId === selectedEmployee.managerId);
   }, [activeProjects, selectedEmployee]);
 
   const selectedProject = useMemo(

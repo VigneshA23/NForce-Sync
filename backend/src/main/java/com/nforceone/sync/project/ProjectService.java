@@ -98,8 +98,8 @@ public class ProjectService {
         project.setClient(client);
         project.setProjectType(projectType);
         project.setStatus(Project.Status.ACTIVE);
-        project.setPm(resolveLead(req.pmId(), null));
-        project.setProjectManager(resolveProjectManager(req.projectManagerId(), null));
+        project.setLead(resolveLead(req.leadId(), null));
+        project.setPm(resolvePm(req.pmId(), null));
         project.setStartDate(req.startDate());
         project.setEndDate(req.endDate());
         project.setCreatedAt(OffsetDateTime.now());
@@ -142,8 +142,8 @@ public class ProjectService {
         project.setClient(client);
         project.setProjectType(projectType);
         project.setStatus(status);
-        project.setPm(resolveLead(req.pmId(), project.getPm()));
-        project.setProjectManager(resolveProjectManager(req.projectManagerId(), project.getProjectManager()));
+        project.setLead(resolveLead(req.leadId(), project.getLead()));
+        project.setPm(resolvePm(req.pmId(), project.getPm()));
         project.setStartDate(req.startDate());
         project.setEndDate(req.endDate());
 
@@ -164,8 +164,8 @@ public class ProjectService {
      * SUPERADMIN, and editing an unrelated field on them must not force a reassignment (which would
      * silently move approval authority).
      */
-    private AppUser resolveLead(Long pmId, AppUser currentHolder) {
-        AppUser lead = appUserRepository.findById(pmId)
+    private AppUser resolveLead(Long leadId, AppUser currentHolder) {
+        AppUser lead = appUserRepository.findById(leadId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Team Lead not found"));
 
         boolean unchanged = currentHolder != null && currentHolder.getId().equals(lead.getId());
@@ -192,8 +192,8 @@ public class ProjectService {
      * <p>Grandfathers an unchanged current holder for the same reason {@link #resolveLead} does:
      * editing an unrelated field must not force a reassignment that silently moves oversight.
      */
-    private AppUser resolveProjectManager(Long projectManagerId, AppUser currentHolder) {
-        AppUser manager = appUserRepository.findById(projectManagerId)
+    private AppUser resolvePm(Long pmId, AppUser currentHolder) {
+        AppUser manager = appUserRepository.findById(pmId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Project Manager not found"));
 

@@ -552,11 +552,11 @@ public class ProjectDashboardService {
     private List<Project> scopedProjects(AppUser pm, Long pmId) {
         if (pm.getRole() == AppUser.Role.SUPERADMIN) {
             if (pmId != null) {
-                return projectRepository.findByProjectManagerIdOrderByNameAsc(pmId);
+                return projectRepository.findByPmIdOrderByNameAsc(pmId);
             }
             return projectRepository.findAllWithPmOrderByNameAsc();
         }
-        return projectRepository.findByProjectManagerIdOrderByNameAsc(pm.getId());
+        return projectRepository.findByPmIdOrderByNameAsc(pm.getId());
     }
 
     private BusinessRuleConfig requireConfig() {

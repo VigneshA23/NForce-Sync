@@ -356,8 +356,8 @@ public class EodClarificationService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Project Manager access required");
         }
         List<EodClarification> rows = open
-                ? clarificationRepository.findOpenByProjectManagerId(pm.getId())
-                : clarificationRepository.findResolvedByProjectManagerId(pm.getId());
+                ? clarificationRepository.findOpenByPmId(pm.getId())
+                : clarificationRepository.findResolvedByPmId(pm.getId());
         return enrich(rows, pm.getId());
     }
 

@@ -208,7 +208,7 @@ public class AllocationService {
                             + "allocated. Set their manager first.");
         }
 
-        AppUser teamLead = project.getPm();
+        AppUser teamLead = project.getLead();
         if (teamLead == null || !teamLead.getId().equals(manager.getId())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     project.getCode() + " is not led by this employee's reporting manager ("

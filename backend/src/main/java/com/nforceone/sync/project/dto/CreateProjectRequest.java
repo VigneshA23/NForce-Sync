@@ -19,7 +19,7 @@ public record CreateProjectRequest(
         @NotNull LocalDate startDate,
         LocalDate endDate,
         /** The project's Team Lead, who approves its EOD entries. Must be an active MANAGER. */
-        @NotNull Long pmId,
+        @NotNull Long leadId,
         /** The overseeing PM — scopes their Approvals queue, dashboard and reports. Active PM only. */
-        @NotNull Long projectManagerId
+        @NotNull Long pmId
 ) {}

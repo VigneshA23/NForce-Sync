@@ -72,7 +72,7 @@ public class TeamEodByEmployeeReportService {
         // derived from the team's own allocations, which reflects which projects the lead's
         // direct reports happen to work on rather than which projects this lead is the Team
         // Lead of. Those are two different relationships and can legitimately diverge.
-        List<ProjectOptionDto> projects = projectRepository.findByPmIdOrderByNameAsc(lead.getId())
+        List<ProjectOptionDto> projects = projectRepository.findByLeadIdOrderByNameAsc(lead.getId())
                 .stream()
                 .map(p -> new ProjectOptionDto(p.getId(), p.getName(), p.getClient()))
                 .toList();

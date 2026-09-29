@@ -99,8 +99,8 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
                                                              @Param("from") LocalDate from,
                                                              @Param("to") LocalDate to);
 
-    // Every entry with at least one task on a project this PM oversees (Project.projectManager —
-    // NOT Project.pm, which is the Team Lead who decides entries), at a given
+    // Every entry with at least one task on a project this PM oversees (Project.pm —
+    // NOT Project.lead, which is the Team Lead who decides entries), at a given
     // status — used for BOTH the PM's Pending tab (status=SUBMITTED) and, unlike a Team Lead's
     // decided query, the PM's Approved/Rejected tabs too (status=APPROVED/REJECTED): a PM
     // oversees every team touching their projects, not just the entries they personally acted
@@ -117,11 +117,11 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
         WHERE e.status = :status
           AND EXISTS (
             SELECT 1 FROM EodTask pt
-            WHERE pt.eodEntry = e AND pt.project.projectManager.id = :pmId
+            WHERE pt.eodEntry = e AND pt.project.pm.id = :pmId
           )
         """)
-    List<EodEntry> findByProjectManagerIdAndStatus(@Param("pmId") Long pmId,
-                                                    @Param("status") EodEntry.Status status);
+    List<EodEntry> findByPmIdAndStatus(@Param("pmId") Long pmId,
+                                       @Param("status") EodEntry.Status status);
 
     // A Team Lead's own decided entries — belonging to this manager's direct reports AND
     // decided by this manager personally. Unlike findByProjectManagerIdAndStatus above, this

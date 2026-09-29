@@ -31,11 +31,11 @@ export interface ProjectFullDto {
   projectTypeId: number | null;
   status: 'ACTIVE' | 'INACTIVE' | 'COMPLETED' | 'ON_HOLD';
   /** The Team Lead who approves this project's EOD entries. */
+  leadId: number | null;
+  leadName: string | null;
+  /** The overseeing PM — whose Approvals queue, dashboard and reports this project feeds. */
   pmId: number | null;
   pmName: string | null;
-  /** The overseeing PM — whose Approvals queue, dashboard and reports this project feeds. */
-  projectManagerId: number | null;
-  projectManagerName: string | null;
   startDate: string | null;
   endDate: string | null;
   allocatedHeadcount: number;
@@ -51,9 +51,9 @@ export interface CreateProjectPayload {
   /** Null means the project is ongoing — no fixed end date. */
   endDate?: string | null;
   /** The project's Team Lead. Must be an active MANAGER. */
-  pmId: number;
+  leadId: number;
   /** The overseeing PM. Must be an active PM. */
-  projectManagerId: number;
+  pmId: number;
 }
 
 export interface UpdateProjectPayload {
@@ -66,9 +66,9 @@ export interface UpdateProjectPayload {
   startDate: string;
   endDate?: string | null;
   /** The project's Team Lead. The existing holder may be re-sent even if now out-of-role. */
+  leadId: number;
+  /** The overseeing PM. Same grandfathering as leadId. */
   pmId: number;
-  /** The overseeing PM. Same grandfathering as pmId. */
-  projectManagerId: number;
 }
 
 export interface EmployeeRefDto {
@@ -77,7 +77,7 @@ export interface EmployeeRefDto {
   employeeCode: string;
   /**
    * The employee's reporting manager. A project is only allocatable to them when its Team Lead
-   * (`ProjectFullDto.pmId`) is this person — see the Project filter in AllocationModal.
+   * (`ProjectFullDto.leadId`) is this person — see the Project filter in AllocationModal.
    * `managerName` is display-only, for naming them when no project qualifies. Null when unset.
    */
   managerId: number | null;

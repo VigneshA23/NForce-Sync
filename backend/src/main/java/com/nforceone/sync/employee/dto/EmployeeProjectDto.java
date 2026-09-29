@@ -6,7 +6,7 @@ public record EmployeeProjectDto(
         Long projectId,
         String projectCode,
         String projectName,
-        String pmName,
+        String leadName,
         String projectStatus,
         LocalDate assignedFrom,
         LocalDate assignedTo

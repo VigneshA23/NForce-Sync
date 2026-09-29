@@ -679,7 +679,7 @@ export default function SubmitEOD() {
   const projectLeadMap = useMemo(() => {
     const m = new Map<number, { leadName: string | null; leadId: number | null; pmName: string | null }>();
     for (const p of myProjects) {
-      m.set(p.id, { leadName: p.pmName, leadId: p.pmId, pmName: p.projectManagerName });
+      m.set(p.id, { leadName: p.leadName, leadId: p.leadId, pmName: p.pmName });
     }
     return m;
   }, [myProjects]);

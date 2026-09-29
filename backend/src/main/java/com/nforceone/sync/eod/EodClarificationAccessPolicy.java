@@ -29,7 +29,7 @@ final class EodClarificationAccessPolicy {
         if (actor.getRole() != AppUser.Role.PM) return false;
         return entry.getTasks().stream()
                 .map(EodTask::getProject).filter(Objects::nonNull)
-                .map(Project::getProjectManager).filter(Objects::nonNull)
+                .map(Project::getPm).filter(Objects::nonNull)
                 .anyMatch(pm -> pm.getId().equals(actor.getId()));
     }
 

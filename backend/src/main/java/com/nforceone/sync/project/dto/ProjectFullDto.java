@@ -15,11 +15,11 @@ public record ProjectFullDto(
         Long projectTypeId,
         String status,
         /** The Team Lead who approves this project's EOD entries. */
+        Long leadId,
+        String leadName,
+        /** The overseeing PM, whose Approvals queue and dashboard this project appears in. */
         Long pmId,
         String pmName,
-        /** The overseeing PM, whose Approvals queue and dashboard this project appears in. */
-        Long projectManagerId,
-        String projectManagerName,
         LocalDate startDate,
         LocalDate endDate,
         int allocatedHeadcount
@@ -33,10 +33,10 @@ public record ProjectFullDto(
                 p.getProjectType() != null ? p.getProjectType().getName() : null,
                 p.getProjectType() != null ? p.getProjectType().getId() : null,
                 p.getStatus().name(),
+                p.getLead() != null ? p.getLead().getId() : null,
+                p.getLead() != null ? p.getLead().getFullName() : null,
                 p.getPm() != null ? p.getPm().getId() : null,
                 p.getPm() != null ? p.getPm().getFullName() : null,
-                p.getProjectManager() != null ? p.getProjectManager().getId() : null,
-                p.getProjectManager() != null ? p.getProjectManager().getFullName() : null,
                 p.getStartDate(),
                 p.getEndDate(),
                 allocatedHeadcount);

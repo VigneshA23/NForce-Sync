@@ -67,13 +67,13 @@ public class SearchService {
                     .map(p -> new SearchResultDto.ProjectResult(
                             p.getId(), p.getCode(), p.getName(), p.getStatus().name()))
                     .toList();
-            case PM -> projectRepository.findByProjectManagerIdOrderByNameAsc(actor.getId()).stream()
+            case PM -> projectRepository.findByPmIdOrderByNameAsc(actor.getId()).stream()
                     .filter(p -> matchesProject(p, term))
                     .limit(5)
                     .map(p -> new SearchResultDto.ProjectResult(
                             p.getId(), p.getCode(), p.getName(), p.getStatus().name()))
                     .toList();
-            case MANAGER -> projectRepository.findByPmIdOrderByNameAsc(actor.getId()).stream()
+            case MANAGER -> projectRepository.findByLeadIdOrderByNameAsc(actor.getId()).stream()
                     .filter(p -> matchesProject(p, term))
                     .limit(5)
                     .map(p -> new SearchResultDto.ProjectResult(

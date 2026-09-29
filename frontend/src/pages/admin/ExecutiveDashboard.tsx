@@ -396,7 +396,7 @@ export default function ExecutiveDashboard() {
                     {data.projectsRequiringAttention.map((p: ProjectAttentionDto) => (
                       <tr key={p.projectId} style={{ borderBottom: '1px solid var(--line)' }}>
                         <td style={{ padding: '8px 10px', color: 'var(--txt)' }}>{p.projectName}</td>
-                        <td style={{ padding: '8px 10px', color: 'var(--txt-mut)' }}>{p.projectManagerName ?? '—'}</td>
+                        <td style={{ padding: '8px 10px', color: 'var(--txt-mut)' }}>{p.pmName ?? '—'}</td>
                         <td style={{ padding: '8px 10px', color: 'var(--txt-mut)' }}>{p.status}</td>
                         <td style={{ padding: '8px 10px', color: 'var(--txt-mut)' }}>{p.metric}</td>
                         <td style={{ padding: '8px 10px', color: 'var(--txt-mut)' }}>{p.reason}</td>

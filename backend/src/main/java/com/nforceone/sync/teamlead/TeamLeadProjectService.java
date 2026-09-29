@@ -32,8 +32,8 @@ import java.util.List;
  * Backs the Team Lead "My Projects" module.
  *
  * <p>Projects: a project counts as the Team Lead's own when the Team Lead is that project's
- * assigned Team Lead — {@code Project.pm} — not when the Team Lead merely holds a personal
- * Allocation row on it (see {@link ProjectRepository#findByPmIdOrderByNameAsc}).
+ * assigned Team Lead — {@code Project.lead} — not when the Team Lead merely holds a personal
+ * Allocation row on it (see {@link ProjectRepository#findByLeadIdOrderByNameAsc}).
  *
  * <p>Categories: global, generic master data — every Team Lead sees and can add to the same
  * application-wide list (see V60), independent of project, team, or who created each row.
@@ -72,7 +72,7 @@ public class TeamLeadProjectService {
 
     public List<ProjectFullDto> listMyProjects(String actingEmail, LocalDate onDate, Long teamLeadId) {
         Long targetId = resolveTeamLeadId(actingEmail, teamLeadId);
-        return projectRepository.findByPmIdOrderByNameAsc(targetId)
+        return projectRepository.findByLeadIdOrderByNameAsc(targetId)
                 .stream()
                 .map(p -> ProjectFullDto.from(p, activeAssignedEmployees(p.getId(), onDate).size()))
                 .toList();
@@ -108,8 +108,8 @@ public class TeamLeadProjectService {
     return allocationRepository.findByProjectIdWithRefs(projectId)
             .stream()
             .filter(a -> isActiveOn(a, onDate))
-            .filter(a -> project.getPm() == null
-                    || !a.getEmployee().getId().equals(project.getPm().getId()))
+            .filter(a -> project.getLead() == null
+                    || !a.getEmployee().getId().equals(project.getLead().getId()))
             .map(a -> EmployeeRefDto.from(a.getEmployee()))
             .distinct()
             .toList();
@@ -313,7 +313,7 @@ public class TeamLeadProjectService {
      * details/categories.
      */
     private Project requireProjectAssignedToTeamLead(Long projectId, Long teamLeadId) {
-        return projectRepository.findByPmIdOrderByNameAsc(teamLeadId)
+        return projectRepository.findByLeadIdOrderByNameAsc(teamLeadId)
                 .stream()
                 .filter(p -> p.getId().equals(projectId))
                 .findFirst()

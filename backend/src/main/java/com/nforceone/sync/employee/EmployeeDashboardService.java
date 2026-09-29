@@ -106,7 +106,7 @@ public class EmployeeDashboardService {
                         a.getProject().getId(),
                         a.getProject().getCode(),
                         a.getProject().getName(),
-                        a.getProject().getPm() != null ? a.getProject().getPm().getFullName() : null,
+                        a.getProject().getLead() != null ? a.getProject().getLead().getFullName() : null,
                         a.getProject().getStatus().name(),
                         a.getEffectiveFrom(),
                         a.getEffectiveTo()))

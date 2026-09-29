@@ -38,21 +38,20 @@ public class Project {
     private Status status;
 
     /**
-     * The project's Team Lead — an active MANAGER who approves EOD entries on it. The column keeps
-     * its historical {@code pm_id} name; the role it holds is a Team Lead, not a PM.
+     * The project's Team Lead — an active MANAGER who approves EOD entries on it.
      */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "pm_id")
-    private AppUser pm;
+    @JoinColumn(name = "lead_id")
+    private AppUser lead;
 
     /**
-     * The overseeing Project Manager (V55). Distinct from {@link #pm}: this scopes what a PM sees —
+     * The overseeing Project Manager (V55). Distinct from {@link #lead}: this scopes what a PM sees —
      * their Approvals queue, Project Dashboard, and the EOD-by-employee / Missing-EOD reports —
      * while the Team Lead is who actually decides entries.
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "project_manager_id", nullable = false)
-    private AppUser projectManager;
+    @JoinColumn(name = "pm_id", nullable = false)
+    private AppUser pm;
 
     @Column(name = "start_date")
     private LocalDate startDate;
