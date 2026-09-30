@@ -2,6 +2,7 @@ package com.nforceone.sync.approval2;
 
 import com.nforceone.sync.approval2.dto.ApprovalPieceDto;
 import com.nforceone.sync.approval2.dto.RejectPieceRequest;
+import com.nforceone.sync.eod.dto.EodEntryDto;
 import jakarta.validation.Valid;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +27,11 @@ public class ApprovalPieceController {
     @GetMapping("/entry/{entryId}/pieces")
     public List<ApprovalPieceDto> getPiecesForEntry(@PathVariable Long entryId) {
         return pieceService.getPiecesForEntry(entryId, actingEmail());
+    }
+
+    @GetMapping("/decided-entries")
+    public List<EodEntryDto> getDecidedEntries(@RequestParam String status) {
+        return pieceService.getDecidedEntriesForActor(actingEmail(), status);
     }
 
     @PostMapping("/pieces/{pieceId}/approve")

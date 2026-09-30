@@ -4,11 +4,11 @@ import {
   Search, AlertTriangle, MessageCircleQuestion,
 } from 'lucide-react';
 import {
-  usePendingApprovals, useDecidedApprovals,
+  usePendingApprovals,
   useApprove, useReject, type PendingApprovalsRange,
 } from '../api/approvals';
 import {
-  usePendingPieces, useApprovePiece, useRejectPiece,
+  usePendingPieces, useApprovePiece, useRejectPiece, useDecidedEntriesV2,
   type ApprovalPieceDto,
 } from '../api/approvalPieces';
 import { useOpenClarification, useEodInbox } from '../api/eodClarification';
@@ -207,7 +207,7 @@ type SortMode = 'oldest' | 'latest' | 'hours' | 'name';
 const PAGE_SIZE = 5;
 const PIECES_PAGE_SIZE = 10;
 
-// ── PieceCard — one card per approval piece (v2 pending tab) ──────────────────
+// ── PieceCard — pending piece row, identical structure to EntryRow ─────────────
 
 function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
   const [expanded, setExpanded] = useState(false);
@@ -220,13 +220,15 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
 
   const { data: entry } = useEodEntry(piece.eodEntryId);
   const projectTasks = (entry?.tasks ?? []).filter(t => t.projectId === piece.projectId);
+  const totalHours = projectTasks.reduce((s, t) => s + Number(t.hours ?? 0), 0);
 
   const busy = approvePiece.isPending || rejectPiece.isPending;
+  const padding = '9px 16px';
 
   async function handleApprove() {
     try {
       await approvePiece.mutateAsync({ pieceId: piece.id });
-      show('Piece approved.', 'success');
+      show('Approved.', 'success');
     } catch (err) {
       show(extractError(err), 'error');
     }
@@ -236,7 +238,7 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
     if (!comment.trim()) return;
     try {
       await rejectPiece.mutateAsync({ pieceId: piece.id, comment: comment.trim() });
-      show('Piece rejected.', 'success');
+      show('Rejected.', 'success');
       setRejecting(false);
       setComment('');
     } catch (err) {
@@ -245,45 +247,76 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
   }
 
   return (
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden', marginBottom: 10 }}>
-      {/* Header row */}
-      <div
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer' }}
-        onClick={() => setExpanded(e => !e)}
-      >
+    <div style={{ borderBottom: '1px solid var(--line)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding }}>
+
+        {/* Avatar — identical to EntryRow */}
         <div style={{
-          width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 12, fontWeight: 700,
+          width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
           background: 'var(--raised2)', color: 'var(--txt)', border: '1px solid var(--line2)',
         }}>
           {initials(piece.employeeName)}
         </div>
+
+        {/* Content block — mirrors EntryRow's middle column */}
         <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Name row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--txt)' }}>{piece.employeeName}</span>
             <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{piece.employeeCode}</span>
-            <span style={{ fontSize: 11.5, color: 'var(--txt-mut)' }}>·</span>
-            <span style={{ fontSize: 12, color: 'var(--info)', fontWeight: 600 }}>
-              {piece.projectName ?? 'Other tasks'}
-            </span>
+            {piece.projectName && (
+              <>
+                <span style={{ fontSize: 11.5, color: 'var(--txt-mut)' }}>·</span>
+                <span style={{ fontSize: 12, color: 'var(--info)', fontWeight: 600 }}>{piece.projectName}</span>
+              </>
+            )}
           </div>
-          <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 2 }}>
-            {fmtDate(piece.entryDate)}
-            {' · '}
-            {projectTasks.length} task{projectTasks.length !== 1 ? 's' : ''}
-            {' · '}
-            {projectTasks.reduce((s, t) => s + (t.hours ?? 0), 0).toFixed(1)} hrs
+
+          {/* Meta row — mirrors EntryRow's date/submitted/tasks line */}
+          <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span>{fmtDate(piece.entryDate)}</span>
+            <span>·</span>
+            <span>Submitted {formatRelative(piece.frozenAt)}</span>
+            <span>·</span>
+            <span>{projectTasks.length} task{projectTasks.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {/* Task summary table — identical rows to EntryRow */}
+          {projectTasks.length > 0 && (
+            <div style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)' }}>
+              {projectTasks.map(t => (
+                <div key={t.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '4px 11px', fontSize: 11, color: 'var(--txt-dim)',
+                  borderBottom: '1px solid var(--line)',
+                }}>
+                  <span style={{ color: 'var(--txt)', fontWeight: 600, minWidth: 120, flexShrink: 0 }}>{t.projectCode ?? '—'}</span>
+                  <span style={{ flex: 1 }}>{t.categoryName ?? '—'}</span>
+                  <span style={{ color: 'var(--txt)', fontWeight: 700, minWidth: 36, textAlign: 'right', flexShrink: 0 }}>
+                    {t.hours != null ? `${hrs(Number(t.hours))}h` : '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Chips row — mirrors EntryRow's hours/status chip strip */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 9 }}>
+            <Chip tone="neutral">{hrs(totalHours)}h logged</Chip>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+
+        {/* Right column — Approve/Reject instead of EntryRow's Review button */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
           {!rejecting && (
-            <>
+            <div style={{ display: 'flex', gap: 6 }}>
               <button
-                onClick={e => { e.stopPropagation(); handleApprove(); }}
+                onClick={() => handleApprove()}
                 disabled={busy}
                 style={{
-                  padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+                  padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
                   border: '1px solid rgba(47,182,124,.4)', background: 'rgba(47,182,124,.08)',
                   color: 'var(--ok)', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
                 }}
@@ -291,102 +324,71 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
                 Approve
               </button>
               <button
-                onClick={e => { e.stopPropagation(); setRejecting(true); setExpanded(true); }}
+                onClick={() => { setRejecting(true); setExpanded(true); }}
                 disabled={busy}
                 style={{
-                  padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+                  padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
                   border: '1px solid rgba(228,55,61,.3)', background: 'rgba(228,55,61,.06)',
                   color: 'var(--risk)', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
                 }}
               >
                 Reject
               </button>
-            </>
+            </div>
           )}
-          <ChevronRight
-            size={14}
-            style={{ color: 'var(--txt-dim)', transform: `rotate(${expanded ? 90 : 0}deg)`, transition: 'transform 200ms ease' }}
-            aria-hidden="true"
-          />
+          <button
+            onClick={() => setExpanded(e => !e)}
+            title="View details"
+            style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
+          >
+            {expanded ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
+          </button>
         </div>
       </div>
 
-      {/* Expanded body */}
-      {expanded && (
-        <div style={{ borderTop: '1px solid var(--line)' }}>
-          {/* Task list */}
-          {!entry ? (
-            <div style={{ padding: '12px 16px', color: 'var(--txt-dim)', fontSize: 12 }}>Loading tasks…</div>
-          ) : projectTasks.length === 0 ? (
-            <div style={{ padding: '12px 16px', color: 'var(--txt-dim)', fontSize: 12 }}>No tasks for this project in this entry.</div>
-          ) : (
-            <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {projectTasks.map(task => (
-                <div key={task.id} style={{ background: 'var(--raised)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--line)' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 12.5, color: 'var(--txt)', fontWeight: 500, flex: 1 }}>
-                      {task.description || <em style={{ color: 'var(--txt-dim)' }}>No description</em>}
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      {task.categoryName && <Chip>{task.categoryName}</Chip>}
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--info)' }}>{(task.hours ?? 0).toFixed(1)} hrs</span>
-                    </div>
-                  </div>
-                  {task.taskStatus && task.taskStatus !== 'COMPLETED' && (
-                    <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 4 }}>
-                      {task.taskStatus.replace(/_/g, ' ')}
-                    </div>
-                  )}
-                  {task.blockerReason && (
-                    <div style={{ fontSize: 11, color: 'var(--warn)', marginTop: 4 }}>Blocker: {task.blockerReason}</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Inline reject panel */}
-          {rejecting && (
-            <div style={{ borderTop: '1px solid var(--line)', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <textarea
-                rows={2}
-                placeholder="Rejection reason (required)"
-                value={comment}
-                onChange={e => setComment(e.target.value)}
-                style={{
-                  width: '100%', resize: 'vertical', padding: '8px 10px', boxSizing: 'border-box',
-                  background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 6,
-                  color: 'var(--txt)', fontSize: 12.5, outline: 'none',
-                }}
-              />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={handleReject}
-                  disabled={!comment.trim() || busy}
-                  style={{
-                    padding: '7px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                    border: '1px solid rgba(228,55,61,.4)', background: 'rgba(228,55,61,.12)',
-                    color: 'var(--risk)',
-                    cursor: (!comment.trim() || busy) ? 'not-allowed' : 'pointer',
-                    opacity: (!comment.trim() || busy) ? 0.5 : 1,
-                  }}
-                >
-                  Confirm rejection
-                </button>
-                <button
-                  onClick={() => { setRejecting(false); setComment(''); }}
-                  disabled={busy}
-                  style={{
-                    padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 500,
-                    border: '1px solid var(--line2)', background: 'var(--raised2)',
-                    color: 'var(--txt-dim)', cursor: 'pointer',
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+      {/* Expanded area — rejection form in same zone as EntryRow's AuditTrail */}
+      {expanded && rejecting && (
+        <div style={{ borderTop: '1px solid var(--line)', padding: '12px 16px', background: 'var(--raised)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)' }}>
+            Rejection reason <span style={{ color: 'var(--risk)' }}>*</span>
+          </div>
+          <textarea
+            rows={3}
+            placeholder="Explain why this piece is being rejected…"
+            value={comment}
+            onChange={e => setComment(e.target.value)}
+            style={{
+              width: '100%', resize: 'vertical', padding: '8px 10px', boxSizing: 'border-box',
+              background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6,
+              color: 'var(--txt)', fontSize: 12.5, outline: 'none',
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => { setRejecting(false); setComment(''); }}
+              style={{
+                padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 500,
+                border: '1px solid var(--line2)', background: 'none',
+                color: 'var(--txt-dim)', cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleReject}
+              disabled={!comment.trim() || busy}
+              style={{
+                padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                border: '1px solid rgba(228,55,61,.4)', background: 'rgba(228,55,61,.1)',
+                color: 'var(--risk)',
+                cursor: (!comment.trim() || busy) ? 'not-allowed' : 'pointer',
+                opacity: (!comment.trim() || busy) ? 0.5 : 1,
+              }}
+            >
+              Confirm Reject
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -442,8 +444,8 @@ export default function Approvals() {
   const highlightId = highlightParam ? Number(highlightParam) : null;
 
   const { isError: pendingError, refetch } = usePendingApprovals(true, range);
-  const { data: approved, isPending: approvedLoading } = useDecidedApprovals('APPROVED');
-  const { data: rejected, isPending: rejectedLoading } = useDecidedApprovals('REJECTED');
+  const { data: approved, isPending: approvedLoading } = useDecidedEntriesV2('APPROVED');
+  const { data: rejected, isPending: rejectedLoading } = useDecidedEntriesV2('REJECTED');
   const { data: pendingPieces = [], isPending: piecesLoading } = usePendingPieces();
   const reject = useReject();
   const requestClarification = useOpenClarification();
@@ -737,7 +739,7 @@ export default function Approvals() {
             </div>
           </Card>
         ) : (
-          <>
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
             {piecesPaged.map(piece => <PieceCard key={piece.id} piece={piece} />)}
             {totalPiecePages > 1 && (
               <Pagination
@@ -745,7 +747,7 @@ export default function Approvals() {
                 pageSize={PIECES_PAGE_SIZE} onPageChange={setPage} itemLabel="pieces"
               />
             )}
-          </>
+          </Card>
         )
       ) : isLoading ? (
         <Card>

@@ -38,6 +38,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -257,6 +258,12 @@ public class EodService {
         // are preserved as a full audit trail for every past submission cycle.
         // findByEodEntryId returns current-cycle pieces only (superseded_at IS NULL).
         List<EodProjectApproval> existingPieces = projectApprovalRepository.findByEodEntryId(saved.getId());
+        // Carry forward any project-level approvals from the previous cycle so that the employee
+        // only needs re-approval on the project(s) the reviewer rejected, not all of them.
+        Set<Long> preApprovedProjectIds = existingPieces.stream()
+                .filter(p -> p.getStatus() == EodProjectApproval.Status.APPROVED && p.getProject() != null)
+                .map(p -> p.getProject().getId())
+                .collect(Collectors.toSet());
         if (!existingPieces.isEmpty()) {
             OffsetDateTime supersededAt = saved.getSubmittedAt();
             for (EodProjectApproval piece : existingPieces) {
@@ -275,13 +282,32 @@ public class EodService {
             piece.setProject(spec.project());
             piece.setApprover(spec.approver());
             piece.setApproverType(spec.approverType());
-            piece.setStatus(spec.status());
+            // Reinstate approval for projects the reviewer already signed off on in a prior cycle.
+            boolean wasPreApproved = spec.project() != null
+                    && preApprovedProjectIds.contains(spec.project().getId());
+            EodProjectApproval.Status pieceStatus = wasPreApproved
+                    ? EodProjectApproval.Status.APPROVED : spec.status();
+            piece.setStatus(pieceStatus);
             piece.setFrozenAt(frozenAt);
-            if (spec.status() == EodProjectApproval.Status.APPROVED) {
+            if (pieceStatus == EodProjectApproval.Status.APPROVED) {
                 piece.setActedAt(frozenAt);
             }
             piece.setCreatedAt(frozenAt);
             projectApprovalRepository.save(piece);
+        }
+        // Recalculate entry status — if some pieces carried over as APPROVED and others remain
+        // PENDING, the entry should reflect PARTIALLY_APPROVED rather than staying SUBMITTED.
+        if (!preApprovedProjectIds.isEmpty()) {
+            List<EodProjectApproval> newPieces = projectApprovalRepository.findByEodEntryId(saved.getId());
+            boolean allApproved = newPieces.stream().allMatch(p -> p.getStatus() == EodProjectApproval.Status.APPROVED);
+            boolean anyApproved = newPieces.stream().anyMatch(p -> p.getStatus() == EodProjectApproval.Status.APPROVED);
+            boolean anyPending  = newPieces.stream().anyMatch(p -> p.getStatus() == EodProjectApproval.Status.PENDING);
+            if (allApproved) {
+                saved.setStatus(EodEntry.Status.APPROVED);
+            } else if (anyApproved && anyPending) {
+                saved.setStatus(EodEntry.Status.PARTIALLY_APPROVED);
+            }
+            entryRepository.save(saved);
         }
 
         // No manager assigned → nobody to notify (matches the rest of the module: an

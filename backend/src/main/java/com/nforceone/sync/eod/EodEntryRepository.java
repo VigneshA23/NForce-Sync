@@ -154,6 +154,25 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
         """)
     List<EodEntry> findAllByStatus(@Param("status") EodEntry.Status status);
 
+    // Entries where a given approver has a non-superseded piece at the given status — backs the
+    // v2 Approved/Rejected tabs so Team Leads see their decided work without requiring a legacy
+    // ApprovalAction record (which the v2 piece flow never writes).
+    @Query("""
+        SELECT DISTINCT e FROM EodEntry e
+        JOIN FETCH e.employee emp
+        LEFT JOIN FETCH e.tasks t
+        LEFT JOIN FETCH t.project
+        LEFT JOIN FETCH t.taskCategory
+        WHERE EXISTS (
+            SELECT 1 FROM EodProjectApproval p
+            WHERE p.eodEntry = e AND p.approver.id = :approverId
+            AND p.status = :status AND p.supersededAt IS NULL
+        )
+        ORDER BY e.entryDate DESC
+        """)
+    List<EodEntry> findByApproverPieceStatus(@Param("approverId") Long approverId,
+                                              @Param("status") com.nforceone.sync.approval2.EodProjectApproval.Status status);
+
     /**
      * Time-adjustment MINUTES spent inside a date window, for the monthly budget check.
      *

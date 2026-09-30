@@ -5,6 +5,7 @@ import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
+import com.nforceone.sync.eod.dto.EodEntryDto;
 import com.nforceone.sync.utilization.UtilizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -71,6 +72,14 @@ public class ApprovalPieceService {
         }
 
         return pieces.stream().map(ApprovalPieceDto::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<EodEntryDto> getDecidedEntriesForActor(String actorEmail, String statusName) {
+        AppUser actor = requireUserByEmail(actorEmail);
+        EodProjectApproval.Status status = EodProjectApproval.Status.valueOf(statusName);
+        List<EodEntry> entries = entryRepository.findByApproverPieceStatus(actor.getId(), status);
+        return entries.stream().map(EodEntryDto::from).toList();
     }
 
     public ApprovalPieceDto approve(Long pieceId, String actorEmail, String comment) {

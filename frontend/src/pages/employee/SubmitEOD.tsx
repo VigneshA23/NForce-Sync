@@ -42,6 +42,12 @@ const WORK_LOCATIONS = ['Office', 'Remote', 'Client Site', 'Field'];
 /** Category name, renamed from 'Leave / Holiday' in V35 — Holiday is a day type now. */
 const LEAVE = 'Leave';
 
+const GROUP_PIECE_STATUS_CFG: Record<string, { color: string; label: string; Icon: typeof CheckCircle }> = {
+  APPROVED: { color: '#2FB67C', label: 'Approved', Icon: CheckCircle },
+  REJECTED: { color: '#E4373D', label: 'Rejected', Icon: XCircle },
+  PENDING:  { color: '#9BA1AC', label: 'Pending',  Icon: Clock },
+};
+
 /**
  * Cap on every free-text field on this form (description, blocker reason, next-day plan,
  * remarks). Mirrored by @Size(max = 300) on SaveEodRequest/SaveEodTaskRequest, so the API
@@ -569,7 +575,10 @@ export default function SubmitEOD() {
   });
 
   const { data: myProjects = [] } = useMyEmployeeProjects(selectedDate);
-  const { data: entryPieces = [] } = useEntryPieces(entryStatus === 'REJECTED' ? entryId : null);
+  const { data: entryPieces = [] } = useEntryPieces(
+    entryStatus === 'SUBMITTED' || entryStatus === 'PARTIALLY_APPROVED' || entryStatus === 'REJECTED'
+      ? entryId : null,
+  );
 
   // The error list renders above the form, so pressing Submit from the bottom of a long task list
   // showed nothing at all until you scrolled up. Bring it into view instead. Same scrollIntoView
@@ -661,11 +670,7 @@ export default function SubmitEOD() {
 
   const isReadOnly   = entryStatus === 'SUBMITTED' || entryStatus === 'APPROVED' || entryStatus === 'MISSED' || entryStatus === 'PARTIALLY_APPROVED';
   const isEditable   = !isReadOnly;
-  // Correction flow: the employee must fix THIS day's report. Re-dating it would leave the
-  // flagged entry untouched and write a different day instead, so the date is pinned while
-  // the rest of the form stays editable. Kept separate from isReadOnly, whose dates must stay
-  // navigable.
-  const isDateLocked = entryStatus === 'REJECTED';
+  const isDateLocked = false;
   // A submitted entry is already fully locked by isReadOnly above (isEditable() on the backend
   // only allows DRAFT/REJECTED) — a TL-requested clarification doesn't change that, it's purely
   // an explanatory reason shown on top of the existing "submitted, awaiting review" lock.
@@ -1559,8 +1564,10 @@ export default function SubmitEOD() {
                   )}
                   {projectGroups.map(group => {
                     const groupTasks = tasks.filter(t => t.projectId === group.projectId);
-                    const groupApproved = entryStatus === 'REJECTED' && group.projectId != null && approvedProjectIds.has(group.projectId);
+                    const groupApproved = (entryStatus === 'REJECTED' || entryStatus === 'PARTIALLY_APPROVED') && group.projectId != null && approvedProjectIds.has(group.projectId);
                     const groupIsReadOnly = isReadOnly || groupApproved;
+                    const groupPiece = entryPieces.find(p => p.projectId === group.projectId) ?? null;
+                    const pieceCfg = groupPiece ? (GROUP_PIECE_STATUS_CFG[groupPiece.status] ?? GROUP_PIECE_STATUS_CFG.PENDING) : null;
                     return (
                       <div key={group.projectId ?? '__none__'} style={{ border: '1px solid var(--line2)', borderRadius: 10, overflow: 'hidden' }}>
                         {/* Group header */}
@@ -1580,11 +1587,39 @@ export default function SubmitEOD() {
                                 : `${group.projectCode ?? ''}${group.projectCode && group.projectName ? ' · ' : ''}${group.projectName ?? 'Project'}`}
                             </span>
                           </div>
-                          <div style={{ fontSize: 11, color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                            <Clock size={11} aria-hidden />
-                            <span>Reviewed by: {group.reviewerLabel}</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
+                            <div style={{ fontSize: 11, color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Clock size={11} aria-hidden />
+                              <span>Reviewed by: {group.reviewerLabel}</span>
+                            </div>
+                            {pieceCfg && (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                padding: '2px 8px', borderRadius: 20,
+                                background: `${pieceCfg.color}18`, border: `1px solid ${pieceCfg.color}40`,
+                                fontSize: 11, fontWeight: 500, color: pieceCfg.color,
+                              }}>
+                                <pieceCfg.Icon size={10} aria-hidden />
+                                {pieceCfg.label}
+                              </span>
+                            )}
                           </div>
                         </div>
+
+                        {/* Rejection reason strip */}
+                        {groupPiece?.status === 'REJECTED' && groupPiece?.comment && (
+                          <div style={{
+                            padding: '7px 14px',
+                            background: 'rgba(228,55,61,.06)',
+                            borderBottom: '1px solid rgba(228,55,61,.2)',
+                            display: 'flex', alignItems: 'flex-start', gap: 7,
+                          }}>
+                            <MessageCircleQuestion size={13} style={{ color: '#E4373D', flexShrink: 0, marginTop: 1 }} aria-hidden />
+                            <span style={{ fontSize: 12, color: '#E4373D', lineHeight: 1.45 }}>
+                              <strong>Reason: </strong>{groupPiece.comment}
+                            </span>
+                          </div>
+                        )}
 
                         {/* Tasks in group */}
                         {groupTasks.length > 0 && (
