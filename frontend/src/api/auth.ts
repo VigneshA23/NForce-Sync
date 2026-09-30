@@ -13,6 +13,13 @@ const BACKEND_ROLE_MAP: Record<string, Role> = {
   ADMIN:      'admin',
 };
 
+export interface ServerUserCapabilities {
+  leadsProjectIds: number[];
+  leadsProjectNames: string[];
+  managesProjectIds: number[];
+  managesProjectNames: string[];
+}
+
 export interface ServerUser {
   id: number;
   fullName: string;
@@ -21,6 +28,7 @@ export interface ServerUser {
   employeeCode: string;
   status: string;
   mustChangePassword: boolean;
+  capabilities: ServerUserCapabilities;
 }
 
 export function toRole(serverRole: string): Role {
