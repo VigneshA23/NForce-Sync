@@ -1,5 +1,6 @@
 package com.nforceone.sync.project;
 
+import com.nforceone.sync.approval2.EodProjectApprovalRepository;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.org.ProjectType;
@@ -26,15 +27,18 @@ public class ProjectService {
     private final AllocationRepository allocationRepository;
     private final AppUserRepository appUserRepository;
     private final ProjectTypeRepository projectTypeRepository;
+    private final EodProjectApprovalRepository pieceRepository;
 
     public ProjectService(ProjectRepository projectRepository,
                           AllocationRepository allocationRepository,
                           AppUserRepository appUserRepository,
-                          ProjectTypeRepository projectTypeRepository) {
+                          ProjectTypeRepository projectTypeRepository,
+                          EodProjectApprovalRepository pieceRepository) {
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
         this.appUserRepository = appUserRepository;
         this.projectTypeRepository = projectTypeRepository;
+        this.pieceRepository = pieceRepository;
     }
 
     /**
@@ -44,10 +48,6 @@ public class ProjectService {
      */
     @Transactional(readOnly = true)
     public List<ProjectDto> listMine(String actingEmail, LocalDate onDate) {
-        // Deleted-aware lookup, per the convention documented on AppUserRepository: an email can
-        // be reused after a soft delete, so findByEmail can match several rows and blow up an
-        // Optional query with IncorrectResultSizeDataAccessException (a 500 on this endpoint,
-        // which the EOD screen shows as an empty Project dropdown).
         AppUser actor = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
@@ -77,6 +77,18 @@ public class ProjectService {
         return appUserRepository
                 .findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
                         List.of(AppUser.Role.MANAGER), AppUser.Status.ACTIVE)
+                .stream()
+                .map(EmployeeRefDto::from)
+                .toList();
+    }
+
+    /** Users assignable as a project's overseeing PM: PM, Admin, and Super Admin accounts. */
+    @Transactional(readOnly = true)
+    public List<EmployeeRefDto> listAssignableProjectManagers() {
+        return appUserRepository
+                .findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
+                        List.of(AppUser.Role.PM, AppUser.Role.ADMIN, AppUser.Role.SUPERADMIN),
+                        AppUser.Status.ACTIVE)
                 .stream()
                 .map(EmployeeRefDto::from)
                 .toList();
@@ -119,8 +131,6 @@ public class ProjectService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status: " + req.status());
         }
 
-        // Code is editable, but must stay unique. Excluding this project from the check is what
-        // lets an unrelated edit re-send the unchanged code without tripping a false clash.
         if (projectRepository.existsByCodeAndIdNot(req.code(), id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A project with this code already exists");
@@ -130,11 +140,20 @@ public class ProjectService {
         String client = resolveClient(projectType, req.client());
         requireDateOrder(req.startDate(), req.endDate());
 
-        // A completed project must say when it finished. Only reachable on update — create()
-        // always starts a project ACTIVE.
         if (status == Project.Status.COMPLETED && req.endDate() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "End Date is required when status is Completed");
+        }
+
+        // Block closing a project while any EOD pieces are still awaiting approval.
+        if ((status == Project.Status.COMPLETED || status == Project.Status.INACTIVE)
+                && project.getStatus() != status) {
+            long pending = pieceRepository.countPendingByProjectId(id);
+            if (pending > 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Cannot close this project: " + pending + " pending EOD approval"
+                        + (pending == 1 ? "" : "s") + " must be resolved first.");
+            }
         }
 
         project.setCode(req.code());
@@ -152,17 +171,54 @@ public class ProjectService {
     }
 
     /**
-     * Resolves the project's Team Lead, which must be an active MANAGER — see listAssignableLeads
-     * for why a PM is not eligible.
-     *
-     * <p>This field is not merely a label: whoever holds it may approve EOD entries on the project
-     * (see {@code ApprovalService.checkManagerAuthorization}) and it scopes their Approvals queue,
-     * Project Dashboard and reports. So an out-of-role assignment is rejected.
-     *
-     * <p>{@code currentHolder} is the project's existing TL on update, and null on create. Re-sending
-     * the current holder unchanged is always allowed — several seeded projects are owned by a
-     * SUPERADMIN, and editing an unrelated field on them must not force a reassignment (which would
-     * silently move approval authority).
+     * Assigns a new Team Lead to a project via the explicit lead-assignment endpoint.
+     * Three-rule validation (Phase 6):
+     *   1. Candidate's role must currently be MANAGER.
+     *   2. Candidate must not already be this project's PM.
+     *   3. Candidate must have an active allocation on this project today.
+     * Each rule returns a specific 400 naming the failure.
+     */
+    public ProjectFullDto assignLead(Long projectId, Long leadId) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
+        AppUser candidate = appUserRepository.findById(leadId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "User not found: " + leadId));
+
+        if (candidate.getRole() != AppUser.Role.MANAGER) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    candidate.getFullName() + " is not a Team Lead (MANAGER role required for this phase).");
+        }
+
+        if (project.getPm() != null && project.getPm().getId().equals(leadId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    candidate.getFullName() + " is already this project's PM and cannot also be its Team Lead.");
+        }
+
+        long active = allocationRepository.countActiveByEmployeeIdAndProjectId(leadId, projectId, LocalDate.now());
+        if (active == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    candidate.getFullName() + " is not actively allocated to this project. "
+                    + "Allocate them first, then assign as Team Lead.");
+        }
+
+        project.setLead(candidate);
+        Project saved = projectRepository.save(project);
+        return ProjectFullDto.from(saved, (int) allocationRepository.countByProjectIdAndEmployeeRole(saved.getId(), AppUser.Role.EMPLOYEE));
+    }
+
+    /** Clears the Team Lead; the project falls back to PM-as-approver per existing routing. */
+    public ProjectFullDto clearLead(Long projectId) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
+        project.setLead(null);
+        Project saved = projectRepository.save(project);
+        return ProjectFullDto.from(saved, (int) allocationRepository.countByProjectIdAndEmployeeRole(saved.getId(), AppUser.Role.EMPLOYEE));
+    }
+
+    /**
+     * Resolves the project's Team Lead, which must be an active MANAGER.
+     * Grandfathers an unchanged current holder so editing an unrelated field cannot force reassignment.
      */
     private AppUser resolveLead(Long leadId, AppUser currentHolder) {
         AppUser lead = appUserRepository.findById(leadId)
@@ -185,12 +241,8 @@ public class ProjectService {
     }
 
     /**
-     * Resolves the overseeing Project Manager (V55). This is not the approver — the Team Lead is —
-     * but it decides whose Approvals queue, Project Dashboard and reports the project appears in,
-     * so an out-of-role assignment is rejected.
-     *
-     * <p>Grandfathers an unchanged current holder for the same reason {@link #resolveLead} does:
-     * editing an unrelated field must not force a reassignment that silently moves oversight.
+     * Resolves the overseeing Project Manager. PM, Admin, and Super Admin may all oversee a project.
+     * Grandfathers an unchanged current holder so an unrelated edit cannot silently move oversight.
      */
     private AppUser resolvePm(Long pmId, AppUser currentHolder) {
         AppUser manager = appUserRepository.findById(pmId)
@@ -204,31 +256,15 @@ public class ProjectService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Project Manager must be an active user");
         }
-        if (manager.getRole() != AppUser.Role.PM) {
+        if (manager.getRole() != AppUser.Role.PM
+                && manager.getRole() != AppUser.Role.ADMIN
+                && manager.getRole() != AppUser.Role.SUPERADMIN) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Only a Project Manager can oversee a project");
+                    "Only a PM, Admin, or Super Admin can oversee a project");
         }
         return manager;
     }
 
-    /** Users assignable as a project's overseeing PM: active PM accounts. */
-    @Transactional(readOnly = true)
-    public List<EmployeeRefDto> listAssignableProjectManagers() {
-        return appUserRepository
-                .findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
-                        List.of(AppUser.Role.PM), AppUser.Status.ACTIVE)
-                .stream()
-                .map(EmployeeRefDto::from)
-                .toList();
-    }
-
-    /**
-     * Resolves the project type from the Organization Master (V51). Mandatory — the column is NOT NULL.
-     *
-     * <p>An inactive type can't be newly assigned, but {@code current} — the project's existing type
-     * on update — passes through, so deactivating a type doesn't block edits to projects already on
-     * it. Same grandfathering as {@link #resolveLead}.
-     */
     private ProjectType resolveProjectType(Long projectTypeId, ProjectType current) {
         if (current != null && current.getId().equals(projectTypeId)) {
             return current;
@@ -243,14 +279,6 @@ public class ProjectService {
         return type;
     }
 
-    /**
-     * The client name to store, decided by the type's {@code requiresClient} flag rather than a
-     * hardcoded "CLIENT" — so renaming or adding a type can't silently change the rule.
-     *
-     * <p>A type that doesn't require a client never stores one: returning null clears a stale name
-     * when a client project is switched to another type, so a value hidden in the UI is never
-     * silently retained.
-     */
     private String resolveClient(ProjectType type, String client) {
         if (!type.isRequiresClient()) {
             return null;
@@ -262,10 +290,6 @@ public class ProjectService {
         return client.trim();
     }
 
-    /**
-     * A null end date means the project is ongoing. A present one must fall strictly after the
-     * start — a project cannot begin and end on the same day.
-     */
     private void requireDateOrder(LocalDate startDate, LocalDate endDate) {
         if (endDate != null && !endDate.isAfter(startDate)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

@@ -145,4 +145,10 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
          + "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :date)")
     Set<Long> findEmployeeIdsAllocatedOn(@Param("employeeIds") List<Long> employeeIds,
                                          @Param("date") LocalDate date);
+
+    @Query("SELECT COUNT(a) FROM Allocation a WHERE a.employee.id = :userId AND a.project.id = :projectId " +
+           "AND a.effectiveFrom <= :today AND (a.effectiveTo IS NULL OR a.effectiveTo >= :today)")
+    long countActiveByEmployeeIdAndProjectId(@Param("userId") Long userId,
+                                              @Param("projectId") Long projectId,
+                                              @Param("today") LocalDate today);
 }

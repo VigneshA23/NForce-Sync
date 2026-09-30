@@ -250,6 +250,7 @@ export const NAV: Record<Role, RoleNav> = {
       items: [
         { key: 'admin-dash',     label: 'Admin Dashboard',      path: '/admin/dashboard',    icon: LayoutDashboard },
         { key: 'user-mgmt',      label: 'User Management',      path: '/admin/users',        icon: Users },
+        { key: 'admin-projects', label: 'Projects & Allocation', path: '/admin/projects',   icon: FolderKanban },
         { key: 'org-masters',    label: 'Organization Masters', path: '/admin/org-masters',  icon: Building2 },
         { key: 'business-rules', label: 'Business Rules',       path: '/admin/rules',        icon: Settings },
         { key: 'role-mgmt',      label: 'Roles & Access',       path: '/admin/roles',        icon: Lock },

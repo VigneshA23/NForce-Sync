@@ -349,6 +349,94 @@ function FieldError({ msg }: { msg?: string }) {
   );
 }
 
+/**
+ * Combobox that filters a list of options by free-text search. Replaces plain <select> where
+ * the list is long enough that scrolling is impractical (leads, managers, employees).
+ */
+function SearchableSelect({ value, onChange, options, placeholder, autoFocus }: {
+  value: string;
+  onChange: (id: string) => void;
+  options: Array<{ id: number | string; label: string }>;
+  placeholder?: string;
+  autoFocus?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const selected = options.find(o => String(o.id) === value);
+  const displayValue = open ? query : (selected?.label ?? '');
+
+  const filtered = useMemo(() => {
+    if (!query) return options;
+    const q = query.toLowerCase();
+    return options.filter(o => o.label.toLowerCase().includes(q));
+  }, [options, query]);
+
+  function handleFocus() {
+    setOpen(true);
+    setQuery('');
+  }
+
+  function handleBlur() {
+    setTimeout(() => setOpen(false), 120);
+  }
+
+  function handleSelect(id: string) {
+    onChange(id);
+    setQuery('');
+    setOpen(false);
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        style={inputStyle}
+        value={displayValue}
+        onChange={e => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        autoFocus={autoFocus}
+        placeholder={placeholder}
+        autoComplete="off"
+      />
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1000,
+          background: 'var(--panel)', border: '1px solid var(--line2)',
+          borderRadius: 6, marginTop: 2, maxHeight: 200, overflowY: 'auto',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+        }}>
+          {filtered.length > 0 ? filtered.map(o => (
+            <div
+              key={o.id}
+              onMouseDown={e => { e.preventDefault(); handleSelect(String(o.id)); }}
+              style={{
+                padding: '8px 12px', fontSize: 13, cursor: 'pointer',
+                color: String(o.id) === value ? 'var(--brand)' : 'var(--txt)',
+                background: String(o.id) === value
+                  ? 'color-mix(in srgb, var(--brand) 10%, transparent)'
+                  : 'transparent',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--raised)'; }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = String(o.id) === value
+                  ? 'color-mix(in srgb, var(--brand) 10%, transparent)'
+                  : 'transparent';
+              }}
+            >
+              {o.label}
+            </div>
+          )) : (
+            <div style={{ padding: '8px 12px', fontSize: 13, color: 'var(--txt-dim)' }}>
+              No matches
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProjectModal({ open, onClose, editing }: {
   open: boolean; onClose: () => void; editing: ProjectFullDto | null;
 }) {
@@ -594,32 +682,28 @@ function ProjectModal({ open, onClose, editing }: {
         <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
             <label style={labelStyle}>Team Lead *</label>
-            <select style={inputStyle} value={form.leadId}
-              onChange={e => setForm(f => ({ ...f, leadId: e.target.value }))}>
-              <option value="">Select Team Lead…</option>
-              {currentLeadMissing && (
-                <option value={String(editing!.leadId)}>{editing!.leadName} (current)</option>
-              )}
-              {leadOptions.map(l => (
-                <option key={l.id} value={l.id}>{l.fullName} ({l.employeeCode})</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={form.leadId}
+              onChange={id => setForm(f => ({ ...f, leadId: id }))}
+              options={[
+                ...(currentLeadMissing ? [{ id: editing!.leadId!, label: `${editing!.leadName} (current)` }] : []),
+                ...leadOptions.map(l => ({ id: l.id, label: `${l.fullName} (${l.employeeCode})` })),
+              ]}
+              placeholder="Select Team Lead…"
+            />
             <FieldError msg={errorFor('leadId')} />
           </div>
           <div>
             <label style={labelStyle}>Project Manager *</label>
-            <select style={inputStyle} value={form.pmId}
-              onChange={e => setForm(f => ({ ...f, pmId: e.target.value }))}>
-              <option value="">Select Project Manager…</option>
-              {currentManagerMissing && (
-                <option value={String(editing!.pmId)}>
-                  {editing!.pmName} (current)
-                </option>
-              )}
-              {managerOptions.map(m => (
-                <option key={m.id} value={m.id}>{m.fullName} ({m.employeeCode})</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={form.pmId}
+              onChange={id => setForm(f => ({ ...f, pmId: id }))}
+              options={[
+                ...(currentManagerMissing ? [{ id: editing!.pmId!, label: `${editing!.pmName} (current)` }] : []),
+                ...managerOptions.map(m => ({ id: m.id, label: `${m.fullName} (${m.employeeCode})` })),
+              ]}
+              placeholder="Select Project Manager…"
+            />
             <FieldError msg={errorFor('pmId')} />
           </div>
         </div>
@@ -1103,17 +1187,13 @@ function AllocationModal({ open, onClose, projects }: {
           {/* Changing the employee clears the project: the list below is scoped to the employee's
               manager, so a project picked for the previous one would otherwise stay selected and
               be submittable — exactly the cross-team allocation this is meant to prevent. */}
-          <select
-            style={inputStyle}
+          <SearchableSelect
             value={employeeId}
-            onChange={e => { setEmployeeId(e.target.value); setProjectId(''); }}
+            onChange={id => { setEmployeeId(id); setProjectId(''); }}
+            options={(employees ?? []).map(emp => ({ id: emp.id, label: `${emp.fullName} (${emp.employeeCode})` }))}
+            placeholder="Select employee…"
             autoFocus
-          >
-            <option value="">Select employee…</option>
-            {employees?.map(emp => (
-              <option key={emp.id} value={emp.id}>{emp.fullName} ({emp.employeeCode})</option>
-            ))}
-          </select>
+          />
         </div>
 
         <div style={{ marginBottom: 14 }}>

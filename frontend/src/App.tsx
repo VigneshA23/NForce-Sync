@@ -91,6 +91,7 @@ function ChunkPrefetcher() {
     } else if (user.role === 'admin') {
       import('./pages/admin/Dashboard');
       import('./pages/admin/UserManagement');
+      import('./pages/pm/ProjectsAllocation');
       import('./pages/admin/AuditLog');
       import('./pages/admin/RolesAccess');
       import('./pages/admin/OrganizationMasters');
@@ -206,7 +207,7 @@ function AppRoutes() {
 
             {/* ── Project Manager ────────────────────── */}
             <Route path="/projects/dashboard"      element={<ProjectDashboard />} />
-            <Route path="/projects"                element={<ProjectsAllocation />} />
+            <Route path="/projects"                element={<ProjectsAllocation readOnly={true} />} />
             <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
             <Route path="/projects/utilization"     element={<ProjectsUtilization />} />
             <Route path="/projects/blockers"       element={<PmBlockers />} />
@@ -237,6 +238,7 @@ function AppRoutes() {
             {/* ── Admin (user administration) ───────── */}
             <Route path="/admin/dashboard"    element={<AdminDashboard />} />
             <Route path="/admin/users"        element={<UserManagement />} />
+            <Route path="/admin/projects"     element={<ProjectsAllocation />} />
             <Route path="/admin/roles"        element={<RolesAccess />} />
             <Route path="/admin/audit"        element={<AuditLog />} />
 

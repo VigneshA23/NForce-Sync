@@ -56,4 +56,8 @@ public interface EodProjectApprovalRepository extends JpaRepository<EodProjectAp
            "AND p.status = :status AND p.supersededAt IS NULL")
     List<EodProjectApproval> findByProjectIdAndStatus(@Param("projectId") Long projectId,
                                                        @Param("status") EodProjectApproval.Status status);
+
+    @Query("SELECT COUNT(p) FROM EodProjectApproval p WHERE p.project.id = :projectId " +
+           "AND p.status = 'PENDING' AND p.supersededAt IS NULL")
+    long countPendingByProjectId(@Param("projectId") Long projectId);
 }
