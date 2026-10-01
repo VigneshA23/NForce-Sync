@@ -480,6 +480,15 @@ public class UserService {
         return UserDto.from(requireUserById(id));
     }
 
+    // Kept out of UserDto deliberately: UserDto is embedded verbatim into every audit log
+    // snapshot (create/update/status-change/delete) via toJson(UserDto.from(user)) above,
+    // and a base64 photo there would bloat every one of those rows. Fetched on demand instead,
+    // the same shape the self-service profile photo is already stored in (see AppUser.photoData).
+    @Transactional(readOnly = true)
+    public String getUserPhotoDataUrl(Long id) {
+        return requireUserById(id).getPhotoData();
+    }
+
     // Top-nav workspace search: free text (q) matches name, email, role label, and
     // location name; role/locationId can additionally be passed as exact filters.
     @Transactional(readOnly = true)

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { Avatar, avatarColor } from '../../components/BlockerThread';
 import { formatDate, formatTime12h } from '../../lib/date';
 import {
   listUsers, createUser, updateUser, setUserStatus, resetPassword,
@@ -17,6 +18,7 @@ import {
   createDepartment, createDesignation, createLocation,
   listShifts,
   getAdminStats,
+  getUserPhoto,
 } from '../../api/admin';
 import type { UserDto, CreateUserPayload, UpdateUserPayload, DepartmentDto, DesignationDto, OrgLocationDto, ShiftDefinitionDto } from '../../api/admin';
 import { toRole } from '../../api/auth';
@@ -200,6 +202,19 @@ function StatusBadge({ status }: { status: string }) {
       {active ? 'Active' : 'Inactive'}
     </span>
   );
+}
+
+// Fetched per-row (not bundled into the UserDto list payload) so the uploaded photo
+// doesn't balloon the audit-log snapshots that wrap UserDto on every create/update — see
+// UserService.getUserPhotoDataUrl on the backend. react-query dedupes/caches per userId,
+// so revisiting the page or re-sorting doesn't refetch a photo already seen this session.
+function UserRowAvatar({ id, fullName }: { id: number; fullName: string }) {
+  const { data: photoUrl } = useQuery({
+    queryKey: ['userPhoto', id],
+    queryFn: () => getUserPhoto(id),
+    staleTime: 300_000,
+  });
+  return <Avatar name={fullName} bg={avatarColor(fullName)} size={32} photoUrl={photoUrl || null} />;
 }
 
 function FieldError({ msg }: { msg?: string }) {
@@ -2043,7 +2058,6 @@ export default function UserManagement() {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
               <thead>
                 <tr>
-                  <th style={thStyle}>Employee ID</th>
                   <th style={thStyle}>
                     <button
                       type="button"
@@ -2079,7 +2093,7 @@ export default function UserManagement() {
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ padding: '48px 20px', textAlign: 'center' }}>
+                    <td colSpan={8} style={{ padding: '48px 20px', textAlign: 'center' }}>
                       {users && users.length === 0 ? (
                         <>
                           <div style={{ fontSize: 15, color: 'var(--txt-mut)', marginBottom: 8 }}>No users yet</div>
@@ -2118,13 +2132,12 @@ export default function UserManagement() {
                       }}
                     >
                       <td style={tdStyle}>
-                        <span style={{ fontSize: 12, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
-                          {user.employeeCode}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                          <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>{user.fullName}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <UserRowAvatar id={user.id} fullName={user.fullName} />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 600 }}>{user.fullName}</span>
+                            <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>{user.employeeCode}</span>
+                          </div>
                         </div>
                       </td>
                       <td style={tdStyle}>

@@ -173,6 +173,12 @@ export async function getUser(id: number): Promise<UserDto> {
   return res.data;
 }
 
+/** Empty string means the user has no uploaded photo (falls back to an initials avatar). */
+export async function getUserPhoto(id: number): Promise<string> {
+  const res = await api.get<{ photoDataUrl: string }>(`/users/${id}/photo`);
+  return res.data.photoDataUrl;
+}
+
 export interface UserSearchParams {
   q?: string;
   role?: string;
