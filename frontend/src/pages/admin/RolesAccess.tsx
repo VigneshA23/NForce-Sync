@@ -84,7 +84,7 @@ const GROUPS: PermGroup[] = [
       { label: 'User Administration console', endpoint: '/admin/dashboard, /admin/users, /admin/roles, /admin/audit', roles: ['ADMIN'], tier: 'ui' },
       { label: 'Organization Masters console', endpoint: '/admin/org-masters', roles: ['ADMIN','SUPERADMIN'], tier: 'ui' },
       { label: 'Executive Dashboard',         endpoint: '/admin/executive-dashboard', roles: ['SUPERADMIN'], tier: 'ui' },
-      { label: 'System configuration console', endpoint: '/admin/rules, /admin/integrations, /admin/ai', roles: ['SUPERADMIN'], tier: 'ui' },
+      { label: 'System configuration console', endpoint: '/admin/rules, /admin/ai', roles: ['SUPERADMIN'], tier: 'ui' },
       { label: 'Reportee Views (read-only)',  endpoint: '/admin/reportee/*', roles: ['SUPERADMIN'], tier: 'ui' },
     ],
   },

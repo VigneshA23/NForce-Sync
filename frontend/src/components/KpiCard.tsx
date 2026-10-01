@@ -45,6 +45,12 @@ export function KpiCard({ icon, label, value, accent = 'var(--txt)', trend, styl
         border: `1px solid ${hov ? `color-mix(in srgb, ${accent} 45%, var(--line))` : 'var(--line)'}`,
         borderRadius: 12,
         padding: '16px 18px',
+        // Fills whatever height the wrapping ClickableKpi (or a bare grid cell) stretches it
+        // to — without this, a tile with no `trend` line renders shorter than its siblings that
+        // have one, since a plain block div sizes to its own content by default rather than
+        // inheriting a parent's stretched height.
+        height: '100%',
+        boxSizing: 'border-box',
         position: 'relative',
         overflow: 'hidden',
         transform: hov ? 'translateY(-3px) scale(1.01)' : 'translateY(0) scale(1)',

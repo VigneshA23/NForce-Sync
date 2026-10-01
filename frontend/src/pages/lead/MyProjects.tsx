@@ -20,7 +20,7 @@ import {
 
 type CategoryStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
-const CATEGORIES_PAGE_SIZE = 10;
+const CATEGORIES_PAGE_SIZE = 9;
 
 // ── New Category modal ────────────────────────────────────────────────────────
 

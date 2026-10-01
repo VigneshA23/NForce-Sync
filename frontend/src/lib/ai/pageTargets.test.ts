@@ -46,7 +46,6 @@ const PLACEHOLDER_OR_UNKNOWN: Array<[string, (typeof ALL_ROLES)[number]]> = [
   ['dashboard', 'dm'],
   ['dashboard', 'finance'],
   ['dashboard', 'leadership'],
-  ['integrations', 'superadmin'],
   ['user-management', 'employee'],
   ['audit-log', 'lead'],
   ['not-a-real-page', 'employee'],

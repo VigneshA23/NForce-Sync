@@ -92,8 +92,8 @@ const PAGE_TARGETS: Partial<Record<string, Partial<Record<Role, { route: string;
   "ai-assistant-admin": {
     superadmin: { route: "/admin/ai", label: "AI & Automation" },
   },
-  // "integrations" and every DM/Finance/Leadership pageId are deliberately absent — they are
-  // placeholders in the registry, and a placeholder never gets a route here.
+  // Every DM/Finance/Leadership pageId is deliberately absent — they are placeholders in the
+  // registry, and a placeholder never gets a route here.
 
   // Shared pages: reachable via the topbar for every role, not through getNavPaths(role) — see
   // Shell.tsx's own allowlist (`isAllowed`), which resolveSharedTarget below mirrors.

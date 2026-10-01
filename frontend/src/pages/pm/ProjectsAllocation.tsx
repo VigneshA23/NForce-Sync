@@ -5,6 +5,7 @@ import {
   ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
+import { Pagination } from '../../components/Pagination';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { StrictDateInput } from '../../components/StrictDateInput';
 import { useToast } from '../../lib/toast';
@@ -158,8 +159,8 @@ function IconButton({ icon, label, danger, onClick, disabled }: {
   );
 }
 
-function Toolbar({ count, noun, onRefetch, isRefreshing, onAdd, addLabel, filters, hideAdd }: {
-  count: number | undefined; noun: string; onRefetch: () => void; isRefreshing?: boolean;
+function Toolbar({ count, noun, onAdd, addLabel, filters, hideAdd }: {
+  count: number | undefined; noun: string;
   onAdd: () => void; addLabel: string;
   /** Optional filter controls, rendered in the left group after the count. */
   filters?: React.ReactNode;
@@ -184,19 +185,6 @@ function Toolbar({ count, noun, onRefetch, isRefreshing, onAdd, addLabel, filter
         {filters}
       </div>
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-        <button
-          onClick={onRefetch}
-          disabled={isRefreshing}
-          aria-label={isRefreshing ? 'Refreshing…' : 'Refresh'}
-          title="Refresh"
-          style={{
-            background: 'transparent', border: 'none', cursor: isRefreshing ? 'default' : 'pointer',
-            color: 'var(--txt-dim)', padding: 6, display: 'flex', alignItems: 'center', borderRadius: 5,
-            opacity: isRefreshing ? 0.7 : 1,
-          }}
-        >
-          <RefreshCw size={14} aria-hidden="true" style={isRefreshing ? { animation: 'spin 1s linear infinite' } : undefined} />
-        </button>
         {!hideAdd && (
           <button
             onClick={onAdd}
@@ -714,7 +702,7 @@ function ProjectModal({ open, onClose, editing }: {
 // "Projects & Allocation" page is unaffected, since a PM viewing their own portfolio doesn't
 // need to filter it by which PM it belongs to.
 function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: boolean; showPmFilter?: boolean }) {
-  const { data, isPending, isError, isFetching, refetch } = useAllProjects();
+  const { data, isPending, isError, refetch } = useAllProjects();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ProjectFullDto | null>(null);
   // Deep-link from a KPI tile elsewhere (e.g. Project Dashboard's Active/On Hold/Completed
@@ -737,6 +725,24 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
       && (pmFilter === '' || String(p.projectManagerId) === pmFilter),
     );
   }, [data, debouncedSearch, statusFilter, leadFilter, pmFilter]);
+
+  // ── Pagination — 12 rows per page (see the shared Pagination component) ──────
+  const PROJECTS_PAGE_SIZE = 12;
+  const [page, setPage] = useState(1);
+  // Jump back to page 1 whenever the filtered set changes shape — adjusted during render
+  // (React's own pattern for this) rather than in an effect, so it takes effect in the same
+  // pass instead of causing an extra render.
+  const filterKey = `${debouncedSearch}|${statusFilter}|${leadFilter}|${pmFilter}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey);
+    setPage(1);
+  }
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PROJECTS_PAGE_SIZE));
+  const paged = useMemo(
+    () => filtered.slice((page - 1) * PROJECTS_PAGE_SIZE, page * PROJECTS_PAGE_SIZE),
+    [filtered, page],
+  );
 
   // Project Manager options, same derivation as leadOptions below but keyed off projectManagerId.
   const pmOptions = useMemo(() => {
@@ -852,8 +858,8 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
 
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
-      <Toolbar count={data ? filtered.length : undefined} noun="project" onRefetch={() => refetch()}
-        isRefreshing={isFetching} onAdd={openCreate} addLabel="New Project" filters={projectFilters} hideAdd={readOnly} />
+      <Toolbar count={data ? filtered.length : undefined} noun="project"
+        onAdd={openCreate} addLabel="New Project" filters={projectFilters} hideAdd={readOnly} />
 
       {isPending && (
         <GlobalLoader fullScreen={false} compact label="Loading projects..." />
@@ -902,7 +908,7 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
                 </td>
               </tr>
             ) : (
-              filtered.map(p => (
+              paged.map(p => (
                 <tr key={p.id}>
                   <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{p.code}</td>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{p.name}</td>
@@ -936,6 +942,13 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
           </tbody>
         </table>
         </div>
+      )}
+
+      {filtered.length > 0 && (
+        <Pagination
+          page={page} totalPages={totalPages} totalItems={filtered.length} pageSize={PROJECTS_PAGE_SIZE}
+          onPageChange={setPage} itemLabel="projects"
+        />
       )}
 
       <ProjectModal open={modalOpen} onClose={() => setModalOpen(false)} editing={editing} />
@@ -1506,7 +1519,7 @@ function DeleteAllocationModal({ allocation, onClose }: { allocation: Allocation
 export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boolean; teamLeadId?: number | null }) {
   const { data: projects } = useAllProjects();
   const [projectFilter, setProjectFilter] = useState('');
-  const { data, isPending, isError, isFetching, refetch } = useAllocations(
+  const { data, isPending, isError, refetch } = useAllocations(
     projectFilter ? Number(projectFilter) : undefined, teamLeadId);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -1541,6 +1554,24 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
       return sort.dir === 'asc' ? cmp : -cmp;
     });
   }, [data, debouncedEmployeeSearch, sort]);
+
+  // ── Pagination — 12 rows per page (see the shared Pagination component) ──────
+  const ALLOCATIONS_PAGE_SIZE = 12;
+  const [page, setPage] = useState(1);
+  // Jump back to page 1 whenever the filtered/sorted set changes shape — adjusted during render
+  // (React's own pattern for this) rather than in an effect, so it takes effect in the same
+  // pass instead of causing an extra render.
+  const filterKey = `${projectFilter}|${debouncedEmployeeSearch}|${sort?.key ?? ''}|${sort?.dir ?? ''}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey);
+    setPage(1);
+  }
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ALLOCATIONS_PAGE_SIZE));
+  const paged = useMemo(
+    () => filtered.slice((page - 1) * ALLOCATIONS_PAGE_SIZE, page * ALLOCATIONS_PAGE_SIZE),
+    [filtered, page],
+  );
 
   const filtersActive = debouncedEmployeeSearch.trim() !== '';
 
@@ -1589,19 +1620,6 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            aria-label={isFetching ? 'Refreshing…' : 'Refresh'}
-            title="Refresh"
-            style={{
-              background: 'transparent', border: 'none', cursor: isFetching ? 'default' : 'pointer',
-              color: 'var(--txt-dim)', padding: 6, display: 'flex', alignItems: 'center', borderRadius: 5,
-              opacity: isFetching ? 0.7 : 1,
-            }}
-          >
-            <RefreshCw size={14} aria-hidden="true" style={isFetching ? { animation: 'spin 1s linear infinite' } : undefined} />
-          </button>
           {!readOnly && (
             <button
               onClick={() => setModalOpen(true)}
@@ -1659,7 +1677,7 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
                 </td>
               </tr>
             ) : (
-              filtered.map(a => (
+              paged.map(a => (
                 <tr key={a.id}>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{a.employeeName} <span style={{ color: 'var(--txt-dim)', fontSize: 11 }}>{a.employeeCode}</span></td>
                   <td style={tdStyle}>{a.projectCode}: {a.projectName}</td>
@@ -1680,6 +1698,13 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
           </tbody>
         </table>
         </div>
+      )}
+
+      {filtered.length > 0 && (
+        <Pagination
+          page={page} totalPages={totalPages} totalItems={filtered.length} pageSize={ALLOCATIONS_PAGE_SIZE}
+          onPageChange={setPage} itemLabel="allocations"
+        />
       )}
 
       <AllocationModal open={modalOpen} onClose={() => setModalOpen(false)} projects={projects ?? []} />

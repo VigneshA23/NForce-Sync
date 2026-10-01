@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   TrendingUp, TrendingDown, Activity, RefreshCw, Layers,
-  Calendar, Download, Lightbulb, AlertTriangle, Users, ArrowUp, ArrowDown, Minus,
+  Calendar, Lightbulb, AlertTriangle, Users, ArrowUp, ArrowDown, Minus,
   CheckCircle2, Award, FolderKanban, X,
 } from 'lucide-react';
 import { UtilBar } from '../../components/UtilBar';
@@ -330,7 +330,7 @@ interface ProjectTableRow extends ProjectUtilizationRowDto {
   topContributor: { name: string; hours: number } | null;
 }
 
-const PROJECT_PAGE_SIZE = 8;
+const PROJECT_PAGE_SIZE = 10;
 const PROJECT_TABLE_COLUMNS = '1.4fr 90px 100px 90px 1.3fr 130px';
 
 function ProjectTable({ rows }: { rows: ProjectTableRow[] }) {
@@ -389,25 +389,13 @@ function ProjectTable({ rows }: { rows: ProjectTableRow[] }) {
         ))}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, fontSize: 11, color: 'var(--txt-dim)' }}>
-        <span>
-          Showing {total === 0 ? 0 : page * PROJECT_PAGE_SIZE + 1} to {Math.min((page + 1) * PROJECT_PAGE_SIZE, total)} of {total} projects
-        </span>
-        {pages > 1 && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            {page > 0 && (
-              <button onClick={() => setPage(p => p - 1)} style={{ padding: '4px 10px', borderRadius: 5, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', fontSize: 11, cursor: 'pointer' }}>
-                ← Prev
-              </button>
-            )}
-            {page < pages - 1 && (
-              <button onClick={() => setPage(p => p + 1)} style={{ padding: '4px 10px', borderRadius: 5, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', fontSize: 11, cursor: 'pointer' }}>
-                Next →
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      {pages > 1 && (
+        <Pagination
+          page={page + 1} totalPages={pages} totalItems={total} pageSize={PROJECT_PAGE_SIZE}
+          onPageChange={p => setPage(p - 1)} itemLabel="projects"
+          style={{ padding: '12px 0 0', borderTop: 'none', marginTop: 2 }}
+        />
+      )}
     </div>
   );
 }
@@ -428,61 +416,49 @@ function ResourceTable({ rows }: { rows: ResourceUtilizationRowDto[] }) {
   }
 
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <div style={{ minWidth: 580 }}>
-        <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr 80px 80px 160px',
-          gap: 8, padding: '6px 0 8px', borderBottom: '1px solid var(--line)',
-          fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)',
-          textTransform: 'uppercase', letterSpacing: '0.06em',
-        }}>
-          <span>Employee</span>
-          <span>Project</span>
-          <span style={{ textAlign: 'right' }}>Approved</span>
-          <span style={{ textAlign: 'right' }}>Available</span>
-          <span>Util %</span>
-        </div>
-
-        {slice.map((row, i) => (
-          <div key={`${row.employeeId}-${row.projectName}`} className="pm-util-res-row" style={{
-            display: 'grid', gridTemplateColumns: '1fr 1fr 80px 80px 160px',
-            gap: 8, padding: '9px 6px', margin: '0 -6px',
-            borderRadius: 6, borderBottom: i < slice.length - 1 ? '1px solid var(--line)' : 'none',
-            alignItems: 'center',
-          }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {row.employeeName}
-            </span>
-            <span style={{ fontSize: 11, color: 'var(--txt-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {row.projectName}
-            </span>
-            <span style={{ fontSize: 11, textAlign: 'right', color: 'var(--txt-mut)', fontVariantNumeric: 'tabular-nums' }}>
-              {row.productiveHours.toFixed(1)}h
-            </span>
-            <span style={{ fontSize: 11, textAlign: 'right', color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
-              {row.availableHours.toFixed(0)}h
-            </span>
-            <UtilBar pct={row.utilizationPct} />
-          </div>
-        ))}
+    <div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr 80px 80px 160px',
+        gap: 8, padding: '6px 0 8px', borderBottom: '1px solid var(--line)',
+        fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)',
+        textTransform: 'uppercase', letterSpacing: '0.06em',
+      }}>
+        <span>Employee</span>
+        <span>Project</span>
+        <span style={{ textAlign: 'right' }}>Approved</span>
+        <span style={{ textAlign: 'right' }}>Available</span>
+        <span>Util %</span>
       </div>
 
-      {pages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, fontSize: 11, color: 'var(--txt-dim)' }}>
-          <span>{total} resources · page {page + 1} of {pages}</span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {page > 0 && (
-              <button onClick={() => setPage(p => p - 1)} style={{ padding: '4px 10px', borderRadius: 5, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', fontSize: 11, cursor: 'pointer' }}>
-                ← Prev
-              </button>
-            )}
-            {page < pages - 1 && (
-              <button onClick={() => setPage(p => p + 1)} style={{ padding: '4px 10px', borderRadius: 5, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', fontSize: 11, cursor: 'pointer' }}>
-                Next →
-              </button>
-            )}
-          </div>
+      {slice.map((row, i) => (
+        <div key={`${row.employeeId}-${row.projectName}`} className="pm-util-res-row" style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr 80px 80px 160px',
+          gap: 8, padding: '9px 6px', margin: '0 -6px',
+          borderRadius: 6, borderBottom: i < slice.length - 1 ? '1px solid var(--line)' : 'none',
+          alignItems: 'center',
+        }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {row.employeeName}
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--txt-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {row.projectName}
+          </span>
+          <span style={{ fontSize: 11, textAlign: 'right', color: 'var(--txt-mut)', fontVariantNumeric: 'tabular-nums' }}>
+            {row.productiveHours.toFixed(1)}h
+          </span>
+          <span style={{ fontSize: 11, textAlign: 'right', color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
+            {row.availableHours.toFixed(0)}h
+          </span>
+          <UtilBar pct={row.utilizationPct} />
         </div>
+      ))}
+
+      {pages > 1 && (
+        <Pagination
+          page={page + 1} totalPages={pages} totalItems={total} pageSize={RESOURCE_PAGE_SIZE}
+          onPageChange={p => setPage(p - 1)} itemLabel="resources"
+          style={{ padding: '12px 0 0', borderTop: 'none', marginTop: 2 }}
+        />
       )}
     </div>
   );
@@ -550,23 +526,11 @@ function TopContributorsPanel({ resourceRows }: { resourceRows: ResourceUtilizat
         </div>
       )}
       {pages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, fontSize: 11, color: 'var(--txt-dim)' }}>
-          <span>
-            Showing {page * CONTRIBUTOR_PAGE_SIZE + 1} to {Math.min((page + 1) * CONTRIBUTOR_PAGE_SIZE, total)} of {total} contributors
-          </span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {page > 0 && (
-              <button onClick={() => setPage(p => p - 1)} style={{ padding: '4px 10px', borderRadius: 5, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', fontSize: 11, cursor: 'pointer' }}>
-                ← Prev
-              </button>
-            )}
-            {page < pages - 1 && (
-              <button onClick={() => setPage(p => p + 1)} style={{ padding: '4px 10px', borderRadius: 5, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', fontSize: 11, cursor: 'pointer' }}>
-                Next →
-              </button>
-            )}
-          </div>
-        </div>
+        <Pagination
+          page={page + 1} totalPages={pages} totalItems={total} pageSize={CONTRIBUTOR_PAGE_SIZE}
+          onPageChange={p => setPage(p - 1)} itemLabel="contributors"
+          style={{ padding: '12px 0 0', borderTop: 'none', marginTop: 2 }}
+        />
       )}
     </Card>
   );
@@ -1053,19 +1017,6 @@ export default function ProjectsUtilization() {
           </div>
 
           <CalendarRangePopover from={from} to={to} onApply={(f, t) => setCustomRange({ from: f, to: t })} />
-
-          {/* No export pipeline exists anywhere in the app yet — presented, not wired, same
-              disabled affordance as TeamUtilization's "Export Report" button. */}
-          <button
-            disabled
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8,
-              fontSize: 12.5, fontWeight: 600, color: 'var(--txt-dim)',
-              background: 'var(--raised)', border: '1px solid var(--line)', cursor: 'not-allowed', opacity: 0.6,
-            }}
-          >
-            <Download size={13} aria-hidden="true" /> Export
-          </button>
         </div>
       </div>
 

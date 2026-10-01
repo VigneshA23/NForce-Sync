@@ -3,7 +3,7 @@ import {
   ClipboardCheck, AlertOctagon, Inbox,
   FolderKanban, Users, TrendingUp, Map,
   AlertTriangle, DollarSign, Trophy,
-  Lock, Settings, Plug, Bot, ScrollText, Building2,
+  Lock, Settings, Bot, ScrollText, Building2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Role } from './types';
@@ -241,7 +241,7 @@ export const NAV: Record<Role, RoleNav> = {
   // on a user record, so Admin manages them as part of user administration too — see
   // OrgController, now hasAnyRole('SUPERADMIN','ADMIN') on writes). Business Rules is likewise
   // shared with Admin (BusinessRuleController, now hasAnyRole('SUPERADMIN','ADMIN')) — same page,
-  // same API, same data as Super Admin's. Admin does not get Integrations/AI (still Super Admin-
+  // same API, same data as Super Admin's. Admin does not get AI & Automation (still Super Admin-
   // only system config), and does not get Reportee Views (operational oversight, not
   // user-administration).
   admin: [
@@ -275,7 +275,6 @@ export const NAV: Record<Role, RoleNav> = {
       items: [
         { key: 'org-masters',    label: 'Organization Masters', path: '/admin/org-masters',  icon: Building2 },
         { key: 'business-rules', label: 'Business Rules',       path: '/admin/rules',        icon: Settings },
-        { key: 'integrations',   label: 'Integrations',     path: '/admin/integrations', icon: Plug, phase: 2 },
         { key: 'ai-settings',    label: 'AI & Automation',  path: '/admin/ai',           icon: Bot },
       ],
     },

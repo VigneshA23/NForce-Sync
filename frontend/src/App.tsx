@@ -247,7 +247,6 @@ function AppRoutes() {
             {/* ── Super Admin (system configuration) ─── */}
             <Route path="/admin/org-masters"  element={<OrganizationMasters />} />
             <Route path="/admin/rules"        element={<BusinessRules />} />
-            <Route path="/admin/integrations" element={<Placeholder title="Integrations" />} />
             <Route path="/admin/ai"           element={<AiAssistantAdmin />} />
 
             {/* ── Super Admin Reportee Views (Project Manager Views only) ── */}

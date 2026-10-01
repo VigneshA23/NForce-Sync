@@ -626,8 +626,11 @@ export default function TeamDashboard() {
         <HeroBanner subtitle="Overview of your team's productivity and status" />
       </div>
 
-      {/* KPI tiles — own full-width row below the hero/quick-actions row. */}
-      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
+      {/* KPI tiles — own full-width row below the hero/quick-actions row. Always exactly 5
+          tiles, so a fixed `repeat(5, 1fr)` guarantees equal widths with no leftover gap —
+          `auto-fit` recomputes track count from available space and can size a track (and thus
+          the tile in it) differently than its neighbors depending on that math. */}
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 16 }}>
           <ClickableKpi onClick={() => navigate('/team/utilization')}>
             <KpiCard
               icon={<Gauge size={18} />} accent="var(--warn)" label="Team Utilization" value={avgUtilLabel}
@@ -676,9 +679,10 @@ export default function TeamDashboard() {
           alignItems override) rather than start-aligned: Team Status and the Blockers
           Today/Team Utilization stack next to it rarely have the same natural height, and
           start-aligning left whichever is shorter ending well above the taller one, exposing
-          bare shell background beside it. Both sides get a trailing flex:1 spacer as their
-          last child so the extra stretched height lands there instead of distorting a real
-          card or opening a gap between visible content and its own footer. */}
+          bare shell background beside it. Each side's *last* card absorbs the extra stretched
+          height itself (a trailing flex:1 spacer as ITS OWN last child, inside its border) —
+          not a spacer between the two cards on the right, which would grow in raw page
+          background outside any card and look like a stray gap rather than an aligned edge. */}
       <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 16, marginBottom: 16 }}>
         <Card style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -764,7 +768,7 @@ export default function TeamDashboard() {
             )}
           </Card>
 
-          <Card style={{ padding: 20 }}>
+          <Card style={{ padding: 20, display: 'flex', flexDirection: 'column', flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Team Utilization (7 Days)</div>
               <button
@@ -775,11 +779,11 @@ export default function TeamDashboard() {
               </button>
             </div>
             {trendPending ? <Skel h={220} /> : <WeeklyUtilChart points={trend?.avgUtilization ?? []} />}
+            {/* Absorbs whatever extra height this stack's stretch (see the grid comment above)
+                adds beyond this card's own header + chart, inside this card's own border —
+                same pattern as Team Status's trailing spacer on the left. */}
+            <div style={{ flex: 1 }} />
           </Card>
-          {/* Absorbs whatever extra height this stack's stretch (see the grid comment above)
-              adds beyond its own two cards, so that space lands below both instead of
-              stretching either one to an oversized, awkward height. */}
-          <div style={{ flex: 1 }} />
         </div>
       </div>
 

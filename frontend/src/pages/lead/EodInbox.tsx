@@ -332,6 +332,7 @@ export default function EodInbox() {
             rows={filteredRows}
             page={page}
             onPageChange={setPage}
+            pageSize={6}
             selectedClarificationId={selectedClarificationId}
             onSelect={clarificationId => {
               setViewEodEntryId(null);

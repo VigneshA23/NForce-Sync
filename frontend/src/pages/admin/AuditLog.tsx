@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  FileText, Shield, Info, RefreshCw,
+  FileText, RefreshCw,
   ChevronDown, ChevronUp, ChevronsUpDown, X,
   ListChecks, PlusCircle, PencilLine, Trash2, PowerCircle, PauseCircle, MoreHorizontal,
 } from 'lucide-react';
@@ -21,7 +21,7 @@ import { GlobalLoader } from '../../components/GlobalLoader';
 // The 3 entity types the backend actually writes today — see writeAudit call sites in
 // UserService/ApprovalService/BusinessRuleService.
 const ENTITY_TYPES = ['APP_USER', 'EOD_ENTRY', 'BUSINESS_RULE'];
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 8;
 
 type DateRangePreset = '' | '7' | '30' | '90' | 'custom';
 
@@ -242,7 +242,6 @@ export default function AuditLog() {
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<'asc' | 'desc'>('desc');
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [noticeOpen, setNoticeOpen] = useState(false);
 
   // Seeds the date-range preset when arriving via the dashboard's "View all N →" link, so the
   // count shown there matches what's displayed here on first load.
@@ -313,37 +312,6 @@ export default function AuditLog() {
                 Track and monitor system activities for compliance, troubleshooting and accountability.
               </p>
             </div>
-          </div>
-
-          <div style={{ position: 'relative' }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-              background: 'rgba(224,169,59,.08)', border: '1px solid rgba(224,169,59,.25)', borderRadius: 8,
-              fontSize: 11.5, color: 'var(--txt-mut)', maxWidth: 360,
-            }}>
-              <Shield size={14} style={{ color: '#E0A93B', flexShrink: 0 }} aria-hidden="true" />
-              <span>Audit logs are restricted to authorized roles only and cannot be edited or deleted.</span>
-              <button
-                onMouseEnter={() => setNoticeOpen(true)}
-                onMouseLeave={() => setNoticeOpen(false)}
-                onClick={() => setNoticeOpen(o => !o)}
-                aria-label="More detail"
-                style={{ background: 'none', border: 'none', padding: 0, display: 'flex', color: 'var(--txt-dim)', cursor: 'pointer', flexShrink: 0 }}
-              >
-                <Info size={13} aria-hidden="true" />
-              </button>
-            </div>
-            {noticeOpen && (
-              <div style={{
-                position: 'absolute', right: 0, top: '100%', marginTop: 6, width: 280, zIndex: 10,
-                background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8,
-                padding: '10px 12px', fontSize: 11.5, color: 'var(--txt-mut)', boxShadow: '0 8px 24px rgba(0,0,0,.3)',
-              }}>
-                Only Admin accounts can view this page. Every record is written automatically when a
-                tracked action occurs and is append-only — there is no update or delete endpoint for
-                audit entries, by design, to preserve their integrity for compliance review.
-              </div>
-            )}
           </div>
         </div>
 
