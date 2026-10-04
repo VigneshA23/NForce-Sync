@@ -18,6 +18,7 @@ export interface ServerUserCapabilities {
   leadsProjectNames: string[];
   managesProjectIds: number[];
   managesProjectNames: string[];
+  hasDirectReports: boolean;
 }
 
 export interface ServerUser {

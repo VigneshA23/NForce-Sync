@@ -274,8 +274,6 @@ public class TeamEodByEmployeeReportService {
                     .sorted(Comparator.comparing(AppUser::getFullName))
                     .toList();
         }
-        return appUserRepository.findByManagerId(lead.getId()).stream()
-                .filter(u -> u.getStatus() == AppUser.Status.ACTIVE && u.getDeletedAt() == null)
-                .toList();
+        return allocationRepository.findActiveMembersByProjectLead(lead.getId(), java.time.LocalDate.now());
     }
 }

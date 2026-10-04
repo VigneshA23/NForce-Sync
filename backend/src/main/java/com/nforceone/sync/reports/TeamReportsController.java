@@ -30,7 +30,7 @@ import java.util.Set;
 
 @RestController
 @RequestMapping("/api/team-reports")
-@PreAuthorize("hasAnyRole('MANAGER','SUPERADMIN')")
+@PreAuthorize("hasAnyRole('MANAGER','ADMIN','SUPERADMIN')")
 public class TeamReportsController {
 
     private final TeamEodByEmployeeReportService eodService;

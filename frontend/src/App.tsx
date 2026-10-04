@@ -52,6 +52,12 @@ const LeadReportsDashboard = lazy(() => import('./pages/lead/ReportsDashboard'))
 const PmBlockers          = lazy(() => import('./pages/pm/Blockers'));
 const PmEodInbox          = lazy(() => import('./pages/pm/EodInbox'));
 
+// My Reports (Reporting Manager)
+const MyReportsOverview    = lazy(() => import('./pages/my-reports/Overview'));
+const MyReportsEodStatus   = lazy(() => import('./pages/my-reports/EodStatus'));
+const MyReportsUtilization = lazy(() => import('./pages/my-reports/Utilization'));
+const MyReportsApprovals   = lazy(() => import('./pages/my-reports/Approvals'));
+
 // Super Admin Reportee Views — Project Manager Views only (Team Lead Views was removed from
 // Super Admin's navigation/access; Team Lead's own navigation/permissions are unaffected).
 // Reuses the PM components above at dedicated routes. "Projects" and "Resource Allocation" were
@@ -255,6 +261,12 @@ function AppRoutes() {
             <Route path="/admin/reportee/pm/projects"      element={<ReporteePmProjects />} />
             <Route path="/admin/reportee/pm/eod"           element={<ReporteePmEod />} />
             <Route path="/admin/reportee/pm/utilization"   element={<ReporteePmUtilization />} />
+
+            {/* ── My Reports (Reporting Manager) ─────── */}
+            <Route path="/my-reports/overview"    element={<MyReportsOverview />} />
+            <Route path="/my-reports/eod-status"  element={<MyReportsEodStatus />} />
+            <Route path="/my-reports/utilization" element={<MyReportsUtilization />} />
+            <Route path="/my-reports/approvals"   element={<MyReportsApprovals />} />
 
             {/* ── Shared ─────────────────────────────── */}
             <Route path="/notifications"   element={<Notifications />} />

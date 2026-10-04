@@ -238,7 +238,7 @@ public class UserService {
         }
 
         AppUser oldManager = user.getManager();
-        AppUser newManager = null;
+        AppUser newManager = oldManager; // null managerId on update = keep existing, per decision Phase 8
 
         if (request.managerId() != null) {
             if (request.managerId().equals(id)) {
@@ -249,8 +249,8 @@ public class UserService {
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                             "Reporting manager not found"));
             requireNoManagerCycle(id, newManager);
+            requireValidReportingManager(request.role(), newManager);
         }
-        requireValidReportingManager(request.role(), newManager);
         user.setManager(newManager);
 
         user = userRepository.save(user);
@@ -311,39 +311,21 @@ public class UserService {
         }
     }
 
-    // Enforces the org's reporting hierarchy — the source of truth for role -> required
-    // manager role: Employee -> Team Lead -> Project Manager -> Super Admin, with Admin also
-    // reporting to a Super Admin. A Reporting Manager is mandatory for Employee, Team Lead,
-    // Project Manager, and Admin. Super Admin sits at the top of the hierarchy and may
-    // optionally report to another Super Admin (or to no one at all). Legacy roles not listed
-    // here (Delivery Manager, Finance Admin, Leadership Viewer) have no enforced hierarchy.
-    private static final Map<AppUser.Role, AppUser.Role> REQUIRED_MANAGER_ROLE = Map.of(
-            AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER,
-            AppUser.Role.MANAGER,  AppUser.Role.PM,
-            AppUser.Role.PM,       AppUser.Role.SUPERADMIN,
-            AppUser.Role.ADMIN,    AppUser.Role.SUPERADMIN
-    );
-
+    // Any active non-deleted user (except self, except SUPERADMIN) may be a reporting manager.
+    // No role restriction — decision Phase 8: one rule replaces the old REQUIRED_MANAGER_ROLE map.
+    // Loop detection is handled separately by requireNoManagerCycle.
     private void requireValidReportingManager(AppUser.Role role, AppUser manager) {
         if (role == AppUser.Role.SUPERADMIN) {
-            // Optional — a Super Admin may report to another Super Admin, or to no one.
-            if (manager != null && manager.getRole() != AppUser.Role.SUPERADMIN) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Super Admin reporting manager must be a Super Admin.");
-            }
-            return;
-        }
-        AppUser.Role requiredRole = REQUIRED_MANAGER_ROLE.get(role);
-        if (requiredRole == null) {
+            // SUPERADMIN: optional manager, no role restriction.
             return;
         }
         if (manager == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Reporting Manager is required for " + ROLE_LABELS.get(role) + ".");
+                    "Reporting Manager is required.");
         }
-        if (manager.getRole() != requiredRole) {
+        if (manager.getStatus() != AppUser.Status.ACTIVE || manager.getDeletedAt() != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    ROLE_LABELS.get(role) + " reporting manager must be a " + ROLE_LABELS.get(requiredRole) + ".");
+                    "Reporting Manager must be an active user.");
         }
     }
 

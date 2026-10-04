@@ -7,6 +7,7 @@ import com.nforceone.sync.businessrules.HolidayRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
+import com.nforceone.sync.project.AllocationRepository;
 import com.nforceone.sync.utilization.dto.DayUtilDto;
 import com.nforceone.sync.utilization.dto.TeamUtilDto;
 import com.nforceone.sync.utilization.dto.UtilSnapshotDto;
@@ -35,15 +36,18 @@ public class UtilizationService {
     private final AppUserRepository        userRepository;
     private final UtilSnapshotRepository   snapshotRepository;
     private final HolidayRepository        holidayRepository;
+    private final AllocationRepository     allocationRepository;
 
     public UtilizationService(EodEntryRepository entryRepository,
                                AppUserRepository userRepository,
                                UtilSnapshotRepository snapshotRepository,
-                               HolidayRepository holidayRepository) {
+                               HolidayRepository holidayRepository,
+                               AllocationRepository allocationRepository) {
         this.entryRepository   = entryRepository;
         this.userRepository    = userRepository;
         this.snapshotRepository = snapshotRepository;
         this.holidayRepository = holidayRepository;
+        this.allocationRepository = allocationRepository;
     }
 
     // Computes utilization for employee/date without touching the persisted snapshot row.
@@ -305,13 +309,9 @@ public class UtilizationService {
 
     @Transactional(readOnly = true)
     public List<TeamUtilDto> getForTeam(Long managerId, LocalDate date) {
-        // Matches the active-member definition used everywhere else on the Team Dashboard
-        // (TeamLeadService.activeMembers) — without this filter, terminated/deleted direct
-        // reports would still show up here even though they're excluded from the dashboard's
-        // KPI card, 7-day trend, and Utilization Overview donut.
-        List<AppUser> reports = userRepository.findByManagerId(managerId).stream()
-                .filter(u -> u.getStatus() == AppUser.Status.ACTIVE && u.getDeletedAt() == null)
-                .toList();
+        // Uses allocation-based team definition (Phase 8): members are those actively allocated
+        // to projects led by this lead on `date`, not manager_id direct reports.
+        List<AppUser> reports = allocationRepository.findActiveMembersByProjectLead(managerId, date);
         if (reports.isEmpty()) return List.of();
 
         // Fetch all snapshots for all team members in one query

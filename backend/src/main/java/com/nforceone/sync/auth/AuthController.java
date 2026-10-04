@@ -205,7 +205,8 @@ public class AuthController {
                 .stream().filter(p -> p.getStatus() == Project.Status.ACTIVE).toList();
         List<Project> managed = projectRepository.findByPmIdOrderByNameAsc(user.getId())
                 .stream().filter(p -> p.getStatus() == Project.Status.ACTIVE).toList();
-        return UserDto.from(user, led, managed);
+        boolean hasDirectReports = appUserRepository.existsByManagerIdAndDeletedAtIsNull(user.getId());
+        return UserDto.from(user, led, managed, hasDirectReports);
     }
 
     private static String firstNameOf(AppUser user) {

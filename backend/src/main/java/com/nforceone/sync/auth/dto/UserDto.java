@@ -33,27 +33,29 @@ public record UserDto(
             List<Long>   leadsProjectIds,
             List<String> leadsProjectNames,
             List<Long>   managesProjectIds,
-            List<String> managesProjectNames
+            List<String> managesProjectNames,
+            boolean      hasDirectReports
     ) {
         static Capabilities empty() {
-            return new Capabilities(List.of(), List.of(), List.of(), List.of());
+            return new Capabilities(List.of(), List.of(), List.of(), List.of(), false);
         }
 
-        static Capabilities from(List<Project> led, List<Project> managed) {
+        static Capabilities from(List<Project> led, List<Project> managed, boolean hasDirectReports) {
             return new Capabilities(
                     led.stream().map(Project::getId).toList(),
                     led.stream().map(Project::getName).toList(),
                     managed.stream().map(Project::getId).toList(),
-                    managed.stream().map(Project::getName).toList()
+                    managed.stream().map(Project::getName).toList(),
+                    hasDirectReports
             );
         }
     }
 
     public static UserDto from(AppUser user) {
-        return from(user, List.of(), List.of());
+        return from(user, List.of(), List.of(), false);
     }
 
-    public static UserDto from(AppUser user, List<Project> led, List<Project> managed) {
+    public static UserDto from(AppUser user, List<Project> led, List<Project> managed, boolean hasDirectReports) {
         return new UserDto(
                 user.getId(),
                 user.getFullName(),
@@ -70,7 +72,7 @@ public record UserDto(
                 user.getWorkMode(),
                 user.getJoiningDate(),
                 user.isMustChangePassword(),
-                Capabilities.from(led, managed)
+                Capabilities.from(led, managed, hasDirectReports)
         );
     }
 }

@@ -35,7 +35,7 @@ public class TeamLeadProjectController {
         this.teamLeadProjectService = teamLeadProjectService;
     }
 
-    @PreAuthorize("hasAnyRole('MANAGER','SUPERADMIN')")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN','SUPERADMIN')")
     @GetMapping("/projects")
     public List<ProjectFullDto> listMyProjects(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
@@ -43,7 +43,7 @@ public class TeamLeadProjectController {
         return teamLeadProjectService.listMyProjects(actingEmail(), date != null ? date : LocalDate.now(), teamLeadId);
     }
 
-    @PreAuthorize("hasAnyRole('MANAGER','SUPERADMIN')")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN','SUPERADMIN')")
     @GetMapping("/projects/{id}")
     public ProjectDetailDto getProjectDetail(
             @PathVariable Long id,
@@ -52,7 +52,7 @@ public class TeamLeadProjectController {
         return teamLeadProjectService.getProjectDetail(actingEmail(), id, date != null ? date : LocalDate.now(), teamLeadId);
     }
 
-    @PreAuthorize("hasAnyRole('MANAGER','SUPERADMIN')")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN','SUPERADMIN')")
     @GetMapping("/categories")
     public List<ProjectCategoryDto> listCategories() {
         return teamLeadProjectService.listCategories(actingEmail());

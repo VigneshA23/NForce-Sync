@@ -48,6 +48,27 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
                                                        @Param("from") LocalDate from,
                                                        @Param("to") LocalDate to);
 
+    // Team Lead blockers scoped by member IDs (Phase 7b allocation-based team definition).
+    // Same join-fetch shape as findBlockedByManagerIdAndDateRange but scopes by employee id set
+    // rather than the denormalized manager_id, so leads see blockers from all allocated members
+    // even when those members' reporting manager is someone else.
+    @Query("SELECT DISTINCT t FROM EodTask t " +
+           "JOIN FETCH t.eodEntry e " +
+           "JOIN FETCH e.employee emp " +
+           "LEFT JOIN FETCH emp.manager " +
+           "LEFT JOIN FETCH t.project " +
+           "LEFT JOIN FETCH t.taskCategory " +
+           "LEFT JOIN FETCH t.acknowledgedBy " +
+           "LEFT JOIN FETCH t.resolvedBy " +
+           "WHERE t.taskStatus = com.nforceone.sync.eod.EodTask.TaskStatus.BLOCKED " +
+           "AND emp.id IN :memberIds " +
+           "AND e.status <> com.nforceone.sync.eod.EodEntry.Status.DRAFT " +
+           "AND e.entryDate BETWEEN :from AND :to " +
+           "ORDER BY e.entryDate DESC")
+    List<EodTask> findBlockedByEmployeeIdsInAndDateRange(@Param("memberIds") List<Long> memberIds,
+                                                          @Param("from") LocalDate from,
+                                                          @Param("to") LocalDate to);
+
     // Cross-team view for the Project Manager Blockers page: every blocker raised against any
     // of the PM's own projects, regardless of which Team Lead the reporting employee belongs to.
     // JOIN FETCHes eodEntry/employee/manager/project/taskCategory up front — PmBlockerDto.from

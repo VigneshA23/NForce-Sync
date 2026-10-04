@@ -117,7 +117,15 @@ public class TeamLeadService {
      */
     public TeamLeadSummaryDto getSummary(LocalDate from, LocalDate to, String actingEmail, Long teamLeadId) {
         Long leadId = resolveLeadId(actingEmail, teamLeadId);
-        List<AppUser> members = activeMembers(leadId);
+        return computeSummary(from, to, activeMembers(leadId));
+    }
+
+    /** For callers (e.g. MyReportsService) that scope team by manager_id, not project lead. */
+    public TeamLeadSummaryDto getSummaryForManager(LocalDate from, LocalDate to, Long managerId) {
+        return computeSummary(from, to, activeMembersByManagerId(managerId));
+    }
+
+    private TeamLeadSummaryDto computeSummary(LocalDate from, LocalDate to, List<AppUser> members) {
         List<Long> memberIds = members.stream().map(AppUser::getId).toList();
 
         // Independent reads, fanned out — see AsyncQueryConfig/EmployeeService for why: each is
@@ -130,14 +138,14 @@ public class TeamLeadService {
                 CompletableFuture.supplyAsync(() -> entriesForMembersOnDate(memberIds, to), dashboardQueryExecutor);
         CompletableFuture<Map<Long, BigDecimal>> pctByMemberF = CompletableFuture.supplyAsync(
                 () -> utilizationService.resolveUtilizationPctForEmployees(memberIds, to), dashboardQueryExecutor);
-        // findBlockedByManagerIdAndDateRange, not findBlockedByManagerId — it eager-fetches
-        // eodEntry (JOIN FETCH) and narrows by date at the DB level. findBlockedByManagerId does
-        // neither: eodEntry is lazy on it, and a Hibernate session closes the instant a
-        // repository call returns (each is individually @Transactional) — touching
-        // t.getEodEntry() even one line later in this SAME lambda, on this worker thread, throws
-        // LazyInitializationException. This isn't a "wrong thread" fix, it's "wrong query".
+        // findBlockedByEmployeeIdsInAndDateRange eager-fetches eodEntry (JOIN FETCH) and narrows
+        // by date at the DB level. Without the JOIN FETCH, eodEntry is lazy on the simpler query
+        // and a Hibernate session closes the instant the repository call returns — touching
+        // t.getEodEntry() even one line later throws LazyInitializationException. Wrong query, not
+        // wrong thread.
         CompletableFuture<Integer> activeBlockersF = CompletableFuture.supplyAsync(() ->
-                (int) taskRepository.findBlockedByManagerIdAndDateRange(leadId, from, to).stream()
+                memberIds.isEmpty() ? 0 :
+                (int) taskRepository.findBlockedByEmployeeIdsInAndDateRange(memberIds, from, to).stream()
                         .filter(t -> t.getAcknowledgedAt() == null)
                         .count(),
                 dashboardQueryExecutor);
@@ -190,7 +198,27 @@ public class TeamLeadService {
 
     public List<MemberEodStatusDto> getMemberStatuses(LocalDate from, LocalDate to, String actingEmail, Long teamLeadId) {
         Long leadId = resolveLeadId(actingEmail, teamLeadId);
-        List<AppUser> members = activeMembers(leadId);
+        return computeMemberStatuses(from, to, activeMembers(leadId));
+    }
+
+    /** For callers (e.g. MyReportsService) that scope team by manager_id, not project lead. */
+    public List<MemberEodStatusDto> getMemberStatusesForManager(LocalDate from, LocalDate to, Long managerId) {
+        return computeMemberStatuses(from, to, activeMembersByManagerId(managerId));
+    }
+
+    /** For My Reporting Team — accepts pre-resolved scope IDs from ReportingScopeService. */
+    public TeamLeadSummaryDto getSummaryForScope(LocalDate from, LocalDate to, List<Long> memberIds) {
+        List<AppUser> members = memberIds.isEmpty() ? List.of() : userRepository.findAllById(memberIds);
+        return computeSummary(from, to, members);
+    }
+
+    /** For My Reporting Team — accepts pre-resolved scope IDs from ReportingScopeService. */
+    public List<MemberEodStatusDto> getMemberStatusesForScope(LocalDate from, LocalDate to, List<Long> memberIds) {
+        List<AppUser> members = memberIds.isEmpty() ? List.of() : userRepository.findAllById(memberIds);
+        return computeMemberStatuses(from, to, members);
+    }
+
+    private List<MemberEodStatusDto> computeMemberStatuses(LocalDate from, LocalDate to, List<AppUser> members) {
         List<Long> memberIds = members.stream().map(AppUser::getId).toList();
 
         // Independent reads, fanned out — see AsyncQueryConfig/EmployeeService for why.
@@ -199,7 +227,7 @@ public class TeamLeadService {
         CompletableFuture<Boolean> holidayTodayF =
                 CompletableFuture.supplyAsync(() -> holidayRepository.existsByHolidayDate(to), dashboardQueryExecutor);
         CompletableFuture<List<TeamBlockerDto>> openBlockersF = CompletableFuture.supplyAsync(
-                () -> getBlockers(from, to, actingEmail, false, teamLeadId), dashboardQueryExecutor);
+                () -> computeBlockers(from, to, memberIds, false), dashboardQueryExecutor);
         CompletableFuture<Map<Long, List<String>>> projectNamesByEmployeeF = CompletableFuture.supplyAsync(
                 () -> activeProjectNamesByEmployee(memberIds, to), dashboardQueryExecutor);
         CompletableFuture<Map<Long, EodEntry>> entryByMemberF =
@@ -226,10 +254,14 @@ public class TeamLeadService {
                     .anyMatch(b -> b.employeeId().equals(member.getId()) && !b.acknowledged());
             List<String> projectNames = projectNamesByEmployee.getOrDefault(member.getId(), List.of());
 
+            AppUser mgr = member.getManager();
             return new MemberEodStatusDto(
                     member.getId(), member.getFullName(), member.getEmployeeCode(),
                     status, entry.map(EodEntry::getId).orElse(null), projectNames,
-                    pct, underutilized, overloaded, hasOpenBlocker);
+                    pct, underutilized, overloaded, hasOpenBlocker,
+                    mgr != null ? mgr.getId() : null,
+                    mgr != null ? mgr.getFullName() : null,
+                    member.getRole() != null ? member.getRole().name() : null);
         }).sorted(TeamLeadService::compareByStatusPriority).toList();
     }
 
@@ -240,7 +272,13 @@ public class TeamLeadService {
     @Transactional(readOnly = true)
     public List<TeamBlockerDto> getBlockers(LocalDate from, LocalDate to, String actingEmail, boolean includeAcknowledged, Long teamLeadId) {
         Long leadId = resolveLeadId(actingEmail, teamLeadId);
-        List<EodTask> tasks = taskRepository.findBlockedByManagerIdAndDateRange(leadId, from, to)
+        List<Long> memberIds = activeMembers(leadId).stream().map(AppUser::getId).toList();
+        return computeBlockers(from, to, memberIds, includeAcknowledged);
+    }
+
+    private List<TeamBlockerDto> computeBlockers(LocalDate from, LocalDate to, List<Long> memberIds, boolean includeAcknowledged) {
+        if (memberIds.isEmpty()) return java.util.Collections.emptyList();
+        List<EodTask> tasks = taskRepository.findBlockedByEmployeeIdsInAndDateRange(memberIds, from, to)
                 .stream()
                 .filter(t -> includeAcknowledged || t.getAcknowledgedAt() == null)
                 .toList();
@@ -265,7 +303,7 @@ public class TeamLeadService {
         AppUser lead = requireLead(actingEmail);
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
-        if (lead.getRole() != AppUser.Role.SUPERADMIN && !task.getEodEntry().getManagerId().equals(lead.getId())) {
+        if (lead.getRole() != AppUser.Role.SUPERADMIN && !isInLeadTeam(task.getEodEntry().getEmployee().getId(), lead.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
         return TeamBlockerDto.from(task, replyRepository.findByTaskIdOrderByCreatedAtAsc(taskId));
@@ -277,7 +315,7 @@ public class TeamLeadService {
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
 
-        if (!task.getEodEntry().getManagerId().equals(lead.getId())) {
+        if (!isInLeadTeam(task.getEodEntry().getEmployee().getId(), lead.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
 
@@ -297,7 +335,7 @@ public class TeamLeadService {
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
 
-        if (!task.getEodEntry().getManagerId().equals(lead.getId())) {
+        if (!isInLeadTeam(task.getEodEntry().getEmployee().getId(), lead.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
 
@@ -365,7 +403,7 @@ public class TeamLeadService {
 
     public DashboardTrendDto getTrend(LocalDate endDate, int days, String actingEmail, Long teamLeadId) {
         Long leadId = resolveLeadId(actingEmail, teamLeadId);
-        List<AppUser> members = activeMembers(leadId);
+        List<AppUser> members = activeMembers(leadId);  // allocation-based team
         LocalDate startDate = endDate.minusDays(days - 1);
         List<Long> memberIds = members.stream().map(AppUser::getId).toList();
 
@@ -375,15 +413,14 @@ public class TeamLeadService {
         // window length: one for every entry in range, one for every day's resolved utilization.
         // Fanned out — see AsyncQueryConfig/EmployeeService — since none of these 4 depends on
         // another's result.
-        // findBlockedByManagerIdAndDateRange (not findBlockedByManagerId) — eager-fetches
-        // eodEntry and narrows by date at the DB level, so grouping by t.getEodEntry().getEntryDate()
-        // right below is safe. findBlockedByManagerId leaves eodEntry lazy, and a Hibernate
-        // session closes the instant its repository call returns (each is individually
-        // @Transactional) — touching that lazy field even one line later in this same lambda
-        // throws LazyInitializationException. See the analogous fix on ProjectDashboardService's
-        // allocations fetch (a different flavor of the same "wrong query, not wrong thread" bug).
+        // findBlockedByEmployeeIdsInAndDateRange eager-fetches eodEntry and narrows by date at the
+        // DB level, so grouping by t.getEodEntry().getEntryDate() right below is safe. The simpler
+        // findBlockedByManagerId leaves eodEntry lazy — a Hibernate session closes the instant its
+        // repository call returns, so touching that lazy field even one line later throws
+        // LazyInitializationException. Wrong query, not wrong thread.
         CompletableFuture<Map<LocalDate, Long>> blockedCountByDateF = CompletableFuture.supplyAsync(
-                () -> taskRepository.findBlockedByManagerIdAndDateRange(leadId, startDate, endDate).stream()
+                () -> (memberIds.isEmpty() ? java.util.Collections.<EodTask>emptyList()
+                        : taskRepository.findBlockedByEmployeeIdsInAndDateRange(memberIds, startDate, endDate)).stream()
                         .filter(t -> t.getAcknowledgedAt() == null)
                         .collect(Collectors.groupingBy(t -> t.getEodEntry().getEntryDate(), Collectors.counting())),
                 dashboardQueryExecutor);
@@ -512,15 +549,24 @@ public class TeamLeadService {
         return activeMembers(leadId).stream()
                 .filter(m -> m.getId().equals(employeeId))
                 .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your direct report"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Not a member of your team"));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────────
 
-    private List<AppUser> activeMembers(Long managerId) {
+    private List<AppUser> activeMembers(Long leadId) {
+        return allocationRepository.findActiveMembersByProjectLead(leadId, LocalDate.now());
+    }
+
+    private List<AppUser> activeMembersByManagerId(Long managerId) {
         return userRepository.findByManagerId(managerId).stream()
                 .filter(u -> u.getStatus() == AppUser.Status.ACTIVE && u.getDeletedAt() == null)
                 .toList();
+    }
+
+    private boolean isInLeadTeam(Long employeeId, Long leadId) {
+        return allocationRepository.findActiveMembersByProjectLead(leadId, LocalDate.now())
+                .stream().anyMatch(u -> u.getId().equals(employeeId));
     }
 
     private String resolveStatus(Optional<EodEntry> entryOpt, boolean holidayToday) {
@@ -591,7 +637,12 @@ public class TeamLeadService {
         AppUser actor = userRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
-        if (actor.getRole() != AppUser.Role.MANAGER && actor.getRole() != AppUser.Role.SUPERADMIN) {
+        // Phase 7: broadened to ADMIN and DM in addition to MANAGER/SUPERADMIN; Phase 8 replaces
+        // this with a capability-based check (projectLeadRepository.existsByLeadIdAndProjectId).
+        java.util.Set<AppUser.Role> allowed = java.util.Set.of(
+                AppUser.Role.MANAGER, AppUser.Role.SUPERADMIN,
+                AppUser.Role.ADMIN, AppUser.Role.DM);
+        if (!allowed.contains(actor.getRole())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
         return actor;

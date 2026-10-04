@@ -55,6 +55,7 @@ const EMPTY_CAPABILITIES: ServerUserCapabilities = {
   leadsProjectNames: [],
   managesProjectIds: [],
   managesProjectNames: [],
+  hasDirectReports: false,
 };
 
 export function buildAuthUser(serverUser: ServerUser, mustChangePassword?: boolean): AuthUser {

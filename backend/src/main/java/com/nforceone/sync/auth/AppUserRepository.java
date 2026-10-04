@@ -70,6 +70,8 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long>, JpaSpec
 
     List<AppUser> findByManagerId(Long managerId);
 
+    boolean existsByManagerIdAndDeletedAtIsNull(Long managerId);
+
     List<AppUser> findByRoleAndStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Role role,
                                                                          AppUser.Status status);
 
