@@ -6,6 +6,7 @@ import com.nforceone.sync.auth.dto.ForgotPasswordRequest;
 import com.nforceone.sync.auth.dto.LoginRequest;
 import com.nforceone.sync.auth.dto.LoginResponse;
 import com.nforceone.sync.auth.dto.UserDto;
+import com.nforceone.sync.project.AllocationRepository;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
 import jakarta.validation.Valid;
@@ -38,6 +39,7 @@ public class AuthController {
     private final AccountLockoutService accountLockoutService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final ProjectRepository projectRepository;
+    private final AllocationRepository allocationRepository;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtService jwtService,
@@ -46,7 +48,8 @@ public class AuthController {
                           UserService userService,
                           AccountLockoutService accountLockoutService,
                           PasswordResetTokenRepository passwordResetTokenRepository,
-                          ProjectRepository projectRepository) {
+                          ProjectRepository projectRepository,
+                          AllocationRepository allocationRepository) {
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.appUserRepository = appUserRepository;
@@ -55,6 +58,7 @@ public class AuthController {
         this.accountLockoutService = accountLockoutService;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.projectRepository = projectRepository;
+        this.allocationRepository = allocationRepository;
     }
 
     @PostMapping("/login")
@@ -206,7 +210,8 @@ public class AuthController {
         List<Project> managed = projectRepository.findByPmIdOrderByNameAsc(user.getId())
                 .stream().filter(p -> p.getStatus() == Project.Status.ACTIVE).toList();
         boolean hasDirectReports = appUserRepository.existsByManagerIdAndDeletedAtIsNull(user.getId());
-        return UserDto.from(user, led, managed, hasDirectReports);
+        String eodForm = computeEodForm(user);
+        return UserDto.from(user, led, managed, hasDirectReports, eodForm);
     }
 
     private static String firstNameOf(AppUser user) {
@@ -227,5 +232,26 @@ public class AuthController {
                     return user != null && user.getDeletedAt() == null
                             && user.getStatus() == AppUser.Status.ACTIVE;
                 });
+    }
+
+    /**
+     * Determines which EOD submission form this user should use.
+     * - EMPLOYEE always gets PROJECT_GROUPED (task-based form).
+     * - Any role with an active project allocation today gets PROJECT_GROUPED.
+     * - Any role with a reporting manager but no active allocation gets PLAIN_LOG (daily summary).
+     * - No reporting manager (top-level SuperAdmin) → null (no EOD submission).
+     */
+    private String computeEodForm(AppUser user) {
+        if (user.getRole() == AppUser.Role.EMPLOYEE) {
+            return "PROJECT_GROUPED";
+        }
+        if (user.getManager() == null) {
+            return null;
+        }
+        java.time.LocalDate today = java.time.LocalDate.now();
+        boolean hasAllocation = !allocationRepository
+                .findEmployeeIdsAllocatedOn(List.of(user.getId()), today)
+                .isEmpty();
+        return hasAllocation ? "PROJECT_GROUPED" : "PLAIN_LOG";
     }
 }

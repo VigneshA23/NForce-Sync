@@ -318,6 +318,10 @@ public class MissingEodReportService {
     // Mirrors ProjectDashboardService.isLeaveOnlyEntry / TeamLeadService's equivalent exactly —
     // no shared leave-request workflow exists yet to look this up directly.
     private boolean isLeaveOnlyEntry(EodEntry entry) {
+        if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+            return entry.getLogTotalHours() != null
+                    && entry.getLogTotalHours().compareTo(java.math.BigDecimal.ZERO) == 0;
+        }
         List<EodTask> tasks = entry.getTasks();
         if (tasks.isEmpty()) return false;
         return tasks.stream().allMatch(t ->

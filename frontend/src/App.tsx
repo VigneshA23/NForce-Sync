@@ -35,6 +35,7 @@ const MyBlockers          = lazy(() => import('./pages/employee/MyBlockers'));
 const EmployeeEodInbox    = lazy(() => import('./pages/employee/EodInbox'));
 const MyUtilization       = lazy(() => import('./pages/employee/MyUtilization'));
 const SubmitEOD           = lazy(() => import('./pages/employee/SubmitEOD'));
+const DailyLogForm        = lazy(() => import('./pages/employee/DailyLogForm'));
 const EodHistory          = lazy(() => import('./pages/employee/EodHistory'));
 const TeamDashboard       = lazy(() => import('./pages/lead/TeamDashboard'));
 const MyProjects          = lazy(() => import('./pages/lead/MyProjects'));
@@ -166,6 +167,14 @@ function RoleLanding() {
   return <Navigate to={ROLE_LANDING[user!.role]} replace />;
 }
 
+/** Routes /eod/submit to the correct form based on the user's computed eodForm capability. */
+function EodSubmitRoute() {
+  const { user } = useAuth();
+  const eodForm = user?.capabilities?.eodForm;
+  if (eodForm === 'PLAIN_LOG') return <DailyLogForm />;
+  return <SubmitEOD />;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -197,7 +206,7 @@ function AppRoutes() {
             <Route path="/my-projects"  element={<EmployeeMyProjects />} />
             <Route path="/blockers"     element={<MyBlockers />} />
             <Route path="/employee/eod-inbox" element={<EmployeeEodInbox />} />
-            <Route path="/eod/submit"  element={<SubmitEOD />} />
+            <Route path="/eod/submit"  element={<EodSubmitRoute />} />
             <Route path="/eod/history" element={<EodHistory />} />
             <Route path="/utilization" element={<MyUtilization />} />
 

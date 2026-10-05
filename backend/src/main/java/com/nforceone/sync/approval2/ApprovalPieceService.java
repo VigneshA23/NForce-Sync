@@ -3,9 +3,13 @@ package com.nforceone.sync.approval2;
 import com.nforceone.sync.approval2.dto.ApprovalPieceDto;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.auth.AuditLog;
+import com.nforceone.sync.auth.AuditLogRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.dto.EodEntryDto;
+import com.nforceone.sync.notification.NotificationDates;
+import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.utilization.UtilizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -24,17 +28,23 @@ public class ApprovalPieceService {
     private final EodEntryRepository entryRepository;
     private final AppUserRepository userRepository;
     private final UtilizationService utilizationService;
+    private final NotificationService notificationService;
+    private final AuditLogRepository auditLogRepository;
 
     public ApprovalPieceService(EodProjectApprovalRepository pieceRepository,
                                  EodProjectApprovalActionRepository actionRepository,
                                  EodEntryRepository entryRepository,
                                  AppUserRepository userRepository,
-                                 UtilizationService utilizationService) {
+                                 UtilizationService utilizationService,
+                                 NotificationService notificationService,
+                                 AuditLogRepository auditLogRepository) {
         this.pieceRepository = pieceRepository;
         this.actionRepository = actionRepository;
         this.entryRepository = entryRepository;
         this.userRepository = userRepository;
         this.utilizationService = utilizationService;
+        this.notificationService = notificationService;
+        this.auditLogRepository = auditLogRepository;
     }
 
     @Transactional(readOnly = true)
@@ -43,6 +53,16 @@ public class ApprovalPieceService {
         List<EodProjectApproval> pieces;
         if (actor.getRole() == AppUser.Role.SUPERADMIN) {
             pieces = pieceRepository.findAllByStatus(EodProjectApproval.Status.PENDING);
+        } else if (actor.getRole() == AppUser.Role.ADMIN) {
+            // Admin sees their own assigned pieces + all ADMIN_GROUP pieces (no specific approver).
+            List<EodProjectApproval> assigned = pieceRepository.findByApproverIdAndStatus(
+                    actor.getId(), EodProjectApproval.Status.PENDING);
+            List<EodProjectApproval> adminGroup = pieceRepository.findByApproverTypeAndStatus(
+                    EodProjectApproval.ApproverType.ADMIN_GROUP, EodProjectApproval.Status.PENDING);
+            java.util.Set<Long> seen = new java.util.HashSet<>();
+            pieces = new java.util.ArrayList<>();
+            for (EodProjectApproval p : assigned) { if (seen.add(p.getId())) pieces.add(p); }
+            for (EodProjectApproval p : adminGroup) { if (seen.add(p.getId())) pieces.add(p); }
         } else {
             pieces = pieceRepository.findByApproverIdAndStatus(actor.getId(), EodProjectApproval.Status.PENDING);
         }
@@ -100,9 +120,20 @@ public class ApprovalPieceService {
         EodEntry entry = piece.getEodEntry();
         updateEntryStatus(entry);
 
-        // Decision 8: utilization only for EMPLOYEE role
-        if (entry.getEmployee().getRole() == AppUser.Role.EMPLOYEE) {
+        // Decision 8: utilization only for EMPLOYEE role; PLAIN_LOG entries are never counted.
+        if (entry.getEmployee().getRole() == AppUser.Role.EMPLOYEE
+                && entry.getEntryForm() != EodEntry.EntryForm.PLAIN_LOG) {
             utilizationService.recomputeForEntry(entry.getId());
+        }
+
+        // Notify the submitter that their daily log was approved.
+        if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+            String dateLabel = NotificationDates.format(entry.getEntryDate());
+            String body = actor.getFullName() + " approved your daily log for " + dateLabel + ".";
+            notificationService.send(entry.getEmployee().getId(), "EOD_APPROVED",
+                    "Daily log approved", body, "/eod/history");
+            writeAuditLog("EOD_ENTRY", entry.getId(), "PLAIN_LOG_APPROVED", actor,
+                    "{\"date\":\"" + entry.getEntryDate() + "\",\"pieceId\":" + piece.getId() + "}");
         }
 
         return ApprovalPieceDto.from(piece);
@@ -131,6 +162,19 @@ public class ApprovalPieceService {
 
         updateEntryStatus(piece.getEodEntry());
 
+        // Notify the submitter that their daily log was rejected.
+        EodEntry entry = piece.getEodEntry();
+        if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+            String dateLabel = NotificationDates.format(entry.getEntryDate());
+            String body = actor.getFullName() + " rejected your daily log for " + dateLabel
+                    + ". Reason: " + comment;
+            notificationService.send(entry.getEmployee().getId(), "EOD_REJECTED",
+                    "Daily log rejected", body, "/eod/submit?date=" + entry.getEntryDate());
+            writeAuditLog("EOD_ENTRY", entry.getId(), "PLAIN_LOG_REJECTED", actor,
+                    "{\"date\":\"" + entry.getEntryDate() + "\",\"pieceId\":" + piece.getId()
+                            + ",\"reason\":\"" + comment.replace("\"", "'") + "\"}");
+        }
+
         return ApprovalPieceDto.from(piece);
     }
 
@@ -146,8 +190,11 @@ public class ApprovalPieceService {
     private void checkApproverAuthorization(AppUser actor, EodProjectApproval piece) {
         if (actor.getRole() == AppUser.Role.SUPERADMIN) return;
         if (piece.getApprover() != null && piece.getApprover().getId().equals(actor.getId())) return;
+        // Admin can act on ADMIN_GROUP pieces (no specific approver assigned).
+        if (actor.getRole() == AppUser.Role.ADMIN
+                && piece.getApproverType() == EodProjectApproval.ApproverType.ADMIN_GROUP) return;
         throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Only the designated approver or a Super Admin can act on this piece");
+                "Only the designated approver, an Admin (for admin-group pieces), or a Super Admin can act on this piece");
     }
 
     private void requirePieceStatus(EodProjectApproval piece, EodProjectApproval.Status required) {
@@ -207,5 +254,17 @@ public class ApprovalPieceService {
         return pieceRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Approval piece not found: " + id));
+    }
+
+    private void writeAuditLog(String entityType, Long entityId, String action,
+                                AppUser actor, String afterValue) {
+        AuditLog al = new AuditLog();
+        al.setEntityType(entityType);
+        al.setEntityId(entityId);
+        al.setAction(action);
+        al.setActor(actor);
+        al.setAfterValue(afterValue);
+        al.setOccurredAt(OffsetDateTime.now());
+        auditLogRepository.save(al);
     }
 }

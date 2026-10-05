@@ -303,6 +303,26 @@ const LEAD_COMBINED_SECTIONS: RoleNav = [
   },
 ];
 
+// EOD Submit + History for roles other than 'employee' whose eodForm is non-null.
+// Employee and employee-with-lead already get this via NAV.employee / MY_WORK_SECTIONS.
+const MY_EOD_SECTIONS: RoleNav = [
+  {
+    section: 'My EOD',
+    items: [
+      { key: 'eod-submit',  label: 'Submit EOD',      path: '/eod/submit',  icon: ClipboardList },
+      {
+        key: 'eod-history', label: 'My EOD History', path: '/eod/history', icon: BarChart3,
+        subItems: [
+          { key: 'eod-submitted', label: 'Submitted', query: { status: 'SUBMITTED' } },
+          { key: 'eod-approved',  label: 'Approved',  query: { status: 'APPROVED' } },
+          { key: 'eod-rejected',  label: 'Rejected',  query: { status: 'REJECTED' } },
+          { key: 'eod-draft',     label: 'Draft',     query: { status: 'DRAFT' } },
+        ],
+      },
+    ],
+  },
+];
+
 function sectionPaths(sections: RoleNav): string[] {
   return sections.flatMap(s => s.items.flatMap(entry =>
     isNavGroup(entry) ? entry.children.map(c => c.path) : [entry.path]));
@@ -339,6 +359,16 @@ export function getNavSections(role: Role, capabilities: ServerUserCapabilities)
 
   if (capabilities.hasDirectReports) {
     sections.push(...MY_REPORTS_SECTIONS);
+  }
+
+  // Non-employee roles that submit EODs get their own section so the form and history
+  // are reachable without crowding the role's primary work sections.
+  if (role !== 'employee' && capabilities.submitsEod) {
+    const alreadyHasEodSubmit = sections.some(s =>
+      s.items.some(e => !isNavGroup(e) && (e as NavItem).path === '/eod/submit'));
+    if (!alreadyHasEodSubmit) {
+      sections.push(...MY_EOD_SECTIONS);
+    }
   }
 
   return sections;

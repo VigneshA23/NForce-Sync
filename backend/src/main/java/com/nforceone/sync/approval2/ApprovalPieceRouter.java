@@ -25,13 +25,21 @@ public class ApprovalPieceRouter {
         AppUser reportingManager = employee.getManager();
 
         if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
-            return List.of(plainLogPiece(reportingManager));
+            boolean isLeave = entry.getLogTotalHours() != null
+                    && entry.getLogTotalHours().compareTo(BigDecimal.ZERO) == 0;
+            return List.of(plainLogPiece(reportingManager, isLeave));
         }
 
         return routeProjectGrouped(entry, employee, reportingManager, config);
     }
 
-    private ApprovalPieceSpec plainLogPiece(AppUser reportingManager) {
+    private ApprovalPieceSpec plainLogPiece(AppUser reportingManager, boolean isLeave) {
+        if (isLeave) {
+            // Leave day: auto-approved immediately, no review needed.
+            return new ApprovalPieceSpec(null, null,
+                    EodProjectApproval.ApproverType.AUTO_APPROVED,
+                    EodProjectApproval.Status.APPROVED);
+        }
         if (reportingManager != null) {
             return new ApprovalPieceSpec(null, reportingManager,
                     EodProjectApproval.ApproverType.REPORTING_MANAGER,

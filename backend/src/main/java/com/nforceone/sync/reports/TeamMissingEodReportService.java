@@ -300,6 +300,11 @@ public class TeamMissingEodReportService {
     }
 
     private boolean isLeaveOnlyEntry(EodEntry entry) {
+        // PLAIN_LOG leave day: hours=0, no tasks
+        if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+            return entry.getLogTotalHours() != null
+                    && entry.getLogTotalHours().compareTo(java.math.BigDecimal.ZERO) == 0;
+        }
         List<EodTask> tasks = entry.getTasks();
         if (tasks.isEmpty()) return false;
         return tasks.stream().allMatch(t ->

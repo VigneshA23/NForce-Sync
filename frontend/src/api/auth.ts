@@ -15,6 +15,10 @@ export interface ServerUserCapabilities {
   managesProjectIds: number[];
   managesProjectNames: string[];
   hasDirectReports: boolean;
+  /** null = no EOD submission; 'PROJECT_GROUPED' = task-based; 'PLAIN_LOG' = daily log */
+  eodForm: 'PROJECT_GROUPED' | 'PLAIN_LOG' | null;
+  /** Convenience: true when eodForm is non-null */
+  submitsEod: boolean;
 }
 
 export interface ServerUser {

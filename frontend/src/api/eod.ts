@@ -60,6 +60,13 @@ export interface EodEntryDto {
   decidedByName?: string | null;
   decidedByRole?: string | null;
   decidedAt?: string | null;
+  // PLAIN_LOG fields — null for PROJECT_GROUPED entries
+  entryForm: string;
+  logSummary: string | null;
+  logTotalHours: number | null;
+  logNotes: string | null;
+  logApproverName: string | null;
+  logApproverType: string | null;
 }
 
 export interface SaveTaskRequest {
@@ -88,6 +95,11 @@ export interface SaveEodRequest {
   tasks: SaveTaskRequest[];
   /** IDs of attachments that belong to the overall EOD entry (not any specific task). */
   attachmentIds: number[];
+  // PLAIN_LOG — omitted for PROJECT_GROUPED saves
+  entryForm?: 'PROJECT_GROUPED' | 'PLAIN_LOG';
+  logSummary?: string | null;
+  logTotalHours?: number | null;
+  logNotes?: string | null;
 }
 
 export async function saveDraft(req: SaveEodRequest): Promise<EodEntryDto> {

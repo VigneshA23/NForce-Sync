@@ -81,6 +81,9 @@ public class EodEntry {
     @Column(name = "log_total_hours", precision = 5, scale = 2)
     private BigDecimal logTotalHours;
 
+    @Column(name = "log_notes", columnDefinition = "TEXT")
+    private String logNotes;
+
     @Column(name = "submitted_at")
     private OffsetDateTime submittedAt;
 

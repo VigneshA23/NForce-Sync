@@ -10,7 +10,6 @@ import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
 import com.nforceone.sync.businessrules.ShiftSchedule;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
-import com.nforceone.sync.project.AllocationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -38,10 +37,9 @@ import java.util.Set;
  * still are — this only adds the automatic pass. It reuses the same {@code EOD_REMINDER} type and
  * {@code /eod/submit} link so both look identical in the notification list.
  *
- * <p>Who gets reminded is the intersection of three tests: the role actually submits EODs
- * (EMPLOYEE or MANAGER), the person is on the shift whose cutoff just passed, and they hold a
- * project allocation covering that work date. Shift membership alone had been reminding every role
- * on the shift — a PM, and even a read-only Leadership viewer — to submit "your EOD".
+ * <p>Selection rule: every active user with a reporting manager (manager_id not null) who has no
+ * submitted/approved entry for a working day. Role and project allocation are irrelevant — PMs,
+ * Admins, and Employees all owe an EOD if they report to someone.
  */
 @Component
 public class EodReminderScheduler {
@@ -75,7 +73,6 @@ public class EodReminderScheduler {
     private final HolidayRepository holidayRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationService notificationService;
-    private final AllocationRepository allocationRepository;
 
     public EodReminderScheduler(ShiftDefinitionRepository shiftRepository,
                                 AppUserRepository userRepository,
@@ -83,8 +80,7 @@ public class EodReminderScheduler {
                                 BusinessRuleConfigRepository configRepository,
                                 HolidayRepository holidayRepository,
                                 NotificationRepository notificationRepository,
-                                NotificationService notificationService,
-                                AllocationRepository allocationRepository) {
+                                NotificationService notificationService) {
         this.shiftRepository = shiftRepository;
         this.userRepository = userRepository;
         this.entryRepository = entryRepository;
@@ -92,7 +88,6 @@ public class EodReminderScheduler {
         this.holidayRepository = holidayRepository;
         this.notificationRepository = notificationRepository;
         this.notificationService = notificationService;
-        this.allocationRepository = allocationRepository;
     }
 
     /**
@@ -125,10 +120,8 @@ public class EodReminderScheduler {
                 // triggered or is too stale to nag about now.
                 if (cutoffAt.isAfter(now) || cutoffAt.isBefore(now.minus(CATCH_UP))) continue;
 
-                // Nobody owes an EOD for a day they were not expected to work.
-                if (isNonWorkingDay(workDate, config)) continue;
-
-                sent += remindShift(shift, workDate, cutoffAt);
+                OffsetDateTime cutoffInstant = cutoffAt.atZone(ZoneId.systemDefault()).toOffsetDateTime();
+                sent += sendRemindersForDate(workDate, config, cutoffInstant, shift.getName());
             }
         }
 
@@ -137,42 +130,41 @@ public class EodReminderScheduler {
         }
     }
 
-    private int remindShift(ShiftDefinition shift, LocalDate workDate, LocalDateTime cutoffAt) {
-        // A user submits an EOD if they have a reporting manager. Users without one
-        // (typically the top-level Super Admin) are exempt.
-        List<AppUser> members = userRepository.findByShiftIdAndStatusAndDeletedAtIsNull(
-                        shift.getId(), AppUser.Status.ACTIVE).stream()
+    /**
+     * Reminds all active users with a reporting manager who have not submitted for {@code workDate}.
+     *
+     * <p>Package-private so integration/unit tests can invoke it directly with a fixed date and
+     * bypass the shift-timing check in {@link #sendDueReminders()}.
+     *
+     * @param cutoffSince lower-bound for idempotency — any EOD_REMINDER delivered after this
+     *                    instant is treated as "already covered" and suppresses a new one
+     * @param shiftName   included verbatim in the notification body
+     * @return count of notifications sent in this call
+     */
+    int sendRemindersForDate(LocalDate workDate, BusinessRuleConfig config,
+                             OffsetDateTime cutoffSince, String shiftName) {
+        if (isNonWorkingDay(workDate, config)) return 0;
+
+        List<AppUser> members = userRepository.findByStatusAndDeletedAtIsNull(AppUser.Status.ACTIVE)
+                .stream()
                 .filter(u -> u.getManager() != null)
                 .toList();
         if (members.isEmpty()) return 0;
 
-        // And of those, only the ones actually staffed on something that day. Project allocation is
-        // the test the Missing EOD report already uses to decide who owes an EOD, so both features
-        // agree rather than each carrying its own definition.
-        Set<Long> allocated = allocationRepository.findEmployeeIdsAllocatedOn(
-                members.stream().map(AppUser::getId).toList(), workDate);
-        if (allocated.isEmpty()) return 0;
-
-        OffsetDateTime cutoffInstant = cutoffAt.atZone(ZoneId.systemDefault()).toOffsetDateTime();
         int sent = 0;
-
         for (AppUser member : members) {
-            if (!allocated.contains(member.getId())) continue;
             if (!owesEod(member.getId(), workDate)) continue;
 
-            // Idempotency: anything of this type already delivered since the cutoff — including a
-            // manual reminder from a manager — means this deadline is already covered.
+            // Idempotency: a manual reminder or an earlier automatic one since the cutoff is enough.
             if (notificationRepository.existsByUserIdAndTypeAndCreatedAtAfter(
-                    member.getId(), "EOD_REMINDER", cutoffInstant)) {
+                    member.getId(), "EOD_REMINDER", cutoffSince)) {
                 continue;
             }
 
-            // Shift names often already end in "Shift" (e.g. "Evening Shift"), so the name is used
-            // bare rather than suffixed — "the Evening Shift cutoff", not "Evening Shift shift".
             notificationService.send(member.getId(), "EOD_REMINDER",
                     "EOD submission overdue",
-                    "Your EOD for " + com.nforceone.sync.notification.NotificationDates.format(workDate) + " is past the " + shift.getName()
-                            + " cutoff. Please submit it.",
+                    "Your EOD for " + NotificationDates.format(workDate) + " is past the "
+                            + shiftName + " cutoff. Please submit it.",
                     "/eod/submit?date=" + workDate);
             sent++;
         }

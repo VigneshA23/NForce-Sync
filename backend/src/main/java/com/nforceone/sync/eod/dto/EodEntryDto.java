@@ -42,7 +42,15 @@ public record EodEntryDto(
          *  which may be the entry's Team Lead rather than the PM. */
         String           decidedByName,
         String           decidedByRole,
-        OffsetDateTime   decidedAt
+        OffsetDateTime   decidedAt,
+        // ── PLAIN_LOG fields (null for PROJECT_GROUPED entries) ──────────────────
+        String           entryForm,
+        String           logSummary,
+        BigDecimal       logTotalHours,
+        String           logNotes,
+        // Approver name + type for the plain-log piece, populated for PLAIN_LOG entries only.
+        String           logApproverName,
+        String           logApproverType
 ) {
     // Default factory — no reviewer comment (used in approval flow, saveDraft, submit)
     public static EodEntryDto from(EodEntry e) {
@@ -103,7 +111,14 @@ public record EodEntryDto(
                 enrichment != null ? enrichment.isResubmission() : null,
                 enrichment != null ? enrichment.decidedByName() : null,
                 enrichment != null ? enrichment.decidedByRole() : null,
-                enrichment != null ? enrichment.decidedAt() : null
+                enrichment != null ? enrichment.decidedAt() : null,
+                // PLAIN_LOG fields
+                e.getEntryForm() != null ? e.getEntryForm().name() : EodEntry.EntryForm.PROJECT_GROUPED.name(),
+                e.getLogSummary(),
+                e.getLogTotalHours(),
+                e.getLogNotes(),
+                null, // logApproverName — populated by ApprovalPieceService when needed
+                null  // logApproverType
         );
     }
 }

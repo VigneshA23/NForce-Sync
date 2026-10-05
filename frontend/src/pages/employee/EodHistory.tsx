@@ -240,16 +240,23 @@ export default function EodHistory() {
   });
   const workingHoursPerDay = dayDefaults?.workingHoursPerDay ?? 8;
 
-  const totalHours = (entry: EodHistoryEntryDto) =>
-    entry.tasks.reduce((sum, t) => sum + (Number(t.hours) || 0), 0);
+  const totalHours = (entry: EodHistoryEntryDto) => {
+    if (entry.entryForm === 'PLAIN_LOG') return entry.logTotalHours ?? 0;
+    return entry.tasks.reduce((sum, t) => sum + (Number(t.hours) || 0), 0);
+  };
 
   const projectSummary = (entry: EodHistoryEntryDto): string => {
+    if (entry.entryForm === 'PLAIN_LOG') return 'Daily log';
     const codes = Array.from(new Set(entry.tasks.map(t => t.projectCode).filter(Boolean))) as string[];
     if (codes.length === 0) return '-';
     return codes.length === 1 ? codes[0] : `${codes[0]} +${codes.length - 1}`;
   };
 
   const taskSummary = (entry: EodHistoryEntryDto): string => {
+    if (entry.entryForm === 'PLAIN_LOG') {
+      if ((entry.logTotalHours ?? 0) === 0) return 'Leave day';
+      return entry.logSummary ? (entry.logSummary.length > 60 ? entry.logSummary.slice(0, 57) + '…' : entry.logSummary) : 'Daily log';
+    }
     if (entry.tasks.length === 0) {
       return entry.dayType !== 'WORKING_DAY'
         ? (DAY_TYPE_LABELS[entry.dayType] ?? entry.dayType.replace('_', ' '))
@@ -270,6 +277,8 @@ export default function EodHistory() {
       rows = rows.filter(e => {
         const haystack = [
           e.entryDate,
+          e.logSummary ?? '',
+          e.logNotes ?? '',
           ...e.tasks.map(t => t.projectCode ?? ''),
           ...e.tasks.map(t => t.categoryName ?? ''),
           ...e.tasks.map(t => t.description ?? ''),

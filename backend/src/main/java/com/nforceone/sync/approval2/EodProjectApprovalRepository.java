@@ -69,4 +69,12 @@ public interface EodProjectApprovalRepository extends JpaRepository<EodProjectAp
             @Param("approverId") Long approverId,
             @Param("approverType") EodProjectApproval.ApproverType approverType,
             @Param("status") EodProjectApproval.Status status);
+
+    /** ADMIN_GROUP pieces — no specific approver assigned; any Admin can act on these. */
+    @Query("SELECT p FROM EodProjectApproval p JOIN FETCH p.eodEntry e JOIN FETCH e.employee " +
+           "LEFT JOIN FETCH p.project LEFT JOIN FETCH p.approver " +
+           "WHERE p.approverType = :approverType AND p.status = :status AND p.supersededAt IS NULL")
+    List<EodProjectApproval> findByApproverTypeAndStatus(
+            @Param("approverType") EodProjectApproval.ApproverType approverType,
+            @Param("status") EodProjectApproval.Status status);
 }

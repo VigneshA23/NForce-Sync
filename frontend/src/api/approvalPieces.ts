@@ -18,6 +18,11 @@ export interface ApprovalPieceDto {
   actedAt: string | null;
   comment: string | null;
   entryDate: string;
+  // PLAIN_LOG fields — null for PROJECT_GROUPED pieces
+  entryForm: string;
+  logSummary: string | null;
+  logTotalHours: number | null;
+  logNotes: string | null;
 }
 
 const STALE = 10_000;

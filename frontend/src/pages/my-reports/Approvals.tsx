@@ -66,7 +66,8 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
     }
   }
 
-  const projectLabel = piece.projectName ?? 'Non-project hours';
+  const projectLabel = piece.entryForm === 'PLAIN_LOG' ? 'Daily log'
+                     : (piece.projectName ?? 'Non-project hours');
   const pieceType = piece.approverType ?? 'REPORTING_MANAGER';
 
   return (
@@ -241,10 +242,30 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
           borderTop: '1px solid var(--line)', padding: '10px 16px 12px 60px',
           background: 'rgba(255,255,255,.015)',
         }}>
-          <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
+          <div style={{ fontSize: 12, color: 'var(--txt-dim)', marginBottom: piece.entryForm === 'PLAIN_LOG' ? 8 : 0 }}>
             <span style={{ color: 'var(--txt-mut)', fontWeight: 600 }}>Frozen: </span>
             {formatDate(piece.frozenAt)}
           </div>
+          {piece.entryForm === 'PLAIN_LOG' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
+                <span style={{ color: 'var(--txt-mut)', fontWeight: 600 }}>Hours: </span>
+                {(piece.logTotalHours ?? 0) === 0 ? 'Leave day' : `${piece.logTotalHours}h`}
+              </div>
+              {piece.logSummary && (
+                <div style={{ fontSize: 12, color: 'var(--txt)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  <span style={{ color: 'var(--txt-mut)', fontWeight: 600 }}>Summary: </span>
+                  {piece.logSummary}
+                </div>
+              )}
+              {piece.logNotes && (
+                <div style={{ fontSize: 12, color: 'var(--txt-dim)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  <span style={{ color: 'var(--txt-mut)', fontWeight: 600 }}>Notes: </span>
+                  {piece.logNotes}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

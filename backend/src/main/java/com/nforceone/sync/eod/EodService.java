@@ -8,6 +8,8 @@ import com.nforceone.sync.approval2.EodProjectApproval;
 import com.nforceone.sync.approval2.EodProjectApprovalRepository;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.auth.AuditLog;
+import com.nforceone.sync.auth.AuditLogRepository;
 import com.nforceone.sync.businessrules.BusinessRuleConfig;
 import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.businessrules.ShiftDefinition;
@@ -96,6 +98,8 @@ public class EodService {
     private final EodProjectApprovalRepository projectApprovalRepository;
     private final EodAccessPolicy accessPolicy;
     private final LeadAccessService leadAccess;
+    private final com.nforceone.sync.project.AllocationRepository allocationRepository;
+    private final AuditLogRepository auditLogRepository;
 
     public EodService(EodEntryRepository entryRepository,
                       EodTaskRepository taskRepository,
@@ -111,7 +115,9 @@ public class EodService {
                       ApprovalPieceRouter approvalPieceRouter,
                       EodProjectApprovalRepository projectApprovalRepository,
                       EodAccessPolicy accessPolicy,
-                      LeadAccessService leadAccess) {
+                      LeadAccessService leadAccess,
+                      com.nforceone.sync.project.AllocationRepository allocationRepository,
+                      AuditLogRepository auditLogRepository) {
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
         this.userRepository    = userRepository;
@@ -127,6 +133,8 @@ public class EodService {
         this.projectApprovalRepository = projectApprovalRepository;
         this.accessPolicy = accessPolicy;
         this.leadAccess = leadAccess;
+        this.allocationRepository = allocationRepository;
+        this.auditLogRepository = auditLogRepository;
     }
 
     public EodEntryDto saveDraft(SaveEodRequest request, String actingEmail) {
@@ -149,6 +157,12 @@ public class EodService {
             entry.setEntryDate(request.entryDate());
             entry.setStatus(EodEntry.Status.DRAFT);
             entry.setCreatedAt(now);
+            // entryForm is decided at draft creation and never changes.
+            // Validate that the requested form matches what the server would assign.
+            if (request.entryForm() != null) {
+                validateFormAssignment(request.entryForm(), employee);
+                entry.setEntryForm(request.entryForm());
+            }
         } else {
             if (!entry.isEditable()) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -156,6 +170,26 @@ public class EodService {
             }
             // Re-open as DRAFT when coming from REJECTED
             entry.setStatus(EodEntry.Status.DRAFT);
+        }
+
+        // PLAIN_LOG draft: persist the summary/hours/notes, skip task processing.
+        if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+            if (request.logSummary() != null) entry.setLogSummary(request.logSummary());
+            if (request.logTotalHours() != null) entry.setLogTotalHours(request.logTotalHours());
+            if (request.logNotes() != null) entry.setLogNotes(request.logNotes());
+            entry.setUpdatedAt(now);
+            EodEntry savedPlain;
+            try {
+                savedPlain = entryRepository.save(entry);
+            } catch (DataIntegrityViolationException ex) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "An entry for this date was just created — reload and try again");
+            }
+            EodAttachmentService.AttachmentsByScope attachments =
+                    attachmentService.loadForEntries(List.of(savedPlain.getId()));
+            return EodEntryDto.from(savedPlain, null, null,
+                    attachments.entryLevelByEntryId().getOrDefault(savedPlain.getId(), List.of()),
+                    java.util.Map.of());
         }
 
         EodEntry.DayType dayType = request.dayType() != null
@@ -235,14 +269,17 @@ public class EodService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Entry in status " + entry.getStatus() + " cannot be submitted");
         }
-        // A holiday has nothing to log, so every task-level and hours check is skipped
-        // outright — not satisfied with empty rows or 0 hours, simply not run.
-        if (entry.getDayType() != EodEntry.DayType.HOLIDAY) {
-            validateLoggedDay(entry);
+        if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+            validatePlainLog(entry);
+        } else {
+            // A holiday has nothing to log, so every task-level and hours check is skipped
+            // outright — not satisfied with empty rows or 0 hours, simply not run.
+            if (entry.getDayType() != EodEntry.DayType.HOLIDAY) {
+                validateLoggedDay(entry);
+            }
+            validateTimeAdjustment(entry, employee);
+            applyOvertime(entry, employee);
         }
-
-        validateTimeAdjustment(entry, employee);
-        applyOvertime(entry, employee);
 
         OffsetDateTime now = OffsetDateTime.now();
         entry.setStatus(EodEntry.Status.SUBMITTED);
@@ -258,6 +295,14 @@ public class EodService {
         }
 
         EodEntry saved = entryRepository.save(entry);
+
+        // Audit log: EOD submitted (PLAIN_LOG form only — PROJECT_GROUPED is already covered
+        // by the legacy ApprovalAction record written per piece).
+        if (saved.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+            writeAuditLog("EOD_ENTRY", saved.getId(), "PLAIN_LOG_SUBMITTED", employee,
+                    "{\"date\":\"" + saved.getEntryDate() + "\",\"logTotalHours\":"
+                            + saved.getLogTotalHours() + "}");
+        }
 
         // Route and persist per-project approval pieces (Phase 2).
         // On resubmission after rejection, stamp the current-cycle pieces with superseded_at
@@ -317,10 +362,24 @@ public class EodService {
             entryRepository.save(saved);
         }
 
-        // No manager assigned → nobody to notify (matches the rest of the module: an
-        // unmanaged employee's entry is only ever actionable by a SUPERADMIN, who works off the
-        // Approvals list directly rather than a per-submission notification).
-        if (saved.getManagerId() != null) {
+        // PLAIN_LOG leave: all pieces carry AUTO_APPROVED status immediately — promote entry now.
+        // This path is distinct from the preApprovedProjectIds path (that handles resubmissions
+        // where project approvals carry over); here it's a brand-new leave submission.
+        boolean isPlainLogLeave = false;
+        if (saved.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+            List<EodProjectApproval> plainPieces = projectApprovalRepository.findByEodEntryId(saved.getId());
+            boolean allApproved = plainPieces.stream()
+                    .allMatch(p -> p.getStatus() == EodProjectApproval.Status.APPROVED);
+            if (allApproved) {
+                isPlainLogLeave = true;
+                saved.setStatus(EodEntry.Status.APPROVED);
+                entryRepository.save(saved);
+            }
+        }
+
+        // No manager assigned → nobody to notify. Leave days are already approved — no action
+        // needed from the manager so skip the notification.
+        if (saved.getManagerId() != null && !isPlainLogLeave) {
             notificationService.send(saved.getManagerId(), "EOD_SUBMITTED",
                     "New EOD submission",
                     employee.getFullName() + " submitted their EOD entry for "
@@ -464,7 +523,9 @@ public class EodService {
                 date, EodEntry.Status.MISSED.name(), EodEntry.DayType.WORKING_DAY.name(),
                 null, null, false, null, null, null, null,
                 null, null, null, List.of(), List.of(),
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null,
+                // PLAIN_LOG fields — synthetic rows are always PROJECT_GROUPED context
+                EodEntry.EntryForm.PROJECT_GROUPED.name(), null, null, null, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -629,6 +690,53 @@ public class EodService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Total hours (" + effectiveTotal.stripTrailingZeros().toPlainString()
                             + ") cannot exceed 24 for a single day.");
+        }
+    }
+
+    /**
+     * Verifies that the form the caller requested matches what the server would assign.
+     * <ul>
+     *   <li>EMPLOYEE must use PROJECT_GROUPED — they always have tasks to log.
+     *   <li>Non-EMPLOYEE with no active allocation today must use PLAIN_LOG.
+     *   <li>Non-EMPLOYEE with an active allocation may use PROJECT_GROUPED.
+     * </ul>
+     * Called only at draft-creation time (entryForm is immutable after that).
+     */
+    private void validateFormAssignment(EodEntry.EntryForm requested, AppUser employee) {
+        if (employee.getRole() == AppUser.Role.EMPLOYEE) {
+            if (requested == EodEntry.EntryForm.PLAIN_LOG) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Employees must use the project-grouped EOD form, not daily log");
+            }
+            return;
+        }
+        // For non-EMPLOYEE roles check whether an allocation exists today.
+        boolean hasAllocation = !allocationRepository
+                .findEmployeeIdsAllocatedOn(List.of(employee.getId()), LocalDate.now())
+                .isEmpty();
+        if (!hasAllocation && employee.getManager() != null
+                && requested == EodEntry.EntryForm.PROJECT_GROUPED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "You have no active project allocation — use the daily log form instead");
+        }
+    }
+
+    /**
+     * Validation for PLAIN_LOG submissions.
+     *
+     * <p>Rules:
+     * <ul>
+     *   <li>logTotalHours required; must be 0.00–24.00 in 0.25-hour steps (15-min granularity).
+     *   <li>Hours == 0 is a leave day — logSummary is optional.
+     *   <li>Hours > 0 — logSummary required (20–4000 chars).
+     *   <li>logNotes, when present, must not exceed 8000 chars.
+     * </ul>
+     */
+    private void validatePlainLog(EodEntry entry) {
+        String error = PlainLogValidation.validate(
+                entry.getLogTotalHours(), entry.getLogSummary(), entry.getLogNotes());
+        if (error != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
         }
     }
 
@@ -930,6 +1038,18 @@ public class EodService {
                         attachments.entryLevelByEntryId().getOrDefault(e.getId(), List.of()),
                         attachments.byTaskId()))
                 .toList();
+    }
+
+    private void writeAuditLog(String entityType, Long entityId, String action,
+                                AppUser actor, String afterValue) {
+        AuditLog al = new AuditLog();
+        al.setEntityType(entityType);
+        al.setEntityId(entityId);
+        al.setAction(action);
+        al.setActor(actor);
+        al.setAfterValue(afterValue);
+        al.setOccurredAt(OffsetDateTime.now());
+        auditLogRepository.save(al);
     }
 
     private AppUser requireUserByEmail(String email) {
