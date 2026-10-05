@@ -5,7 +5,7 @@ knowledge:
     pageId: eod-submit
     actionId: eod.submit
     version: 1
-    audience: [EMPLOYEE, MANAGER]
+    audience: [EMPLOYEE]
     title: Day types and what each requires to submit
     synonyms:
       - how do I submit my EOD
@@ -49,7 +49,7 @@ knowledge:
     pageId: eod-submit
     actionId: eod.time-adjustment
     version: 1
-    audience: [EMPLOYEE, MANAGER]
+    audience: [EMPLOYEE]
     title: Time adjustment (late arrival, early leave, intervening time-off)
     synonyms:
       - came in late
@@ -81,7 +81,7 @@ knowledge:
     module: eod
     actionId: eod.overtime
     version: 1
-    audience: [EMPLOYEE, MANAGER, PM, SUPERADMIN]
+    audience: [EMPLOYEE, PM, SUPERADMIN]
     title: How overtime is calculated
     synonyms:
       - OT calculation
@@ -107,7 +107,7 @@ knowledge:
     pageId: eod-submit
     actionId: eod.attachments
     version: 1
-    audience: [EMPLOYEE, MANAGER]
+    audience: [EMPLOYEE]
     title: EOD attachments
     synonyms:
       - attach a file to my EOD
@@ -132,7 +132,7 @@ knowledge:
     module: eod
     actionId: eod.missing
     version: 1
-    audience: [EMPLOYEE, MANAGER, PM, SUPERADMIN, ADMIN]
+    audience: [EMPLOYEE, PM, SUPERADMIN, ADMIN]
     title: What a "Missing" EOD means
     synonyms:
       - missing eod
@@ -156,7 +156,7 @@ knowledge:
     pageId: eod-inbox
     actionId: eod.clarification
     version: 1
-    audience: [EMPLOYEE, MANAGER, PM]
+    audience: [EMPLOYEE, PM]
     title: EOD clarifications
     synonyms:
       - clarification request

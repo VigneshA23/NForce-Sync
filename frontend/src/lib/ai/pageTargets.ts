@@ -14,53 +14,49 @@ import type { Role } from "../types";
  * reach, even if this map briefly drifts from a nav.ts change before the next deploy.
  *
  * Sync's own nav `key`s are not safe to key this table by: the same registry pageId maps to a
- * *different* nav.ts key per role (e.g. "utilization" is `my-util` for Employee, `team-util` for
- * Team Lead, `pm-util` for PM), and a few keys collide across roles entirely (e.g. `eod-inbox`
- * means three different pages). Routes, not keys, are the stable cross-role identifier here.
+ * *different* nav.ts key per role (e.g. "utilization" is `my-util` for Employee, `pm-util` for
+ * PM), and a few keys collide across roles entirely (e.g. `eod-inbox`
+ * means different pages per role). Routes, not keys, are the stable cross-role identifier here.
  */
 const PAGE_TARGETS: Partial<Record<string, Partial<Record<Role, { route: string; label: string }>>>> = {
   dashboard: {
     employee: { route: "/dashboard", label: "My Dashboard" },
-    lead: { route: "/team/dashboard", label: "Team Dashboard" },
     pm: { route: "/projects/dashboard", label: "Project Dashboard" },
     admin: { route: "/admin/dashboard", label: "Admin Dashboard" },
     superadmin: { route: "/admin/executive-dashboard", label: "Executive Dashboard" },
   },
   "eod-submit": {
     employee: { route: "/eod/submit", label: "Submit EOD" },
-    lead: { route: "/eod/submit", label: "Submit EOD" },
   },
   "eod-history": {
     employee: { route: "/eod/history", label: "My EOD History" },
   },
   "eod-inbox": {
     employee: { route: "/employee/eod-inbox", label: "EOD Inbox" },
-    lead: { route: "/team/eod-inbox", label: "EOD Inbox" },
     pm: { route: "/projects/eod-inbox", label: "EOD Inbox" },
   },
   "my-projects": {
     employee: { route: "/my-projects", label: "My Projects" },
-    lead: { route: "/team/projects", label: "My Projects" },
   },
   "projects-allocation": {
     pm: { route: "/projects", label: "Projects & Allocation" },
   },
   utilization: {
     employee: { route: "/utilization", label: "My Utilization" },
-    lead: { route: "/team/utilization", label: "Team Utilization" },
     pm: { route: "/projects/utilization", label: "Projects Utilization" },
   },
   blockers: {
     employee: { route: "/blockers", label: "My Blockers" },
-    lead: { route: "/team/blockers", label: "Blockers" },
     pm: { route: "/projects/blockers", label: "Blockers" },
   },
   approvals: {
-    lead: { route: "/team/approvals", label: "Approvals" },
+    // Employee entry covers team leads (EMPLOYEE role who leads a project). Non-leads
+    // navigated here will see an empty approvals page — acceptable; the route is valid.
+    employee: { route: "/team/approvals", label: "Approvals" },
     pm: { route: "/projects/approvals", label: "Approvals" },
   },
   reports: {
-    lead: { route: "/team/reports", label: "Reports" },
+    employee: { route: "/team/reports", label: "Reports" },
     pm: { route: "/projects/reports", label: "Reports" },
   },
   "user-management": {
@@ -92,8 +88,6 @@ const PAGE_TARGETS: Partial<Record<string, Partial<Record<Role, { route: string;
   "ai-assistant-admin": {
     superadmin: { route: "/admin/ai", label: "AI & Automation" },
   },
-  // Every DM/Finance/Leadership pageId is deliberately absent — they are placeholders in the
-  // registry, and a placeholder never gets a route here.
 
   // Shared pages: reachable via the topbar for every role, not through getNavPaths(role) — see
   // Shell.tsx's own allowlist (`isAllowed`), which resolveSharedTarget below mirrors.

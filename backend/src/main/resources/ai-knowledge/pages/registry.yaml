@@ -21,10 +21,6 @@ pages:
         label: "My Dashboard"
         route: /dashboard
         description: "The employee landing page: this month's EOD/utilization overview, assigned projects, holiday calendar, open blockers and recent activity."
-      - roles: [MANAGER]
-        label: "Team Dashboard"
-        route: /team/dashboard
-        description: "The Team Lead's overview of their direct reports: team EOD/utilization status and pending work."
       - roles: [PM]
         label: "Project Dashboard"
         route: /projects/dashboard
@@ -37,26 +33,11 @@ pages:
         label: "Executive Dashboard"
         route: /admin/executive-dashboard
         description: "Organization-wide executive KPIs and oversight for Super Admin."
-      - roles: [DM]
-        label: "Delivery Dashboard"
-        route: /dm/dashboard
-        description: "Delivery Manager dashboard."
-        placeholder: true
-      - roles: [FINANCE]
-        label: "Finance Dashboard"
-        route: /finance/dashboard
-        description: "Finance Admin dashboard."
-        placeholder: true
-      - roles: [LEADERSHIP]
-        label: "Org Dashboard"
-        route: /leadership/dashboard
-        description: "Leadership Viewer organization dashboard."
-        placeholder: true
 
   - pageId: eod-submit
     module: eod
     variants:
-      - roles: [EMPLOYEE, MANAGER]
+      - roles: [EMPLOYEE]
         label: "Submit EOD"
         route: /eod/submit
         description: "Log or edit today's (or a past date's) End of Day entry: day type, tasks, hours, work location and any time adjustment."
@@ -76,10 +57,6 @@ pages:
         label: "EOD Inbox"
         route: /employee/eod-inbox
         description: "Clarification requests from the employee's Team Lead on their submitted EODs."
-      - roles: [MANAGER]
-        label: "EOD Inbox"
-        route: /team/eod-inbox
-        description: "EOD clarification threads the Team Lead has opened with their reports."
       - roles: [PM]
         label: "EOD Inbox"
         route: /projects/eod-inbox
@@ -92,10 +69,6 @@ pages:
         label: "My Projects"
         route: /my-projects
         description: "Projects the employee is currently allocated to."
-      - roles: [MANAGER]
-        label: "My Projects"
-        route: /team/projects
-        description: "Projects the Team Lead's reports are allocated to."
 
   - pageId: projects-allocation
     module: projects
@@ -112,19 +85,10 @@ pages:
         label: "My Utilization"
         route: /utilization
         description: "The employee's own utilization percentage over time, with a weekly trend, period summary, hours breakdown and daily history."
-      - roles: [MANAGER]
-        label: "Team Utilization"
-        route: /team/utilization
-        description: "Utilization for the Team Lead's direct reports."
       - roles: [PM]
         label: "Projects Utilization"
         route: /projects/utilization
         description: "Utilization for employees allocated to the Project Manager's projects."
-      - roles: [DM]
-        label: "Cross-Project Util"
-        route: /dm/utilization
-        description: "Delivery Manager cross-project utilization view."
-        placeholder: true
 
   - pageId: blockers
     module: blockers
@@ -133,10 +97,6 @@ pages:
         label: "My Blockers"
         route: /blockers
         description: "Blockers the employee has raised on their own EOD tasks, and any replies."
-      - roles: [MANAGER]
-        label: "Blockers"
-        route: /team/blockers
-        description: "Blockers raised by the Team Lead's reports, with reply/acknowledge/resolve actions."
       - roles: [PM]
         label: "Blockers"
         route: /projects/blockers
@@ -145,7 +105,7 @@ pages:
   - pageId: approvals
     module: approvals
     variants:
-      - roles: [MANAGER]
+      - roles: [EMPLOYEE]
         label: "Approvals"
         route: /team/approvals
         description: "Pending EOD entries awaiting the Team Lead's approve/reject decision, plus approval history."
@@ -157,7 +117,7 @@ pages:
   - pageId: reports
     module: reports
     variants:
-      - roles: [MANAGER]
+      - roles: [EMPLOYEE]
         label: "Reports"
         route: /team/reports
         description: "EOD-by-employee and missing-EOD reports scoped to the Team Lead's reports."
@@ -165,21 +125,6 @@ pages:
         label: "Reports"
         route: /projects/reports
         description: "EOD-by-employee and missing-EOD reports scoped to the Project Manager's projects, exportable."
-      - roles: [DM]
-        label: "Reports"
-        route: /dm/reports
-        description: "Delivery Manager reports."
-        placeholder: true
-      - roles: [FINANCE]
-        label: "Reports"
-        route: /finance/reports
-        description: "Finance Admin reports."
-        placeholder: true
-      - roles: [LEADERSHIP]
-        label: "Reports"
-        route: /leadership/reports
-        description: "Leadership Viewer reports."
-        placeholder: true
 
   - pageId: user-management
     module: admin
@@ -253,75 +198,12 @@ pages:
         route: /admin/ai
         description: "AI assistant operational controls: health, re-indexing, rate-limit settings, usage and billing."
 
-  - pageId: dm-escalations
-    module: dm
-    variants:
-      - roles: [DM]
-        label: "Escalations"
-        route: /dm/escalations
-        description: "Delivery Manager escalations queue."
-        placeholder: true
-
-  - pageId: dm-allocation
-    module: dm
-    variants:
-      - roles: [DM]
-        label: "Allocation"
-        route: /dm/allocation
-        description: "Delivery Manager allocation view."
-        placeholder: true
-
-  - pageId: dm-heatmap
-    module: dm
-    variants:
-      - roles: [DM]
-        label: "Allocation Heatmap"
-        route: /dm/heatmap
-        description: "Delivery Manager allocation heatmap."
-        placeholder: true
-
-  - pageId: finance-billable
-    module: finance
-    variants:
-      - roles: [FINANCE]
-        label: "Billable Data"
-        route: /finance/billable
-        description: "Finance Admin billable-hours data."
-        placeholder: true
-
-  - pageId: finance-profitability
-    module: finance
-    variants:
-      - roles: [FINANCE]
-        label: "Profitability"
-        route: /finance/profitability
-        description: "Finance Admin profitability view."
-        placeholder: true
-
-  - pageId: leadership-trends
-    module: leadership
-    variants:
-      - roles: [LEADERSHIP]
-        label: "Trends & Drilldown"
-        route: /leadership/trends
-        description: "Leadership Viewer trend analysis."
-        placeholder: true
-
-  - pageId: leadership-teams
-    module: leadership
-    variants:
-      - roles: [LEADERSHIP]
-        label: "Team Rankings"
-        route: /leadership/teams
-        description: "Leadership Viewer team rankings."
-        placeholder: true
-
   # Shared pages — reachable by every role via the topbar (bell/avatar), not the sidebar. Allowed
   # outside getNavPaths(role) by Shell.tsx's own allowlist (line ~706-713).
   - pageId: notifications
     module: shared
     variants:
-      - roles: [EMPLOYEE, MANAGER, PM, DM, FINANCE, LEADERSHIP, ADMIN, SUPERADMIN]
+      - roles: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
         label: "Notifications"
         route: /notifications
         description: "The user's own notifications (EOD submitted/approved/rejected, clarifications, blocker replies)."
@@ -329,7 +211,7 @@ pages:
   - pageId: profile
     module: shared
     variants:
-      - roles: [EMPLOYEE, MANAGER, PM, DM, FINANCE, LEADERSHIP, ADMIN, SUPERADMIN]
+      - roles: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
         label: "Profile"
         route: /profile
         description: "The user's own profile: name, photo, personal details."
@@ -337,7 +219,7 @@ pages:
   - pageId: change-password
     module: shared
     variants:
-      - roles: [EMPLOYEE, MANAGER, PM, DM, FINANCE, LEADERSHIP, ADMIN, SUPERADMIN]
+      - roles: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
         label: "Change Password"
         route: /change-password
         description: "Change the signed-in user's own password."
@@ -345,7 +227,7 @@ pages:
   - pageId: preferences
     module: shared
     variants:
-      - roles: [EMPLOYEE, MANAGER, PM, DM, FINANCE, LEADERSHIP, ADMIN, SUPERADMIN]
+      - roles: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
         label: "Preferences"
         route: /preferences
         description: "Appearance preferences: theme, accent color, density, font size."

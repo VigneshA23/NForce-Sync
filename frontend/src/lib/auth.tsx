@@ -83,11 +83,7 @@ interface AuthContextValue {
 
 export const ROLE_LANDING: Record<Role, string> = {
   employee:   '/dashboard',
-  lead:       '/team/dashboard',
   pm:         '/projects/dashboard',
-  dm:         '/dm/dashboard',
-  finance:    '/finance/dashboard',
-  leadership: '/leadership/dashboard',
   admin:      '/admin/dashboard',
   // Super Admin no longer owns the Admin Dashboard (user-administration stats) — it lands on
   // its own Executive Dashboard (organization-wide oversight) instead.

@@ -5,7 +5,7 @@ knowledge:
     pageId: my-projects
     actionId: projects.my-projects
     version: 1
-    audience: [EMPLOYEE, MANAGER]
+    audience: [EMPLOYEE]
     title: My Projects (Employee / Team Lead view)
     synonyms:
       - my assigned projects
@@ -40,7 +40,7 @@ knowledge:
       A project has a code, name, client, project type, status (Active, Inactive, Completed or
       On Hold) and optional start/end dates. It has two distinct people attached to it, and
       they're easy to confuse:
-      - Its Team Lead: an active Team Lead (backend role MANAGER) who is the one who actually
+      - Its Team Lead: an active employee who leads the project and is the one who actually
         approves EOD entries on the project.
       - Its Project Manager: the PM who owns and oversees it — this is what scopes a PM's own
         dashboards and reports to "their" projects.

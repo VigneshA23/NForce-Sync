@@ -68,14 +68,6 @@ public class EodReminderScheduler {
     private static final Set<EodEntry.Status> STILL_OWED = Set.of(
             EodEntry.Status.DRAFT, EodEntry.Status.REJECTED, EodEntry.Status.MISSED);
 
-    /**
-     * The only roles that submit an EOD. Everyone else — PM, DM, FINANCE, LEADERSHIP,
-     * SUPERADMIN — reviews or reports on EODs rather than filing one, so telling them "your EOD is
-     * overdue" was always wrong, even when they held a shift and a project allocation.
-     */
-    private static final Set<AppUser.Role> SUBMITS_EOD = Set.of(
-            AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER);
-
     private final ShiftDefinitionRepository shiftRepository;
     private final AppUserRepository userRepository;
     private final EodEntryRepository entryRepository;
@@ -146,12 +138,11 @@ public class EodReminderScheduler {
     }
 
     private int remindShift(ShiftDefinition shift, LocalDate workDate, LocalDateTime cutoffAt) {
-        // Holding a shift is not the same as owing an EOD. Shift membership alone reminded every
-        // active account on the shift regardless of role — PMs, even a read-only Leadership
-        // viewer — to submit "your EOD". Only employees and team leads file one.
+        // A user submits an EOD if they have a reporting manager. Users without one
+        // (typically the top-level Super Admin) are exempt.
         List<AppUser> members = userRepository.findByShiftIdAndStatusAndDeletedAtIsNull(
                         shift.getId(), AppUser.Status.ACTIVE).stream()
-                .filter(u -> SUBMITS_EOD.contains(u.getRole()))
+                .filter(u -> u.getManager() != null)
                 .toList();
         if (members.isEmpty()) return 0;
 

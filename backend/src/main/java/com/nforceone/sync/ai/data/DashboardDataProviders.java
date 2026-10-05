@@ -34,7 +34,8 @@ final class DashboardDataProviders {
 
         @Override public String id() { return "team.summary"; }
         @Override public String title() { return "Team summary"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.MANAGER); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(); }
+        @Override public Set<String> audienceCapabilities() { return Set.of(CAPABILITY_LEADS_PROJECT); }
         @Override public Set<String> modules() { return Set.of("dashboard"); }
 
         @Override
@@ -61,7 +62,7 @@ final class DashboardDataProviders {
 
         @Override public String id() { return "project-dashboard.summary"; }
         @Override public String title() { return "Project portfolio summary"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.PM); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(AppUser.Role.PM); }
         @Override public Set<String> modules() { return Set.of("dashboard", "projects"); }
 
         @Override
@@ -88,7 +89,7 @@ final class DashboardDataProviders {
 
         @Override public String id() { return "executive.summary"; }
         @Override public String title() { return "Executive summary"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.SUPERADMIN); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(AppUser.Role.SUPERADMIN); }
         @Override public Set<String> modules() { return Set.of("dashboard"); }
 
         @Override

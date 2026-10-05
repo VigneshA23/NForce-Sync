@@ -182,8 +182,7 @@ function WorkspaceSearch() {
 
   function projectRoute(): string {
     if (role === 'pm') return '/projects';
-    if (role === 'lead' || (user!.capabilities?.leadsProjectIds?.length ?? 0) > 0) return '/team/projects';
-    if (role === 'dm') return '/dm/allocation';
+    if ((user!.capabilities?.leadsProjectIds?.length ?? 0) > 0) return '/team/projects';
     if (role === 'employee') return '/my-projects';
     return '/projects';
   }
@@ -540,7 +539,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
     setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
-  const isLead = role === 'lead' || caps.leadsProjectIds.length > 0;
+  const isLead = caps.leadsProjectIds.length > 0;
   const isPm   = role === 'pm'   || caps.managesProjectIds.length > 0;
 
   // Sidebar Approvals badge, the Team Dashboard "Pending Approval" KPI, and the

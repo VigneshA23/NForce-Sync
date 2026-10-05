@@ -23,7 +23,8 @@ knowledge:
     module: dashboard
     pageId: dashboard
     version: 1
-    audience: [MANAGER]
+    audience: []
+    capabilities: [LEADS_PROJECT]
     title: Team Dashboard (Team Lead)
     synonyms:
       - team lead dashboard

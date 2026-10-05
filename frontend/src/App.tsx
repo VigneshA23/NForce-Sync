@@ -13,7 +13,6 @@ import { Shell } from './components/Shell';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { GlobalLoader } from './components/GlobalLoader';
 import { NotAuthorized } from './pages/NotAuthorized';
-import { Placeholder } from './pages/Placeholder';
 import Login               from './pages/auth/Login';
 import Forgot              from './pages/auth/Forgot';
 import Reset               from './pages/auth/Reset';
@@ -109,7 +108,7 @@ function ChunkPrefetcher() {
       // Reportee Views (Super Admin visibility into PM operational pages — Team Lead Views was
       // removed from Super Admin's navigation/access).
       import('./pages/admin/reportee/PmProjects');
-    } else if (user.role === 'lead' || (user.capabilities?.leadsProjectIds?.length ?? 0) > 0) {
+    } else if ((user.capabilities?.leadsProjectIds?.length ?? 0) > 0) {
       import('./pages/lead/TeamDashboard');
       import('./pages/lead/MyProjects');
       import('./pages/Approvals');
@@ -220,26 +219,6 @@ function AppRoutes() {
             <Route path="/projects/eod-inbox"      element={<PmEodInbox />} />
             <Route path="/projects/approvals"      element={<ApprovalsPM />} />
             <Route path="/projects/reports"        element={<ReportsDashboard />} />
-
-            {/* ── Delivery Manager ───────────────────── */}
-            <Route path="/dm/dashboard"      element={<Placeholder title="Delivery Dashboard" />} />
-            <Route path="/dm/escalations"    element={<Placeholder title="Escalations" />} />
-            <Route path="/dm/allocation"     element={<Placeholder title="Allocation" />} />
-            <Route path="/dm/heatmap"        element={<Placeholder title="Allocation Heatmap" />} />
-            <Route path="/dm/utilization"    element={<Placeholder title="Cross-Project Util" />} />
-            <Route path="/dm/reports"        element={<Placeholder title="Reports" />} />
-
-            {/* ── Finance Admin ──────────────────────── */}
-            <Route path="/finance/dashboard"     element={<Placeholder title="Finance Dashboard" />} />
-            <Route path="/finance/billable"      element={<Placeholder title="Billable Data" />} />
-            <Route path="/finance/profitability" element={<Placeholder title="Profitability" />} />
-            <Route path="/finance/reports"       element={<Placeholder title="Reports" />} />
-
-            {/* ── Leadership ─────────────────────────── */}
-            <Route path="/leadership/dashboard" element={<Placeholder title="Org Dashboard" />} />
-            <Route path="/leadership/trends"    element={<Placeholder title="Trends & Drilldown" />} />
-            <Route path="/leadership/teams"     element={<Placeholder title="Team Rankings" />} />
-            <Route path="/leadership/reports"   element={<Placeholder title="Reports" />} />
 
             {/* ── Admin (user administration) ───────── */}
             <Route path="/admin/dashboard"    element={<AdminDashboard />} />

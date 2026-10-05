@@ -105,9 +105,14 @@ class AiEvaluationSetTest {
             for (String knowledgeId : q.expect().knowledge()) {
                 KnowledgeDocument doc = knowledgeById.get(knowledgeId);
                 assertNotNull(doc, q.id() + ": expected knowledge id '" + knowledgeId + "' does not exist");
-                assertTrue(doc.audience().contains(role),
+                // A capability-gated doc (non-empty capabilities, empty role audience) is accessible
+                // to any role that holds that capability at runtime — accept it here since we can't
+                // resolve live capability assignments in a static fixture test.
+                boolean visibleByRole = doc.audience().contains(role);
+                boolean visibleByCapability = !doc.capabilities().isEmpty();
+                assertTrue(visibleByRole || visibleByCapability,
                         q.id() + ": expected knowledge id '" + knowledgeId + "' is not visible to role " + role
-                                + " (audience: " + doc.audience() + ")");
+                                + " (audience: " + doc.audience() + ", capabilities: " + doc.capabilities() + ")");
             }
         }
     }

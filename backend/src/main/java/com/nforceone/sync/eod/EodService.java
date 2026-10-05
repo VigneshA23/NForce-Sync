@@ -875,11 +875,8 @@ public class EodService {
     }
 
     private Long resolveTargetEmployee(AppUser actor, Long requestedId) {
-        if (actor.getRole() == AppUser.Role.SUPERADMIN) {
-            return requestedId != null ? requestedId : actor.getId();
-        }
-        if (actor.getRole() == AppUser.Role.MANAGER) {
-            // MANAGER had unscoped access before Phase 8a — kept unchanged.
+        if (actor.getRole() == AppUser.Role.SUPERADMIN
+                || actor.getRole() == AppUser.Role.ADMIN) {
             return requestedId != null ? requestedId : actor.getId();
         }
         if (requestedId != null && leadAccess.isInLeadTeam(requestedId, actor.getId())) {

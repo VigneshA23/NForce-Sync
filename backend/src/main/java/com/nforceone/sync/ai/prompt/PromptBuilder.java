@@ -6,6 +6,7 @@ import com.nforceone.sync.ai.contract.ConversationTurn;
 import com.nforceone.sync.ai.contract.LiveDataSection;
 import com.nforceone.sync.ai.contract.PageReference;
 import com.nforceone.sync.ai.contract.RetrievalResult;
+import com.nforceone.sync.ai.data.AssistantDataProvider;
 import com.nforceone.sync.ai.navigation.PageRegistry;
 import org.springframework.stereotype.Component;
 
@@ -32,6 +33,9 @@ public class PromptBuilder {
         StringBuilder sb = new StringBuilder(SystemPromptTemplate.POLICY);
 
         sb.append("\n\nSIGNED-IN USER\n- Role: ").append(context.roleLabel());
+        if (context.capabilities().contains(AssistantDataProvider.CAPABILITY_LEADS_PROJECT)) {
+            sb.append(" (Team Lead — leads at least one project and can review team EODs and approvals)");
+        }
         if (currentPage != null) {
             sb.append("\n- Currently viewing: ").append(currentPage.label())
                     .append(" (pageId ").append(currentPage.pageId()).append(')')

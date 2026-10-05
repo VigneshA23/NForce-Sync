@@ -3,7 +3,7 @@ knowledge:
     type: FOUNDATION
     module: foundations
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: What NForce Sync is
     synonyms:
       - what is sync
@@ -33,7 +33,7 @@ knowledge:
     type: FOUNDATION
     module: eod
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: The EOD lifecycle, end to end
     synonyms:
       - how does eod work

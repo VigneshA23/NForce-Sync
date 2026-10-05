@@ -4,7 +4,7 @@ knowledge:
     module: eod
     pageId: eod-submit
     version: 1
-    audience: [EMPLOYEE, MANAGER]
+    audience: [EMPLOYEE]
     title: EOD submission validation errors
     synonyms:
       - why won't my eod submit
@@ -51,7 +51,7 @@ knowledge:
     module: eod
     pageId: eod-submit
     version: 1
-    audience: [EMPLOYEE, MANAGER]
+    audience: [EMPLOYEE]
     title: Time adjustment validation errors
     synonyms:
       - why won't my time adjustment save

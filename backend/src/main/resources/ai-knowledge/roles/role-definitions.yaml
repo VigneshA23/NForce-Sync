@@ -3,7 +3,7 @@ knowledge:
     type: ROLE
     module: roles
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: The Employee role
     synonyms:
       - what can an employee do
@@ -24,17 +24,16 @@ knowledge:
     type: ROLE
     module: roles
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
-    title: The Team Lead role (backend role MANAGER)
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
+    title: The Team Lead capability
     synonyms:
       - team lead
       - what can my manager do
       - what can a team lead do
-      - manager role
     body: |
-      "Team Lead" is the label shown in the UI; the backend calls this role MANAGER. A Team Lead
-      is the direct reporting manager for a set of employees (set via each employee's manager
-      assignment). A Team Lead can:
+      A Team Lead is any active employee who has been assigned as the lead of at least one project.
+      The role in the system is EMPLOYEE — the Team Lead distinction comes from project assignment,
+      not a separate role. A Team Lead can:
       - Do everything an Employee can for their own EOD.
       - See their direct reports' submitted EODs and approve or reject them.
       - Open, reply to and resolve EOD clarifications with their reports.
@@ -48,7 +47,7 @@ knowledge:
     type: ROLE
     module: roles
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: The Project Manager role
     synonyms:
       - pm role
@@ -69,7 +68,7 @@ knowledge:
     type: ROLE
     module: roles
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: The Admin role
     synonyms:
       - what can an admin do
@@ -88,7 +87,7 @@ knowledge:
     type: ROLE
     module: roles
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: The Super Admin role
     synonyms:
       - what can a super admin do
@@ -124,7 +123,7 @@ knowledge:
     type: ROLE
     module: roles
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: Delivery Manager, Finance Admin and Leadership Viewer — not yet available
     synonyms:
       - delivery manager role

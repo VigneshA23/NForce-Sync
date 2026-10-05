@@ -107,6 +107,7 @@ public class YamlKnowledgeSource implements KnowledgeSource {
                 stringOf(unit.get("workflowId")),
                 version,
                 parseAudience(unit.get("audience")),
+                new java.util.LinkedHashSet<>(stringListOf(unit.get("capabilities"))),
                 sourceRef,
                 stringOf(unit.get("title")),
                 stringOf(unit.get("body")),

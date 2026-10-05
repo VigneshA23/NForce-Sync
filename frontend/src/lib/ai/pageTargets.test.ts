@@ -6,28 +6,22 @@ import { canNavigateTo, pageIdFor, resolvePageTarget } from './pageTargets';
 // (kept honest by that file's own PageRegistryParityTest against nav.ts on the backend side).
 const REACHABLE: Array<[string, (typeof ALL_ROLES)[number]]> = [
   ['dashboard', 'employee'],
-  ['dashboard', 'lead'],
   ['dashboard', 'pm'],
   ['dashboard', 'admin'],
   ['dashboard', 'superadmin'],
   ['eod-submit', 'employee'],
-  ['eod-submit', 'lead'],
   ['eod-history', 'employee'],
   ['eod-inbox', 'employee'],
-  ['eod-inbox', 'lead'],
   ['eod-inbox', 'pm'],
   ['my-projects', 'employee'],
-  ['my-projects', 'lead'],
   ['projects-allocation', 'pm'],
   ['utilization', 'employee'],
-  ['utilization', 'lead'],
   ['utilization', 'pm'],
   ['blockers', 'employee'],
-  ['blockers', 'lead'],
   ['blockers', 'pm'],
-  ['approvals', 'lead'],
+  ['approvals', 'employee'],
   ['approvals', 'pm'],
-  ['reports', 'lead'],
+  ['reports', 'employee'],
   ['reports', 'pm'],
   ['user-management', 'admin'],
   ['org-masters', 'admin'],
@@ -39,15 +33,12 @@ const REACHABLE: Array<[string, (typeof ALL_ROLES)[number]]> = [
   ['reportee-pm-projects', 'superadmin'],
   ['reportee-pm-eod', 'superadmin'],
   ['reportee-pm-utilization', 'superadmin'],
-  ['ai-assistant-admin', 'superadmin'], // M8: the real page, no longer a Placeholder
+  ['ai-assistant-admin', 'superadmin'],
 ];
 
 const PLACEHOLDER_OR_UNKNOWN: Array<[string, (typeof ALL_ROLES)[number]]> = [
-  ['dashboard', 'dm'],
-  ['dashboard', 'finance'],
-  ['dashboard', 'leadership'],
   ['user-management', 'employee'],
-  ['audit-log', 'lead'],
+  ['audit-log', 'employee'],
   ['not-a-real-page', 'employee'],
 ];
 
@@ -78,7 +69,8 @@ describe('resolvePageTarget', () => {
 describe('canNavigateTo', () => {
   it('mirrors resolvePageTarget', () => {
     expect(canNavigateTo('eod-submit', 'employee')).toBe(true);
-    expect(canNavigateTo('dashboard', 'dm')).toBe(false);
+    expect(canNavigateTo('dashboard', 'employee')).toBe(true);
+    expect(canNavigateTo('audit-log', 'employee')).toBe(false);
   });
 });
 
@@ -86,7 +78,7 @@ describe('pageIdFor', () => {
   it('reverse-resolves a known route to its pageId for that role', () => {
     expect(pageIdFor('employee', '/dashboard')).toBe('dashboard');
     expect(pageIdFor('pm', '/projects/dashboard')).toBe('dashboard');
-    expect(pageIdFor('lead', '/team/utilization')).toBe('utilization');
+    expect(pageIdFor('employee', '/team/reports')).toBe('reports');
   });
 
   it('returns null for a route not in the map', () => {

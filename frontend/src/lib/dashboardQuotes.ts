@@ -15,10 +15,6 @@ const DASHBOARD_QUOTES: Partial<Record<Role, DashboardQuote>> = {
     label: 'Make every day count.',
     value: 'Own your work and drive your impact.',
   },
-  lead: {
-    label: 'Turn team visibility into team success.',
-    value: 'Lead with clarity and purpose.',
-  },
   pm: {
     label: 'Turn plans into progress.',
     value: 'Align resources and accelerate delivery.',

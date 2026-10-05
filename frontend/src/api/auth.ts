@@ -4,12 +4,8 @@ import type { Role } from '../lib/types';
 
 const BACKEND_ROLE_MAP: Record<string, Role> = {
   EMPLOYEE:   'employee',
-  MANAGER:    'lead',
   SUPERADMIN: 'superadmin',
   PM:         'pm',
-  DM:         'dm',
-  FINANCE:    'finance',
-  LEADERSHIP: 'leadership',
   ADMIN:      'admin',
 };
 

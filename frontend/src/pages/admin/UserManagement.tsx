@@ -38,22 +38,13 @@ import { GENDER_OPTIONS } from '../../lib/illustration';
 // Admin is the role responsible for assigning it (per the current role/hierarchy design).
 const ROLE_OPTIONS = [
   { label: 'Employee',        value: 'EMPLOYEE' },
-  { label: 'Team Lead',       value: 'MANAGER' },
   { label: 'Project Manager', value: 'PM' },
   { label: 'Admin',           value: 'ADMIN' },
   { label: 'Super Admin',     value: 'SUPERADMIN' },
 ];
 
-// Labels for legacy/protected roles that are no longer creatable/selectable but may still
-// belong to an existing user — used only so the Edit User Role dropdown can display a role
-// it isn't otherwise offering as a choice. Delivery Manager/Finance Admin/Leadership Viewer are
-// deprecated roles. HR is not listed here — it no longer exists as a role at all (removed from
-// AppUser.Role entirely; existing HR users were migrated to Employee).
-const LEGACY_ROLE_LABELS: Record<string, string> = {
-  DM: 'Delivery Manager',
-  FINANCE: 'Finance Admin',
-  LEADERSHIP: 'Leadership Viewer',
-};
+// No legacy roles remain — MANAGER/DM/FINANCE/LEADERSHIP were all migrated to EMPLOYEE (V106).
+const LEGACY_ROLE_LABELS: Record<string, string> = {};
 
 const EMPLOYMENT_TYPES = [
   { value: 'FULL_TIME',   label: 'Full-time' },
@@ -69,23 +60,13 @@ const WORK_MODES = [
   { value: 'REMOTE', label: 'Remote' },
 ];
 
-// Mirrors the backend hierarchy (UserService.REQUIRED_MANAGER_ROLE) — the source of truth:
-// Employee -> Team Lead, Team Lead -> Project Manager, Project Manager -> Super Admin,
-// Admin -> Super Admin. A Super Admin sits at the top and may optionally report to another
-// Super Admin.
-const REPORTING_MANAGER_ROLE_FOR: Record<string, string> = {
-  EMPLOYEE: 'MANAGER',
-  MANAGER: 'PM',
-  PM: 'SUPERADMIN',
-  ADMIN: 'SUPERADMIN',
-  SUPERADMIN: 'SUPERADMIN',
-};
+// No role-based restriction on who can be a reporting manager — any active user can report to
+// any other active user. The backend validates: not self, not deleted, not a cycle; no role
+// constraint. Super Admin is the only role with an optional manager (everyone else requires one).
+const MANDATORY_MANAGER_ROLES = ['EMPLOYEE', 'PM', 'ADMIN'];
 
-// Reporting Manager is mandatory for these roles — Super Admin remains optional.
-const MANDATORY_MANAGER_ROLES = ['EMPLOYEE', 'MANAGER', 'PM', 'ADMIN'];
-
-function reportingManagerRoleFilter(role: string): string | null {
-  return REPORTING_MANAGER_ROLE_FOR[role] ?? (role ? 'MANAGER' : null);
+function reportingManagerRoleFilter(_role: string): string | null {
+  return null;
 }
 
 /**

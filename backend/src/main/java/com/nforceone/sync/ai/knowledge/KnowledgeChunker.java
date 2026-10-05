@@ -31,6 +31,7 @@ public class KnowledgeChunker {
         Set<String> audience = doc.audience().stream()
                 .map(Enum::name)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+        audience.addAll(doc.capabilities());
 
         List<String> pieces = splitBody(doc.body());
         List<ChunkDraft> chunks = new ArrayList<>(pieces.size());

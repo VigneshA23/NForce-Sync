@@ -58,14 +58,6 @@ public class SearchService {
                             u.getId(), u.getFullName(), u.getEmail(),
                             u.getRole().name(), u.getEmployeeCode()))
                     .toList();
-            case MANAGER -> userRepository.findByManagerId(actor.getId()).stream()
-                    .filter(u -> u.getDeletedAt() == null)
-                    .filter(u -> matchesUser(u, term))
-                    .limit(5)
-                    .map(u -> new SearchResultDto.UserResult(
-                            u.getId(), u.getFullName(), u.getEmail(),
-                            u.getRole().name(), u.getEmployeeCode()))
-                    .toList();
             case EMPLOYEE -> {
                 if (leadAccess.leadsAnyProject(actor.getId())) {
                     yield allocationRepository.findActiveMembersByProjectLead(actor.getId(), LocalDate.now())
@@ -85,19 +77,13 @@ public class SearchService {
 
     private List<SearchResultDto.ProjectResult> searchProjects(String term, AppUser actor) {
         return switch (actor.getRole()) {
-            case SUPERADMIN, DM, FINANCE, LEADERSHIP -> projectRepository.findAll().stream()
+            case SUPERADMIN, ADMIN -> projectRepository.findAll().stream()
                     .filter(p -> matchesProject(p, term))
                     .limit(5)
                     .map(p -> new SearchResultDto.ProjectResult(
                             p.getId(), p.getCode(), p.getName(), p.getStatus().name()))
                     .toList();
             case PM -> projectRepository.findByPmIdOrderByNameAsc(actor.getId()).stream()
-                    .filter(p -> matchesProject(p, term))
-                    .limit(5)
-                    .map(p -> new SearchResultDto.ProjectResult(
-                            p.getId(), p.getCode(), p.getName(), p.getStatus().name()))
-                    .toList();
-            case MANAGER -> projectRepository.findByLeadIdOrderByNameAsc(actor.getId()).stream()
                     .filter(p -> matchesProject(p, term))
                     .limit(5)
                     .map(p -> new SearchResultDto.ProjectResult(
@@ -123,7 +109,6 @@ public class SearchService {
                                 p.getId(), p.getCode(), p.getName(), p.getStatus().name()))
                         .toList();
             }
-            case ADMIN -> List.of();
         };
     }
 

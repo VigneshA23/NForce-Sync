@@ -1,8 +1,7 @@
 import {
   LayoutDashboard, ClipboardList, BarChart3, Activity,
   ClipboardCheck, AlertOctagon, Inbox,
-  FolderKanban, Users, TrendingUp, Map,
-  AlertTriangle, DollarSign, Trophy,
+  FolderKanban, Users,
   Lock, Settings, Bot, ScrollText, Building2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -70,28 +69,20 @@ export type RoleNav = NavSection[];
 
 export const ROLE_COLORS: Record<Role, string> = {
   employee:   '#4C8DD6',
-  lead:       '#2FB67C',
   pm:         '#E0A93B',
-  dm:         '#9B6DFF',
-  finance:    '#14B8A6',
-  leadership: '#F09030',
   admin:      '#6366F1',
   superadmin: '#A78BFA',
 };
 
 export const ROLE_LABELS: Record<Role, string> = {
   employee:   'Employee',
-  lead:       'Team Lead',
   pm:         'Project Manager',
-  dm:         'Delivery Manager',
-  finance:    'Finance Admin',
-  leadership: 'Leadership Viewer',
   admin:      'Admin',
   superadmin: 'Super Admin',
 };
 
 export const ALL_ROLES: Role[] = [
-  'employee', 'lead', 'pm', 'dm', 'finance', 'leadership', 'admin', 'superadmin',
+  'employee', 'pm', 'admin', 'superadmin',
 ];
 
 export const NAV: Record<Role, RoleNav> = {
@@ -142,27 +133,6 @@ export const NAV: Record<Role, RoleNav> = {
     },
   ],
 
-  lead: [
-    {
-      section: 'Overview',
-      items: [
-        { key: 'lead-dash',      label: 'Team Dashboard', path: '/team/dashboard',   icon: LayoutDashboard },
-        { key: 'lead-projects',  label: 'My Projects',    path: '/team/projects',    icon: FolderKanban },
-        { key: 'approvals',  label: 'Approvals',         path: '/team/approvals',   icon: ClipboardCheck },
-        { key: 'team-util',  label: 'Team Utilization',  path: '/team/utilization', icon: Activity },
-        { key: 'blockers',   label: 'Blockers',          path: '/team/blockers',    icon: AlertOctagon },
-        { key: 'eod-inbox',  label: 'EOD Inbox',         path: '/team/eod-inbox',   icon: Inbox },
-      ],
-    },
-    {
-      section: 'Personal',
-      items: [
-        { key: 'eod-submit',    label: 'Submit EOD',     path: '/eod/submit',    icon: ClipboardList },
-        { key: 'reports',       label: 'Reports',         path: '/team/reports',  icon: BarChart3 },
-      ],
-    },
-  ],
-
   pm: [
     {
       section: 'Projects',
@@ -179,59 +149,6 @@ export const NAV: Record<Role, RoleNav> = {
       items: [
         { key: 'approvals',     label: 'Approvals',      path: '/projects/approvals', icon: ClipboardCheck },
         { key: 'reports',       label: 'Reports',         path: '/projects/reports',   icon: BarChart3 },
-      ],
-    },
-  ],
-
-  dm: [
-    {
-      section: 'Delivery',
-      items: [
-        { key: 'dm-dash',        label: 'Delivery Dashboard',  path: '/dm/dashboard',    icon: LayoutDashboard },
-        { key: 'escalations',    label: 'Escalations',         path: '/dm/escalations',  icon: AlertTriangle, badge: 3 },
-        { key: 'allocation',     label: 'Allocation',          path: '/dm/allocation',   icon: Users },
-        { key: 'heatmap',        label: 'Allocation Heatmap',  path: '/dm/heatmap',      icon: Map },
-        { key: 'dm-util',        label: 'Cross-Project Util',  path: '/dm/utilization',  icon: Activity, phase: 2 },
-      ],
-    },
-    {
-      section: 'More',
-      items: [
-        { key: 'reports',       label: 'Reports',        path: '/dm/reports',    icon: BarChart3 },
-      ],
-    },
-  ],
-
-  finance: [
-    {
-      section: 'Billing',
-      items: [
-        { key: 'fin-dash',     label: 'Finance Dashboard', path: '/finance/dashboard',    icon: LayoutDashboard },
-        { key: 'fin-billable', label: 'Billable Data',      path: '/finance/billable',     icon: DollarSign },
-        { key: 'fin-profit',   label: 'Profitability',      path: '/finance/profitability', icon: TrendingUp, phase: 2 },
-      ],
-    },
-    {
-      section: 'More',
-      items: [
-        { key: 'reports',       label: 'Reports',        path: '/finance/reports', icon: BarChart3 },
-      ],
-    },
-  ],
-
-  leadership: [
-    {
-      section: 'Organization',
-      items: [
-        { key: 'lead-org-dash', label: 'Org Dashboard',      path: '/leadership/dashboard', icon: LayoutDashboard },
-        { key: 'org-trends',    label: 'Trends & Drilldown',  path: '/leadership/trends',    icon: TrendingUp, phase: 2 },
-        { key: 'org-teams',     label: 'Team Rankings',       path: '/leadership/teams',     icon: Trophy, phase: 2 },
-      ],
-    },
-    {
-      section: 'More',
-      items: [
-        { key: 'reports', label: 'Reports', path: '/leadership/reports', icon: BarChart3 },
       ],
     },
   ],
@@ -407,7 +324,7 @@ export function getNavSections(role: Role, capabilities: ServerUserCapabilities)
   const hasLeadCaps = capabilities.leadsProjectIds.length > 0;
 
   let sections: NavSection[];
-  if ((role === 'lead' || role === 'employee') && hasLeadCaps) {
+  if (role === 'employee' && hasLeadCaps) {
     sections = [...MY_WORK_SECTIONS, ...LEAD_COMBINED_SECTIONS];
   } else {
     sections = [...NAV[role]];

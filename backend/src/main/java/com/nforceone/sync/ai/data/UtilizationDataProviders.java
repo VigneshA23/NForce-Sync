@@ -26,7 +26,7 @@ final class UtilizationDataProviders {
 
         @Override public String id() { return "utilization.mine"; }
         @Override public String title() { return "My utilization (last 14 days)"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(AppUser.Role.EMPLOYEE); }
         @Override public Set<String> modules() { return Set.of("utilization"); }
 
         @Override

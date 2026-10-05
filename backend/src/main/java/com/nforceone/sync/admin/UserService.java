@@ -38,33 +38,16 @@ public class UserService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    // Mirrors frontend ROLE_LABELS (src/lib/nav.ts) so free-text search ("team lead")
-    // matches the label users actually see, not just the backend enum name.
+    // Mirrors frontend ROLE_LABELS (src/lib/nav.ts) so free-text search matches labels.
     private static final Map<AppUser.Role, String> ROLE_LABELS = Map.of(
             AppUser.Role.EMPLOYEE,   "Employee",
-            AppUser.Role.MANAGER,    "Team Lead",
             AppUser.Role.PM,         "Project Manager",
-            AppUser.Role.DM,         "Delivery Manager",
-            AppUser.Role.FINANCE,    "Finance Admin",
-            AppUser.Role.LEADERSHIP, "Leadership Viewer",
             AppUser.Role.SUPERADMIN, "Super Admin",
             AppUser.Role.ADMIN,      "Admin"
     );
 
-    // Roles selectable when creating a user (or reassigning role on an existing one) from the
-    // Add/Edit User screens: Employee, Team Lead, Project Manager, Admin, Super Admin.
-    // Delivery Manager, Finance Admin, and Leadership Viewer remain valid AppUser.Role values for
-    // existing users but are no longer offered going forward — an existing holder of one of
-    // these legacy roles is left untouched by updateUser as long as their role isn't being
-    // changed (see the CREATABLE_ROLES check there). HR is not a legacy role like these three —
-    // it has been removed from AppUser.Role entirely; no row can reference it any more.
-    //
-    // Super Admin IS creatable/assignable here: Admin is the role responsible for
-    // role-assignment per the current hierarchy design (Admin -> Super Admin reporting
-    // relationship enforced by REQUIRED_MANAGER_ROLE below).
     private static final java.util.Set<AppUser.Role> CREATABLE_ROLES = java.util.EnumSet.of(
-            AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER,
-            AppUser.Role.PM, AppUser.Role.ADMIN, AppUser.Role.SUPERADMIN
+            AppUser.Role.EMPLOYEE, AppUser.Role.PM, AppUser.Role.ADMIN, AppUser.Role.SUPERADMIN
     );
 
     private final AppUserRepository userRepository;

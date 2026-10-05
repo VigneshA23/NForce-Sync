@@ -3,7 +3,7 @@ knowledge:
     type: TERM
     module: eod
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: "EOD terminology"
     synonyms:
       - end of day
@@ -23,7 +23,7 @@ knowledge:
     type: TERM
     module: roles
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: "\"Manager\" is ambiguous — Team Lead vs Project Manager"
     synonyms:
       - who is my manager
@@ -31,9 +31,10 @@ knowledge:
       - who approves my eod
     body: |
       The word "manager" is ambiguous in Sync and must not be assumed. There are two distinct
-      roles that both get called "manager" in everyday speech:
-      - Team Lead (backend role MANAGER): the employee's direct reporting manager, set on their
-        user record. A Team Lead approves their direct reports' EODs and sees a team dashboard.
+      people that both get called "manager" in everyday speech:
+      - Team Lead: the employee's direct reporting manager, set on their user record. A Team Lead
+        is an active employee assigned as lead on one or more projects. They approve their direct
+        reports' EODs and see a team dashboard.
       - Project Manager (PM): owns one or more projects and can also approve EOD entries that
         touch those projects, independently of who the employee's Team Lead is.
       An employee's EOD can be approved by either their Team Lead or a Project Manager on one of
@@ -46,7 +47,7 @@ knowledge:
     type: TERM
     module: blockers
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: "Blocker terminology"
     synonyms:
       - issue
@@ -63,7 +64,7 @@ knowledge:
     type: TERM
     module: utilization
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: "Utilization terminology"
     synonyms:
       - utilization percentage
@@ -81,7 +82,7 @@ knowledge:
     type: TERM
     module: projects
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: "Allocation terminology"
     synonyms:
       - assign to project
@@ -98,7 +99,7 @@ knowledge:
     type: TERM
     module: eod
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: "Overtime (OT) terminology"
     synonyms:
       - OT
@@ -114,7 +115,7 @@ knowledge:
     type: TERM
     module: eod
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: "\"Missing EOD\" terminology"
     synonyms:
       - missed eod

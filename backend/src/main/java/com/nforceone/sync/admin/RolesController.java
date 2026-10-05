@@ -16,13 +16,9 @@ public class RolesController {
 
     private static final List<RoleInfoDto> ROLES = List.of(
             new RoleInfoDto("EMPLOYEE",   "Employee",        "Standard employee — own profile, timesheets, and leave.",                  false),
-            new RoleInfoDto("MANAGER",    "Manager",         "Team management and approval authority.",                                  false),
-            new RoleInfoDto("ADMIN",      "Admin",           "User administration — manages accounts, roles, and access.",               false),
-            new RoleInfoDto("SUPERADMIN", "Super Admin",     "System-wide operational oversight — monitoring and cross-team visibility.", false),
             new RoleInfoDto("PM",         "Project Manager", "Project and milestone oversight.",                                         false),
-            new RoleInfoDto("DM",         "Department Manager", "Department-level oversight and reporting.",                             false),
-            new RoleInfoDto("FINANCE",    "Finance",         "Financial data and reports access.",                                       false),
-            new RoleInfoDto("LEADERSHIP", "Leadership",      "Executive read-only visibility across all areas.",                         true)
+            new RoleInfoDto("ADMIN",      "Admin",           "User administration — manages accounts, roles, and access.",               false),
+            new RoleInfoDto("SUPERADMIN", "Super Admin",     "System-wide operational oversight — monitoring and cross-team visibility.", false)
     );
 
     @GetMapping

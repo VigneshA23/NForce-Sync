@@ -3,7 +3,7 @@ knowledge:
     type: ERROR
     module: approvals
     version: 1
-    audience: [MANAGER, PM, SUPERADMIN]
+    audience: [EMPLOYEE, PM, SUPERADMIN]
     title: Approval action errors
     synonyms:
       - why can't I approve this

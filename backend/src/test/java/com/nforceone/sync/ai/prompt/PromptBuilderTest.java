@@ -29,18 +29,14 @@ class PromptBuilderTest {
     }
 
     private static AssistantRequestContext context(AppUser.Role role) {
-        return new AssistantRequestContext(1L, "employee@nforceone.com", role, role.name(), null, null);
+        return new AssistantRequestContext(1L, "employee@nforceone.com", role, role.name(), null, null, java.util.Set.of());
     }
 
     @Test
-    void systemPromptListsOnlyNonPlaceholderReachablePages() {
-        String prompt = promptBuilder.buildSystemPrompt(context(AppUser.Role.DM), List.of(), null, List.of());
-        assertTrue(prompt.contains("NOT YET AVAILABLE"));
-        // DM's dashboard is a placeholder — must appear under NOT YET AVAILABLE, never REACHABLE PAGES.
-        int reachableIdx = prompt.indexOf("REACHABLE PAGES");
-        int notYetIdx = prompt.indexOf("NOT YET AVAILABLE");
-        String reachableSection = prompt.substring(reachableIdx, notYetIdx);
-        assertFalse(reachableSection.contains("dashboard :"));
+    void systemPromptExcludesAdminPagesForEmployee() {
+        String prompt = promptBuilder.buildSystemPrompt(context(AppUser.Role.EMPLOYEE), List.of(), null, List.of());
+        assertTrue(prompt.contains("REACHABLE PAGES"));
+        assertFalse(prompt.contains("user-management"), "admin-only pages must not appear in employee prompt");
     }
 
     @Test

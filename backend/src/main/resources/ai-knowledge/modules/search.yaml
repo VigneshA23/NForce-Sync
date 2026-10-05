@@ -3,7 +3,7 @@ knowledge:
     type: MODULE
     module: search
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: Global search
     synonyms:
       - search bar

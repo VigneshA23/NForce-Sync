@@ -114,7 +114,7 @@ public class AppUser {
     private String bannerData;
 
     public enum Role {
-        EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN
+        EMPLOYEE, PM, ADMIN, SUPERADMIN
     }
 
     public enum Status {
