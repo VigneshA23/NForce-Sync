@@ -21,7 +21,7 @@ import java.util.List;
  * Read endpoints additionally allow SUPERADMIN, which may pass {@code teamLeadId} to view a
  * specific Team Lead's projects (read-only visibility, per the Super Admin Reportee Views
  * enhancement) — this does not change category ownership or project assignment, so the
- * write endpoints (create/update/delete category) remain MANAGER-only.
+ * write endpoints (create/update/delete category) require lead capability (leads ≥1 active project).
  * Projects and categories are independent: categories are generic master data owned by the
  * Team Lead who created them and are never filtered by project assignment.
  */
@@ -35,7 +35,7 @@ public class TeamLeadProjectController {
         this.teamLeadProjectService = teamLeadProjectService;
     }
 
-    @PreAuthorize("hasAnyRole('MANAGER','ADMIN','SUPERADMIN')")
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/projects")
     public List<ProjectFullDto> listMyProjects(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
@@ -43,7 +43,7 @@ public class TeamLeadProjectController {
         return teamLeadProjectService.listMyProjects(actingEmail(), date != null ? date : LocalDate.now(), teamLeadId);
     }
 
-    @PreAuthorize("hasAnyRole('MANAGER','ADMIN','SUPERADMIN')")
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/projects/{id}")
     public ProjectDetailDto getProjectDetail(
             @PathVariable Long id,
@@ -52,26 +52,26 @@ public class TeamLeadProjectController {
         return teamLeadProjectService.getProjectDetail(actingEmail(), id, date != null ? date : LocalDate.now(), teamLeadId);
     }
 
-    @PreAuthorize("hasAnyRole('MANAGER','ADMIN','SUPERADMIN')")
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/categories")
     public List<ProjectCategoryDto> listCategories() {
         return teamLeadProjectService.listCategories(actingEmail());
     }
 
-    @PreAuthorize("hasRole('MANAGER')")
+    @PreAuthorize("isAuthenticated()")
     @PostMapping("/categories")
     @ResponseStatus(HttpStatus.CREATED)
     public ProjectCategoryDto createCategory(@Valid @RequestBody CreateProjectCategoryRequest request) {
         return teamLeadProjectService.createCategory(request, actingEmail());
     }
 
-    @PreAuthorize("hasRole('MANAGER')")
+    @PreAuthorize("isAuthenticated()")
     @PutMapping("/categories/{id}")
     public ProjectCategoryDto updateCategory(@PathVariable Long id, @Valid @RequestBody UpdateProjectCategoryRequest request) {
         return teamLeadProjectService.updateCategory(id, request, actingEmail());
     }
 
-    @PreAuthorize("hasRole('MANAGER')")
+    @PreAuthorize("isAuthenticated()")
     @DeleteMapping("/categories/{id}")
     public DeleteCategoryResult deleteCategory(@PathVariable Long id) {
         return teamLeadProjectService.deleteCategory(id, actingEmail());

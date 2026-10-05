@@ -182,7 +182,7 @@ function WorkspaceSearch() {
 
   function projectRoute(): string {
     if (role === 'pm') return '/projects';
-    if (role === 'lead') return '/team/projects';
+    if (role === 'lead' || (user!.capabilities?.leadsProjectIds?.length ?? 0) > 0) return '/team/projects';
     if (role === 'dm') return '/dm/allocation';
     if (role === 'employee') return '/my-projects';
     return '/projects';

@@ -38,7 +38,7 @@ public class Project {
     private Status status;
 
     /**
-     * The project's Team Lead — an active MANAGER who approves EOD entries on it.
+     * The project's Team Lead — any active non-PM user who approves EOD entries on it.
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "lead_id")

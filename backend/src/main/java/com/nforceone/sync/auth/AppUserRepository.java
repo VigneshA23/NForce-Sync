@@ -89,4 +89,8 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long>, JpaSpec
 
     /** Everyone currently on a given shift — the audience for that shift's EOD cutoff reminder. */
     List<AppUser> findByShiftIdAndStatusAndDeletedAtIsNull(Long shiftId, AppUser.Status status);
+
+    /** All active users whose role is NOT in the excluded set — used for the lead dropdown (exclude PM only). */
+    List<AppUser> findByRoleNotInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
+            java.util.Collection<AppUser.Role> excludedRoles, AppUser.Status status);
 }

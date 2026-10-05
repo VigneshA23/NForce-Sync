@@ -68,15 +68,15 @@ public class ProjectService {
     }
 
     /**
-     * Users assignable as a project's Team Lead: active MANAGERs only. A PM is deliberately not
-     * offered — a PM sits above the TL in the approval chain (they are the escalation target when a
-     * TL goes quiet), so leading a project would put them on both sides of their own escalation.
+     * Users assignable as a project's Team Lead: any active user except PM role.
+     * A PM cannot be a lead — they sit above the lead in the approval chain, so leading
+     * a project would put them on both sides of their own escalation.
      */
     @Transactional(readOnly = true)
     public List<EmployeeRefDto> listAssignableLeads() {
         return appUserRepository
-                .findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
-                        List.of(AppUser.Role.MANAGER), AppUser.Status.ACTIVE)
+                .findByRoleNotInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
+                        List.of(AppUser.Role.PM), AppUser.Status.ACTIVE)
                 .stream()
                 .map(EmployeeRefDto::from)
                 .toList();
@@ -172,9 +172,9 @@ public class ProjectService {
 
     /**
      * Assigns a new Team Lead to a project via the explicit lead-assignment endpoint.
-     * Three-rule validation (Phase 6):
-     *   1. Candidate's role must currently be MANAGER.
-     *   2. Candidate must not already be this project's PM.
+     * Three-rule validation (Phase 8a):
+     *   1. Candidate must not have PM role — PMs sit above the lead in the approval chain.
+     *   2. Candidate must not already be this project's PM (same-person check).
      *   3. Candidate must have an active allocation on this project today.
      * Each rule returns a specific 400 naming the failure.
      */
@@ -185,9 +185,9 @@ public class ProjectService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "User not found: " + leadId));
 
-        if (candidate.getRole() != AppUser.Role.MANAGER) {
+        if (candidate.getRole() == AppUser.Role.PM) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    candidate.getFullName() + " is not a Team Lead (MANAGER role required for this phase).");
+                    candidate.getFullName() + " has the PM role and cannot be assigned as Team Lead.");
         }
 
         if (project.getPm() != null && project.getPm().getId().equals(leadId)) {
@@ -217,7 +217,7 @@ public class ProjectService {
     }
 
     /**
-     * Resolves the project's Team Lead, which must be an active MANAGER.
+     * Resolves the project's Team Lead. Any active non-PM user may lead a project (Phase 8a).
      * Grandfathers an unchanged current holder so editing an unrelated field cannot force reassignment.
      */
     private AppUser resolveLead(Long leadId, AppUser currentHolder) {
@@ -233,9 +233,9 @@ public class ProjectService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Team Lead must be an active user");
         }
-        if (lead.getRole() != AppUser.Role.MANAGER) {
+        if (lead.getRole() == AppUser.Role.PM) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Only a Team Lead can lead a project");
+                    "A user with the PM role cannot be assigned as Team Lead.");
         }
         return lead;
     }

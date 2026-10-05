@@ -109,7 +109,7 @@ function ChunkPrefetcher() {
       // Reportee Views (Super Admin visibility into PM operational pages — Team Lead Views was
       // removed from Super Admin's navigation/access).
       import('./pages/admin/reportee/PmProjects');
-    } else if (user.role === 'lead') {
+    } else if (user.role === 'lead' || (user.capabilities?.leadsProjectIds?.length ?? 0) > 0) {
       import('./pages/lead/TeamDashboard');
       import('./pages/lead/MyProjects');
       import('./pages/Approvals');

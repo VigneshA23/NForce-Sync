@@ -121,9 +121,12 @@ public class TeamLeadProjectService {
     }
 
     public List<ProjectCategoryDto> listCategories(String actingEmail) {
-        // Global list — every Team Lead sees the same application-wide categories, not just
-        // the ones they personally created (see V60 / class javadoc).
-        resolveActor(actingEmail);
+        AppUser actor = resolveActor(actingEmail);
+        if (actor.getRole() != AppUser.Role.ADMIN
+                && actor.getRole() != AppUser.Role.SUPERADMIN
+                && !projectRepository.existsByLeadIdAndStatus(actor.getId(), Project.Status.ACTIVE)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team Lead access required");
+        }
         return categoryRepository.findAllWithRefs()
                 .stream()
                 .map(ProjectCategoryDto::from)
@@ -133,6 +136,10 @@ public class TeamLeadProjectService {
     @Transactional
     public ProjectCategoryDto createCategory(CreateProjectCategoryRequest req, String actingEmail) {
         AppUser actor = resolveActor(actingEmail);
+
+        if (!projectRepository.existsByLeadIdAndStatus(actor.getId(), Project.Status.ACTIVE)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team Lead access required");
+        }
 
         // Associated Project is optional — a category does not require one. When given, it must
         // be one of this Team Lead's own projects; this is the authorization check.
@@ -298,8 +305,8 @@ public class TeamLeadProjectService {
         if (actor.getRole() == AppUser.Role.SUPERADMIN && requestedTeamLeadId != null) {
             AppUser target = appUserRepository.findById(requestedTeamLeadId)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Team Lead not found"));
-            if (target.getRole() != AppUser.Role.MANAGER) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target user is not a Team Lead");
+            if (!projectRepository.existsByLeadIdAndStatus(target.getId(), Project.Status.ACTIVE)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target user is not an active Team Lead");
             }
             return target.getId();
         }

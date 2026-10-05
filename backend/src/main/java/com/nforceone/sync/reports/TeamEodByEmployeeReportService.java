@@ -261,7 +261,8 @@ public class TeamEodByEmployeeReportService {
         AppUser user = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
-        if (user.getRole() != AppUser.Role.MANAGER && user.getRole() != AppUser.Role.SUPERADMIN) {
+        if (user.getRole() != AppUser.Role.SUPERADMIN
+                && !projectRepository.existsByLeadIdAndStatus(user.getId(), Project.Status.ACTIVE)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team Lead access required");
         }
         return user;

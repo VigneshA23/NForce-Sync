@@ -407,7 +407,7 @@ export function getNavSections(role: Role, capabilities: ServerUserCapabilities)
   const hasLeadCaps = capabilities.leadsProjectIds.length > 0;
 
   let sections: NavSection[];
-  if (role === 'lead' && hasLeadCaps) {
+  if ((role === 'lead' || role === 'employee') && hasLeadCaps) {
     sections = [...MY_WORK_SECTIONS, ...LEAD_COMBINED_SECTIONS];
   } else {
     sections = [...NAV[role]];

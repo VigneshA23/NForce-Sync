@@ -44,6 +44,9 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     @Query("SELECT p.status, COUNT(p) FROM Project p GROUP BY p.status")
     List<Object[]> countGroupedByStatus();
 
+    /** True when the given user is the assigned lead of at least one project in the given status. */
+    boolean existsByLeadIdAndStatus(Long leadId, Project.Status status);
+
     /** Grouped-headcount idiom, keyed on project type. */
     @Query("SELECT p.projectType.id, COUNT(DISTINCT a.employee.id) " +
            "FROM Allocation a JOIN a.project p " +

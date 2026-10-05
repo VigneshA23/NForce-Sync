@@ -19,6 +19,8 @@ import com.nforceone.sync.org.Designation;
 import com.nforceone.sync.org.DesignationRepository;
 import com.nforceone.sync.project.Allocation;
 import com.nforceone.sync.project.AllocationRepository;
+import com.nforceone.sync.project.Project;
+import com.nforceone.sync.project.ProjectRepository;
 import com.nforceone.sync.teamlead.dto.BlockerStatusRequest;
 import com.nforceone.sync.teamlead.dto.DashboardTrendDto;
 import com.nforceone.sync.teamlead.dto.MemberEodStatusDto;
@@ -78,6 +80,7 @@ public class TeamLeadService {
     private final BlockerReplyRepository       replyRepository;
     private final NotificationService          notificationService;
     private final AllocationRepository         allocationRepository;
+    private final ProjectRepository            projectRepository;
     private final Executor                     dashboardQueryExecutor;
 
     public TeamLeadService(AppUserRepository userRepository,
@@ -91,6 +94,7 @@ public class TeamLeadService {
                             BlockerReplyRepository replyRepository,
                             NotificationService notificationService,
                             AllocationRepository allocationRepository,
+                            ProjectRepository projectRepository,
                             Executor dashboardQueryExecutor) {
         this.userRepository    = userRepository;
         this.entryRepository   = entryRepository;
@@ -103,6 +107,7 @@ public class TeamLeadService {
         this.replyRepository   = replyRepository;
         this.notificationService = notificationService;
         this.allocationRepository = allocationRepository;
+        this.projectRepository = projectRepository;
         this.dashboardQueryExecutor = dashboardQueryExecutor;
     }
 
@@ -637,12 +642,8 @@ public class TeamLeadService {
         AppUser actor = userRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
-        // Phase 7: broadened to ADMIN and DM in addition to MANAGER/SUPERADMIN; Phase 8 replaces
-        // this with a capability-based check (projectLeadRepository.existsByLeadIdAndProjectId).
-        java.util.Set<AppUser.Role> allowed = java.util.Set.of(
-                AppUser.Role.MANAGER, AppUser.Role.SUPERADMIN,
-                AppUser.Role.ADMIN, AppUser.Role.DM);
-        if (!allowed.contains(actor.getRole())) {
+        if (actor.getRole() == AppUser.Role.SUPERADMIN) return actor;
+        if (!projectRepository.existsByLeadIdAndStatus(actor.getId(), Project.Status.ACTIVE)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
         return actor;
@@ -662,8 +663,8 @@ public class TeamLeadService {
         if (actor.getRole() == AppUser.Role.SUPERADMIN && requestedTeamLeadId != null) {
             AppUser target = userRepository.findById(requestedTeamLeadId)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Team Lead not found"));
-            if (target.getRole() != AppUser.Role.MANAGER) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target user is not a Team Lead");
+            if (!projectRepository.existsByLeadIdAndStatus(target.getId(), Project.Status.ACTIVE)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target user is not an active Team Lead");
             }
             return target.getId();
         }

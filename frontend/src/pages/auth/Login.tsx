@@ -434,6 +434,7 @@ const eyeButtonStyle: React.CSSProperties = {
   alignItems: 'center',
   padding: 4,
   borderRadius: 4,
+  zIndex: 2,
 };
 
 const mutedLinkStyle: React.CSSProperties = {

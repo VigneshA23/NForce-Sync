@@ -50,6 +50,7 @@ public class EodAttachmentService {
     private final EodEntryRepository entryRepository;
     private final EodTaskRepository taskRepository;
     private final AppUserRepository userRepository;
+    private final EodAccessPolicy accessPolicy;
 
     public EodAttachmentService(
             @Value("${app.eod-attachment.max-file-size-bytes}") long maxFileSizeBytes,
@@ -59,7 +60,8 @@ public class EodAttachmentService {
             EodAttachmentRepository attachmentRepository,
             EodEntryRepository entryRepository,
             EodTaskRepository taskRepository,
-            AppUserRepository userRepository) {
+            AppUserRepository userRepository,
+            EodAccessPolicy accessPolicy) {
         this.maxFileSizeBytes = maxFileSizeBytes;
         this.maxTotalStorageBytes = maxTotalStorageBytes;
         this.maxAttachmentsPerEntry = maxAttachmentsPerEntry;
@@ -68,6 +70,7 @@ public class EodAttachmentService {
         this.entryRepository = entryRepository;
         this.taskRepository = taskRepository;
         this.userRepository = userRepository;
+        this.accessPolicy = accessPolicy;
     }
 
     public EodAttachmentDto upload(Long entryId, Long taskId, MultipartFile file, String actingEmail) {
@@ -141,7 +144,7 @@ public class EodAttachmentService {
         AppUser actor = requireUserByEmail(actingEmail);
         EodAttachment attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attachment not found"));
-        if (!EodAccessPolicy.canRead(actor, attachment.getEodEntry())) {
+        if (!accessPolicy.canRead(actor, attachment.getEodEntry())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to this attachment");
         }
         return attachment;

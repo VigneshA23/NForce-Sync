@@ -18,6 +18,7 @@ import com.nforceone.sync.org.DesignationRepository;
 import com.nforceone.sync.project.Allocation;
 import com.nforceone.sync.project.AllocationRepository;
 import com.nforceone.sync.project.Project;
+import com.nforceone.sync.project.ProjectRepository;
 import com.nforceone.sync.reports.dto.MissingEodDayDto;
 import com.nforceone.sync.reports.dto.MissingEodReportDto;
 import com.nforceone.sync.reports.dto.MissingEodRowDto;
@@ -59,6 +60,7 @@ public class TeamMissingEodReportService {
     private final DesignationRepository designationRepository;
     private final NotificationService notificationService;
     private final ShiftDefinitionRepository shiftRepository;
+    private final ProjectRepository projectRepository;
 
     public TeamMissingEodReportService(AppUserRepository appUserRepository,
                                         AllocationRepository allocationRepository,
@@ -67,7 +69,8 @@ public class TeamMissingEodReportService {
                                         BusinessRuleConfigRepository configRepository,
                                         DesignationRepository designationRepository,
                                         NotificationService notificationService,
-                                        ShiftDefinitionRepository shiftRepository) {
+                                        ShiftDefinitionRepository shiftRepository,
+                                        ProjectRepository projectRepository) {
         this.appUserRepository = appUserRepository;
         this.allocationRepository = allocationRepository;
         this.eodEntryRepository = eodEntryRepository;
@@ -76,6 +79,7 @@ public class TeamMissingEodReportService {
         this.notificationService = notificationService;
         this.designationRepository = designationRepository;
         this.shiftRepository = shiftRepository;
+        this.projectRepository = projectRepository;
     }
 
     /**
@@ -311,7 +315,8 @@ public class TeamMissingEodReportService {
         AppUser user = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
-        if (user.getRole() != AppUser.Role.MANAGER && user.getRole() != AppUser.Role.SUPERADMIN) {
+        if (user.getRole() != AppUser.Role.SUPERADMIN
+                && !projectRepository.existsByLeadIdAndStatus(user.getId(), Project.Status.ACTIVE)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team Lead access required");
         }
         return user;

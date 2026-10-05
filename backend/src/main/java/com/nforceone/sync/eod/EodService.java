@@ -23,6 +23,7 @@ import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
 import com.nforceone.sync.project.TaskCategory;
 import com.nforceone.sync.project.TaskCategoryRepository;
+import com.nforceone.sync.teamlead.LeadAccessService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -93,6 +94,8 @@ public class EodService {
     private final com.nforceone.sync.notification.NotificationService notificationService;
     private final ApprovalPieceRouter approvalPieceRouter;
     private final EodProjectApprovalRepository projectApprovalRepository;
+    private final EodAccessPolicy accessPolicy;
+    private final LeadAccessService leadAccess;
 
     public EodService(EodEntryRepository entryRepository,
                       EodTaskRepository taskRepository,
@@ -106,7 +109,9 @@ public class EodService {
                       EodAttachmentService attachmentService,
                       com.nforceone.sync.notification.NotificationService notificationService,
                       ApprovalPieceRouter approvalPieceRouter,
-                      EodProjectApprovalRepository projectApprovalRepository) {
+                      EodProjectApprovalRepository projectApprovalRepository,
+                      EodAccessPolicy accessPolicy,
+                      LeadAccessService leadAccess) {
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
         this.userRepository    = userRepository;
@@ -120,6 +125,8 @@ public class EodService {
         this.notificationService = notificationService;
         this.approvalPieceRouter = approvalPieceRouter;
         this.projectApprovalRepository = projectApprovalRepository;
+        this.accessPolicy = accessPolicy;
+        this.leadAccess = leadAccess;
     }
 
     public EodEntryDto saveDraft(SaveEodRequest request, String actingEmail) {
@@ -868,16 +875,21 @@ public class EodService {
     }
 
     private Long resolveTargetEmployee(AppUser actor, Long requestedId) {
-        boolean isPrivileged = actor.getRole() == AppUser.Role.MANAGER
-                || actor.getRole() == AppUser.Role.SUPERADMIN;
-        if (!isPrivileged) {
-            return actor.getId();
+        if (actor.getRole() == AppUser.Role.SUPERADMIN) {
+            return requestedId != null ? requestedId : actor.getId();
         }
-        return requestedId != null ? requestedId : actor.getId();
+        if (actor.getRole() == AppUser.Role.MANAGER) {
+            // MANAGER had unscoped access before Phase 8a — kept unchanged.
+            return requestedId != null ? requestedId : actor.getId();
+        }
+        if (requestedId != null && leadAccess.isInLeadTeam(requestedId, actor.getId())) {
+            return requestedId;
+        }
+        return actor.getId();
     }
 
     private boolean canReadEntry(AppUser actor, EodEntry entry) {
-        return EodAccessPolicy.canRead(actor, entry);
+        return accessPolicy.canRead(actor, entry);
     }
 
     // Single-entry path: still used by getEntry()
