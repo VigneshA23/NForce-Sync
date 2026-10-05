@@ -25,9 +25,7 @@ knowledge:
       - Blockers: obstacles an employee flags on a specific task, which their Team Lead or the
         project's Project Manager can see and respond to.
 
-      Access to pages and data depends on the signed-in user's role. Some roles (Delivery
-      Manager, Finance Admin, Leadership Viewer) currently only have roadmap placeholder pages —
-      their real functionality has not shipped yet.
+      Access to pages and data depends on the signed-in user's role.
 
   - knowledgeId: foundation.eod-cycle
     type: FOUNDATION

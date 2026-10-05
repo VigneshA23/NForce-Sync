@@ -53,7 +53,7 @@ public class ProjectController {
         return projectService.create(request);
     }
 
-    /** Users assignable as a project's Team Lead — active MANAGERs only. */
+    /** Users assignable as a project's Team Lead — any active non-PM user. */
     @GetMapping("/leads")
     @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public List<EmployeeRefDto> listAssignableLeads() {
@@ -75,7 +75,7 @@ public class ProjectController {
     }
 
     /**
-     * Assign a Team Lead to a project. Three-rule validation: target must be MANAGER-role,
+     * Assign a Team Lead to a project. Three-rule validation: target must not be PM-role,
      * must not already be this project's PM, and must have an active allocation on this project.
      */
     @PutMapping("/{id}/lead")

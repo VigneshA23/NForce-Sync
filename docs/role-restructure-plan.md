@@ -4,17 +4,58 @@
 **Backup branch:** `backup/pre-role-restructure-2026-09-28` (pushed to origin)
 **DB export:** manual pg_dump taken 2026-09-28 — confirm file exists before Phase 8
 **Source doc:** `docs/NForce_Sync_Approvals_and_Roles_Team_Guide.docx` (v1.0)
-**Status:** Phase 1 complete (2026-09-28). Phases 2–9 pending.
+**Status:** All phases complete as of 2026-10-05 (vigneshdev branch). V109 is the current top migration.
 
 ---
 
-## Known Issues
+## Security
 
-**Fresh database cannot be built from V1.** `business_rule_config` is ALTERed by V33 (and V34,
-V36, V59) but no migration in the chain creates it — the CREATE TABLE migration that originally
-created it was reverted before V27 and never replaced. Neon has the table because it predates the
-revert. Needs a repair migration (CREATE TABLE IF NOT EXISTS) before any new environment can be
-provisioned from scratch.
+**Credentials exposed in git history — password rotation required.**
+
+`application.yml` previously contained real Neon database credentials (URL, username, password)
+and the JWT secret in plain text. These values exist verbatim in every commit from project
+inception up to and including the commit where this line was added. Anyone who can read the git
+history can see them.
+
+**Required actions (do this before the next deploy):**
+
+1. **Rotate the Neon database password** — generate a new password in the Neon console, update
+   `application-local.yml` locally, and set `SPRING_DATASOURCE_PASSWORD` in Railway.
+2. **Rotate the JWT secret** — generate a new random string (minimum 32 chars), update
+   `application-local.yml`, and set `JWT_SECRET` in Railway. All existing sessions will be
+   invalidated (users will have to log in again — this is expected and safe).
+3. **Do not print either value anywhere** — use masked output in logs and docs.
+
+`application.yml` now uses `${SPRING_DATASOURCE_URL}`, `${SPRING_DATASOURCE_USERNAME}`,
+`${SPRING_DATASOURCE_PASSWORD}`, and `${JWT_SECRET}` (no defaults; app fails clearly at startup
+if missing). Local dev values live only in the gitignored `application-local.yml`. Railway uses
+its own environment variables panel.
+
+---
+
+## Known Issues — resolved
+
+**Fresh database can now be built from V1.** `beforeMigrate.sql` (Flyway SQL callback, checked in
+at `backend/src/main/resources/db/migration/beforeMigrate.sql`) runs before any migration and
+creates `business_rule_config` if it does not exist. The callback is a no-op on Neon (table
+already present). New environments provisioned from V1 will apply the callback first, so V33
+ALTER never fails on a missing table.
+
+---
+
+## What was built (final state, 2026-10-05)
+
+| Area | What shipped |
+|------|-------------|
+| Roles | 4 roles: EMPLOYEE, PM, ADMIN, SUPERADMIN. MANAGER/HR/DM/FINANCE/LEADERSHIP removed (V106/V107). |
+| Team Lead | Capability, not a role. Any active non-PM user assigned as `project.lead_id`. EOD approval, team dashboard, reports scoped to the project. |
+| Reporting Manager | `manager_id` FK on `app_user`. Any active user can be a reporting manager. My Reporting Team nav section shown when `hasDirectReports`. |
+| EOD approval | Per-piece approval via `eod_project_approval` table. LEAD piece → escalates to PM after SLA hours. PM piece runs alongside LEAD. REPORTING_MANAGER piece for plain-log hours over limit. |
+| Escalation | Hourly `EscalationScheduler`. LEAD pieces with no action after `escalation_sla_hours` escalate to PM as an additional approver. Manual trigger at `/api/v2/approvals/admin/trigger-escalation` (SUPERADMIN + `@PreAuthorize`, writes `audit_log` row). |
+| Secrets | DB credentials and JWT secret moved to env vars (`SPRING_DATASOURCE_*`, `JWT_SECRET`). Local values in gitignored `application-local.yml`. |
+| Fresh DB | `beforeMigrate.sql` callback ensures `business_rule_config` exists before V33. |
+| Tests | `SyncApplicationTests` and `EodReminderSchedulerIT` skip unless `NFORCE_LIVE_DB_IT=true`. `EodReminderSchedulerIT` creates its own users dynamically — no hardcoded IDs. |
+| AI knowledge | YAMLs updated: removed DM/Finance/Leadership role entries. AI correctly describes 4 roles + Team Lead capability + Reporting Manager relationship. |
 
 ---
 

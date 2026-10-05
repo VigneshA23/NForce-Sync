@@ -118,22 +118,3 @@ knowledge:
       notification is sent; a Super Admin finds that entry by checking the Approvals list directly.
       Super Admin does not have Admin's User Management page in their own sidebar — that is
       Admin-only.
-
-  - knowledgeId: role.dm-finance-leadership
-    type: ROLE
-    module: roles
-    version: 1
-    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
-    title: Delivery Manager, Finance Admin and Leadership Viewer — not yet available
-    synonyms:
-      - delivery manager role
-      - finance admin role
-      - leadership viewer role
-      - what can a delivery manager do
-    body: |
-      Delivery Manager, Finance Admin and Leadership Viewer are real roles in Sync's role model,
-      each with a full sidebar of intended pages (dashboards, escalations, allocation, reports,
-      billable data, profitability, trends, and so on). None of that functionality has shipped
-      yet — every page under these three roles currently renders a roadmap placeholder with no
-      real data or actions. A user in one of these roles can sign in and see their sidebar, but
-      cannot currently perform any of the described work through the application.

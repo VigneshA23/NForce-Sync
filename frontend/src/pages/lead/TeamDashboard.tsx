@@ -600,7 +600,7 @@ export default function TeamDashboard() {
   return (
     <div>
       {isSuperAdmin && (
-        <ReporteeScopePicker role="MANAGER" label="Team Lead" value={teamLeadId} onChange={setTeamLeadId} />
+        <ReporteeScopePicker role="LEAD" label="Team Lead" value={teamLeadId} onChange={setTeamLeadId} />
       )}
       {/* Header controls — date filter + review-approvals action */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>

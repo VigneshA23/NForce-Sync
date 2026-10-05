@@ -13,6 +13,13 @@ DECLARE
   eid     BIGINT;
   n_rows  INTEGER;
 BEGIN
+  -- Skip on fresh databases where the reference users/projects from Neon do not exist.
+  -- This seed is Neon-specific demo data; it is a no-op on any DB that lacks id=2/3/4.
+  IF NOT EXISTS (SELECT 1 FROM project WHERE id = v_sync) OR
+     NOT EXISTS (SELECT 1 FROM app_user WHERE id = v_emp) THEN
+    RAISE NOTICE 'V38: reference data absent — skipping (fresh DB or non-Neon environment)';
+    RETURN;
+  END IF;
 
   -- ── 2026-07-07 Mon NEW APPROVED util=100% ────────────────────────────────
   INSERT INTO eod_entry (employee_id, entry_date, status, work_location, next_day_plan, remarks, submitted_at, created_at, updated_at)

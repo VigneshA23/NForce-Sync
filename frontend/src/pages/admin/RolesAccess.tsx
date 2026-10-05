@@ -43,11 +43,11 @@ const GROUPS: PermGroup[] = [
     ],
   },
   {
-    label: 'Project management: PM + Super Admin',
+    label: 'Project management: PM, Admin + Super Admin',
     rows: [
-      { label: 'List & create projects',      endpoint: 'GET/POST /api/projects',                 roles: ['PM','SUPERADMIN'], tier: 'api' },
-      { label: 'Update projects',             endpoint: 'PUT /api/projects/:id',                  roles: ['PM','SUPERADMIN'], tier: 'api' },
-      { label: 'Manage project allocation',   endpoint: 'GET/POST /api/allocation',               roles: ['PM','SUPERADMIN'], tier: 'api' },
+      { label: 'List & create projects',      endpoint: 'GET/POST /api/projects',                 roles: ['PM','ADMIN','SUPERADMIN'], tier: 'api' },
+      { label: 'Update projects',             endpoint: 'PUT /api/projects/:id',                  roles: ['PM','ADMIN','SUPERADMIN'], tier: 'api' },
+      { label: 'Manage project allocation',   endpoint: 'GET/POST /api/allocation',               roles: ['PM','ADMIN','SUPERADMIN'], tier: 'api' },
     ],
   },
   {
@@ -68,9 +68,9 @@ const GROUPS: PermGroup[] = [
     ],
   },
   {
-    label: 'System configuration: Super Admin only',
+    label: 'System configuration: Admin + Super Admin',
     rows: [
-      { label: 'Business rules config',        endpoint: 'GET/PUT /api/admin/business-rules/*',    roles: ['SUPERADMIN'], tier: 'api' },
+      { label: 'Business rules config',        endpoint: 'GET/PUT /api/admin/business-rules/*',    roles: ['ADMIN','SUPERADMIN'], tier: 'api' },
     ],
   },
   {
@@ -285,6 +285,19 @@ export default function RolesAccess() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* Concept notes */}
+          <div style={{
+            background: 'var(--panel)', border: '1px solid var(--line)', borderTop: 'none',
+            padding: '12px 20px', display: 'flex', flexWrap: 'wrap', gap: 12,
+          }}>
+            <div style={{ fontSize: 12, color: 'var(--txt-dim)', padding: '8px 12px', background: 'var(--raised2)', border: '1px solid var(--line)', borderRadius: 8 }}>
+              <strong style={{ color: 'var(--txt)' }}>Team Lead</strong> is a project assignment, not a role — any active non-PM user can be assigned as a project&apos;s Team Lead and will see the Team Lead views (team dashboard, approvals, reports) for that project.
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--txt-dim)', padding: '8px 12px', background: 'var(--raised2)', border: '1px solid var(--line)', borderRadius: 8 }}>
+              <strong style={{ color: 'var(--txt)' }}>Reporting Manager</strong> is a hierarchical relationship (manager_id on the user account) — any active user can be set as another user&apos;s reporting manager, regardless of their own role. Users with at least one direct report see the &ldquo;My Reporting Team&rdquo; nav section.
             </div>
           </div>
 

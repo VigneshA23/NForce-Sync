@@ -12,8 +12,7 @@ function firstOfMonthISO(): string {
 }
 
 const ROLE_LABEL: Record<string, string> = {
-  EMPLOYEE: 'Employee', LEAD: 'Team Lead', PM: 'Project Manager', DM: 'Delivery Manager',
-  HR: 'HR', FINANCE: 'Finance', LEADERSHIP: 'Leadership', SUPERADMIN: 'Super Admin',
+  EMPLOYEE: 'Employee', LEAD: 'Team Lead', PM: 'Project Manager', SUPERADMIN: 'Super Admin',
 };
 
 /** Drill-through target for the Executive Dashboard's "Unallocated Resources" tile — active

@@ -19,9 +19,8 @@ knowledge:
       the signed-in role:
       - Users: Admin can find any user; a Team Lead can find their own direct reports; every
         other role gets no user results from search.
-      - Projects: Super Admin, Delivery Manager, Finance Admin and Leadership Viewer can find any
-        project; a Project Manager can find the projects they manage; a Team Lead can find
-        projects they lead; an Employee can find projects they are allocated to today; Admin gets
-        no project results from search.
+      - Projects: Super Admin can find any project; a Project Manager can find the projects they
+        manage; a Team Lead can find projects they lead; an Employee can find projects they are
+        allocated to today; Admin gets no project results from search.
       Search only looks up users and projects — it does not search EOD entries, blockers or
       reports.

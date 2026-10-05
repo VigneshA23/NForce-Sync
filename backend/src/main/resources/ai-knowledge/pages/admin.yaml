@@ -18,17 +18,15 @@ knowledge:
       User Management lets an Admin create, edit, search, deactivate/reactivate and reset the
       password of any Sync account. A new account needs a full name (letters and spaces only), a
       company email ending in @nforceone.com, and an Employee ID in the format NF- followed by 8
-      digits. The role must be one an Admin is allowed to assign: Employee, Team Lead, Project
-      Manager, Admin or Super Admin (a small number of legacy roles exist on older accounts but
-      can't be newly assigned here).
+      digits. The four assignable roles are: Employee, Project Manager, Admin, and Super Admin.
+      Team Lead is not a role — it is a project assignment (any active non-PM user can be assigned
+      as a project's Team Lead). Reporting Manager is a relationship (any active user can be set
+      as another user's manager_id, regardless of their own role).
 
-      Every creatable role except Super Admin requires a reporting manager, and that manager must
-      themselves hold the next role up the chain (an Employee's manager must be a Team Lead, a
-      Team Lead's manager must be a Project Manager, a Project Manager's or Admin's manager must
-      be a Super Admin) — Sync also blocks a circular reporting chain. Deactivating an account
-      blocks sign-in but keeps their history; you can't remove the last active Super Admin.
-      Resetting a password generates a temporary one, forces a change on next sign-in, and clears
-      any existing lockout.
+      Every creatable role except Super Admin can have a reporting manager set on their account
+      — Sync blocks circular reporting chains. Deactivating an account blocks sign-in but keeps
+      their history; you can't remove the last active Super Admin. Resetting a password generates
+      a temporary one, forces a change on next sign-in, and clears any existing lockout.
 
   - knowledgeId: page.org-masters
     type: PAGE
@@ -90,10 +88,11 @@ knowledge:
     sources:
       - backend/src/main/java/com/nforceone/sync/admin/RolesController.java
     body: |
-      Roles & Access is a reference page listing Sync's roles and a short description of each —
-      Employee, Team Lead, Admin, Super Admin, Project Manager, Delivery Manager, Finance and
-      Leadership. It's informational; role assignment itself happens on a user's account in User
-      Management.
+      Roles & Access is a reference page showing Sync's four roles (Employee, Project Manager,
+      Admin, Super Admin) and their permissions. Team Lead is a project assignment capability,
+      not a separate role — any active non-PM user can lead a project. Reporting Manager is a
+      hierarchical relationship (manager_id), not a role. The page is informational; role
+      assignment itself happens on a user's account in User Management.
 
   - knowledgeId: page.audit-log
     type: PAGE

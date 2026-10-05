@@ -17,7 +17,7 @@ import java.util.List;
 /**
  * Reporting Manager "My Reports" endpoints. No class-level @PreAuthorize — service enforces
  * the "has direct reports" gate, making this accessible to any authenticated role that has
- * at least one person with manager_id pointing to them (ADMIN, DM, MANAGER, PM, etc.).
+ * at least one person with manager_id pointing to them (ADMIN, REPORTING_MANAGER, PM, etc.).
  */
 @RestController
 @RequestMapping("/api/my-reports")

@@ -222,6 +222,7 @@ export const NAV: Record<Role, RoleNav> = {
             { key: 'ro-pm-util',     label: 'Utilization',          path: '/admin/reportee/pm/utilization', icon: Activity },
           ],
         },
+        { key: 'ro-unallocated', label: 'Unallocated Resources', path: '/admin/unallocated-resources', icon: Users },
       ],
     },
   ],

@@ -2,7 +2,7 @@
 # Nforce Sync — Build Context
 
 ## Product
-Internal platform for NForce One (~150 users, 8 roles).
+Internal platform for NForce One (~150 users, 4 roles).
 Employee submits End-of-Day report → manager approves → utilization auto-computes from APPROVED hours only → dashboards.
 
 ## THE SPINE — never violate
@@ -91,9 +91,9 @@ off-screen, worse at higher zoom). Centre with a `position: fixed; inset: 0` fle
 - The login screen will show both paths: SSO button (primary) + credentials form (fallback).
 - Implementation depends on company Azure AD configuration — coordinate with IT when ready.
 
-## Roles — 8 roles, enforced server-side
-employee, lead, pm, dm, hr, finance, leadership, superadmin.
-The auth mechanism above is reused from NForce timetracker but Nforce Sync keeps its full 8-role set. Super Admin performs provisioning duties (create users, assign roles, reset passwords, deactivate). Enforce access on the SERVER for every request, not just in the UI. Leadership is READ-ONLY. One role per user. Restricted route → "Not authorized".
+## Roles — 4 roles, enforced server-side
+employee, pm, admin, superadmin.
+Team Lead is not a role — it is a project assignment capability (any active non-PM user assigned as project.lead_id). Reporting Manager is a hierarchical relationship (manager_id FK), not a role. Super Admin performs system config and org-wide oversight. Admin performs user administration (CRUD, audit log). Enforce access on the SERVER for every request, not just in the UI. One role per user. Restricted route → "Not authorized".
 
 ## Admin creates users (User Management screen — backend phase)
 Super Admin creates an employee by entering: full name, company email, initial password, role (one of the 8), and an auto-incrementing employee ID. Created users are persisted in the database and can then log in. This is a BACKEND feature (DB + API) — the frontend User Management screen calls it.
