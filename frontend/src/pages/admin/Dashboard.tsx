@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
-import { Users, UserCheck, UserX, Activity, ArrowRight, RefreshCw } from 'lucide-react';
+import {
+  Users, UserCheck, UserX, Activity, ArrowRight, RefreshCw,
+  Building2, Briefcase, MapPin, UserPlus,
+} from 'lucide-react';
 import { getAdminStats } from '../../api/admin';
 import { toRole } from '../../api/auth';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
@@ -15,16 +18,15 @@ const RECENT_ACTIVITY_PAGE_SIZE = 9;
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
-// ── Role bar ──────────────────────────────────────────────────────────────────
+// ── Generic stat bar (role / department / location breakdowns) ─────────────────
 
-function RoleBar({ roleKey, count, total }: { roleKey: string; count: number; total: number }) {
-  const frontendRole = toRole(roleKey);
-  const label = ROLE_LABELS[frontendRole] ?? roleKey;
-  const color = ROLE_COLORS[frontendRole] ?? 'var(--txt-dim)';
+function StatBar({ label, count, total, color }: { label: string; count: number; total: number; color: string }) {
   const pct = total > 0 ? (count / total) * 100 : 0;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-      <div style={{ width: 90, fontSize: 11, color: 'var(--txt-mut)', textAlign: 'right', flexShrink: 0 }}>{label}</div>
+      <div style={{ width: 90, fontSize: 11, color: 'var(--txt-mut)', textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={label}>
+        {label}
+      </div>
       <div style={{ flex: 1, height: 6, background: 'var(--raised2)', borderRadius: 3, overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 3, transition: 'width 0.6s ease' }} />
       </div>
@@ -32,6 +34,99 @@ function RoleBar({ roleKey, count, total }: { roleKey: string; count: number; to
         {count}
       </div>
     </div>
+  );
+}
+
+function RoleBar({ roleKey, count, total }: { roleKey: string; count: number; total: number }) {
+  const frontendRole = toRole(roleKey);
+  return (
+    <StatBar
+      label={ROLE_LABELS[frontendRole] ?? roleKey}
+      count={count}
+      total={total}
+      color={ROLE_COLORS[frontendRole] ?? 'var(--txt-dim)'}
+    />
+  );
+}
+
+// Neutral palette cycled by index — department/location names aren't tied to the fixed
+// per-role colors in ROLE_COLORS, so this just needs enough visual separation between bars.
+const BREAKDOWN_COLORS = ['var(--info)', 'var(--ok)', 'var(--warn)', 'var(--brand-bright)', 'var(--txt-mut)'];
+
+function BreakdownCard({ title, counts }: { title: string; counts: Record<string, number> }) {
+  const entries = Object.entries(counts).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((sum, [, v]) => sum + v, 0);
+  return (
+    <Card>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 18 }}>{title}</div>
+      {entries.length === 0
+        ? <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>No data</div>
+        : entries.map(([label, count], i) => (
+          <StatBar key={label} label={label} count={count} total={total} color={BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]} />
+        ))}
+    </Card>
+  );
+}
+
+// ── Compact name list (inactive users / new joiners) ────────────────────────────
+
+function NameListCard({
+  title, names, emptyLabel, viewAllTo, viewAllLabel,
+}: {
+  title: string; names: string[]; emptyLabel: string; viewAllTo?: string; viewAllLabel?: string;
+}) {
+  const VISIBLE = 8;
+  const visible = names.slice(0, VISIBLE);
+  const overflow = names.length - visible.length;
+  return (
+    <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 16 }}>{title}</div>
+      {names.length === 0
+        ? <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>{emptyLabel}</div>
+        : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {visible.map((name, i) => (
+              <div key={`${name}-${i}`} style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{name}</div>
+            ))}
+            {overflow > 0 && (
+              <div style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>+{overflow} more</div>
+            )}
+          </div>
+        )}
+      {viewAllTo && (
+        <Link
+          to={viewAllTo}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
+            marginTop: 'auto', paddingTop: 12, fontSize: 12, fontWeight: 500,
+            color: 'var(--info)', textDecoration: 'none',
+          }}
+        >
+          {viewAllLabel} <ArrowRight size={12} aria-hidden="true" />
+        </Link>
+      )}
+    </Card>
+  );
+}
+
+// ── EOD submitted today ──────────────────────────────────────────────────────────
+
+function EodTodayCard({ submitted, expected }: { submitted: number; expected: number }) {
+  const pct = expected > 0 ? Math.round((submitted / expected) * 100) : 0;
+  return (
+    <Card>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 18 }}>EOD Submitted Today</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 10 }}>
+        <span style={{ fontSize: 28, fontWeight: 700, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>{submitted}</span>
+        <span style={{ fontSize: 14, color: 'var(--txt-dim)' }}>/ {expected} active users</span>
+      </div>
+      <div style={{ height: 6, background: 'var(--raised2)', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: 'var(--ok)', borderRadius: 3, transition: 'width 0.6s ease' }} />
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>
+        {pct}% submitted so far today. Plain daily count, not the shift/holiday-aware compliance report.
+      </div>
+    </Card>
   );
 }
 
@@ -112,6 +207,23 @@ export default function AdminDashboard() {
         </ClickableKpi>
       </div>
 
+      {/* Org Masters snapshot + new joiners — second KPI row, same grid/breakpoints as above.
+          Departments/Designations/Locations deep-link to Org Masters since that's where Admin
+          manages those records; New Joiners has no dedicated filtered view to link to, so it's
+          a plain (non-clickable) tile. */}
+      <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16, marginBottom: 24 }}>
+        <ClickableKpi onClick={() => navigate('/admin/org-masters')}>
+          <KpiCard icon={<Building2 size={18} />} label="Departments" value={stats.departmentCount} accent="var(--info)" />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate('/admin/org-masters')}>
+          <KpiCard icon={<Briefcase size={18} />} label="Designations" value={stats.designationCount} accent="var(--warn)" />
+        </ClickableKpi>
+        <ClickableKpi onClick={() => navigate('/admin/org-masters')}>
+          <KpiCard icon={<MapPin size={18} />} label="Locations" value={stats.locationCount} accent="var(--brand-bright)" />
+        </ClickableKpi>
+        <KpiCard icon={<UserPlus size={18} />} label="New Joiners (7 days)" value={stats.newUsersLast7Days} accent="var(--ok)" />
+      </div>
+
       <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 24 }}>
         {/* Users by role */}
         <Card>
@@ -182,6 +294,29 @@ export default function AdminDashboard() {
             View all {stats.auditEventsLast24h} <ArrowRight size={12} aria-hidden="true" />
           </Link>
         </Card>
+      </div>
+
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 24 }}>
+        <BreakdownCard title="Users by Department" counts={stats.usersByDepartment ?? {}} />
+        <BreakdownCard title="Users by Location" counts={stats.usersByLocation ?? {}} />
+      </div>
+
+      <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)', gap: 16 }}>
+        <EodTodayCard submitted={stats.eodSubmittedToday} expected={stats.eodExpectedToday} />
+        <NameListCard
+          title="Inactive Users"
+          names={stats.inactiveUserNames ?? []}
+          emptyLabel="No inactive users"
+          viewAllTo="/admin/users?status=INACTIVE"
+          viewAllLabel={`View all ${stats.inactiveUsers}`}
+        />
+        <NameListCard
+          title="New Joiners (7 days)"
+          names={stats.newUserNames ?? []}
+          emptyLabel="No new joiners this week"
+          viewAllTo="/admin/users?status=ALL"
+          viewAllLabel="View all users"
+        />
       </div>
     </div>
   );

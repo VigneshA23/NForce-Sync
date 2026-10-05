@@ -6,7 +6,9 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -87,4 +89,27 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long>, JpaSpec
 
     /** Everyone currently on a given shift — the audience for that shift's EOD cutoff reminder. */
     List<AppUser> findByShiftIdAndStatusAndDeletedAtIsNull(Long shiftId, AppUser.Status status);
+
+    // ── Admin Dashboard: org breakdowns ─────────────────────────────────────────
+
+    // One GROUP BY for the dashboard's department headcount bars — departmentId is nullable
+    // (row[0] may be null for a user with no department assigned yet), resolved to a
+    // department name (or "Unassigned") by the caller.
+    @Query("SELECT u.departmentId, count(u) FROM AppUser u " +
+           "WHERE u.deletedAt IS NULL AND u.status = com.nforceone.sync.auth.AppUser.Status.ACTIVE " +
+           "GROUP BY u.departmentId")
+    List<Object[]> countActiveGroupedByDepartment();
+
+    @Query("SELECT u.locationId, count(u) FROM AppUser u " +
+           "WHERE u.deletedAt IS NULL AND u.status = com.nforceone.sync.auth.AppUser.Status.ACTIVE " +
+           "GROUP BY u.locationId")
+    List<Object[]> countActiveGroupedByLocation();
+
+    // Recently-joined headcount/roster for the dashboard's "New Joiners" card — mirrors
+    // findInactiveUserNames (projection query, no full entity load).
+    long countByCreatedAtAfterAndDeletedAtIsNull(OffsetDateTime since);
+
+    @Query("SELECT u.fullName FROM AppUser u WHERE u.createdAt > :since AND u.deletedAt IS NULL " +
+           "ORDER BY u.createdAt DESC")
+    List<String> findRecentlyJoinedUserNames(@Param("since") OffsetDateTime since);
 }

@@ -54,6 +54,15 @@ export interface AdminStatsDto {
   usersByRole: Record<string, number>;
   recentAuditEvents: AuditLogDto[];
   auditEventsLast24h: number;
+  usersByDepartment: Record<string, number>;
+  usersByLocation: Record<string, number>;
+  departmentCount: number;
+  designationCount: number;
+  locationCount: number;
+  newUsersLast7Days: number;
+  newUserNames: string[];
+  eodSubmittedToday: number;
+  eodExpectedToday: number;
 }
 
 export interface RoleInfoDto {

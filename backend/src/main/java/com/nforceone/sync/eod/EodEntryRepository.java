@@ -184,4 +184,13 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
                                       @Param("from") LocalDate from,
                                       @Param("to") LocalDate to,
                                       @Param("excludeId") Long excludeId);
+
+    // Admin Dashboard's "EOD Submitted Today" tile — a plain today-only count, deliberately
+    // simpler than ExecutiveDashboardService's org-wide EodComplianceDto (which additionally
+    // excludes holidays/leave/weekends and applies shift-cutoff "at risk" logic). DRAFT is
+    // excluded the same way sumAdjustmentMinutesInPeriod above excludes it: a draft is an
+    // intention, not a submission.
+    @Query("SELECT COUNT(DISTINCT e.employee.id) FROM EodEntry e " +
+           "WHERE e.entryDate = :date AND e.status <> com.nforceone.sync.eod.EodEntry.Status.DRAFT")
+    long countDistinctSubmittedEmployeesOnDate(@Param("date") LocalDate date);
 }
