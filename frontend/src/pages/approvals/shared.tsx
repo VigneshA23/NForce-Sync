@@ -5,6 +5,7 @@ import {
 } from '../../api/approvals';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../lib/toast';
+import { StatusGlyph } from '../../lib/statusCues';
 import { formatDateTime } from '../../lib/date';
 import { formatDate as fmtDate, formatDurationMinutes } from '../../lib/date';
 import { getEodAttachmentDataUrl } from '../../api/eod';
@@ -187,6 +188,7 @@ export function Chip({ children, tone = 'neutral', dashed = false }: {
       background: dashed ? 'transparent' : `color-mix(in srgb, ${color} 14%, transparent)`,
       border: dashed ? `1px dashed var(--line2)` : `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
     }}>
+      {tone !== 'neutral' && <StatusGlyph tone={tone} size={11} />}
       {children}
     </span>
   );

@@ -95,6 +95,7 @@ function NameListCard({
         )}
       {viewAllTo && (
         <Link
+          className="nf-link"
           to={viewAllTo}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
@@ -284,6 +285,7 @@ export default function AdminDashboard() {
               </>
             )}
           <Link
+            className="nf-link"
             to={`/admin/audit?from=${encodeURIComponent(since24h)}`}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,

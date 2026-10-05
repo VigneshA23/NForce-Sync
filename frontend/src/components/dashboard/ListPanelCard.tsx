@@ -37,7 +37,7 @@ export function ListPanelCard({
           </span>
         )}
         {viewAllPath && (
-          <Link to={viewAllPath} style={{
+          <Link to={viewAllPath} className="nf-link" style={{
             marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4,
             color: 'var(--info)', fontSize: 11, fontWeight: 500, textDecoration: 'none',
           }}>
