@@ -85,7 +85,11 @@ public class EodEntry {
         // CHANGES_REQUESTED removed in V44 — REJECTED already returns the entry to the employee
         // for edit and resubmit, so the two were functionally identical. Existing rows were
         // migrated to REJECTED.
-        DRAFT, SUBMITTED, APPROVED, REJECTED, MISSED
+        // PARTIALLY_APPROVED added back to match V98 (applied to the shared DB out-of-band by
+        // the unmerged per-project-approval work on vigneshdev) — this checkout has no
+        // per-project approval feature, so it is treated as "still needs approval action",
+        // same as SUBMITTED, everywhere it's read.
+        DRAFT, SUBMITTED, APPROVED, PARTIALLY_APPROVED, REJECTED, MISSED
     }
 
     /**

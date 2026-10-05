@@ -532,7 +532,9 @@ public class TeamLeadService {
 
         return switch (entry.getStatus()) {
             case APPROVED -> "SUBMITTED";
-            case SUBMITTED -> "PENDING_APPROVAL";
+            // PARTIALLY_APPROVED (per-project approval workflow, not implemented in this
+            // checkout — see the enum's own comment) still needs lead action, same as SUBMITTED.
+            case SUBMITTED, PARTIALLY_APPROVED -> "PENDING_APPROVAL";
             case DRAFT, REJECTED, MISSED -> "MISSING";
         };
     }

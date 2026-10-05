@@ -504,7 +504,9 @@ public class ProjectDashboardService {
         if (entry == null) return true;
         if (isLeaveOnlyEntry(entry, leaveCategoryId)) return false;
         return switch (entry.getStatus()) {
-            case APPROVED, SUBMITTED -> false;
+            // PARTIALLY_APPROVED (per-project approval workflow, not implemented in this
+            // checkout — see EodEntry.Status's own comment) is not "missing" either.
+            case APPROVED, SUBMITTED, PARTIALLY_APPROVED -> false;
             case DRAFT, REJECTED, MISSED -> true;
         };
     }

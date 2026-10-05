@@ -310,7 +310,9 @@ public class MissingEodReportService {
     private boolean isMissing(EodEntry entry) {
         if (entry == null) return true;
         return switch (entry.getStatus()) {
-            case APPROVED, SUBMITTED -> false;
+            // PARTIALLY_APPROVED (per-project approval workflow, not implemented in this
+            // checkout — see EodEntry.Status's own comment) is not "missing" either.
+            case APPROVED, SUBMITTED, PARTIALLY_APPROVED -> false;
             case DRAFT, REJECTED, MISSED -> true;
         };
     }

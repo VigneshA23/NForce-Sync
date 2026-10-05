@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MoreVertical } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -11,6 +11,8 @@ export interface DropdownMenuItem {
   color?: string;
   onSelect: () => void;
   disabled?: boolean;
+  /** Optional: draws a divider line above this item. */
+  dividerBefore?: boolean;
 }
 
 interface DropdownMenuProps {
@@ -24,6 +26,11 @@ interface DropdownMenuProps {
    */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Optional (default off): focus moves into the menu on open; Arrow Up/Down, Home/End move
+   *  between enabled items, Enter activates, Escape closes and returns focus to the trigger. */
+  keyboardNav?: boolean;
+  /** Optional native tooltip for the trigger button. */
+  triggerTitle?: string;
 }
 
 const MENU_GAP = 4;
@@ -45,7 +52,7 @@ interface MenuPosition {
  * corner wrapper) and isn't limited to a low ancestor z-index/stacking context.
  * It also flips to open upward when there isn't enough room below the trigger.
  */
-export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', open: openProp, onOpenChange }: DropdownMenuProps) {
+export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', open: openProp, onOpenChange, keyboardNav = false, triggerTitle }: DropdownMenuProps) {
   const isControlled = openProp !== undefined && onOpenChange !== undefined;
   const [openState, setOpenState] = useState(false);
   const open = isControlled ? openProp : openState;
@@ -87,6 +94,14 @@ export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', op
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, items.length]);
 
+  // Keyboard mode only: once positioned (menu visible), focus the first enabled item.
+  const positioned = position !== null;
+  useEffect(() => {
+    if (!open || !keyboardNav || !positioned) return;
+    if (menuRef.current?.contains(document.activeElement)) return;
+    menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([disabled])')?.focus();
+  }, [open, keyboardNav, positioned]);
+
   useEffect(() => {
     if (!open) return;
     function onMouse(e: MouseEvent) {
@@ -95,7 +110,22 @@ export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', op
       if (menuRef.current && !menuRef.current.contains(target)) setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        setOpen(false);
+        if (keyboardNav) triggerRef.current?.focus();
+        return;
+      }
+      if (!keyboardNav || !menuRef.current) return;
+      const enabled = Array.from(menuRef.current.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])'));
+      if (enabled.length === 0) return;
+      const idx = enabled.indexOf(document.activeElement as HTMLButtonElement);
+      let next = -1;
+      if (e.key === 'ArrowDown') next = idx < 0 ? 0 : (idx + 1) % enabled.length;
+      else if (e.key === 'ArrowUp') next = idx < 0 ? enabled.length - 1 : (idx - 1 + enabled.length) % enabled.length;
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = enabled.length - 1;
+      else if (e.key === 'Tab') { setOpen(false); return; }
+      if (next >= 0) { e.preventDefault(); enabled[next].focus(); }
     }
     function onReposition() { updatePosition(); }
     document.addEventListener('mousedown', onMouse);
@@ -119,6 +149,7 @@ export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', op
         aria-label={ariaLabel}
         aria-haspopup="menu"
         aria-expanded={open}
+        title={triggerTitle}
         onClick={() => setOpen(!open)}
         style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -148,8 +179,9 @@ export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', op
           {items.map(item => {
             const Icon = item.icon;
             return (
+              <Fragment key={item.key}>
+              {item.dividerBefore && <div role="separator" style={{ height: 1, margin: '4px 0', background: 'var(--line)' }} />}
               <button
-                key={item.key}
                 role="menuitem"
                 type="button"
                 disabled={item.disabled}
@@ -163,10 +195,13 @@ export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', op
                 }}
                 onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background = 'var(--raised2)'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                onFocus={keyboardNav ? e => { if (!item.disabled) e.currentTarget.style.background = 'var(--raised2)'; } : undefined}
+                onBlur={keyboardNav ? e => { e.currentTarget.style.background = 'transparent'; } : undefined}
               >
                 {Icon && <Icon size={14} aria-hidden="true" />}
                 {item.label}
               </button>
+              </Fragment>
             );
           })}
         </div>,
