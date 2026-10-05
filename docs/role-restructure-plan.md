@@ -8,6 +8,16 @@
 
 ---
 
+## Known Issues
+
+**Fresh database cannot be built from V1.** `business_rule_config` is ALTERed by V33 (and V34,
+V36, V59) but no migration in the chain creates it — the CREATE TABLE migration that originally
+created it was reverted before V27 and never replaced. Neon has the table because it predates the
+revert. Needs a repair migration (CREATE TABLE IF NOT EXISTS) before any new environment can be
+provisioned from scratch.
+
+---
+
 ## Management override (addendum)
 
 The guide's section 2 and 9 stated "only Employees submit EODs." Management has overridden this:

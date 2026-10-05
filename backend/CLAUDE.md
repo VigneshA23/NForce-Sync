@@ -51,6 +51,11 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 - Top version as of 2026-09-24 is **V95** (`ai_billing_settings`), applied directly to the shared
   dev DB as part of the AI support assistant build — see `## AI Support Assistant` below. Re-run
   the query above before adding the next migration; other branches may have moved past V95 since.
+- **Known Issue — fresh database cannot be built from V1.** `business_rule_config` is ALTERed by
+  V33, V34, V36, and V59 but no migration in the chain creates it — the CREATE TABLE migration was
+  reverted before V27 and never replaced. Neon has the table because it predates the revert. Before
+  provisioning any new environment from scratch, add a `CREATE TABLE IF NOT EXISTS business_rule_config`
+  repair migration numbered above the current top version.
 - An earlier, uncommitted Cerebras-based assistant prototype had applied `assistant_conversation`,
   `assistant_message` and `assistant_knowledge` out-of-band (V78–V81). **These are gone** — V91
   dropped them. The AI assistant's real schema is the `ai_*` tables from V91–V95
