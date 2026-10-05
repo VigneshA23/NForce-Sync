@@ -10,6 +10,7 @@ import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.dto.EodEntryDto;
 import com.nforceone.sync.notification.NotificationDates;
 import com.nforceone.sync.notification.NotificationService;
+import com.nforceone.sync.project.PmScopeService;
 import com.nforceone.sync.utilization.UtilizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class ApprovalPieceService {
     private final UtilizationService utilizationService;
     private final NotificationService notificationService;
     private final AuditLogRepository auditLogRepository;
+    private final PmScopeService pmScopeService;
 
     public ApprovalPieceService(EodProjectApprovalRepository pieceRepository,
                                  EodProjectApprovalActionRepository actionRepository,
@@ -37,7 +39,8 @@ public class ApprovalPieceService {
                                  AppUserRepository userRepository,
                                  UtilizationService utilizationService,
                                  NotificationService notificationService,
-                                 AuditLogRepository auditLogRepository) {
+                                 AuditLogRepository auditLogRepository,
+                                 PmScopeService pmScopeService) {
         this.pieceRepository = pieceRepository;
         this.actionRepository = actionRepository;
         this.entryRepository = entryRepository;
@@ -45,6 +48,7 @@ public class ApprovalPieceService {
         this.utilizationService = utilizationService;
         this.notificationService = notificationService;
         this.auditLogRepository = auditLogRepository;
+        this.pmScopeService = pmScopeService;
     }
 
     @Transactional(readOnly = true)
@@ -63,7 +67,7 @@ public class ApprovalPieceService {
             pieces = new java.util.ArrayList<>();
             for (EodProjectApproval p : assigned) { if (seen.add(p.getId())) pieces.add(p); }
             for (EodProjectApproval p : adminGroup) { if (seen.add(p.getId())) pieces.add(p); }
-        } else if (actor.getRole() == AppUser.Role.PM) {
+        } else if (actor.getRole() == AppUser.Role.PM || pmScopeService.isProjectManager(actor)) {
             // PM-type pieces (no lead) + escalated LEAD pieces where PM is the designated fallback.
             List<EodProjectApproval> pmPieces = pieceRepository.findByApproverIdAndStatus(
                     actor.getId(), EodProjectApproval.Status.PENDING);

@@ -489,6 +489,82 @@ function PlainSelect({
   );
 }
 
+// ── Reporting Manager searchable combobox ─────────────────────────────────────
+// Replaces the plain <select> for the manager field. The list can have 30+ users after the
+// org seed, so free-text filtering is needed. Supports an optional "none" row for SUPERADMIN.
+
+function ManagerSearchableSelect({
+  value,
+  onChange,
+  users,
+  allowNone,
+  required,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  users: Array<{ id: number; fullName: string; email: string }>;
+  allowNone?: boolean;
+  required?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const options: Array<{ id: string; label: string }> = [
+    ...(allowNone ? [{ id: '', label: 'No reporting manager' }] : []),
+    ...users.map(u => ({ id: String(u.id), label: `${u.fullName} (${u.email})` })),
+  ];
+
+  const selected = options.find(o => o.id === value);
+  const displayValue = open ? query : (selected?.label ?? '');
+
+  const filtered = useMemo(() => {
+    if (!query) return options;
+    const q = query.toLowerCase();
+    return options.filter(o => o.label.toLowerCase().includes(q));
+  }, [options, query]);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        style={inputStyle}
+        value={displayValue}
+        placeholder={required ? 'Select reporting manager' : 'Select reporting manager (optional)'}
+        autoComplete="off"
+        onChange={e => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => { setOpen(true); setQuery(''); }}
+        onBlur={() => setTimeout(() => { setOpen(false); setQuery(''); }, 150)}
+      />
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+          background: 'var(--panel)', border: '1px solid var(--line2)',
+          borderRadius: 6, marginTop: 2, maxHeight: 220, overflowY: 'auto',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+        }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: '8px 12px', fontSize: 13, color: 'var(--txt-dim)' }}>No matches</div>
+          )}
+          {filtered.map(o => (
+            <div
+              key={o.id}
+              onMouseDown={e => { e.preventDefault(); onChange(o.id); setOpen(false); setQuery(''); }}
+              style={{
+                padding: '8px 12px', fontSize: 13, cursor: 'pointer',
+                color: o.id === value ? 'var(--brand-bright)' : 'var(--txt)',
+                background: o.id === value ? 'rgba(176,17,22,.10)' : 'transparent',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--raised)')}
+              onMouseLeave={e => (e.currentTarget.style.background = o.id === value ? 'rgba(176,17,22,.10)' : 'transparent')}
+            >
+              {o.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Org data hook ─────────────────────────────────────────────────────────────
 
 function useOrgData() {
@@ -894,27 +970,17 @@ function AddModal({
             </Field>
           </div>
 
-          {/* Reporting Manager — full width. Options are filtered by the selected Role (see
-              reportingManagerRoleFilter); the backend enforces the same hierarchy
-              independently of this dropdown. Required for Employee/Team Lead/Project Manager/
-              Admin; optional for Super Admin (who may report to another
-              Super Admin, or to no one). */}
+          {/* Reporting Manager — full width. Any active user can be a reporting manager.
+              Required for Employee / PM / Admin; optional for Super Admin. */}
           <div style={{ gridColumn: '1/-1' }}>
             <Field label={managerRequired ? 'Reporting Manager *' : 'Reporting Manager'}>
-              <select
-                style={selectStyle(form.managerId !== undefined)}
-                value={form.managerId === undefined ? '' : form.managerId === null ? 'none' : String(form.managerId)}
-                onChange={e => {
-                  const v = e.target.value;
-                  set('managerId', v === 'none' ? null : v ? Number(v) : undefined);
-                }}
-              >
-                <option value="" style={placeholderOptionStyle}>Select reporting manager</option>
-                {!managerRequired && <option value="none" style={realOptionStyle}>No reporting manager</option>}
-                {managers.map(m => (
-                  <option key={m.id} value={m.id} style={realOptionStyle}>{m.fullName} ({m.email})</option>
-                ))}
-              </select>
+              <ManagerSearchableSelect
+                value={form.managerId === undefined || form.managerId === null ? '' : String(form.managerId)}
+                onChange={v => set('managerId', v ? Number(v) : (managerRequired ? undefined : null))}
+                users={managers}
+                allowNone={!managerRequired}
+                required={managerRequired}
+              />
               <FieldError msg={errors.managerId} />
             </Field>
           </div>
@@ -1130,19 +1196,16 @@ function EditModal({
             </Field>
           </div>
 
-          {/* Reporting Manager — full width. Options are filtered by the selected Role (see
-              reportingManagerRoleFilter); the backend enforces the same hierarchy
-              independently of this dropdown. Required for Employee/Team Lead/Project Manager/
-              Admin; optional for Super Admin (who may report to another
-              Super Admin, or to no one). */}
+          {/* Reporting Manager — full width. Any active user can be a reporting manager.
+              Required for Employee / PM / Admin; optional for Super Admin. */}
           <div style={{ gridColumn: '1/-1' }}>
             <Field label={managerRequired ? 'Reporting Manager *' : 'Reporting Manager'}>
-              <PlainSelect
+              <ManagerSearchableSelect
                 value={form.managerId != null ? String(form.managerId) : ''}
-                options={managers.map(m => ({ value: String(m.id), label: `${m.fullName} (${m.email})` }))}
                 onChange={v => set('managerId', v ? Number(v) : null)}
-                emptyLabel={managerRequired ? undefined : 'No reporting manager'}
-                placeholder={managerRequired ? 'Select manager' : undefined}
+                users={managers}
+                allowNone={!managerRequired}
+                required={managerRequired}
               />
             </Field>
           </div>

@@ -3,7 +3,6 @@ package com.nforceone.sync.pmblockers;
 import com.nforceone.sync.pmblockers.dto.PmBlockerDto;
 import com.nforceone.sync.pmblockers.dto.PmBlockersFiltersDto;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,7 +16,6 @@ import java.util.List;
  *  unlike {@code TeamLeadController}'s blocker surface. */
 @RestController
 @RequestMapping("/api/pm-blockers")
-@PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
 public class PmBlockersController {
 
     private final PmBlockersService blockersService;

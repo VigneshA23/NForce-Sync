@@ -47,6 +47,9 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     /** True when the given user is the assigned lead of at least one project in the given status. */
     boolean existsByLeadIdAndStatus(Long leadId, Project.Status status);
 
+    /** True when the given user is the assigned PM of at least one project in the given status. */
+    boolean existsByPmIdAndStatus(Long pmId, Project.Status status);
+
     /** Grouped-headcount idiom, keyed on project type. */
     @Query("SELECT p.projectType.id, COUNT(DISTINCT a.employee.id) " +
            "FROM Allocation a JOIN a.project p " +

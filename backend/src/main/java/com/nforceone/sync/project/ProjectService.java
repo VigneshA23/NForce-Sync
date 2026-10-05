@@ -82,13 +82,11 @@ public class ProjectService {
                 .toList();
     }
 
-    /** Users assignable as a project's overseeing PM: PM, Admin, and Super Admin accounts. */
+    /** Users assignable as a project's overseeing PM: any active user (any role). */
     @Transactional(readOnly = true)
     public List<EmployeeRefDto> listAssignableProjectManagers() {
         return appUserRepository
-                .findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
-                        List.of(AppUser.Role.PM, AppUser.Role.ADMIN, AppUser.Role.SUPERADMIN),
-                        AppUser.Status.ACTIVE)
+                .findByStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Status.ACTIVE)
                 .stream()
                 .map(EmployeeRefDto::from)
                 .toList();
@@ -241,7 +239,7 @@ public class ProjectService {
     }
 
     /**
-     * Resolves the overseeing Project Manager. PM, Admin, and Super Admin may all oversee a project.
+     * Resolves the overseeing Project Manager. Any active user may oversee a project.
      * Grandfathers an unchanged current holder so an unrelated edit cannot silently move oversight.
      */
     private AppUser resolvePm(Long pmId, AppUser currentHolder) {
@@ -255,12 +253,6 @@ public class ProjectService {
         if (manager.getStatus() != AppUser.Status.ACTIVE || manager.getDeletedAt() != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Project Manager must be an active user");
-        }
-        if (manager.getRole() != AppUser.Role.PM
-                && manager.getRole() != AppUser.Role.ADMIN
-                && manager.getRole() != AppUser.Role.SUPERADMIN) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Only a PM, Admin, or Super Admin can oversee a project");
         }
         return manager;
     }

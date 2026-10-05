@@ -17,6 +17,7 @@ import com.nforceone.sync.org.Designation;
 import com.nforceone.sync.org.DesignationRepository;
 import com.nforceone.sync.project.Allocation;
 import com.nforceone.sync.project.AllocationRepository;
+import com.nforceone.sync.project.PmScopeService;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
 import com.nforceone.sync.reports.dto.MissingEodDayDto;
@@ -62,6 +63,7 @@ public class MissingEodReportService {
     private final DesignationRepository designationRepository;
     private final NotificationService notificationService;
     private final ShiftDefinitionRepository shiftRepository;
+    private final PmScopeService pmScopeService;
 
     public MissingEodReportService(AppUserRepository appUserRepository,
                                     ProjectRepository projectRepository,
@@ -71,7 +73,8 @@ public class MissingEodReportService {
                                     BusinessRuleConfigRepository configRepository,
                                     DesignationRepository designationRepository,
                                     NotificationService notificationService,
-                                    ShiftDefinitionRepository shiftRepository) {
+                                    ShiftDefinitionRepository shiftRepository,
+                                    PmScopeService pmScopeService) {
         this.appUserRepository = appUserRepository;
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
@@ -81,6 +84,7 @@ public class MissingEodReportService {
         this.notificationService = notificationService;
         this.designationRepository = designationRepository;
         this.shiftRepository = shiftRepository;
+        this.pmScopeService = pmScopeService;
     }
 
     /**
@@ -340,9 +344,7 @@ public class MissingEodReportService {
         AppUser user = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
-        if (user.getRole() != AppUser.Role.PM && user.getRole() != AppUser.Role.SUPERADMIN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Project Manager access required");
-        }
+        pmScopeService.requirePmScope(user);
         return user;
     }
 

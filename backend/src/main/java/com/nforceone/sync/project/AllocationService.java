@@ -44,12 +44,6 @@ public class AllocationService {
         this.appUserRepository = appUserRepository;
     }
 
-    /**
-     * Allocations, restricted to people holding the EMPLOYEE role. Leads, managers and back-office
-     * accounts are not project-assignable, so rows belonging to them are excluded rather than shown
-     * alongside real employees. The employee is already JOIN FETCHed, so filtering here costs no
-     * extra queries.
-     */
     @Transactional(readOnly = true)
     public List<AllocationDto> listAll(Long projectId) {
         return listAll(projectId, null);
@@ -75,17 +69,15 @@ public class AllocationService {
             allocations = allocationRepository.findAllWithRefsOrderByEffectiveFromDesc();
         }
         return allocations.stream()
-                .filter(a -> a.getEmployee().getRole() == AppUser.Role.EMPLOYEE)
                 .map(AllocationDto::from)
                 .toList();
     }
 
-    /** Only EMPLOYEE-role users may be allocated to a project. */
+    /** Any active user may be allocated to a project. */
     @Transactional(readOnly = true)
     public List<EmployeeRefDto> listAssignableEmployees() {
         return appUserRepository
-                .findByRoleAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
-                        AppUser.Role.EMPLOYEE, AppUser.Status.ACTIVE)
+                .findByStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Status.ACTIVE)
                 .stream()
                 .map(EmployeeRefDto::from)
                 .toList();

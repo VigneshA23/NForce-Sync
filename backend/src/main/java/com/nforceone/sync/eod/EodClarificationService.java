@@ -16,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.nforceone.sync.eod.dto.EodTaskCategoryNameRow;
 import com.nforceone.sync.eod.dto.EodTaskProjectNameRow;
+import com.nforceone.sync.project.PmScopeService;
 
 import java.io.IOException;
 import java.time.OffsetDateTime;
@@ -60,6 +61,7 @@ public class EodClarificationService {
     private final EodTaskRepository taskRepository;
     private final AppUserRepository userRepository;
     private final NotificationService notificationService;
+    private final PmScopeService pmScopeService;
 
     public EodClarificationService(@Value("${app.eod-attachment.max-file-size-bytes}") long maxFileSizeBytes,
                                     @Value("${app.eod-attachment.max-total-storage-bytes}") long maxTotalStorageBytes,
@@ -70,7 +72,8 @@ public class EodClarificationService {
                                     EodClarificationReadStateRepository readStateRepository,
                                     EodTaskRepository taskRepository,
                                     AppUserRepository userRepository,
-                                    NotificationService notificationService) {
+                                    NotificationService notificationService,
+                                    PmScopeService pmScopeService) {
         this.maxFileSizeBytes = maxFileSizeBytes;
         this.maxTotalStorageBytes = maxTotalStorageBytes;
         this.entryRepository = entryRepository;
@@ -81,6 +84,7 @@ public class EodClarificationService {
         this.taskRepository = taskRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
+        this.pmScopeService = pmScopeService;
     }
 
     @Transactional(readOnly = true)
@@ -352,9 +356,7 @@ public class EodClarificationService {
     @Transactional(readOnly = true)
     public List<EodInboxItemDto> listForPm(String actingEmail, boolean open) {
         AppUser pm = requireUser(actingEmail);
-        if (pm.getRole() != AppUser.Role.PM && pm.getRole() != AppUser.Role.SUPERADMIN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Project Manager access required");
-        }
+        pmScopeService.requirePmScope(pm);
         List<EodClarification> rows = open
                 ? clarificationRepository.findOpenByPmId(pm.getId())
                 : clarificationRepository.findResolvedByPmId(pm.getId());

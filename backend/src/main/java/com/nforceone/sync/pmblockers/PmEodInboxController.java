@@ -7,7 +7,6 @@ import com.nforceone.sync.eod.dto.EodInboxItemDto;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,7 +22,6 @@ import java.util.List;
  *  to entries touching a project this PM owns (see EodClarificationRepository's PM queries). */
 @RestController
 @RequestMapping("/api/pm-eod-inbox")
-@PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
 public class PmEodInboxController {
 
     private final EodClarificationService clarificationService;
