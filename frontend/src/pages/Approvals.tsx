@@ -282,6 +282,20 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
             <span>{projectTasks.length} task{projectTasks.length !== 1 ? 's' : ''}</span>
           </div>
 
+          {/* Escalation note — shown on the lead's view when their piece was escalated to PM */}
+          {piece.escalatedAt && (
+            <div style={{
+              marginTop: 4, fontSize: 11.5,
+              color: 'var(--warn)', display: 'flex', alignItems: 'center', gap: 5,
+            }}>
+              <span>⚠</span>
+              <span>
+                Escalated to {piece.escalatedToName ?? 'PM'}
+                {piece.hoursPending != null ? ` after ${Math.round(piece.hoursPending)}h` : ''}
+              </span>
+            </div>
+          )}
+
           {/* Task summary table — identical rows to EntryRow */}
           {projectTasks.length > 0 && (
             <div style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)' }}>

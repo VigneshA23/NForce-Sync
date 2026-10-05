@@ -23,6 +23,11 @@ export interface ApprovalPieceDto {
   logSummary: string | null;
   logTotalHours: number | null;
   logNotes: string | null;
+  // Escalation fields — null when piece has not been escalated
+  escalatedAt: string | null;
+  escalatedToId: number | null;
+  escalatedToName: string | null;
+  hoursPending: number | null;
 }
 
 const STALE = 10_000;

@@ -56,6 +56,16 @@ public class EodProjectApproval {
     @Column(name = "superseded_at")
     private OffsetDateTime supersededAt;
 
+    // Escalation — set once when a stale LEAD piece is escalated to the project PM.
+    // escalated_at is the timestamp of escalation; escalated_to is the PM who now also holds
+    // authority to act. The piece stays in the lead's queue; first actor wins.
+    @Column(name = "escalated_at")
+    private OffsetDateTime escalatedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "escalated_to_id")
+    private AppUser escalatedTo;
+
     public enum ApproverType {
         LEAD, REPORTING_MANAGER, PM, ADMIN_GROUP, AUTO_APPROVED
     }

@@ -2,10 +2,14 @@ package com.nforceone.sync.approval2;
 
 import com.nforceone.sync.approval2.dto.ApprovalPieceDto;
 import com.nforceone.sync.approval2.dto.RejectPieceRequest;
+import com.nforceone.sync.auth.AppUser;
+import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.eod.dto.EodEntryDto;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -14,9 +18,15 @@ import java.util.List;
 public class ApprovalPieceController {
 
     private final ApprovalPieceService pieceService;
+    private final EscalationScheduler escalationScheduler;
+    private final AppUserRepository userRepository;
 
-    public ApprovalPieceController(ApprovalPieceService pieceService) {
+    public ApprovalPieceController(ApprovalPieceService pieceService,
+                                    EscalationScheduler escalationScheduler,
+                                    AppUserRepository userRepository) {
         this.pieceService = pieceService;
+        this.escalationScheduler = escalationScheduler;
+        this.userRepository = userRepository;
     }
 
     @GetMapping("/pending")
@@ -45,6 +55,17 @@ public class ApprovalPieceController {
     public ApprovalPieceDto reject(@PathVariable Long pieceId,
                                     @Valid @RequestBody RejectPieceRequest request) {
         return pieceService.reject(pieceId, actingEmail(), request.comment());
+    }
+
+    @PostMapping("/admin/trigger-escalation")
+    public String triggerEscalation() {
+        AppUser actor = userRepository.findByEmailAndDeletedAtIsNull(actingEmail())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        if (actor.getRole() != AppUser.Role.SUPERADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "SUPERADMIN only");
+        }
+        int count = escalationScheduler.triggerNow();
+        return "Escalated " + count + " piece(s).";
     }
 
     private String actingEmail() {

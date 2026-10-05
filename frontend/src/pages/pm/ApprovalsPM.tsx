@@ -7,6 +7,8 @@ import {
   usePendingApprovals, useDecidedApprovals,
   useApprove, useReject,
 } from '../../api/approvals';
+import { usePendingPieces, useApprovePiece, useRejectPiece } from '../../api/approvalPieces';
+import type { ApprovalPieceDto } from '../../api/approvalPieces';
 import { useEodInbox } from '../../api/eodClarification';
 import { FilterDropdown, toggleFilterVal } from '../../components/FilterDropdown';
 import { useToast } from '../../lib/toast';
@@ -46,6 +48,178 @@ const NO_TL_LABEL = 'No Team Lead assigned';
 
 function teamLeadOf(entry: EodEntryDto): string {
   return entry.tlName ?? NO_TL_LABEL;
+}
+
+// ── EscalatedPieceCard — piece-level card for escalated LEAD pieces shown to PM ──
+
+function EscalatedPieceCard({ piece }: { piece: ApprovalPieceDto }) {
+  const [rejecting, setRejecting] = useState(false);
+  const [comment, setComment] = useState('');
+  const { show } = useToast();
+
+  const approvePiece = useApprovePiece();
+  const rejectPiece = useRejectPiece();
+  const busy = approvePiece.isPending || rejectPiece.isPending;
+
+  async function handleApprove() {
+    try {
+      await approvePiece.mutateAsync({ pieceId: piece.id });
+      show('Approved.', 'success');
+    } catch (err) {
+      show(extractError(err), 'error');
+    }
+  }
+
+  async function handleReject() {
+    const trimmed = comment.trim();
+    if (!trimmed) return;
+    try {
+      await rejectPiece.mutateAsync({ pieceId: piece.id, comment: trimmed });
+      show('Rejected.', 'success');
+      setRejecting(false);
+      setComment('');
+    } catch (err) {
+      show(extractError(err), 'error');
+    }
+  }
+
+  return (
+    <div style={{ borderBottom: '1px solid var(--line)', background: 'linear-gradient(90deg, color-mix(in srgb, var(--warn) 7%, transparent), transparent 45%)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '9px 16px' }}>
+
+        {/* Avatar */}
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
+          background: 'var(--raised2)', color: 'var(--txt)', border: '1px solid var(--line2)',
+        }}>
+          {initials(piece.employeeName)}
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Name row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--txt)' }}>{piece.employeeName}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{piece.employeeCode}</span>
+            <span>
+              <Chip tone="warn"><AlertTriangle size={11} aria-hidden="true" /> Escalated</Chip>
+            </span>
+            {piece.projectName && (
+              <>
+                <span style={{ fontSize: 11.5, color: 'var(--txt-mut)' }}>·</span>
+                <span style={{ fontSize: 12, color: 'var(--info)', fontWeight: 600 }}>{piece.projectName}</span>
+              </>
+            )}
+          </div>
+
+          {/* Meta row */}
+          <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span>{piece.entryDate}</span>
+            <span>·</span>
+            {piece.approverName && (
+              <>
+                <span>Lead: {piece.approverName}</span>
+                <span>·</span>
+              </>
+            )}
+            {piece.hoursPending != null && (
+              <span style={{ color: 'var(--warn)' }}>Pending {Math.round(piece.hoursPending)}h</span>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+          {!rejecting && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                onClick={handleApprove}
+                disabled={busy}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+                  padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  border: '1px solid rgba(47,182,124,.4)', background: 'rgba(47,182,124,.08)',
+                  color: 'var(--ok)', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
+                  outline: 'none',
+                }}
+                onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px var(--ok)'; }}
+                onBlur={e => { e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                Approve
+              </button>
+              <button
+                onClick={() => setRejecting(true)}
+                disabled={busy}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+                  padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  border: '1px solid rgba(228,55,61,.3)', background: 'rgba(228,55,61,.06)',
+                  color: 'var(--risk)', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
+                  outline: 'none',
+                }}
+                onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px var(--risk)'; }}
+                onBlur={e => { e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                Reject
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Rejection form */}
+      {rejecting && (
+        <div style={{
+          borderTop: '1px solid var(--line)', padding: '12px 16px',
+          background: 'var(--raised)', display: 'flex', flexDirection: 'column', gap: 10,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)' }}>
+            Rejection reason <span style={{ color: 'var(--risk)' }}>*</span>
+          </div>
+          <textarea
+            rows={3}
+            placeholder="Explain why this piece is being rejected…"
+            value={comment}
+            onChange={e => setComment(e.target.value)}
+            style={{
+              width: '100%', resize: 'vertical', padding: '8px 10px', boxSizing: 'border-box',
+              background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6,
+              color: 'var(--txt)', fontSize: 12.5, outline: 'none', fontFamily: 'inherit',
+            }}
+            onFocus={e => { e.currentTarget.style.borderColor = 'var(--brand)'; }}
+            onBlur={e => { e.currentTarget.style.borderColor = 'var(--line2)'; }}
+          />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => { setRejecting(false); setComment(''); }}
+              style={{
+                padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 500,
+                border: '1px solid var(--line2)', background: 'none',
+                color: 'var(--txt-dim)', cursor: 'pointer', outline: 'none',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleReject}
+              disabled={!comment.trim() || busy}
+              style={{
+                padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                border: '1px solid rgba(228,55,61,.4)', background: 'rgba(228,55,61,.1)',
+                color: 'var(--risk)',
+                cursor: (!comment.trim() || busy) ? 'not-allowed' : 'pointer',
+                opacity: (!comment.trim() || busy) ? 0.5 : 1,
+                outline: 'none',
+              }}
+            >
+              Confirm Reject
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── entry row ─────────────────────────────────────────────────────────────────
@@ -206,6 +380,7 @@ export default function ApprovalsPM() {
   const { data: pending, isPending: pendingLoading, isError: pendingError, refetch } = usePendingApprovals();
   const { data: approved, isPending: approvedLoading } = useDecidedApprovals('APPROVED');
   const { data: rejected, isPending: rejectedLoading } = useDecidedApprovals('REJECTED');
+  const { data: allPendingPieces } = usePendingPieces();
   const reject = useReject();
   const { show } = useToast();
 
@@ -308,6 +483,13 @@ export default function ApprovalsPM() {
   const approvedCount = approved?.length ?? 0;
   const rejectedCount = rejected?.length ?? 0;
 
+  // Escalated LEAD pieces from the v2 piece queue — pieces the PM now has authority to act on.
+  // Sorted by hoursPending descending so the most overdue surfaces first.
+  const escalatedPieces = useMemo(() => {
+    const pieces = (allPendingPieces ?? []).filter(p => p.escalatedAt != null);
+    return [...pieces].sort((a, b) => (b.hoursPending ?? 0) - (a.hoursPending ?? 0));
+  }, [allPendingPieces]);
+
   const hasActiveFilters = tlFilter.size > 0 || employeeFilter.size > 0 || projectFilter.size > 0 || categoryFilter.size > 0;
 
   function clearAllFilters() {
@@ -350,6 +532,38 @@ export default function ApprovalsPM() {
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>Review and act on your projects' EOD submissions, across every team touching them</p>
         </div>
       </div>
+
+      {/* Escalated Piece Queue — LEAD pieces the PM now has authority to act on directly.
+          These are piece-level (v2 API), distinct from the entry-level escalation banners below
+          which reflect the old entry-based flow. Shown only when there are escalated pieces. */}
+      {escalatedPieces.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <AlertTriangle size={16} style={{ color: 'var(--warn)' }} aria-hidden="true" />
+            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--txt)' }}>
+              Escalated Pieces
+            </span>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center',
+              padding: '2px 9px', borderRadius: 20,
+              background: 'color-mix(in srgb, var(--warn) 18%, var(--panel))',
+              border: '1px solid color-mix(in srgb, var(--warn) 35%, var(--line))',
+              fontSize: 11.5, fontWeight: 700, color: 'var(--warn)',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {escalatedPieces.length}
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
+              — Team Lead hasn't acted within SLA. You can approve or reject these directly.
+            </span>
+          </div>
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            {escalatedPieces.map(piece => (
+              <EscalatedPieceCard key={piece.id} piece={piece} />
+            ))}
+          </Card>
+        </div>
+      )}
 
       {/* Escalation banner — informational only. Opening an approval is always the row-level
           Review button now (see EntryRow); the Escalated tab just below is how you get to this

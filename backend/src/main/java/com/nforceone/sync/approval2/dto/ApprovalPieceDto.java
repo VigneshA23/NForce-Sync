@@ -26,7 +26,12 @@ public record ApprovalPieceDto(
     String entryForm,
     String logSummary,
     BigDecimal logTotalHours,
-    String logNotes
+    String logNotes,
+    // Escalation fields — null when piece has not been escalated
+    OffsetDateTime escalatedAt,
+    Long escalatedToId,
+    String escalatedToName,
+    Double hoursPending
 ) {
     public static ApprovalPieceDto from(EodProjectApproval p) {
         EodEntry entry = p.getEodEntry();
@@ -50,7 +55,13 @@ public record ApprovalPieceDto(
                 entry.getEntryForm() != null ? entry.getEntryForm().name() : EodEntry.EntryForm.PROJECT_GROUPED.name(),
                 isPlainLog ? entry.getLogSummary() : null,
                 isPlainLog ? entry.getLogTotalHours() : null,
-                isPlainLog ? entry.getLogNotes() : null
+                isPlainLog ? entry.getLogNotes() : null,
+                p.getEscalatedAt(),
+                p.getEscalatedTo() != null ? p.getEscalatedTo().getId() : null,
+                p.getEscalatedTo() != null ? p.getEscalatedTo().getFullName() : null,
+                p.getFrozenAt() != null
+                        ? (double) java.time.Duration.between(p.getFrozenAt(), java.time.OffsetDateTime.now()).toMinutes() / 60.0
+                        : null
         );
     }
 }

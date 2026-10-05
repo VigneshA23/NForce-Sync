@@ -63,6 +63,16 @@ public class ApprovalPieceService {
             pieces = new java.util.ArrayList<>();
             for (EodProjectApproval p : assigned) { if (seen.add(p.getId())) pieces.add(p); }
             for (EodProjectApproval p : adminGroup) { if (seen.add(p.getId())) pieces.add(p); }
+        } else if (actor.getRole() == AppUser.Role.PM) {
+            // PM-type pieces (no lead) + escalated LEAD pieces where PM is the designated fallback.
+            List<EodProjectApproval> pmPieces = pieceRepository.findByApproverIdAndStatus(
+                    actor.getId(), EodProjectApproval.Status.PENDING);
+            List<EodProjectApproval> escalatedToMe = pieceRepository.findByEscalatedToIdAndStatus(
+                    actor.getId(), EodProjectApproval.Status.PENDING);
+            java.util.Set<Long> seen = new java.util.HashSet<>();
+            pieces = new java.util.ArrayList<>();
+            for (EodProjectApproval p : pmPieces) { if (seen.add(p.getId())) pieces.add(p); }
+            for (EodProjectApproval p : escalatedToMe) { if (seen.add(p.getId())) pieces.add(p); }
         } else {
             pieces = pieceRepository.findByApproverIdAndStatus(actor.getId(), EodProjectApproval.Status.PENDING);
         }
@@ -193,12 +203,23 @@ public class ApprovalPieceService {
         // Admin can act on ADMIN_GROUP pieces (no specific approver assigned).
         if (actor.getRole() == AppUser.Role.ADMIN
                 && piece.getApproverType() == EodProjectApproval.ApproverType.ADMIN_GROUP) return;
+        // PM may act on an escalated piece where they are the designated fallback.
+        if (piece.getEscalatedTo() != null && piece.getEscalatedTo().getId().equals(actor.getId())) return;
         throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                 "Only the designated approver, an Admin (for admin-group pieces), or a Super Admin can act on this piece");
     }
 
     private void requirePieceStatus(EodProjectApproval piece, EodProjectApproval.Status required) {
         if (piece.getStatus() != required) {
+            if (piece.getStatus() == EodProjectApproval.Status.APPROVED
+                    || piece.getStatus() == EodProjectApproval.Status.REJECTED) {
+                String actorName = actionRepository.findTopByPieceIdOrderByActedAtDesc(piece.getId())
+                        .map(a -> a.getActor().getFullName())
+                        .orElse("someone");
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "already " + piece.getStatus().name().toLowerCase() + " by " + actorName
+                        + ". This piece cannot be acted on again.");
+            }
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Piece must be in " + required + " status; current: " + piece.getStatus());
         }

@@ -134,6 +134,7 @@ export function DatePicker({
   placeholder = 'Select date',
   quickNav = false,
   clearable = false,
+  disabled = false,
 }: {
   value: string;
   onChange: (iso: string) => void;
@@ -146,6 +147,8 @@ export function DatePicker({
   quickNav?: boolean;
   /** Opt-in "X" to reset the field back to empty. Off by default — some call sites (e.g. EOD entry date) always need a real date and aren't safe to clear. */
   clearable?: boolean;
+  /** When true the picker is read-only: the calendar will not open and the field is visually dimmed. */
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -177,6 +180,7 @@ export function DatePicker({
   }, [open]);
 
   function toggleOpen() {
+    if (disabled) return;
     setOpen(o => {
       const next = !o;
       if (next) {
@@ -221,11 +225,12 @@ export function DatePicker({
       <div style={{ position: 'relative' }}>
         <input
           readOnly
-          style={{ ...inputStyle, paddingRight: clearable && value ? 58 : 36, cursor: 'pointer' }}
+          style={{ ...inputStyle, paddingRight: clearable && value ? 58 : 36, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 }}
           value={formatDateDisplay(value)}
           placeholder={placeholder}
           onClick={toggleOpen}
-          onKeyDown={focusNextOnEnter}
+          onKeyDown={disabled ? undefined : focusNextOnEnter}
+          disabled={disabled}
         />
         {clearable && value && (
           <button

@@ -228,11 +228,9 @@ export default function DailyLogForm() {
 
   // ── Derived state ────────────────────────────────────────────────────────
 
-  const isLeave     = hours === 0;
-  const editable    = isEditable(entry);
-  const isSubmitted = entry?.status === 'SUBMITTED' || entry?.status === 'PARTIALLY_APPROVED';
-  const isApproved  = entry?.status === 'APPROVED';
-  const isRejected  = entry?.status === 'REJECTED';
+  const isLeave  = hours === 0;
+  const editable = isEditable(entry);
+  const isRejected = entry?.status === 'REJECTED';
 
   const summaryLen  = summary.length;
   const summaryOk   = isLeave || (summaryLen >= MIN_SUMMARY_LEN && summaryLen <= MAX_SUMMARY_LEN);
@@ -313,7 +311,7 @@ export default function DailyLogForm() {
 
           {/* Entry status banner */}
           {entry && !editable && (
-            <EntryStatusBanner entry={entry} rejectionComment={rejectionComment} />
+            <EntryStatusBanner entry={entry} />
           )}
 
           {/* Rejection banner (re-editable) */}
@@ -546,9 +544,8 @@ export default function DailyLogForm() {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function EntryStatusBanner({ entry, rejectionComment }: {
+function EntryStatusBanner({ entry }: {
   entry: EodEntryDto;
-  rejectionComment: string | null;
 }) {
   const cfg = ENTRY_STATUS_LABEL[entry.status] ?? { color: 'var(--txt-dim)', label: entry.status };
   return (

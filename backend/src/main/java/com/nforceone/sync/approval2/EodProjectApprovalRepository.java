@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 public interface EodProjectApprovalRepository extends JpaRepository<EodProjectApproval, Long> {
@@ -76,5 +77,23 @@ public interface EodProjectApprovalRepository extends JpaRepository<EodProjectAp
            "WHERE p.approverType = :approverType AND p.status = :status AND p.supersededAt IS NULL")
     List<EodProjectApproval> findByApproverTypeAndStatus(
             @Param("approverType") EodProjectApproval.ApproverType approverType,
+            @Param("status") EodProjectApproval.Status status);
+
+    /** Stale LEAD pieces eligible for escalation: PENDING, not superseded, not yet escalated, frozen before cutoff. */
+    @Query("SELECT p FROM EodProjectApproval p JOIN FETCH p.eodEntry e JOIN FETCH e.employee " +
+           "LEFT JOIN FETCH p.project proj LEFT JOIN FETCH proj.pm LEFT JOIN FETCH proj.lead " +
+           "LEFT JOIN FETCH p.approver " +
+           "WHERE p.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD " +
+           "AND p.status = com.nforceone.sync.approval2.EodProjectApproval.Status.PENDING " +
+           "AND p.supersededAt IS NULL AND p.escalatedAt IS NULL " +
+           "AND p.frozenAt < :cutoff")
+    List<EodProjectApproval> findStaleLeadPiecesForEscalation(@Param("cutoff") OffsetDateTime cutoff);
+
+    /** Escalated pieces where the given user is the designated fallback approver. */
+    @Query("SELECT p FROM EodProjectApproval p JOIN FETCH p.eodEntry e JOIN FETCH e.employee " +
+           "LEFT JOIN FETCH p.project LEFT JOIN FETCH p.approver LEFT JOIN FETCH p.escalatedTo " +
+           "WHERE p.escalatedTo.id = :escalatedToId AND p.status = :status AND p.supersededAt IS NULL")
+    List<EodProjectApproval> findByEscalatedToIdAndStatus(
+            @Param("escalatedToId") Long escalatedToId,
             @Param("status") EodProjectApproval.Status status);
 }
