@@ -233,9 +233,10 @@ public class EodClarificationService {
         }
 
         if (actorIsEmployee) {
-            Long leadId = entry.getManagerId();
-            if (leadId != null) {
-                notificationService.send(leadId, "EOD_CLARIFICATION_REPLY",
+            // Notify whoever opened this round — could be frozen RM, project lead, or PM.
+            AppUser opener = clarification.getOpenedBy();
+            if (opener != null) {
+                notificationService.send(opener.getId(), "EOD_CLARIFICATION_REPLY",
                         "New reply on an EOD clarification",
                         actor.getFullName() + " replied on the clarification for their EOD entry ("
                                 + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + ").",

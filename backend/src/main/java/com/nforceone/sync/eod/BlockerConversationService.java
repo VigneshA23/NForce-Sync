@@ -295,10 +295,17 @@ public class BlockerConversationService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
     }
 
-    private void requireLeadOwnsTask(EodTask task, AppUser lead) {
-        if (!task.getEodEntry().getManagerId().equals(lead.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+    // Before: only the frozen reporting manager (entry.managerId) could access the lead thread.
+    // Now: frozen RM, the project's lead, and the project's PM are all allowed.
+    private void requireLeadOwnsTask(EodTask task, AppUser actor) {
+        Long actorId = actor.getId();
+        if (actorId.equals(task.getEodEntry().getManagerId())) return;
+        com.nforceone.sync.project.Project project = task.getProject();
+        if (project != null) {
+            if (project.getLead() != null && actorId.equals(project.getLead().getId())) return;
+            if (project.getPm() != null && actorId.equals(project.getPm().getId())) return;
         }
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
     }
 
     private void requireEmployeeOwnsTask(EodTask task, AppUser employee) {

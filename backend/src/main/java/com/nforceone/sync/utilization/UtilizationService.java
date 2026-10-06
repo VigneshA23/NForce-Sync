@@ -1,5 +1,7 @@
 package com.nforceone.sync.utilization;
 
+import com.nforceone.sync.approval2.EodProjectApproval;
+import com.nforceone.sync.approval2.EodProjectApprovalRepository;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.businessrules.Holiday;
@@ -24,6 +26,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -32,22 +35,25 @@ import java.util.stream.Collectors;
 @Transactional
 public class UtilizationService {
 
-    private final EodEntryRepository      entryRepository;
-    private final AppUserRepository        userRepository;
-    private final UtilSnapshotRepository   snapshotRepository;
-    private final HolidayRepository        holidayRepository;
-    private final AllocationRepository     allocationRepository;
+    private final EodEntryRepository            entryRepository;
+    private final AppUserRepository              userRepository;
+    private final UtilSnapshotRepository         snapshotRepository;
+    private final HolidayRepository              holidayRepository;
+    private final AllocationRepository           allocationRepository;
+    private final EodProjectApprovalRepository   pieceRepository;
 
     public UtilizationService(EodEntryRepository entryRepository,
                                AppUserRepository userRepository,
                                UtilSnapshotRepository snapshotRepository,
                                HolidayRepository holidayRepository,
-                               AllocationRepository allocationRepository) {
-        this.entryRepository   = entryRepository;
-        this.userRepository    = userRepository;
+                               AllocationRepository allocationRepository,
+                               EodProjectApprovalRepository pieceRepository) {
+        this.entryRepository    = entryRepository;
+        this.userRepository     = userRepository;
         this.snapshotRepository = snapshotRepository;
-        this.holidayRepository = holidayRepository;
+        this.holidayRepository  = holidayRepository;
         this.allocationRepository = allocationRepository;
+        this.pieceRepository    = pieceRepository;
     }
 
     // Computes utilization for employee/date without touching the persisted snapshot row.
@@ -66,23 +72,41 @@ public class UtilizationService {
         BigDecimal approvedProductive = BigDecimal.ZERO;
         BigDecimal bench              = BigDecimal.ZERO;
 
-        Optional<EodEntry> approvedOpt = entryOpt
-                .filter(e -> e.getStatus() == EodEntry.Status.APPROVED);
+        if (entryOpt.isPresent()) {
+            EodEntry entry = entryOpt.get();
+            EodEntry.Status status = entry.getStatus();
+            boolean countable = status == EodEntry.Status.APPROVED
+                    || status == EodEntry.Status.PARTIALLY_APPROVED;
 
-        if (approvedOpt.isPresent()) {
-            EodEntry entry = approvedOpt.get();
+            if (countable && entry.getEntryForm() == EodEntry.EntryForm.PROJECT_GROUPED) {
+                // Count hours only for tasks whose project has a non-superseded APPROVED piece.
+                // This ensures partial approvals (PARTIALLY_APPROVED entry with only some
+                // projects approved) contribute the correct subset of hours rather than zero
+                // (old: waited for all pieces ⇒ APPROVED) or all hours (wrong for partials).
+                Set<Long> approvedProjectIds = pieceRepository.findByEodEntryId(entry.getId()).stream()
+                        .filter(p -> p.getSupersededAt() == null
+                                && p.getStatus() == EodProjectApproval.Status.APPROVED
+                                && p.getProject() != null)
+                        .map(p -> p.getProject().getId())
+                        .collect(Collectors.toSet());
 
-            for (EodTask task : entry.getTasks()) {
-                if (task.getHours() == null) continue;
-                BigDecimal h = task.getHours();
-
-                boolean productive = task.getTaskCategory() != null
-                        && Boolean.TRUE.equals(task.getTaskCategory().getIsProductive());
-
-                if (productive) {
-                    approvedProductive = approvedProductive.add(h);
-                } else {
-                    bench = bench.add(h);
+                for (EodTask task : entry.getTasks()) {
+                    if (task.getHours() == null || task.getProject() == null) continue;
+                    if (!approvedProjectIds.contains(task.getProject().getId())) continue;
+                    boolean productive = task.getTaskCategory() != null
+                            && Boolean.TRUE.equals(task.getTaskCategory().getIsProductive());
+                    if (productive) approvedProductive = approvedProductive.add(task.getHours());
+                    else bench = bench.add(task.getHours());
+                }
+            } else if (countable && entry.getEntryForm() != EodEntry.EntryForm.PROJECT_GROUPED) {
+                // PLAIN_LOG entries: count all approved task hours (PLAIN_LOG approval is
+                // entry-level, not piece-level, so entry.status == APPROVED is the signal).
+                for (EodTask task : entry.getTasks()) {
+                    if (task.getHours() == null) continue;
+                    boolean productive = task.getTaskCategory() != null
+                            && Boolean.TRUE.equals(task.getTaskCategory().getIsProductive());
+                    if (productive) approvedProductive = approvedProductive.add(task.getHours());
+                    else bench = bench.add(task.getHours());
                 }
             }
         }

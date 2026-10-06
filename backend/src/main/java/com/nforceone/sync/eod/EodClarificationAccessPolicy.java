@@ -10,9 +10,9 @@ import java.util.Objects;
 /**
  * Shared access rules for the EOD Clarification conversation — mirrors EodAccessPolicy's shape
  * (a package-private static class) rather than Blockers' inline-per-service-method checks, per
- * this feature's explicit convention. PM's "read-only, no reply" scoping is additionally
- * reinforced by controller wiring: no reply/resolve endpoint is ever wired to a PM controller,
- * the same belt-and-suspenders pattern PmBlockersController already uses.
+ * this feature's explicit convention. Expanded in parity with BlockerConversationService:
+ * open/resolve/reply is now allowed by the frozen RM, any project lead, and any project PM
+ * on the entry — not just the frozen RM.
  */
 final class EodClarificationAccessPolicy {
     private EodClarificationAccessPolicy() {}
@@ -21,39 +21,59 @@ final class EodClarificationAccessPolicy {
         return entry.getEmployee().getId().equals(actor.getId());
     }
 
-    static boolean isOwningLead(AppUser actor, EodEntry entry) {
+    /** Frozen reporting manager (entry.managerId stamped at first submit). */
+    static boolean isFrozenRm(AppUser actor, EodEntry entry) {
         return entry.getManagerId() != null && entry.getManagerId().equals(actor.getId());
     }
 
-    static boolean isScopedPm(AppUser actor, EodEntry entry) {
-        if (actor.getRole() != AppUser.Role.PM) return false;
+    /** Any project in the entry's tasks has this actor as its lead. */
+    static boolean isProjectLead(AppUser actor, EodEntry entry) {
+        return entry.getTasks().stream()
+                .map(EodTask::getProject).filter(Objects::nonNull)
+                .map(Project::getLead).filter(Objects::nonNull)
+                .anyMatch(lead -> lead.getId().equals(actor.getId()));
+    }
+
+    /** Any project in the entry's tasks has this actor as its PM. */
+    static boolean isProjectPm(AppUser actor, EodEntry entry) {
         return entry.getTasks().stream()
                 .map(EodTask::getProject).filter(Objects::nonNull)
                 .map(Project::getPm).filter(Objects::nonNull)
                 .anyMatch(pm -> pm.getId().equals(actor.getId()));
     }
 
-    /** TL opening/resolving a round, or Superadmin. */
+    /** Legacy alias — frozen RM check (kept so callers in EodClarificationService compile). */
+    static boolean isOwningLead(AppUser actor, EodEntry entry) {
+        return isFrozenRm(actor, entry);
+    }
+
+    static boolean isScopedPm(AppUser actor, EodEntry entry) {
+        if (actor.getRole() != AppUser.Role.PM) return false;
+        return isProjectPm(actor, entry);
+    }
+
+    /** Open/resolve: frozen RM, project lead, project PM, or Superadmin.
+     *  Mirrors BlockerConversationService.requireLeadOwnsTask (gap 3 fix). */
     static void requireCanOpenOrResolve(AppUser actor, EodEntry entry) {
         if (actor.getRole() == AppUser.Role.SUPERADMIN) return;
-        if (!isOwningLead(actor, entry)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Only this employee's Team Lead can manage a clarification on this entry");
-        }
+        if (isFrozenRm(actor, entry) || isProjectLead(actor, entry) || isProjectPm(actor, entry)) return;
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Only this employee's reporting manager, project lead, or project PM can manage a clarification on this entry");
     }
 
-    /** Replying — either the owning TL or the entry's own employee. */
+    /** Reply: owning employee, frozen RM, project lead, project PM, or Superadmin. */
     static void requireCanReply(AppUser actor, EodEntry entry) {
         if (actor.getRole() == AppUser.Role.SUPERADMIN) return;
-        if (!isOwningLead(actor, entry) && !isOwningEmployee(actor, entry)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
+        if (isOwningEmployee(actor, entry) || isFrozenRm(actor, entry)
+                || isProjectLead(actor, entry) || isProjectPm(actor, entry)) return;
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
     }
 
-    /** Reading — owning employee, owning TL, scoped PM, or Superadmin. */
+    /** Reading — owning employee, frozen RM, project lead, project PM, or Superadmin. */
     static void requireCanRead(AppUser actor, EodEntry entry) {
         if (actor.getRole() == AppUser.Role.SUPERADMIN) return;
-        if (isOwningEmployee(actor, entry) || isOwningLead(actor, entry) || isScopedPm(actor, entry)) return;
+        if (isOwningEmployee(actor, entry) || isFrozenRm(actor, entry)
+                || isProjectLead(actor, entry) || isProjectPm(actor, entry)) return;
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
     }
 }

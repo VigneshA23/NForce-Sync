@@ -140,14 +140,19 @@ public class ApprovalPieceService {
             utilizationService.recomputeForEntry(entry.getId());
         }
 
-        // Notify the submitter that their daily log was approved.
+        // Notify the submitter that their piece was approved.
+        String dateLabel = NotificationDates.format(entry.getEntryDate());
         if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
-            String dateLabel = NotificationDates.format(entry.getEntryDate());
             String body = actor.getFullName() + " approved your daily log for " + dateLabel + ".";
             notificationService.send(entry.getEmployee().getId(), "EOD_APPROVED",
                     "Daily log approved", body, "/eod/history");
             writeAuditLog("EOD_ENTRY", entry.getId(), "PLAIN_LOG_APPROVED", actor,
                     "{\"date\":\"" + entry.getEntryDate() + "\",\"pieceId\":" + piece.getId() + "}");
+        } else {
+            String projectName = piece.getProject() != null ? piece.getProject().getName() : "your entry";
+            String body = actor.getFullName() + " approved your EOD entry for " + dateLabel + " — " + projectName + ".";
+            notificationService.send(entry.getEmployee().getId(), "EOD_APPROVED",
+                    "Entry approved: " + projectName, body, "/eod/history");
         }
 
         return ApprovalPieceDto.from(piece);
@@ -176,10 +181,10 @@ public class ApprovalPieceService {
 
         updateEntryStatus(piece.getEodEntry());
 
-        // Notify the submitter that their daily log was rejected.
+        // Notify the submitter that their piece was rejected.
         EodEntry entry = piece.getEodEntry();
+        String dateLabel = NotificationDates.format(entry.getEntryDate());
         if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
-            String dateLabel = NotificationDates.format(entry.getEntryDate());
             String body = actor.getFullName() + " rejected your daily log for " + dateLabel
                     + ". Reason: " + comment;
             notificationService.send(entry.getEmployee().getId(), "EOD_REJECTED",
@@ -187,6 +192,12 @@ public class ApprovalPieceService {
             writeAuditLog("EOD_ENTRY", entry.getId(), "PLAIN_LOG_REJECTED", actor,
                     "{\"date\":\"" + entry.getEntryDate() + "\",\"pieceId\":" + piece.getId()
                             + ",\"reason\":\"" + comment.replace("\"", "'") + "\"}");
+        } else {
+            String projectName = piece.getProject() != null ? piece.getProject().getName() : "your entry";
+            String body = actor.getFullName() + " rejected your EOD entry for " + dateLabel
+                    + " — " + projectName + ". Reason: " + comment;
+            notificationService.send(entry.getEmployee().getId(), "EOD_REJECTED",
+                    "Entry rejected: " + projectName, body, "/eod/submit?date=" + entry.getEntryDate());
         }
 
         return ApprovalPieceDto.from(piece);

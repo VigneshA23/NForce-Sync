@@ -377,14 +377,20 @@ public class EodService {
             }
         }
 
-        // No manager assigned → nobody to notify. Leave days are already approved — no action
-        // needed from the manager so skip the notification.
-        if (saved.getManagerId() != null && !isPlainLogLeave) {
-            notificationService.send(saved.getManagerId(), "EOD_SUBMITTED",
-                    "New EOD submission",
-                    employee.getFullName() + " submitted their EOD entry for "
-                            + com.nforceone.sync.notification.NotificationDates.format(saved.getEntryDate()) + ".",
-                    "/team/approvals?highlight=" + saved.getId());
+        // Leave days are already auto-approved — skip all approver notifications.
+        // PLAIN_LOG: single notify to frozen RM. PROJECT_GROUPED: one notify per distinct approver.
+        if (!isPlainLogLeave) {
+            if (saved.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+                if (saved.getManagerId() != null) {
+                    notificationService.send(saved.getManagerId(), "EOD_SUBMITTED",
+                            "New EOD submission",
+                            employee.getFullName() + " submitted their EOD entry for "
+                                    + com.nforceone.sync.notification.NotificationDates.format(saved.getEntryDate()) + ".",
+                            "/team/approvals?highlight=" + saved.getId());
+                }
+            } else {
+                notifySubmitApprovers(specs, employee, saved);
+            }
         }
 
         EodAttachmentService.AttachmentsByScope attachments =
@@ -392,6 +398,24 @@ public class EodService {
         return EodEntryDto.from(saved, null, null,
                 attachments.entryLevelByEntryId().getOrDefault(saved.getId(), List.of()),
                 attachments.byTaskId());
+    }
+
+    private void notifySubmitApprovers(List<ApprovalPieceSpec> specs, AppUser employee, EodEntry saved) {
+        String dateLabel = com.nforceone.sync.notification.NotificationDates.format(saved.getEntryDate());
+        specs.stream()
+            .filter(s -> s.approverType() != EodProjectApproval.ApproverType.AUTO_APPROVED && s.approver() != null)
+            .collect(Collectors.groupingBy(
+                s -> s.approver().getId(),
+                Collectors.mapping(s -> s.project() != null ? s.project().getName() : null, Collectors.toList())
+            ))
+            .forEach((approverId, names) -> {
+                List<String> distinct = names.stream().filter(n -> n != null).distinct().sorted().toList();
+                String suffix = distinct.isEmpty() ? "" : " — " + String.join(", ", distinct);
+                notificationService.send(approverId, "EOD_SUBMITTED",
+                        "New EOD submission",
+                        employee.getFullName() + " submitted their EOD entry for " + dateLabel + suffix + ".",
+                        "/team/approvals?highlight=" + saved.getId());
+            });
     }
 
     @Transactional(readOnly = true)
