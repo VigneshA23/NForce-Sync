@@ -1,12 +1,12 @@
 import {
   LayoutDashboard, ClipboardList, BarChart3, Activity,
   ClipboardCheck, AlertOctagon, Inbox,
-  FolderKanban, Users, TrendingUp, Map,
-  AlertTriangle, DollarSign, Trophy,
+  FolderKanban, Users,
   Lock, Settings, Bot, ScrollText, Building2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Role } from './types';
+import type { ServerUserCapabilities } from '../api/auth';
 
 /**
  * A searchable sub-heading within a nav item's page — a status filter, a section of a
@@ -69,28 +69,20 @@ export type RoleNav = NavSection[];
 
 export const ROLE_COLORS: Record<Role, string> = {
   employee:   '#4C8DD6',
-  lead:       '#2FB67C',
   pm:         '#E0A93B',
-  dm:         '#9B6DFF',
-  finance:    '#14B8A6',
-  leadership: '#F09030',
   admin:      '#6366F1',
   superadmin: '#A78BFA',
 };
 
 export const ROLE_LABELS: Record<Role, string> = {
   employee:   'Employee',
-  lead:       'Team Lead',
   pm:         'Project Manager',
-  dm:         'Delivery Manager',
-  finance:    'Finance Admin',
-  leadership: 'Leadership Viewer',
   admin:      'Admin',
   superadmin: 'Super Admin',
 };
 
 export const ALL_ROLES: Role[] = [
-  'employee', 'lead', 'pm', 'dm', 'finance', 'leadership', 'admin', 'superadmin',
+  'employee', 'pm', 'admin', 'superadmin',
 ];
 
 export const NAV: Record<Role, RoleNav> = {
@@ -141,27 +133,6 @@ export const NAV: Record<Role, RoleNav> = {
     },
   ],
 
-  lead: [
-    {
-      section: 'Overview',
-      items: [
-        { key: 'lead-dash',      label: 'Team Dashboard', path: '/team/dashboard',   icon: LayoutDashboard },
-        { key: 'lead-projects',  label: 'My Projects',    path: '/team/projects',    icon: FolderKanban },
-        { key: 'approvals',  label: 'Approvals',         path: '/team/approvals',   icon: ClipboardCheck },
-        { key: 'team-util',  label: 'Team Utilization',  path: '/team/utilization', icon: Activity },
-        { key: 'blockers',   label: 'Blockers',          path: '/team/blockers',    icon: AlertOctagon },
-        { key: 'eod-inbox',  label: 'EOD Inbox',         path: '/team/eod-inbox',   icon: Inbox },
-      ],
-    },
-    {
-      section: 'Personal',
-      items: [
-        { key: 'eod-submit',    label: 'Submit EOD',     path: '/eod/submit',    icon: ClipboardList },
-        { key: 'reports',       label: 'Reports',         path: '/team/reports',  icon: BarChart3 },
-      ],
-    },
-  ],
-
   pm: [
     {
       section: 'Projects',
@@ -182,59 +153,6 @@ export const NAV: Record<Role, RoleNav> = {
     },
   ],
 
-  dm: [
-    {
-      section: 'Delivery',
-      items: [
-        { key: 'dm-dash',        label: 'Delivery Dashboard',  path: '/dm/dashboard',    icon: LayoutDashboard },
-        { key: 'escalations',    label: 'Escalations',         path: '/dm/escalations',  icon: AlertTriangle, badge: 3 },
-        { key: 'allocation',     label: 'Allocation',          path: '/dm/allocation',   icon: Users },
-        { key: 'heatmap',        label: 'Allocation Heatmap',  path: '/dm/heatmap',      icon: Map },
-        { key: 'dm-util',        label: 'Cross-Project Util',  path: '/dm/utilization',  icon: Activity, phase: 2 },
-      ],
-    },
-    {
-      section: 'More',
-      items: [
-        { key: 'reports',       label: 'Reports',        path: '/dm/reports',    icon: BarChart3 },
-      ],
-    },
-  ],
-
-  finance: [
-    {
-      section: 'Billing',
-      items: [
-        { key: 'fin-dash',     label: 'Finance Dashboard', path: '/finance/dashboard',    icon: LayoutDashboard },
-        { key: 'fin-billable', label: 'Billable Data',      path: '/finance/billable',     icon: DollarSign },
-        { key: 'fin-profit',   label: 'Profitability',      path: '/finance/profitability', icon: TrendingUp, phase: 2 },
-      ],
-    },
-    {
-      section: 'More',
-      items: [
-        { key: 'reports',       label: 'Reports',        path: '/finance/reports', icon: BarChart3 },
-      ],
-    },
-  ],
-
-  leadership: [
-    {
-      section: 'Organization',
-      items: [
-        { key: 'lead-org-dash', label: 'Org Dashboard',      path: '/leadership/dashboard', icon: LayoutDashboard },
-        { key: 'org-trends',    label: 'Trends & Drilldown',  path: '/leadership/trends',    icon: TrendingUp, phase: 2 },
-        { key: 'org-teams',     label: 'Team Rankings',       path: '/leadership/teams',     icon: Trophy, phase: 2 },
-      ],
-    },
-    {
-      section: 'More',
-      items: [
-        { key: 'reports', label: 'Reports', path: '/leadership/reports', icon: BarChart3 },
-      ],
-    },
-  ],
-
   // Admin owns user administration — split off from Super Admin (see the Reportee Views
   // block below for Super Admin's system-wide operational visibility). Organization Masters is
   // additionally shared with Admin (Department/Designation/Location/Project Type are attributes
@@ -250,6 +168,7 @@ export const NAV: Record<Role, RoleNav> = {
       items: [
         { key: 'admin-dash',     label: 'Admin Dashboard',      path: '/admin/dashboard',    icon: LayoutDashboard },
         { key: 'user-mgmt',      label: 'User Management',      path: '/admin/users',        icon: Users },
+        { key: 'admin-projects', label: 'Projects & Allocation', path: '/admin/projects',   icon: FolderKanban },
         { key: 'org-masters',    label: 'Organization Masters', path: '/admin/org-masters',  icon: Building2 },
         { key: 'business-rules', label: 'Business Rules',       path: '/admin/rules',        icon: Settings },
         { key: 'role-mgmt',      label: 'Roles & Access',       path: '/admin/roles',        icon: Lock },
@@ -303,17 +222,167 @@ export const NAV: Record<Role, RoleNav> = {
             { key: 'ro-pm-util',     label: 'Utilization',          path: '/admin/reportee/pm/utilization', icon: Activity },
           ],
         },
+        { key: 'ro-unallocated', label: 'Unallocated Resources', path: '/admin/unallocated-resources', icon: Users },
       ],
     },
   ],
 };
 
-export function getNavPaths(role: Role): string[] {
-  return NAV[role].flatMap(s => s.items.flatMap(entry => isNavGroup(entry) ? entry.children.map(c => c.path) : [entry.path]));
+const MY_REPORTS_SECTIONS: RoleNav = [
+  {
+    section: 'My Reporting Team',
+    items: [
+      { key: 'rm-overview',    label: 'Overview',              path: '/my-reports/overview',    icon: LayoutDashboard },
+      { key: 'rm-eod-status',  label: 'EOD Status',            path: '/my-reports/eod-status',  icon: ClipboardList },
+      { key: 'rm-utilization', label: 'Utilization',           path: '/my-reports/utilization', icon: Activity },
+      { key: 'rm-approvals',   label: 'Reporting Approvals',   path: '/my-reports/approvals',   icon: ClipboardCheck },
+    ],
+  },
+];
+
+// Employee pages shown under "My Work" for any user who leads at least one project.
+// The EOD Inbox key is intentionally `emp-eod-inbox` (not `eod-inbox`) so the team inbox
+// badge logic doesn't bleed onto this entry.
+const MY_WORK_SECTIONS: RoleNav = [
+  {
+    section: 'My Work',
+    items: [
+      {
+        key: 'emp-dash', label: 'My Dashboard', path: '/dashboard', icon: LayoutDashboard,
+        subItems: [
+          { key: 'month-overview',    label: 'Month Overview',    anchor: 'month-overview' },
+          { key: 'assigned-projects', label: 'Assigned Projects', anchor: 'assigned-projects' },
+          { key: 'holiday-calendar',  label: 'Holiday Calendar',  anchor: 'holiday-calendar' },
+          { key: 'dashboard-blockers', label: 'My Blockers',      anchor: 'dashboard-blockers' },
+          { key: 'recent-entries',    label: 'Recent Entries',    anchor: 'recent-entries' },
+          { key: 'monthly-activity',  label: 'Monthly Activity',  anchor: 'monthly-activity' },
+        ],
+      },
+      { key: 'my-projects',   label: 'My Projects',     path: '/my-projects',        icon: FolderKanban },
+      { key: 'my-blockers',   label: 'My Blockers',     path: '/blockers',           icon: AlertOctagon },
+      { key: 'emp-eod-inbox', label: 'EOD Inbox',       path: '/employee/eod-inbox', icon: Inbox },
+      { key: 'eod-submit',    label: 'Submit EOD',      path: '/eod/submit',         icon: ClipboardList },
+      {
+        key: 'eod-history', label: 'My EOD History', path: '/eod/history', icon: BarChart3,
+        subItems: [
+          { key: 'eod-submitted', label: 'Submitted', query: { status: 'SUBMITTED' } },
+          { key: 'eod-approved',  label: 'Approved',  query: { status: 'APPROVED' } },
+          { key: 'eod-rejected',  label: 'Rejected',  query: { status: 'REJECTED' } },
+          { key: 'eod-draft',     label: 'Draft',     query: { status: 'DRAFT' } },
+          { key: 'eod-missing',   label: 'Missing',   query: { status: 'MISSED' } },
+        ],
+      },
+      {
+        key: 'my-util', label: 'My Utilization', path: '/utilization', icon: Activity,
+        subItems: [
+          { key: 'util-weekly-trend',    label: 'Weekly Trend',    anchor: 'weekly-trend' },
+          { key: 'util-period-summary',  label: 'Period Summary',  anchor: 'period-summary' },
+          { key: 'util-hours-breakdown', label: 'Hours Breakdown', anchor: 'hours-breakdown' },
+          { key: 'util-daily-history',   label: 'Daily History',   anchor: 'daily-history' },
+        ],
+      },
+    ],
+  },
+];
+
+// Lead pages shown under "Team Lead" for any user who leads at least one project.
+// Labels differ from NAV.lead where names would clash with the "My Work" set:
+//   "My Projects" → "Projects I Lead", "Blockers" → "Team Blockers", "EOD Inbox" → "Team Inbox".
+// Submit EOD is omitted — it already appears in MY_WORK_SECTIONS above.
+const LEAD_COMBINED_SECTIONS: RoleNav = [
+  {
+    section: 'Team Lead',
+    items: [
+      { key: 'lead-dash',     label: 'Team Dashboard',   path: '/team/dashboard',   icon: LayoutDashboard },
+      { key: 'lead-projects', label: 'Projects I Lead',  path: '/team/projects',    icon: FolderKanban },
+      { key: 'approvals',     label: 'Approvals',        path: '/team/approvals',   icon: ClipboardCheck },
+      { key: 'team-util',     label: 'Team Utilization', path: '/team/utilization', icon: Activity },
+      { key: 'blockers',      label: 'Team Blockers',    path: '/team/blockers',    icon: AlertOctagon },
+      { key: 'eod-inbox',     label: 'Team Inbox',       path: '/team/eod-inbox',   icon: Inbox },
+      { key: 'reports',       label: 'Reports',          path: '/team/reports',     icon: BarChart3 },
+    ],
+  },
+];
+
+// EOD Submit + History for roles other than 'employee' whose eodForm is non-null.
+// Employee and employee-with-lead already get this via NAV.employee / MY_WORK_SECTIONS.
+const MY_EOD_SECTIONS: RoleNav = [
+  {
+    section: 'My EOD',
+    items: [
+      { key: 'eod-submit',  label: 'Submit EOD',      path: '/eod/submit',  icon: ClipboardList },
+      {
+        key: 'eod-history', label: 'My EOD History', path: '/eod/history', icon: BarChart3,
+        subItems: [
+          { key: 'eod-submitted', label: 'Submitted', query: { status: 'SUBMITTED' } },
+          { key: 'eod-approved',  label: 'Approved',  query: { status: 'APPROVED' } },
+          { key: 'eod-rejected',  label: 'Rejected',  query: { status: 'REJECTED' } },
+          { key: 'eod-draft',     label: 'Draft',     query: { status: 'DRAFT' } },
+        ],
+      },
+    ],
+  },
+];
+
+function sectionPaths(sections: RoleNav): string[] {
+  return sections.flatMap(s => s.items.flatMap(entry =>
+    isNavGroup(entry) ? entry.children.map(c => c.path) : [entry.path]));
 }
 
-export function getNavItem(role: Role, path: string): { item: NavItem; section: NavSection } | undefined {
-  for (const section of NAV[role]) {
+/**
+ * Builds the full nav section list for a user, combining their role-based sections with any
+ * capability-based sections they qualify for.
+ *
+ * Phase 7b rule: any user with leadsProjectIds > 0 sees BOTH sets in one sidebar —
+ * "My Work" (employee pages) and "Team Lead" (lead pages, relabeled). For the `lead` role,
+ * MY_WORK_SECTIONS + LEAD_COMBINED_SECTIONS replaces NAV.lead entirely. For other roles,
+ * the two sections are appended after the role's own base.
+ *
+ * - `pm` sections appear when capabilities.managesProjectIds.length > 0 (any role)
+ * - `my-reports` section appears when capabilities.hasDirectReports (any role)
+ */
+export function getNavSections(role: Role, capabilities: ServerUserCapabilities): NavSection[] {
+  const hasLeadCaps = capabilities.leadsProjectIds.length > 0;
+
+  let sections: NavSection[];
+  if (role === 'employee' && hasLeadCaps) {
+    sections = [...MY_WORK_SECTIONS, ...LEAD_COMBINED_SECTIONS];
+  } else {
+    sections = [...NAV[role]];
+    if (hasLeadCaps) {
+      sections.push(...MY_WORK_SECTIONS, ...LEAD_COMBINED_SECTIONS);
+    }
+  }
+
+  if (role !== 'pm' && capabilities.managesProjectIds.length > 0) {
+    sections.push(...NAV.pm);
+  }
+
+  if (capabilities.hasDirectReports) {
+    sections.push(...MY_REPORTS_SECTIONS);
+  }
+
+  // Non-employee roles that submit EODs get their own section so the form and history
+  // are reachable without crowding the role's primary work sections.
+  if (role !== 'employee' && capabilities.submitsEod) {
+    const alreadyHasEodSubmit = sections.some(s =>
+      s.items.some(e => !isNavGroup(e) && (e as NavItem).path === '/eod/submit'));
+    if (!alreadyHasEodSubmit) {
+      sections.push(...MY_EOD_SECTIONS);
+    }
+  }
+
+  return sections;
+}
+
+export function getNavPaths(role: Role, capabilities?: ServerUserCapabilities): string[] {
+  if (!capabilities) return sectionPaths(NAV[role]);
+  return [...new Set(sectionPaths(getNavSections(role, capabilities)))];
+}
+
+export function getNavItem(role: Role, path: string, capabilities?: ServerUserCapabilities): { item: NavItem; section: NavSection } | undefined {
+  const sections = capabilities ? getNavSections(role, capabilities) : NAV[role];
+  for (const section of sections) {
     for (const entry of section.items) {
       if (isNavGroup(entry)) {
         const child = entry.children.find(c => c.path === path);

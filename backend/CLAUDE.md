@@ -33,7 +33,7 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 - New users are created ONLY by a Super Admin (no public signup endpoint for now — email verification comes later).
 - Password reset: single-use link, 1-hour validity, generic "if that email exists" response (build the endpoint shape now, email delivery can be stubbed).
 - Deactivation not deletion: deactivated users are blocked from login but retain their row.
-- Roles for THIS PHASE (4 of the eventual 8): EMPLOYEE, MANAGER, HR, SUPERADMIN. Design the schema to hold all 8 eventually but only seed/test these 4 now.
+- Roles (4, final): EMPLOYEE, PM, ADMIN, SUPERADMIN. Team Lead = project assignment (any active non-PM). Reporting Manager = manager_id FK relationship, not a role.
 - Authorization enforced SERVER-SIDE on every request — never trust the frontend alone.
 - Before any non-local deployment, set a real JWT_SECRET environment variable — application.yml's current value is an intentionally obvious dev-only placeholder and must never be used outside local development.
 
@@ -48,9 +48,8 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   `SchemaManagementException: missing column`. That's a skipped migration, not a code bug.
 - Flyway expands `${...}` as a placeholder EVEN INSIDE `--` comments — never put `${}` (e.g. a JS
   template literal) in a migration comment; it fails to parse before touching the DB.
-- Top version as of 2026-09-24 is **V95** (`ai_billing_settings`), applied directly to the shared
-  dev DB as part of the AI support assistant build — see `## AI Support Assistant` below. Re-run
-  the query above before adding the next migration; other branches may have moved past V95 since.
+- Top version as of 2026-10-05 is **V109** (add log_notes to eod_entry). Re-run the query above before adding the next migration; other branches may have moved past V109 since.
+- **Fresh DB — resolved.** `beforeMigrate.sql` Flyway SQL callback (runs before any migration) now creates `business_rule_config` if absent. Any new environment provisioned from V1 will apply the callback first, so V33 ALTER never fails on a missing table.
 - An earlier, uncommitted Cerebras-based assistant prototype had applied `assistant_conversation`,
   `assistant_message` and `assistant_knowledge` out-of-band (V78–V81). **These are gone** — V91
   dropped them. The AI assistant's real schema is the `ai_*` tables from V91–V95
@@ -74,9 +73,8 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   after adding nested enums or record components; trust the compiler, not the squiggles.
 - Run: `./mvnw.cmd spring-boot:run`; restart for ANY entity/endpoint/migration change.
   Backgrounded from a tool shell it gets reaped — run it in your own terminal.
-- Inspect the DB: psql at `/c/Program Files/PostgreSQL/16/bin/psql`, creds in `application.yml`.
-- Test logins (all `ChangeMe123!`, all `@nforceone.com`): `superadmin@` · `projectmanager@` (PM)
-  · `teamlead@` (MANAGER) · `employee@` (EMPLOYEE, currently INACTIVE).
+- Inspect the DB: credentials in `application-local.yml` (gitignored). `application.yml` now uses env var placeholders (`${SPRING_DATASOURCE_URL}` etc.) — no real credentials in tracked files.
+- Test logins (all `ChangeMe123!`, all `@nforceone.com`): `superadmin@` · `projectmanager@` (PM) · `employee@` (EMPLOYEE). Also sample accounts: `sampleemployee@`, `samplepm@`, `sampleadmin2@`, `sampletopadmin@`.
 
 ## Rules for every module
 - Flyway owns schema. Two underscores: V2__name.sql
@@ -115,7 +113,7 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   "Leave / Holiday" was renamed to "Leave" in V35 (same id 19, no rows repointed) once Holiday
   became a day type rather than a category. is_billable_default was dropped with the
   Billable/Non-Billable classification removal (it was write-only, never read).
-- Seed: Priya Nair (id=2, MANAGER) set as manager_id for employees id=3,4,5
+- Early seed (now superseded): Priya Nair (id=2) set as manager_id for employees id=3,4,5
 
 ## EOD tables (V4 migration)
 - eod_entry: id, employee_id FK, entry_date DATE, status (DRAFT/SUBMITTED/APPROVED/REJECTED/CHANGES_REQUESTED/MISSED),
@@ -192,7 +190,7 @@ com.nforceone.sync/
   eod/             — EodEntry, EodTask entities, EodEntryRepository, EodService, EodController, DTOs
                      POST /api/eod/draft  POST /api/eod/{id}/submit
                      GET  /api/eod        GET  /api/eod/{id}
-                     Employees see own entries; MANAGER/HR/SUPERADMIN/DM/LEADERSHIP can see others'
+                     Employees see own entries; PM/ADMIN/SUPERADMIN can see others'
   approval/        — ApprovalAction entity, ApprovalService, ApprovalController, DTOs
                      GET  /api/approvals/pending
                      POST /api/approvals/{entryId}/approve

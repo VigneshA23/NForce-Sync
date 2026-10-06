@@ -42,7 +42,13 @@ class KnowledgeSchemaValidatorTest {
     void rejectsEmptyAudience() {
         var ex = assertThrows(KnowledgeValidationException.class,
                 () -> validator.validate(List.of(valid().audience(Set.of()).build())));
-        assertTrue(ex.getProblems().stream().anyMatch(p -> p.contains("audience must not be empty")));
+        assertTrue(ex.getProblems().stream().anyMatch(p -> p.contains("audience and capabilities must not both be empty")));
+    }
+
+    @Test
+    void acceptsEmptyAudienceWhenCapabilitiesNonEmpty() {
+        assertDoesNotThrow(() -> validator.validate(List.of(
+                valid().audience(Set.of()).capabilities(Set.of("LEADS_PROJECT")).build())));
     }
 
     @Test
@@ -83,11 +89,11 @@ class KnowledgeSchemaValidatorTest {
     }
 
     @Test
-    void rejectsPlaceholderPageDescribedAsAvailable() {
-        // "dashboard" for DM is a placeholder in registry.yaml.
+    void rejectsPageWithNoRegistryVariantForThatRole() {
+        // "org-masters" only has variants for ADMIN and SUPERADMIN, not EMPLOYEE.
         var ex = assertThrows(KnowledgeValidationException.class, () -> validator.validate(List.of(
-                valid().pageId("dashboard").audience(Set.of(AppUser.Role.DM)).build())));
-        assertTrue(ex.getProblems().stream().anyMatch(p -> p.contains("is a placeholder for role")));
+                valid().pageId("org-masters").audience(Set.of(AppUser.Role.EMPLOYEE)).build())));
+        assertTrue(ex.getProblems().stream().anyMatch(p -> p.contains("has no variant for that role")));
     }
 
     @Test

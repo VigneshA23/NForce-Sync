@@ -698,7 +698,7 @@ export default function TeamUtilization() {
   return (
     <div>
       {isSuperAdmin && (
-        <ReporteeScopePicker role="MANAGER" label="Team Lead" value={teamLeadId} onChange={setTeamLeadId} />
+        <ReporteeScopePicker role="LEAD" label="Team Lead" value={teamLeadId} onChange={setTeamLeadId} />
       )}
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 14, flexWrap: 'wrap' }}>

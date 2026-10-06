@@ -44,12 +44,6 @@ public class AllocationService {
         this.appUserRepository = appUserRepository;
     }
 
-    /**
-     * Allocations, restricted to people holding the EMPLOYEE role. Leads, managers and back-office
-     * accounts are not project-assignable, so rows belonging to them are excluded rather than shown
-     * alongside real employees. The employee is already JOIN FETCHed, so filtering here costs no
-     * extra queries.
-     */
     @Transactional(readOnly = true)
     public List<AllocationDto> listAll(Long projectId) {
         return listAll(projectId, null);
@@ -75,17 +69,15 @@ public class AllocationService {
             allocations = allocationRepository.findAllWithRefsOrderByEffectiveFromDesc();
         }
         return allocations.stream()
-                .filter(a -> a.getEmployee().getRole() == AppUser.Role.EMPLOYEE)
                 .map(AllocationDto::from)
                 .toList();
     }
 
-    /** Only EMPLOYEE-role users may be allocated to a project. */
+    /** Any active user may be allocated to a project. */
     @Transactional(readOnly = true)
     public List<EmployeeRefDto> listAssignableEmployees() {
         return appUserRepository
-                .findByRoleAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
-                        AppUser.Role.EMPLOYEE, AppUser.Status.ACTIVE)
+                .findByStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Status.ACTIVE)
                 .stream()
                 .map(EmployeeRefDto::from)
                 .toList();
@@ -98,7 +90,7 @@ public class AllocationService {
         Project project = projectRepository.findById(req.projectId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
 
-        requireAllocatableToEmployee(employee, project);
+        requireProjectActive(project);
         requirePctValid(req.allocationPct());
         requireDateOrder(req.effectiveFrom(), req.effectiveTo());
         requireNotBeforeProjectStart(project, req.effectiveFrom());
@@ -178,41 +170,11 @@ public class AllocationService {
         }
     }
 
-    /**
-     * A project may only be staffed with an employee when it is ACTIVE and its Team Lead is that
-     * employee's own reporting manager.
-     *
-     * <p>The Team Lead half is what keeps Approvals answerable. An employee's EOD project list is
-     * built from their allocation rows, so allocating across teams lets them log tasks against a
-     * project their own Team Lead does not lead — that Lead then gets the entry in their queue with
-     * no visibility into that project's work, and cannot honestly approve or reject it.
-     *
-     * <p>The ACTIVE half was previously only enforced by the form, which left a direct API call
-     * free to staff someone onto completed or on-hold work they could never book against.
-     *
-     * <p>Create-only. {@link #update} never reassigns the employee or project, so there is nothing
-     * to re-check there, and applying this to edits would retroactively freeze allocations made
-     * before the rule existed.
-     */
-    private void requireAllocatableToEmployee(AppUser employee, Project project) {
+    private void requireProjectActive(Project project) {
         if (project.getStatus() != Project.Status.ACTIVE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     project.getCode() + " is " + project.getStatus()
                             + " — only ACTIVE projects can be allocated.");
-        }
-
-        AppUser manager = employee.getManager();
-        if (manager == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    employee.getFullName() + " has no reporting manager, so no project can be "
-                            + "allocated. Set their manager first.");
-        }
-
-        AppUser teamLead = project.getPm();
-        if (teamLead == null || !teamLead.getId().equals(manager.getId())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    project.getCode() + " is not led by this employee's reporting manager ("
-                            + manager.getFullName() + ").");
         }
     }
 

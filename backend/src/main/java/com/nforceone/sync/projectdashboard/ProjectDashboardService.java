@@ -16,6 +16,7 @@ import com.nforceone.sync.eod.dto.EmployeeProjectHoursRow;
 import com.nforceone.sync.eod.dto.ProjectHoursRow;
 import com.nforceone.sync.project.Allocation;
 import com.nforceone.sync.project.AllocationRepository;
+import com.nforceone.sync.project.PmScopeService;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
 import com.nforceone.sync.project.TaskCategoryRepository;
@@ -68,6 +69,7 @@ public class ProjectDashboardService {
     private final BusinessRuleConfigRepository configRepository;
     private final TaskCategoryRepository taskCategoryRepository;
     private final Executor dashboardQueryExecutor;
+    private final PmScopeService pmScopeService;
 
     public ProjectDashboardService(AppUserRepository appUserRepository,
                                     ProjectRepository projectRepository,
@@ -77,7 +79,8 @@ public class ProjectDashboardService {
                                     HolidayRepository holidayRepository,
                                     BusinessRuleConfigRepository configRepository,
                                     TaskCategoryRepository taskCategoryRepository,
-                                    Executor dashboardQueryExecutor) {
+                                    Executor dashboardQueryExecutor,
+                                    PmScopeService pmScopeService) {
         this.appUserRepository = appUserRepository;
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
@@ -87,6 +90,7 @@ public class ProjectDashboardService {
         this.configRepository = configRepository;
         this.taskCategoryRepository = taskCategoryRepository;
         this.dashboardQueryExecutor = dashboardQueryExecutor;
+        this.pmScopeService = pmScopeService;
     }
 
     public ProjectDashboardFiltersDto getFilters(String actingEmail) {
@@ -504,8 +508,6 @@ public class ProjectDashboardService {
         if (entry == null) return true;
         if (isLeaveOnlyEntry(entry, leaveCategoryId)) return false;
         return switch (entry.getStatus()) {
-            // PARTIALLY_APPROVED (per-project approval workflow, not implemented in this
-            // checkout — see EodEntry.Status's own comment) is not "missing" either.
             case APPROVED, SUBMITTED, PARTIALLY_APPROVED -> false;
             case DRAFT, REJECTED, MISSED -> true;
         };
@@ -540,9 +542,7 @@ public class ProjectDashboardService {
         AppUser user = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
-        if (user.getRole() != AppUser.Role.PM && user.getRole() != AppUser.Role.SUPERADMIN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Project Manager access required");
-        }
+        pmScopeService.requirePmScope(user);
         return user;
     }
 
@@ -554,11 +554,11 @@ public class ProjectDashboardService {
     private List<Project> scopedProjects(AppUser pm, Long pmId) {
         if (pm.getRole() == AppUser.Role.SUPERADMIN) {
             if (pmId != null) {
-                return projectRepository.findByProjectManagerIdOrderByNameAsc(pmId);
+                return projectRepository.findByPmIdOrderByNameAsc(pmId);
             }
             return projectRepository.findAllWithPmOrderByNameAsc();
         }
-        return projectRepository.findByProjectManagerIdOrderByNameAsc(pm.getId());
+        return projectRepository.findByPmIdOrderByNameAsc(pm.getId());
     }
 
     private BusinessRuleConfig requireConfig() {

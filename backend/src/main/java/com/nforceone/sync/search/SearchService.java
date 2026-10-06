@@ -2,24 +2,35 @@ package com.nforceone.sync.search;
 
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.project.AllocationRepository;
+import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
+import com.nforceone.sync.teamlead.LeadAccessService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class SearchService {
 
-    private final AppUserRepository userRepository;
-    private final ProjectRepository projectRepository;
+    private final AppUserRepository    userRepository;
+    private final ProjectRepository    projectRepository;
+    private final AllocationRepository allocationRepository;
+    private final LeadAccessService    leadAccess;
 
-    public SearchService(AppUserRepository userRepository, ProjectRepository projectRepository) {
-        this.userRepository = userRepository;
+    public SearchService(AppUserRepository userRepository,
+                         ProjectRepository projectRepository,
+                         AllocationRepository allocationRepository,
+                         LeadAccessService leadAccess) {
+        this.userRepository    = userRepository;
         this.projectRepository = projectRepository;
+        this.allocationRepository = allocationRepository;
+        this.leadAccess        = leadAccess;
     }
 
     @Transactional(readOnly = true)
@@ -47,45 +58,57 @@ public class SearchService {
                             u.getId(), u.getFullName(), u.getEmail(),
                             u.getRole().name(), u.getEmployeeCode()))
                     .toList();
-            case MANAGER -> userRepository.findByManagerId(actor.getId()).stream()
-                    .filter(u -> u.getDeletedAt() == null)
-                    .filter(u -> matchesUser(u, term))
-                    .limit(5)
-                    .map(u -> new SearchResultDto.UserResult(
-                            u.getId(), u.getFullName(), u.getEmail(),
-                            u.getRole().name(), u.getEmployeeCode()))
-                    .toList();
+            case EMPLOYEE -> {
+                if (leadAccess.leadsAnyProject(actor.getId())) {
+                    yield allocationRepository.findActiveMembersByProjectLead(actor.getId(), LocalDate.now())
+                            .stream()
+                            .filter(u -> u.getDeletedAt() == null && matchesUser(u, term))
+                            .limit(5)
+                            .map(u -> new SearchResultDto.UserResult(
+                                    u.getId(), u.getFullName(), u.getEmail(),
+                                    u.getRole().name(), u.getEmployeeCode()))
+                            .toList();
+                }
+                yield List.of();
+            }
             default -> List.of();
         };
     }
 
     private List<SearchResultDto.ProjectResult> searchProjects(String term, AppUser actor) {
         return switch (actor.getRole()) {
-            case SUPERADMIN, DM, FINANCE, LEADERSHIP -> projectRepository.findAll().stream()
+            case SUPERADMIN, ADMIN -> projectRepository.findAll().stream()
                     .filter(p -> matchesProject(p, term))
                     .limit(5)
                     .map(p -> new SearchResultDto.ProjectResult(
                             p.getId(), p.getCode(), p.getName(), p.getStatus().name()))
                     .toList();
-            case PM -> projectRepository.findByProjectManagerIdOrderByNameAsc(actor.getId()).stream()
+            case PM -> projectRepository.findByPmIdOrderByNameAsc(actor.getId()).stream()
                     .filter(p -> matchesProject(p, term))
                     .limit(5)
                     .map(p -> new SearchResultDto.ProjectResult(
                             p.getId(), p.getCode(), p.getName(), p.getStatus().name()))
                     .toList();
-            case MANAGER -> projectRepository.findByPmIdOrderByNameAsc(actor.getId()).stream()
-                    .filter(p -> matchesProject(p, term))
-                    .limit(5)
-                    .map(p -> new SearchResultDto.ProjectResult(
-                            p.getId(), p.getCode(), p.getName(), p.getStatus().name()))
-                    .toList();
-            case EMPLOYEE -> projectRepository.findAllocatedToEmployeeOnDate(actor.getId(), LocalDate.now(), com.nforceone.sync.project.Project.Status.ACTIVE).stream()
-                    .filter(p -> matchesProject(p, term))
-                    .limit(5)
-                    .map(p -> new SearchResultDto.ProjectResult(
-                            p.getId(), p.getCode(), p.getName(), p.getStatus().name()))
-                    .toList();
-            case ADMIN -> List.of();
+            case EMPLOYEE -> {
+                // Allocated projects (baseline for all employees).
+                List<Project> results = new ArrayList<>(
+                        projectRepository.findAllocatedToEmployeeOnDate(
+                                actor.getId(), LocalDate.now(), Project.Status.ACTIVE));
+                // Additional: projects this employee leads, merged without duplicates.
+                if (leadAccess.leadsAnyProject(actor.getId())) {
+                    for (Project led : projectRepository.findByLeadIdOrderByNameAsc(actor.getId())) {
+                        if (results.stream().noneMatch(r -> r.getId().equals(led.getId()))) {
+                            results.add(led);
+                        }
+                    }
+                }
+                yield results.stream()
+                        .filter(p -> matchesProject(p, term))
+                        .limit(5)
+                        .map(p -> new SearchResultDto.ProjectResult(
+                                p.getId(), p.getCode(), p.getName(), p.getStatus().name()))
+                        .toList();
+            }
         };
     }
 
@@ -97,7 +120,7 @@ public class SearchService {
         return name.contains(term) || email.contains(term) || code.contains(term);
     }
 
-    private boolean matchesProject(com.nforceone.sync.project.Project p, String term) {
+    private boolean matchesProject(Project p, String term) {
         if (term.isEmpty()) return false;
         String name = p.getName() == null ? "" : p.getName().toLowerCase();
         String code = p.getCode() == null ? "" : p.getCode().toLowerCase();

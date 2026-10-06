@@ -4,9 +4,13 @@ import {
   Search, AlertTriangle, MessageCircleQuestion,
 } from 'lucide-react';
 import {
-  usePendingApprovals, useDecidedApprovals,
+  usePendingApprovals,
   useApprove, useReject, type PendingApprovalsRange,
 } from '../api/approvals';
+import {
+  usePendingPieces, useApprovePiece, useRejectPiece, useDecidedEntriesV2,
+  type ApprovalPieceDto,
+} from '../api/approvalPieces';
 import { useOpenClarification, useEodInbox } from '../api/eodClarification';
 import { FilterDropdown } from '../components/FilterDropdown';
 import { useToast } from '../lib/toast';
@@ -14,7 +18,7 @@ import {
   formatDate as fmtDate, todayISO as localTodayISO, yesterdayISO as localYesterdayISO,
   formatDateShort, formatDateRange,
 } from '../lib/date';
-import type { EodEntryDto } from '../api/eod';
+import { useEodEntry, type EodEntryDto } from '../api/eod';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   sumHours, hrs, entryProjects, entryCategories,
@@ -201,6 +205,209 @@ type Tab = 'pending' | 'approved' | 'rejected';
 type SortMode = 'oldest' | 'latest' | 'hours' | 'name';
 
 const PAGE_SIZE = 5;
+const PIECES_PAGE_SIZE = 10;
+
+// ── PieceCard — pending piece row, identical structure to EntryRow ─────────────
+
+function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
+  const [expanded, setExpanded] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [comment, setComment] = useState('');
+  const { show } = useToast();
+
+  const approvePiece = useApprovePiece();
+  const rejectPiece = useRejectPiece();
+
+  const { data: entry } = useEodEntry(piece.eodEntryId);
+  const projectTasks = (entry?.tasks ?? []).filter(t => t.projectId === piece.projectId);
+  const totalHours = projectTasks.reduce((s, t) => s + Number(t.hours ?? 0), 0);
+
+  const busy = approvePiece.isPending || rejectPiece.isPending;
+  const padding = '9px 16px';
+
+  async function handleApprove() {
+    try {
+      await approvePiece.mutateAsync({ pieceId: piece.id });
+      show('Approved.', 'success');
+    } catch (err) {
+      show(extractError(err), 'error');
+    }
+  }
+
+  async function handleReject() {
+    if (!comment.trim()) return;
+    try {
+      await rejectPiece.mutateAsync({ pieceId: piece.id, comment: comment.trim() });
+      show('Rejected.', 'success');
+      setRejecting(false);
+      setComment('');
+    } catch (err) {
+      show(extractError(err), 'error');
+    }
+  }
+
+  return (
+    <div style={{ borderBottom: '1px solid var(--line)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding }}>
+
+        {/* Avatar — identical to EntryRow */}
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
+          background: 'var(--raised2)', color: 'var(--txt)', border: '1px solid var(--line2)',
+        }}>
+          {initials(piece.employeeName)}
+        </div>
+
+        {/* Content block — mirrors EntryRow's middle column */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Name row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--txt)' }}>{piece.employeeName}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--txt-dim)' }}>{piece.employeeCode}</span>
+            {piece.projectName && (
+              <>
+                <span style={{ fontSize: 11.5, color: 'var(--txt-mut)' }}>·</span>
+                <span style={{ fontSize: 12, color: 'var(--info)', fontWeight: 600 }}>{piece.projectName}</span>
+              </>
+            )}
+          </div>
+
+          {/* Meta row — mirrors EntryRow's date/submitted/tasks line */}
+          <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 3, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span>{fmtDate(piece.entryDate)}</span>
+            <span>·</span>
+            <span>Submitted {formatRelative(piece.frozenAt)}</span>
+            <span>·</span>
+            <span>{projectTasks.length} task{projectTasks.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {/* Escalation note — shown on the lead's view when their piece was escalated to PM */}
+          {piece.escalatedAt && (
+            <div style={{
+              marginTop: 4, fontSize: 11.5,
+              color: 'var(--warn)', display: 'flex', alignItems: 'center', gap: 5,
+            }}>
+              <span>⚠</span>
+              <span>
+                Escalated to {piece.escalatedToName ?? 'PM'}
+                {piece.hoursPending != null ? ` after ${Math.round(piece.hoursPending)}h` : ''}
+              </span>
+            </div>
+          )}
+
+          {/* Task summary table — identical rows to EntryRow */}
+          {projectTasks.length > 0 && (
+            <div style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)' }}>
+              {projectTasks.map(t => (
+                <div key={t.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '4px 11px', fontSize: 11, color: 'var(--txt-dim)',
+                  borderBottom: '1px solid var(--line)',
+                }}>
+                  <span style={{ color: 'var(--txt)', fontWeight: 600, minWidth: 120, flexShrink: 0 }}>{t.projectCode ?? '—'}</span>
+                  <span style={{ flex: 1 }}>{t.categoryName ?? '—'}</span>
+                  <span style={{ color: 'var(--txt)', fontWeight: 700, minWidth: 36, textAlign: 'right', flexShrink: 0 }}>
+                    {t.hours != null ? `${hrs(Number(t.hours))}h` : '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Chips row — mirrors EntryRow's hours/status chip strip */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 9 }}>
+            <Chip tone="neutral">{hrs(totalHours)}h logged</Chip>
+          </div>
+        </div>
+
+        {/* Right column — Approve/Reject instead of EntryRow's Review button */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+          {!rejecting && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                onClick={() => handleApprove()}
+                disabled={busy}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+                  padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  border: '1px solid rgba(47,182,124,.4)', background: 'rgba(47,182,124,.08)',
+                  color: 'var(--ok)', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
+                }}
+              >
+                Approve
+              </button>
+              <button
+                onClick={() => { setRejecting(true); setExpanded(true); }}
+                disabled={busy}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+                  padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                  border: '1px solid rgba(228,55,61,.3)', background: 'rgba(228,55,61,.06)',
+                  color: 'var(--risk)', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
+                }}
+              >
+                Reject
+              </button>
+            </div>
+          )}
+          <button
+            onClick={() => setExpanded(e => !e)}
+            title="View details"
+            style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
+          >
+            {expanded ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded area — rejection form in same zone as EntryRow's AuditTrail */}
+      {expanded && rejecting && (
+        <div style={{ borderTop: '1px solid var(--line)', padding: '12px 16px', background: 'var(--raised)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)' }}>
+            Rejection reason <span style={{ color: 'var(--risk)' }}>*</span>
+          </div>
+          <textarea
+            rows={3}
+            placeholder="Explain why this piece is being rejected…"
+            value={comment}
+            onChange={e => setComment(e.target.value)}
+            style={{
+              width: '100%', resize: 'vertical', padding: '8px 10px', boxSizing: 'border-box',
+              background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6,
+              color: 'var(--txt)', fontSize: 12.5, outline: 'none',
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => { setRejecting(false); setComment(''); }}
+              style={{
+                padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 500,
+                border: '1px solid var(--line2)', background: 'none',
+                color: 'var(--txt-dim)', cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleReject}
+              disabled={!comment.trim() || busy}
+              style={{
+                padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                border: '1px solid rgba(228,55,61,.4)', background: 'rgba(228,55,61,.1)',
+                color: 'var(--risk)',
+                cursor: (!comment.trim() || busy) ? 'not-allowed' : 'pointer',
+                opacity: (!comment.trim() || busy) ? 0.5 : 1,
+              }}
+            >
+              Confirm Reject
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Approvals() {
   // Arriving from the Team Dashboard's "Review approvals" button carries the dashboard's
@@ -250,9 +457,10 @@ export default function Approvals() {
   const highlightParam = searchParams.get('highlight');
   const highlightId = highlightParam ? Number(highlightParam) : null;
 
-  const { data: pending, isPending: pendingLoading, isError: pendingError, refetch } = usePendingApprovals(true, range);
-  const { data: approved, isPending: approvedLoading } = useDecidedApprovals('APPROVED');
-  const { data: rejected, isPending: rejectedLoading } = useDecidedApprovals('REJECTED');
+  const { isError: pendingError, refetch } = usePendingApprovals(true, range);
+  const { data: approved, isPending: approvedLoading } = useDecidedEntriesV2('APPROVED');
+  const { data: rejected, isPending: rejectedLoading } = useDecidedEntriesV2('REJECTED');
+  const { data: pendingPieces = [], isPending: piecesLoading } = usePendingPieces();
   const reject = useReject();
   const requestClarification = useOpenClarification();
   const { show } = useToast();
@@ -286,15 +494,29 @@ export default function Approvals() {
 
   const modalApprove = useApprove();
 
-  const isLoading = pendingLoading
+  const isLoading = (tab === 'pending' && piecesLoading)
     || (tab === 'approved' && approvedLoading)
-    || (tab === 'rejected' && rejectedLoading);
+    || (tab === 'rejected' && rejectedLoading);
 
   const baseList: EodEntryDto[] = useMemo(() => {
-    if (tab === 'pending') return pending ?? [];
     if (tab === 'approved') return approved ?? [];
-    return rejected ?? [];
-  }, [tab, pending, approved, rejected]);
+    if (tab === 'rejected') return rejected ?? [];
+    return [];
+  }, [tab, approved, rejected]);
+
+  const filteredPieces = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return pendingPieces;
+    return pendingPieces.filter(p =>
+      p.employeeName.toLowerCase().includes(q) ||
+      p.employeeCode.toLowerCase().includes(q) ||
+      (p.projectName ?? '').toLowerCase().includes(q),
+    );
+  }, [pendingPieces, search]);
+
+  const totalPiecePages = Math.max(1, Math.ceil(filteredPieces.length / PIECES_PAGE_SIZE));
+  const piecesPageSafe = Math.min(page, totalPiecePages);
+  const piecesPaged = filteredPieces.slice((piecesPageSafe - 1) * PIECES_PAGE_SIZE, piecesPageSafe * PIECES_PAGE_SIZE);
 
   const allProjects = useMemo(() => [...new Set(baseList.flatMap(entryProjects))].sort(), [baseList]);
   const allCategories = useMemo(() => [...new Set(baseList.flatMap(entryCategories))].sort(), [baseList]);
@@ -370,7 +592,7 @@ export default function Approvals() {
     }
   }
 
-  const pendingCount = pending?.length ?? 0;
+  const pendingCount = pendingPieces.length;
   const approvedCount = approved?.length ?? 0;
   const rejectedCount = rejected?.length ?? 0;
 
@@ -516,8 +738,32 @@ export default function Approvals() {
         </select>
       </div>
 
-      {/* List */}
-      {isLoading ? (
+      {/* List — pending tab uses v2 per-piece cards; approved/rejected use v1 entry rows */}
+      {tab === 'pending' ? (
+        piecesLoading ? (
+          <Card>
+            <GlobalLoader fullScreen={false} compact label="Loading pending pieces..." />
+          </Card>
+        ) : filteredPieces.length === 0 ? (
+          <Card style={{ textAlign: 'center', padding: '48px 20px' }}>
+            <CheckCheck size={28} style={{ color: 'var(--ok)', marginBottom: 12 }} aria-hidden="true" />
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)', marginBottom: 6 }}>You're all caught up</div>
+            <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>
+              {search.trim() ? 'No pieces match your search.' : 'No pending approval pieces.'}
+            </div>
+          </Card>
+        ) : (
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            {piecesPaged.map(piece => <PieceCard key={piece.id} piece={piece} />)}
+            {totalPiecePages > 1 && (
+              <Pagination
+                page={piecesPageSafe} totalPages={totalPiecePages} totalItems={filteredPieces.length}
+                pageSize={PIECES_PAGE_SIZE} onPageChange={setPage} itemLabel="pieces"
+              />
+            )}
+          </Card>
+        )
+      ) : isLoading ? (
         <Card>
           <GlobalLoader fullScreen={false} compact label="Loading approvals..." />
         </Card>
@@ -525,12 +771,10 @@ export default function Approvals() {
         <Card style={{ textAlign: 'center', padding: '48px 20px' }}>
           <CheckCheck size={28} style={{ color: 'var(--ok)', marginBottom: 12 }} aria-hidden="true" />
           <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)', marginBottom: 6 }}>
-            {tab === 'pending' && "You're all caught up"}
             {tab === 'approved' && 'No approved entries yet'}
             {tab === 'rejected' && 'No rejected entries'}
           </div>
           <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>
-            {tab === 'pending' && 'No pending entries match your current filters.'}
             {tab === 'approved' && 'Entries you approve will appear here.'}
             {tab === 'rejected' && 'Entries you reject will appear here with the reason given.'}
           </div>

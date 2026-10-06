@@ -373,7 +373,7 @@ public class ExecutiveDashboardService {
             if (p.getStatus() != Project.Status.ACTIVE) continue;
             if (!projectsWithAllocation.contains(p.getId())) {
                 attention.add(new ProjectAttentionDto(p.getId(), p.getName(),
-                        p.getProjectManager() != null ? p.getProjectManager().getFullName() : null,
+                        p.getPm() != null ? p.getPm().getFullName() : null,
                         p.getStatus().name(), "0 active resources", "No active resource allocation"));
             }
         }
@@ -391,7 +391,7 @@ public class ExecutiveDashboardService {
             Project p = projectByName.get(e.getKey());
             if (p == null) continue;
             attention.add(new ProjectAttentionDto(p.getId(), p.getName(),
-                    p.getProjectManager() != null ? p.getProjectManager().getFullName() : null,
+                    p.getPm() != null ? p.getPm().getFullName() : null,
                     p.getStatus().name(), e.getValue() + " employee(s) at-risk for missing EOD",
                     "High missing-EOD rate (at or above configured threshold)"));
         }

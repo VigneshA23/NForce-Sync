@@ -20,6 +20,7 @@ import com.nforceone.sync.ai.prompt.PromptBuilder;
 import com.nforceone.sync.ai.response.ResponseValidator;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.teamlead.LeadAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -46,6 +47,7 @@ class AiAssistantServiceTest {
     private ResponseValidator responseValidator;
     private ConversationService conversationService;
     private AiInteractionLogger interactionLogger;
+    private LeadAccessService leadAccess;
     private AiProperties properties;
     private AiAssistantService service;
 
@@ -61,6 +63,8 @@ class AiAssistantServiceTest {
         responseValidator = mock(ResponseValidator.class);
         conversationService = mock(ConversationService.class);
         interactionLogger = mock(AiInteractionLogger.class);
+        leadAccess = mock(LeadAccessService.class);
+        when(leadAccess.leadsAnyProject(any())).thenReturn(false);
 
         properties = new AiProperties();
         properties.setEnabled(true);
@@ -68,7 +72,7 @@ class AiAssistantServiceTest {
 
         service = new AiAssistantService(appUserRepository, properties, rateLimiter, navigationValidator,
                 retriever, dataService, promptBuilder, llmProvider, responseValidator, conversationService,
-                interactionLogger);
+                interactionLogger, leadAccess);
 
         when(navigationValidator.validateCurrentPage(any(), any())).thenReturn(Optional.empty());
         when(dataService.fetch(any(), any(), any())).thenReturn(new AssistantDataService.Selection(List.of(), List.of()));

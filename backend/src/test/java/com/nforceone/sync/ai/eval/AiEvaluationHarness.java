@@ -54,7 +54,7 @@ class AiEvaluationHarness {
         assumeTrue(baseUrl != null && !baseUrl.isBlank(), "AI_EVAL_BASE_URL not set — skipping live evaluation");
 
         Map<String, String> credentialsByRole = new HashMap<>();
-        for (String role : List.of("EMPLOYEE", "MANAGER", "PM", "DM", "FINANCE", "LEADERSHIP", "ADMIN", "SUPERADMIN")) {
+        for (String role : List.of("EMPLOYEE", "PM", "ADMIN", "SUPERADMIN")) {
             String cred = System.getenv("AI_EVAL_" + role);
             if (cred != null && !cred.isBlank()) {
                 credentialsByRole.put(role, cred);

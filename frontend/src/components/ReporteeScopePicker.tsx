@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Shield } from 'lucide-react';
 import { searchUsers } from '../api/admin';
+import { listAssignableLeads } from '../api/projects';
 
 /**
  * Super Admin-only control shown at the top of a reused PM/Team Lead operational page. Lets a
@@ -11,18 +12,29 @@ import { searchUsers } from '../api/admin';
  * See ApprovalService/TeamLeadService/ProjectDashboardService's `pmId`/`teamLeadId`/`managerId`
  * params on the backend (Super Admin Reportee Views enhancement) — this is purely the picker
  * for those, no new business logic lives here.
+ *
+ * role='PM'   → searchUsers({ role: 'PM' })           — PM accounts
+ * role='LEAD' → /api/projects/leads (listAssignableLeads) — any active non-PM user who can lead
  */
 export function ReporteeScopePicker({ role, label, value, onChange }: {
-  role: 'PM' | 'MANAGER';
+  role: 'PM' | 'LEAD';
   label: string;
   value: number | null;
   onChange: (id: number | null) => void;
 }) {
-  const { data } = useQuery({
-    queryKey: ['users', 'search', role],
-    queryFn: () => searchUsers({ role }),
+  const pmQuery = useQuery({
+    queryKey: ['users', 'search', 'PM'],
+    queryFn: () => searchUsers({ role: 'PM' }),
     staleTime: 5 * 60_000,
+    enabled: role === 'PM',
   });
+  const leadQuery = useQuery({
+    queryKey: ['projects', 'leads'],
+    queryFn: listAssignableLeads,
+    staleTime: 5 * 60_000,
+    enabled: role === 'LEAD',
+  });
+  const data = role === 'LEAD' ? leadQuery.data : pmQuery.data;
 
   return (
     <div style={{

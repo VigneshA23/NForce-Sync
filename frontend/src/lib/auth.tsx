@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import type { Role } from './types';
 import { getMe, toRole } from '../api/auth';
-import type { ServerUser } from '../api/auth';
+import type { ServerUser, ServerUserCapabilities } from '../api/auth';
 import { clearStoredDateFilter } from './teamDashboardDateFilter';
 
 const SESSION_KEY = 'nfsync_session';
@@ -37,6 +37,8 @@ function initials(name: string): string {
     .join('');
 }
 
+export type { ServerUserCapabilities };
+
 export interface AuthUser {
   id: number;
   name: string;
@@ -45,7 +47,18 @@ export interface AuthUser {
   role: Role;
   employeeCode: string;
   mustChangePassword: boolean;
+  capabilities: ServerUserCapabilities;
 }
+
+const EMPTY_CAPABILITIES: ServerUserCapabilities = {
+  leadsProjectIds: [],
+  leadsProjectNames: [],
+  managesProjectIds: [],
+  managesProjectNames: [],
+  hasDirectReports: false,
+  eodForm: null,
+  submitsEod: false,
+};
 
 export function buildAuthUser(serverUser: ServerUser, mustChangePassword?: boolean): AuthUser {
   return {
@@ -56,6 +69,7 @@ export function buildAuthUser(serverUser: ServerUser, mustChangePassword?: boole
     role:               toRole(serverUser.role),
     employeeCode:       serverUser.employeeCode,
     mustChangePassword: mustChangePassword ?? serverUser.mustChangePassword,
+    capabilities:       serverUser.capabilities ?? EMPTY_CAPABILITIES,
   };
 }
 
@@ -71,11 +85,7 @@ interface AuthContextValue {
 
 export const ROLE_LANDING: Record<Role, string> = {
   employee:   '/dashboard',
-  lead:       '/team/dashboard',
   pm:         '/projects/dashboard',
-  dm:         '/dm/dashboard',
-  finance:    '/finance/dashboard',
-  leadership: '/leadership/dashboard',
   admin:      '/admin/dashboard',
   // Super Admin no longer owns the Admin Dashboard (user-administration stats) — it lands on
   // its own Executive Dashboard (organization-wide oversight) instead.

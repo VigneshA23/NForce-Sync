@@ -1,5 +1,5 @@
 import {
-  Activity, Ban, Bot, Building2, ClipboardCheck, ClipboardList, FolderKanban, Lock, Settings, Users,
+  Activity, Ban, Bot, Building2, ClipboardList, FolderKanban, Lock, Settings, Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Role } from '../../lib/types';
@@ -40,18 +40,6 @@ export const ASSISTANT_ROLE_CONTENT: Partial<Record<Role, AssistantRoleContent>>
       'How do I submit my EOD?',
       'How do I raise a blocker?',
       'Why is my utilization low this week?',
-    ],
-  },
-  lead: {
-    quickActions: [
-      { label: 'EOD Approvals', route: '/team/approvals', icon: ClipboardCheck },
-      { label: 'Blockers Inbox', route: '/team/blockers', icon: Ban },
-      { label: 'Team Utilization', route: '/team/utilization', icon: Activity },
-    ],
-    popularQuestions: [
-      "How do I approve a team member's EOD?",
-      'How do I resolve a blocker?',
-      'How is team utilization calculated?',
     ],
   },
   pm: {

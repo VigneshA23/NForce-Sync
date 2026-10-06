@@ -28,7 +28,7 @@ final class ProjectDataProviders {
 
         @Override public String id() { return "projects.mine"; }
         @Override public String title() { return "My current projects"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.EMPLOYEE); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(AppUser.Role.EMPLOYEE); }
         @Override public Set<String> modules() { return Set.of("projects"); }
 
         @Override
@@ -52,7 +52,8 @@ final class ProjectDataProviders {
 
         @Override public String id() { return "projects.lead"; }
         @Override public String title() { return "Projects I lead"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.MANAGER); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(); }
+        @Override public Set<String> audienceCapabilities() { return Set.of(CAPABILITY_LEADS_PROJECT); }
         @Override public Set<String> modules() { return Set.of("projects"); }
 
         @Override

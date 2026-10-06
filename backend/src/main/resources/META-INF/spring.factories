@@ -1,0 +1,2 @@
+org.springframework.boot.diagnostics.FailureAnalyzer=\
+  com.nforceone.sync.config.MissingEnvVarFailureAnalyzer

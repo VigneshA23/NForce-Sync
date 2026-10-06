@@ -6,6 +6,9 @@ import com.nforceone.sync.auth.dto.ForgotPasswordRequest;
 import com.nforceone.sync.auth.dto.LoginRequest;
 import com.nforceone.sync.auth.dto.LoginResponse;
 import com.nforceone.sync.auth.dto.UserDto;
+import com.nforceone.sync.project.AllocationRepository;
+import com.nforceone.sync.project.Project;
+import com.nforceone.sync.project.ProjectRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -19,6 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -34,6 +38,8 @@ public class AuthController {
     private final UserService userService;
     private final AccountLockoutService accountLockoutService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final ProjectRepository projectRepository;
+    private final AllocationRepository allocationRepository;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtService jwtService,
@@ -41,7 +47,9 @@ public class AuthController {
                           PasswordEncoder passwordEncoder,
                           UserService userService,
                           AccountLockoutService accountLockoutService,
-                          PasswordResetTokenRepository passwordResetTokenRepository) {
+                          PasswordResetTokenRepository passwordResetTokenRepository,
+                          ProjectRepository projectRepository,
+                          AllocationRepository allocationRepository) {
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.appUserRepository = appUserRepository;
@@ -49,6 +57,8 @@ public class AuthController {
         this.userService = userService;
         this.accountLockoutService = accountLockoutService;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.projectRepository = projectRepository;
+        this.allocationRepository = allocationRepository;
     }
 
     @PostMapping("/login")
@@ -82,7 +92,7 @@ public class AuthController {
             accountLockoutService.recordSuccess(existing);
             String token = jwtService.generateToken(user);
             return ResponseEntity.ok(
-                    new LoginResponse(token, UserDto.from(user), user.isMustChangePassword()));
+                    new LoginResponse(token, buildUserDto(user), user.isMustChangePassword()));
         } catch (BadCredentialsException e) {
             OptionalInt attemptsRemaining = accountLockoutService.recordFailure(existing);
             if (attemptsRemaining.isPresent() && attemptsRemaining.getAsInt() == 0) {
@@ -136,7 +146,7 @@ public class AuthController {
         AppUser user = appUserRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
-        return ResponseEntity.ok(UserDto.from(user));
+        return ResponseEntity.ok(buildUserDto(user));
     }
 
     @PostMapping("/change-password")
@@ -169,7 +179,7 @@ public class AuthController {
         // Issue a fresh token with mustChangePassword=false
         String newToken = jwtService.generateToken(user);
         return ResponseEntity.ok(
-                new LoginResponse(newToken, UserDto.from(user), false));
+                new LoginResponse(newToken, buildUserDto(user), false));
     }
 
     /**
@@ -194,6 +204,16 @@ public class AuthController {
                 "email", user.getEmail()));
     }
 
+    private UserDto buildUserDto(AppUser user) {
+        List<Project> led = projectRepository.findByLeadIdOrderByNameAsc(user.getId())
+                .stream().filter(p -> p.getStatus() == Project.Status.ACTIVE).toList();
+        List<Project> managed = projectRepository.findByPmIdOrderByNameAsc(user.getId())
+                .stream().filter(p -> p.getStatus() == Project.Status.ACTIVE).toList();
+        boolean hasDirectReports = appUserRepository.existsByManagerIdAndDeletedAtIsNull(user.getId());
+        String eodForm = computeEodForm(user);
+        return UserDto.from(user, led, managed, hasDirectReports, eodForm);
+    }
+
     private static String firstNameOf(AppUser user) {
         String fullName = user.getFullName();
         if (fullName == null || fullName.isBlank()) return "";
@@ -212,5 +232,26 @@ public class AuthController {
                     return user != null && user.getDeletedAt() == null
                             && user.getStatus() == AppUser.Status.ACTIVE;
                 });
+    }
+
+    /**
+     * Determines which EOD submission form this user should use.
+     * - EMPLOYEE always gets PROJECT_GROUPED (task-based form).
+     * - Any role with an active project allocation today gets PROJECT_GROUPED.
+     * - Any role with a reporting manager but no active allocation gets PLAIN_LOG (daily summary).
+     * - No reporting manager (top-level SuperAdmin) → null (no EOD submission).
+     */
+    private String computeEodForm(AppUser user) {
+        if (user.getRole() == AppUser.Role.EMPLOYEE) {
+            return "PROJECT_GROUPED";
+        }
+        if (user.getManager() == null) {
+            return null;
+        }
+        java.time.LocalDate today = java.time.LocalDate.now();
+        boolean hasAllocation = !allocationRepository
+                .findEmployeeIdsAllocatedOn(List.of(user.getId()), today)
+                .isEmpty();
+        return hasAllocation ? "PROJECT_GROUPED" : "PLAIN_LOG";
     }
 }

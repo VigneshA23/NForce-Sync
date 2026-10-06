@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class AssistantDataServiceTest {
 
     private static AssistantRequestContext context(AppUser.Role role) {
-        return new AssistantRequestContext(1L, "e@nforceone.com", role, role.name(), null, null);
+        return new AssistantRequestContext(1L, "e@nforceone.com", role, role.name(), null, null, java.util.Set.of());
     }
 
     private static RetrievalResult knowledgeIn(String module, double score) {
@@ -29,7 +29,7 @@ class AssistantDataServiceTest {
         return new AssistantDataProvider() {
             @Override public String id() { return id; }
             @Override public String title() { return id; }
-            @Override public Set<AppUser.Role> audiences() { return audiences; }
+            @Override public Set<AppUser.Role> audienceRoles() { return audiences; }
             @Override public Set<String> modules() { return modules; }
             @Override public Optional<String> fetch(AssistantRequestContext ctx) { return fetch.apply(ctx); }
         };

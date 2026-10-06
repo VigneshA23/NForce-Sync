@@ -13,6 +13,23 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
     List<Allocation> findByEmployeeId(Long employeeId);
     List<Allocation> findByProjectId(Long projectId);
 
+    /**
+     * Active team members for a Team Lead: distinct employees with an active allocation
+     * (effectiveFrom <= today AND effectiveTo IS NULL OR effectiveTo >= today) on any project
+     * where project.lead_id = leadId, excluding the lead themselves.
+     * Used by TeamLeadService.activeMembers() — the Phase 7b allocation-based "my team" definition.
+     */
+    @Query("SELECT DISTINCT a.employee FROM Allocation a " +
+           "JOIN a.project p " +
+           "WHERE p.lead.id = :leadId " +
+           "AND a.employee.id <> :leadId " +
+           "AND a.employee.status = com.nforceone.sync.auth.AppUser.Status.ACTIVE " +
+           "AND a.employee.deletedAt IS NULL " +
+           "AND a.effectiveFrom <= :today " +
+           "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :today)")
+    List<AppUser> findActiveMembersByProjectLead(@Param("leadId") Long leadId,
+                                                  @Param("today") LocalDate today);
+
     // JOIN FETCH employee + project to avoid N+1 lazy-load round trips when listing
     @Query("SELECT a FROM Allocation a JOIN FETCH a.employee JOIN FETCH a.project ORDER BY a.effectiveFrom DESC")
     List<Allocation> findAllWithRefsOrderByEffectiveFromDesc();
@@ -145,4 +162,10 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
          + "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :date)")
     Set<Long> findEmployeeIdsAllocatedOn(@Param("employeeIds") List<Long> employeeIds,
                                          @Param("date") LocalDate date);
+
+    @Query("SELECT COUNT(a) FROM Allocation a WHERE a.employee.id = :userId AND a.project.id = :projectId " +
+           "AND a.effectiveFrom <= :today AND (a.effectiveTo IS NULL OR a.effectiveTo >= :today)")
+    long countActiveByEmployeeIdAndProjectId(@Param("userId") Long userId,
+                                              @Param("projectId") Long projectId,
+                                              @Param("today") LocalDate today);
 }

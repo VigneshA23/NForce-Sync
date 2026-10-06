@@ -417,7 +417,7 @@ export function ProjectsPanel({
                   <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{fmtDateDMY(p.startDate)}</td>
                   <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>{p.endDate ? fmtDateDMY(p.endDate) : 'Ongoing'}</td>
                   <td style={{ ...tdStyle, color: 'var(--txt-mut)' }}>
-                    {teamColumn === 'lead' ? (p.pmName ?? 'Not Assigned') : p.allocatedHeadcount}
+                    {teamColumn === 'lead' ? (p.leadName ?? 'Not Assigned') : p.allocatedHeadcount}
                   </td>
                 </tr>
               ))

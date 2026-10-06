@@ -72,11 +72,9 @@ class PageRegistryParityTest {
     @Test
     void backendRoleMapMatchesAuthTs() throws IOException {
         String authTs = readFrontendFile("api/auth.ts");
-        // Mirrors RoleLabels' implicit pairing (backend AppUser.Role -> frontend UI role key) —
-        // confirms e.g. MANAGER still maps to the UI's "lead" (Team Lead), not "manager".
+        // Mirrors RoleLabels' implicit pairing (backend AppUser.Role -> frontend UI role key).
         Map<String, String> expected = Map.of(
-                "EMPLOYEE", "employee", "MANAGER", "lead", "SUPERADMIN", "superadmin",
-                "PM", "pm", "DM", "dm", "FINANCE", "finance", "LEADERSHIP", "leadership", "ADMIN", "admin");
+                "EMPLOYEE", "employee", "SUPERADMIN", "superadmin", "PM", "pm", "ADMIN", "admin");
         for (Map.Entry<String, String> e : expected.entrySet()) {
             Pattern p = Pattern.compile(e.getKey() + "\\s*:\\s*'" + e.getValue() + "'");
             assertTrue(p.matcher(authTs).find(),

@@ -1,0 +1,23 @@
+# Copy this file to application-local.yml and fill in your values.
+# application-local.yml is gitignored — never commit real credentials.
+#
+# Railway deployments: set the same keys as env vars (SPRING_DATASOURCE_URL, etc.)
+# instead of this file.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://<host>/<db>?sslmode=require
+    username: <db-username>
+    password: <db-password>
+
+app:
+  jwt:
+    # Minimum 32 characters for HS256. Generates a 400 at startup if missing.
+    secret: "<your-jwt-secret-min-32-chars>"
+  ai:
+    enabled: false          # set true to enable the AI assistant locally
+    mistral:
+      api-key: ""           # Mistral API key (required when ai.enabled=true)
+
+resend:
+  api-key: ""               # Resend API key (required for email delivery)

@@ -19,6 +19,7 @@ public record KnowledgeDocument(
         String workflowId,
         int version,
         Set<AppUser.Role> audience,
+        Set<String> capabilities,
         String sourceRef,
         String title,
         String body,
@@ -28,6 +29,7 @@ public record KnowledgeDocument(
         Map<String, Object> metadata
 ) {
     public KnowledgeDocument {
+        capabilities = capabilities == null ? Set.of() : Set.copyOf(capabilities);
         synonyms = synonyms == null ? List.of() : List.copyOf(synonyms);
         sources = sources == null ? List.of() : List.copyOf(sources);
         errorMessages = errorMessages == null ? List.of() : List.copyOf(errorMessages);
@@ -44,6 +46,7 @@ public record KnowledgeDocument(
         private String workflowId;
         private int version = 1;
         private Set<AppUser.Role> audience = Set.of();
+        private Set<String> capabilities = Set.of();
         private String sourceRef = "test:inline";
         private String title = "Untitled";
         private String body = "";
@@ -60,6 +63,7 @@ public record KnowledgeDocument(
         public Builder workflowId(String v) { this.workflowId = v; return this; }
         public Builder version(int v) { this.version = v; return this; }
         public Builder audience(Set<AppUser.Role> v) { this.audience = v; return this; }
+        public Builder capabilities(Set<String> v) { this.capabilities = v; return this; }
         public Builder sourceRef(String v) { this.sourceRef = v; return this; }
         public Builder title(String v) { this.title = v; return this; }
         public Builder body(String v) { this.body = v; return this; }
@@ -70,7 +74,7 @@ public record KnowledgeDocument(
 
         public KnowledgeDocument build() {
             return new KnowledgeDocument(knowledgeId, type, module, pageId, actionId, workflowId, version,
-                    audience, sourceRef, title, body, synonyms, sources, errorMessages, metadata);
+                    audience, capabilities, sourceRef, title, body, synonyms, sources, errorMessages, metadata);
         }
     }
 }

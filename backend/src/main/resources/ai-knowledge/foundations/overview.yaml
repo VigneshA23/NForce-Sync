@@ -3,7 +3,7 @@ knowledge:
     type: FOUNDATION
     module: foundations
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: What NForce Sync is
     synonyms:
       - what is sync
@@ -25,15 +25,13 @@ knowledge:
       - Blockers: obstacles an employee flags on a specific task, which their Team Lead or the
         project's Project Manager can see and respond to.
 
-      Access to pages and data depends on the signed-in user's role. Some roles (Delivery
-      Manager, Finance Admin, Leadership Viewer) currently only have roadmap placeholder pages —
-      their real functionality has not shipped yet.
+      Access to pages and data depends on the signed-in user's role.
 
   - knowledgeId: foundation.eod-cycle
     type: FOUNDATION
     module: eod
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: The EOD lifecycle, end to end
     synonyms:
       - how does eod work

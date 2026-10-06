@@ -3,7 +3,6 @@ package com.nforceone.sync.projectdashboard;
 import com.nforceone.sync.projectdashboard.dto.ProjectDashboardFiltersDto;
 import com.nforceone.sync.projectdashboard.dto.ProjectDashboardSummaryDto;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,7 +13,6 @@ import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/project-dashboard")
-@PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
 public class ProjectDashboardController {
 
     private final ProjectDashboardService dashboardService;

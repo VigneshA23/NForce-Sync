@@ -85,7 +85,7 @@ export interface AllocationOverviewDto {
 export interface ProjectAttentionDto {
   projectId: number;
   projectName: string;
-  projectManagerName: string | null;
+  pmName: string | null;
   status: string;
   metric: string;
   reason: string;

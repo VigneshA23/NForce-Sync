@@ -48,22 +48,22 @@ public interface EodClarificationRepository extends JpaRepository<EodClarificati
     List<EodClarification> findByEodEntry_Employee_IdAndStatusOrderByResolvedAtDesc(Long employeeId, EodClarification.Status status);
 
     // PM's EOD Inbox — read-only, cross-team, scoped by project ownership (mirrors
-    // PmBlockersService: EXISTS over eod_task.project.projectManager, not the entry's manager).
+    // PmBlockersService: EXISTS over eod_task.project.pm, not the entry's manager).
     @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
     @Query("""
         SELECT c FROM EodClarification c
         WHERE c.status <> com.nforceone.sync.eod.EodClarification.Status.RESOLVED
-          AND EXISTS (SELECT 1 FROM EodTask t WHERE t.eodEntry = c.eodEntry AND t.project.projectManager.id = :pmId)
+          AND EXISTS (SELECT 1 FROM EodTask t WHERE t.eodEntry = c.eodEntry AND t.project.pm.id = :pmId)
         ORDER BY c.openedAt DESC
         """)
-    List<EodClarification> findOpenByProjectManagerId(@Param("pmId") Long pmId);
+    List<EodClarification> findOpenByPmId(@Param("pmId") Long pmId);
 
     @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
     @Query("""
         SELECT c FROM EodClarification c
         WHERE c.status = com.nforceone.sync.eod.EodClarification.Status.RESOLVED
-          AND EXISTS (SELECT 1 FROM EodTask t WHERE t.eodEntry = c.eodEntry AND t.project.projectManager.id = :pmId)
+          AND EXISTS (SELECT 1 FROM EodTask t WHERE t.eodEntry = c.eodEntry AND t.project.pm.id = :pmId)
         ORDER BY c.resolvedAt DESC
         """)
-    List<EodClarification> findResolvedByProjectManagerId(@Param("pmId") Long pmId);
+    List<EodClarification> findResolvedByPmId(@Param("pmId") Long pmId);
 }

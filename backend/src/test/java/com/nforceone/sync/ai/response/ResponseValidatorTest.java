@@ -26,7 +26,7 @@ class ResponseValidatorTest {
     }
 
     private static AssistantRequestContext context(AppUser.Role role) {
-        return new AssistantRequestContext(1L, "employee@nforceone.com", role, role.name(), null, null);
+        return new AssistantRequestContext(1L, "employee@nforceone.com", role, role.name(), null, null, java.util.Set.of());
     }
 
     @Test
@@ -90,11 +90,11 @@ class ResponseValidatorTest {
     }
 
     @Test
-    void navigationToPlaceholderIsDroppedAndTypeDowngraded() {
-        // "dashboard" is a placeholder for DM.
-        String json = "{\"type\":\"NAVIGATION\",\"answer\":\"Go to your dashboard.\","
-                + "\"navigation\":{\"pageId\":\"dashboard\"}}";
-        AssistantResponse response = validator.validate(json, context(AppUser.Role.DM));
+    void navigationToAdminOnlyPageIsDroppedForEmployee() {
+        // "org-masters" has no EMPLOYEE variant — navigation must be dropped and type downgraded.
+        String json = "{\"type\":\"NAVIGATION\",\"answer\":\"Go to org masters.\","
+                + "\"navigation\":{\"pageId\":\"org-masters\"}}";
+        AssistantResponse response = validator.validate(json, context(AppUser.Role.EMPLOYEE));
         assertNull(response.navigation());
         assertEquals(AssistantResponseType.EXPLANATION, response.type());
     }
@@ -174,7 +174,7 @@ class ResponseValidatorTest {
     void claimedCompletedActionIsReplacedWithReadOnlyDecline() {
         // I19: a model answer falsely claiming a mutation was performed must never reach the user.
         String json = "{\"type\":\"HOW_TO\",\"answer\":\"I have approved your EOD entry for you.\"}";
-        AssistantResponse response = validator.validate(json, context(AppUser.Role.MANAGER));
+        AssistantResponse response = validator.validate(json, context(AppUser.Role.EMPLOYEE));
         assertEquals(AssistantResponseType.UNKNOWN, response.type());
         assertFalse(response.answer().toLowerCase().contains("i have approved"));
     }
@@ -190,7 +190,7 @@ class ResponseValidatorTest {
     void explainingHowToApproveIsNotFlaggedAsAClaimedAction() {
         // Must not false-positive on legitimate how-to text that merely mentions the verb.
         String json = "{\"type\":\"HOW_TO\",\"answer\":\"To approve an entry, open Approvals and click Approve.\"}";
-        AssistantResponse response = validator.validate(json, context(AppUser.Role.MANAGER));
+        AssistantResponse response = validator.validate(json, context(AppUser.Role.EMPLOYEE));
         assertEquals(AssistantResponseType.HOW_TO, response.type());
     }
 

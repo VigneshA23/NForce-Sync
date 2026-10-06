@@ -8,6 +8,7 @@ import com.nforceone.sync.pmblockers.dto.PmBlockerDto;
 import com.nforceone.sync.pmblockers.dto.PmBlockersFiltersDto;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
+import com.nforceone.sync.project.PmScopeService;
 import com.nforceone.sync.projectdashboard.dto.ProjectOptionDto;
 import com.nforceone.sync.projectdashboard.dto.TeamOptionDto;
 import org.springframework.http.HttpStatus;
@@ -25,9 +26,9 @@ import java.util.stream.Collectors;
 /**
  * Backs the read-only, cross-team Project Manager Blockers page — every blocker raised against
  * any project the PM owns, regardless of which Team Lead the reporting employee belongs to.
- * Scoped server-side to {@code project.projectManager.id == caller.id} (SUPERADMIN may view any
+ * Scoped server-side to {@code project.pm.id == caller.id} (SUPERADMIN may view any
  * PM's portfolio), matching {@code ProjectDashboardService}'s convention. Keys off
- * {@code projectManager}, not {@code pm} — the latter holds the Team Lead, so a PM id would
+ * {@code pm}, not {@code lead} — the latter holds the Team Lead, so a PM id would
  * never match it.
  */
 @Service
@@ -37,13 +38,16 @@ public class PmBlockersService {
     private final AppUserRepository appUserRepository;
     private final ProjectRepository projectRepository;
     private final EodTaskRepository eodTaskRepository;
+    private final PmScopeService pmScopeService;
 
     public PmBlockersService(AppUserRepository appUserRepository,
                               ProjectRepository projectRepository,
-                              EodTaskRepository eodTaskRepository) {
+                              EodTaskRepository eodTaskRepository,
+                              PmScopeService pmScopeService) {
         this.appUserRepository = appUserRepository;
         this.projectRepository = projectRepository;
         this.eodTaskRepository = eodTaskRepository;
+        this.pmScopeService = pmScopeService;
     }
 
     public PmBlockersFiltersDto getFilters(String actingEmail) {
@@ -119,9 +123,7 @@ public class PmBlockersService {
         AppUser user = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
-        if (user.getRole() != AppUser.Role.PM && user.getRole() != AppUser.Role.SUPERADMIN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Project Manager access required");
-        }
+        pmScopeService.requirePmScope(user);
         return user;
     }
 
@@ -129,6 +131,6 @@ public class PmBlockersService {
         if (pm.getRole() == AppUser.Role.SUPERADMIN) {
             return projectRepository.findAllWithPmOrderByNameAsc();
         }
-        return projectRepository.findByProjectManagerIdOrderByNameAsc(pm.getId());
+        return projectRepository.findByPmIdOrderByNameAsc(pm.getId());
     }
 }

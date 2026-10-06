@@ -17,8 +17,8 @@ export interface ProjectDetailDto {
   client: string | null;
   status: string;
   /** The Team Lead who approves this project's EOD entries; null when none is assigned. */
-  pmId: number | null;
-  pmName: string | null;
+  leadId: number | null;
+  leadName: string | null;
   startDate: string | null;
   endDate: string | null;
   employees: ProjectDetailEmployeeDto[];

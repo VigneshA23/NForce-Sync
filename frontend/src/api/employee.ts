@@ -205,7 +205,7 @@ export interface EmployeeProjectDto {
   projectId: number;
   projectCode: string;
   projectName: string;
-  pmName: string | null;
+  leadName: string | null;
   projectStatus: string;
   assignedFrom: string;
   assignedTo: string | null;

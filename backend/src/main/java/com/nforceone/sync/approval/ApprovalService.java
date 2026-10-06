@@ -102,7 +102,7 @@ public class ApprovalService {
 
         if (actor.getRole() == AppUser.Role.SUPERADMIN) {
             if (pmId != null) {
-                return enrichAll(entryRepository.findByProjectManagerIdAndStatus(pmId, EodEntry.Status.SUBMITTED));
+                return enrichAll(entryRepository.findByPmIdAndStatus(pmId, EodEntry.Status.SUBMITTED));
             }
             if (managerId != null) {
                 List<EodEntry> entries = (from != null && to != null)
@@ -114,7 +114,7 @@ public class ApprovalService {
         }
 
         if (actor.getRole() == AppUser.Role.PM) {
-            List<EodEntry> entries = entryRepository.findByProjectManagerIdAndStatus(actor.getId(), EodEntry.Status.SUBMITTED);
+            List<EodEntry> entries = entryRepository.findByPmIdAndStatus(actor.getId(), EodEntry.Status.SUBMITTED);
             return enrichAll(entries);
         }
         List<EodEntry> entries = (from != null && to != null)
@@ -145,7 +145,7 @@ public class ApprovalService {
 
         if (actor.getRole() == AppUser.Role.SUPERADMIN) {
             if (pmId != null) {
-                return enrichAll(entryRepository.findByProjectManagerIdAndStatus(pmId, status));
+                return enrichAll(entryRepository.findByPmIdAndStatus(pmId, status));
             }
             if (managerId != null) {
                 return enrichAll(entryRepository.findDecidedByManagerId(managerId, status));
@@ -156,8 +156,8 @@ public class ApprovalService {
         if (actor.getRole() == AppUser.Role.PM) {
             // Deliberately NOT scoped to actions this PM personally took — a PM oversees every
             // team touching their projects, so Approved/Rejected must include entries a Team
-            // Lead decided too. See findByProjectManagerIdAndStatus's javadoc.
-            List<EodEntry> entries = entryRepository.findByProjectManagerIdAndStatus(actor.getId(), status);
+            // Lead decided too. See findByPmIdAndStatus's javadoc.
+            List<EodEntry> entries = entryRepository.findByPmIdAndStatus(actor.getId(), status);
             return enrichAll(entries);
         }
         List<EodEntry> entries = entryRepository.findDecidedByManagerId(actor.getId(), status);
@@ -349,13 +349,13 @@ public class ApprovalService {
         boolean isDirectManager = manager != null && manager.getId().equals(actor.getId());
 
         // Keys off projectManager, NOT pm — pm holds the project's Team Lead. Using pm here let a
-        // PM load entries via findByProjectManagerIdAndStatus (which correctly keys off
+        // PM load entries via findByPmIdAndStatus (which correctly keys off
         // projectManager) and then get 403 on approve/reject, since their id was being matched
         // against the Team Lead field instead.
         boolean isProjectManager = entry.getTasks().stream()
                 .map(EodTask::getProject)
                 .filter(Objects::nonNull)
-                .map(Project::getProjectManager)
+                .map(Project::getPm)
                 .filter(Objects::nonNull)
                 .anyMatch(pm -> pm.getId().equals(actor.getId()));
 

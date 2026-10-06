@@ -68,9 +68,9 @@ public class KnowledgeSchemaValidator {
         }
 
         Set<AppUser.Role> audience = doc.audience();
-        if (audience == null || audience.isEmpty()) {
-            problems.add(where + ": audience must not be empty — an untagged unit is fail-closed "
-                    + "(visible to nobody), never fall back to visible-to-everyone");
+        if ((audience == null || audience.isEmpty()) && doc.capabilities().isEmpty()) {
+            problems.add(where + ": audience and capabilities must not both be empty — an untagged unit "
+                    + "is fail-closed (visible to nobody); set audience roles, capabilities, or both");
         }
 
         String body = doc.body() == null ? "" : doc.body().trim();

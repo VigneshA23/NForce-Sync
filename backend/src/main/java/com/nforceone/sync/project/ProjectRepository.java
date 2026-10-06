@@ -26,17 +26,16 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
                                                 @Param("onDate") LocalDate onDate,
                                                 @Param("status") Project.Status status);
 
-    // JOIN FETCH pm to avoid N+1 lazy-load round trips when listing for management view
+    // JOIN FETCH lead to avoid N+1 lazy-load round trips when listing for management view
     @org.springframework.data.jpa.repository.Query(
-            "SELECT p FROM Project p LEFT JOIN FETCH p.pm ORDER BY p.name ASC")
+            "SELECT p FROM Project p LEFT JOIN FETCH p.lead ORDER BY p.name ASC")
     List<Project> findAllWithPmOrderByNameAsc();
 
     /**
      * Projects a given PM oversees — the scope for the Project Dashboard and the PM reports.
-     * Keys off {@code projectManager}, not {@code pm}: the latter holds the Team Lead, who is a
-     * MANAGER, so a PM id would never match it.
+     * Keys off {@code pm} (the actual PM field after Phase 4 rename).
      */
-    List<Project> findByProjectManagerIdOrderByNameAsc(Long projectManagerId);
+    List<Project> findByPmIdOrderByNameAsc(Long pmId);
 
     /** FK guard for deleting a project type. */
     long countByProjectTypeId(Long projectTypeId);
@@ -44,6 +43,12 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     /** Org-wide project-status distribution — backs the Super Admin Executive Dashboard. */
     @Query("SELECT p.status, COUNT(p) FROM Project p GROUP BY p.status")
     List<Object[]> countGroupedByStatus();
+
+    /** True when the given user is the assigned lead of at least one project in the given status. */
+    boolean existsByLeadIdAndStatus(Long leadId, Project.Status status);
+
+    /** True when the given user is the assigned PM of at least one project in the given status. */
+    boolean existsByPmIdAndStatus(Long pmId, Project.Status status);
 
     /** Grouped-headcount idiom, keyed on project type. */
     @Query("SELECT p.projectType.id, COUNT(DISTINCT a.employee.id) " +
@@ -56,8 +61,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     // "My Projects" for an Employee (and, historically, mis-used for the Team Lead's own list
     // too): the given AppUser's OWN allocation rows — i.e. projects they are personally staffed
     // on. Still correct for that purpose; it is NOT who a project's assigned Team Lead is, so it
-    // must not be used to scope the Team Lead "My Projects" list (see findByPmIdOrderByNameAsc).
-    @Query("SELECT DISTINCT a.project FROM Allocation a LEFT JOIN FETCH a.project.pm " +
+    // must not be used to scope the Team Lead "My Projects" list (see findByLeadIdOrderByNameAsc).
+    @Query("SELECT DISTINCT a.project FROM Allocation a LEFT JOIN FETCH a.project.lead " +
            "WHERE a.employee.id = :teamLeadId " +
            "AND a.effectiveFrom <= :onDate " +
            "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :onDate) " +
@@ -66,11 +71,10 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
                                                 @Param("onDate") LocalDate onDate);
 
     /**
-     * Projects actually assigned to this Team Lead — keyed on {@code Project.pm} (the {@code
-     * pm_id} column), which is the real Team Lead-of-project relationship, regardless of whether
-     * that Team Lead also happens to hold a personal Allocation row on the project. This is the
-     * source of truth for the Team Lead "My Projects" list.
+     * Projects actually assigned to this Team Lead — keyed on {@code Project.lead} (the
+     * {@code lead_id} column after Phase 4 rename). Source of truth for the Team Lead
+     * "My Projects" list.
      */
-    @Query("SELECT p FROM Project p LEFT JOIN FETCH p.pm WHERE p.pm.id = :teamLeadId ORDER BY p.name ASC")
-    List<Project> findByPmIdOrderByNameAsc(@Param("teamLeadId") Long teamLeadId);
+    @Query("SELECT p FROM Project p LEFT JOIN FETCH p.lead WHERE p.lead.id = :teamLeadId ORDER BY p.name ASC")
+    List<Project> findByLeadIdOrderByNameAsc(@Param("teamLeadId") Long teamLeadId);
 }

@@ -82,6 +82,11 @@ public class BusinessRuleConfig {
     @Column(name = "monthly_adjustment_minutes", nullable = false)
     private Integer monthlyAdjustmentMinutes;
 
+    // Non-project hours per day that need no review (Phase 1: stored, not yet consumed by router).
+    // Configurable in Business Rules admin screen. Added V99.
+    @Column(name = "non_project_auto_approve_hours", nullable = false)
+    private BigDecimal nonProjectAutoApproveHours;
+
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 

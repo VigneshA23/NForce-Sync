@@ -38,13 +38,14 @@ import static org.mockito.Mockito.*;
 class DataProviderSafetyTest {
 
     private static final AssistantRequestContext EMPLOYEE_CTX =
-            new AssistantRequestContext(42L, "employee@nforceone.com", AppUser.Role.EMPLOYEE, "Employee", null, null);
-    private static final AssistantRequestContext MANAGER_CTX =
-            new AssistantRequestContext(42L, "lead@nforceone.com", AppUser.Role.MANAGER, "Team Lead", null, null);
+            new AssistantRequestContext(42L, "employee@nforceone.com", AppUser.Role.EMPLOYEE, "Employee", null, null, Set.of());
+    private static final AssistantRequestContext LEAD_CTX =
+            new AssistantRequestContext(42L, "lead@nforceone.com", AppUser.Role.EMPLOYEE, "Employee",
+                    null, null, Set.of(AssistantDataProvider.CAPABILITY_LEADS_PROJECT));
     private static final AssistantRequestContext PM_CTX =
-            new AssistantRequestContext(42L, "pm@nforceone.com", AppUser.Role.PM, "Project Manager", null, null);
+            new AssistantRequestContext(42L, "pm@nforceone.com", AppUser.Role.PM, "Project Manager", null, null, Set.of());
     private static final AssistantRequestContext SUPERADMIN_CTX =
-            new AssistantRequestContext(42L, "admin@nforceone.com", AppUser.Role.SUPERADMIN, "Super Admin", null, null);
+            new AssistantRequestContext(42L, "admin@nforceone.com", AppUser.Role.SUPERADMIN, "Super Admin", null, null, Set.of());
 
     @Test
     void completeProviderListIsPinned() {
@@ -109,11 +110,11 @@ class DataProviderSafetyTest {
     @Test
     void clarificationLeadCallsOnlyListForLeadSelfScoped() {
         EodClarificationService service = mock(EodClarificationService.class);
-        when(service.listForLead(eq(MANAGER_CTX.email()), eq(true))).thenReturn(List.of());
+        when(service.listForLead(eq(LEAD_CTX.email()), eq(true))).thenReturn(List.of());
 
-        new EodDataProviders.ClarificationLeadProvider(service).fetch(MANAGER_CTX);
+        new EodDataProviders.ClarificationLeadProvider(service).fetch(LEAD_CTX);
 
-        verify(service).listForLead(eq(MANAGER_CTX.email()), eq(true));
+        verify(service).listForLead(eq(LEAD_CTX.email()), eq(true));
         verifyNoMoreInteractions(service);
     }
 
@@ -142,13 +143,13 @@ class DataProviderSafetyTest {
     @Test
     void projectsLeadCallsOnlyListMyProjectsSelfScopedWithNoTeamLeadOverride() {
         TeamLeadProjectService service = mock(TeamLeadProjectService.class);
-        when(service.listMyProjects(eq(MANAGER_CTX.email()), any(), isNull())).thenReturn(List.of());
+        when(service.listMyProjects(eq(LEAD_CTX.email()), any(), isNull())).thenReturn(List.of());
 
-        new ProjectDataProviders.ProjectsLeadProvider(service).fetch(MANAGER_CTX);
+        new ProjectDataProviders.ProjectsLeadProvider(service).fetch(LEAD_CTX);
 
         // teamLeadId must be null — only a Super Admin may pass an override, and this provider
         // never offers one.
-        verify(service).listMyProjects(eq(MANAGER_CTX.email()), any(), isNull());
+        verify(service).listMyProjects(eq(LEAD_CTX.email()), any(), isNull());
         verifyNoMoreInteractions(service);
     }
 
@@ -180,11 +181,11 @@ class DataProviderSafetyTest {
     @Test
     void blockersTeamCallsOnlyGetBlockersSelfScopedWithNoTeamLeadOverride() {
         TeamLeadService service = mock(TeamLeadService.class);
-        when(service.getBlockers(any(), any(), eq(MANAGER_CTX.email()), eq(false), isNull())).thenReturn(List.of());
+        when(service.getBlockers(any(), any(), eq(LEAD_CTX.email()), eq(false), isNull())).thenReturn(List.of());
 
-        new BlockerDataProviders.BlockersTeamProvider(service).fetch(MANAGER_CTX);
+        new BlockerDataProviders.BlockersTeamProvider(service).fetch(LEAD_CTX);
 
-        verify(service).getBlockers(any(), any(), eq(MANAGER_CTX.email()), eq(false), isNull());
+        verify(service).getBlockers(any(), any(), eq(LEAD_CTX.email()), eq(false), isNull());
         verifyNoMoreInteractions(service);
     }
 
@@ -216,11 +217,11 @@ class DataProviderSafetyTest {
         TeamLeadService service = mock(TeamLeadService.class);
         var dto = new com.nforceone.sync.teamlead.dto.TeamLeadSummaryDto(
                 0, 0, 0, 0, 0, null, 0, 0, 0, null, false);
-        when(service.getSummary(any(), any(), eq(MANAGER_CTX.email()), isNull())).thenReturn(dto);
+        when(service.getSummary(any(), any(), eq(LEAD_CTX.email()), isNull())).thenReturn(dto);
 
-        new DashboardDataProviders.TeamSummaryProvider(service).fetch(MANAGER_CTX);
+        new DashboardDataProviders.TeamSummaryProvider(service).fetch(LEAD_CTX);
 
-        verify(service).getSummary(any(), any(), eq(MANAGER_CTX.email()), isNull());
+        verify(service).getSummary(any(), any(), eq(LEAD_CTX.email()), isNull());
         verifyNoMoreInteractions(service);
     }
 

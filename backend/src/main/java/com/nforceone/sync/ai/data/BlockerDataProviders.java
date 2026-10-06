@@ -34,7 +34,7 @@ final class BlockerDataProviders {
 
         @Override public String id() { return "blockers.mine"; }
         @Override public String title() { return "My open blockers"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.EMPLOYEE); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(AppUser.Role.EMPLOYEE); }
         @Override public Set<String> modules() { return Set.of("blockers"); }
 
         @Override
@@ -60,7 +60,8 @@ final class BlockerDataProviders {
 
         @Override public String id() { return "blockers.team"; }
         @Override public String title() { return "Open blockers on my team"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.MANAGER); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(); }
+        @Override public Set<String> audienceCapabilities() { return Set.of(CAPABILITY_LEADS_PROJECT); }
         @Override public Set<String> modules() { return Set.of("blockers"); }
 
         @Override
@@ -86,7 +87,7 @@ final class BlockerDataProviders {
 
         @Override public String id() { return "blockers.pm"; }
         @Override public String title() { return "Open blockers on my projects"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.PM); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(AppUser.Role.PM); }
         @Override public Set<String> modules() { return Set.of("blockers"); }
 
         @Override

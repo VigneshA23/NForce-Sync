@@ -9,8 +9,7 @@ import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 // ── Data derived from grep -rn "@PreAuthorize" backend/src ────────────────────
 //
 // Only these tiers are enforced at the API (Spring Security @PreAuthorize).
-// All other role distinctions — TEAMLEAD, DM, FINANCE, LEADERSHIP — are
-// enforced by the frontend routing layer only (nav.ts + Shell access guard).
+// Team Lead distinction comes from project assignment (capability), not a separate role.
 //
 // User administration (user CRUD, audit log, role info, admin stats) is owned by Admin —
 // split off from Super Admin, which keeps system-wide operational oversight (business rules,
@@ -19,7 +18,7 @@ import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 //
 // This page is READ-ONLY. Permissions are code-defined and cannot be changed here.
 
-const ROLE_ORDER = ['EMPLOYEE', 'TEAMLEAD', 'PM', 'DM', 'FINANCE', 'LEADERSHIP', 'ADMIN', 'SUPERADMIN'];
+const ROLE_ORDER = ['EMPLOYEE', 'PM', 'ADMIN', 'SUPERADMIN'];
 
 interface PermRow {
   label: string;
@@ -37,18 +36,18 @@ const GROUPS: PermGroup[] = [
   {
     label: 'Authenticated: all roles',
     rows: [
-      { label: 'Submit & view own EOD',       endpoint: 'POST /api/eod, GET /api/eod',           roles: ['EMPLOYEE','TEAMLEAD','PM','DM','FINANCE','LEADERSHIP','ADMIN','SUPERADMIN'], tier: 'api' },
-      { label: 'View / approve EOD entries',  endpoint: 'GET /api/approvals/pending',             roles: ['EMPLOYEE','TEAMLEAD','PM','DM','FINANCE','LEADERSHIP','ADMIN','SUPERADMIN'], tier: 'api' },
-      { label: 'Read org masters',            endpoint: 'GET /api/org/*',                         roles: ['EMPLOYEE','TEAMLEAD','PM','DM','FINANCE','LEADERSHIP','ADMIN','SUPERADMIN'], tier: 'api' },
-      { label: 'Profile & Notifications',     endpoint: 'GET /api/users/me, GET /api/notifications', roles: ['EMPLOYEE','TEAMLEAD','PM','DM','FINANCE','LEADERSHIP','ADMIN','SUPERADMIN'], tier: 'api' },
+      { label: 'Submit & view own EOD',       endpoint: 'POST /api/eod, GET /api/eod',           roles: ['EMPLOYEE','PM','ADMIN','SUPERADMIN'], tier: 'api' },
+      { label: 'View / approve EOD entries',  endpoint: 'GET /api/approvals/pending',             roles: ['EMPLOYEE','PM','ADMIN','SUPERADMIN'], tier: 'api' },
+      { label: 'Read org masters',            endpoint: 'GET /api/org/*',                         roles: ['EMPLOYEE','PM','ADMIN','SUPERADMIN'], tier: 'api' },
+      { label: 'Profile & Notifications',     endpoint: 'GET /api/users/me, GET /api/notifications', roles: ['EMPLOYEE','PM','ADMIN','SUPERADMIN'], tier: 'api' },
     ],
   },
   {
-    label: 'Project management: PM + Super Admin',
+    label: 'Project management: PM, Admin + Super Admin',
     rows: [
-      { label: 'List & create projects',      endpoint: 'GET/POST /api/projects',                 roles: ['PM','SUPERADMIN'], tier: 'api' },
-      { label: 'Update projects',             endpoint: 'PUT /api/projects/:id',                  roles: ['PM','SUPERADMIN'], tier: 'api' },
-      { label: 'Manage project allocation',   endpoint: 'GET/POST /api/allocation',               roles: ['PM','SUPERADMIN'], tier: 'api' },
+      { label: 'List & create projects',      endpoint: 'GET/POST /api/projects',                 roles: ['PM','ADMIN','SUPERADMIN'], tier: 'api' },
+      { label: 'Update projects',             endpoint: 'PUT /api/projects/:id',                  roles: ['PM','ADMIN','SUPERADMIN'], tier: 'api' },
+      { label: 'Manage project allocation',   endpoint: 'GET/POST /api/allocation',               roles: ['PM','ADMIN','SUPERADMIN'], tier: 'api' },
     ],
   },
   {
@@ -69,18 +68,15 @@ const GROUPS: PermGroup[] = [
     ],
   },
   {
-    label: 'System configuration: Super Admin only',
+    label: 'System configuration: Admin + Super Admin',
     rows: [
-      { label: 'Business rules config',        endpoint: 'GET/PUT /api/admin/business-rules/*',    roles: ['SUPERADMIN'], tier: 'api' },
+      { label: 'Business rules config',        endpoint: 'GET/PUT /api/admin/business-rules/*',    roles: ['ADMIN','SUPERADMIN'], tier: 'api' },
     ],
   },
   {
     label: 'Navigation: UI routing only (not backend-enforced)',
     rows: [
-      { label: 'Team dashboard & approvals',  endpoint: '/team/*', roles: ['TEAMLEAD','SUPERADMIN'], tier: 'ui' },
-      { label: 'Delivery management',         endpoint: '/dm/*',   roles: ['DM','SUPERADMIN'],       tier: 'ui' },
-      { label: 'Finance modules',             endpoint: '/finance/*', roles: ['FINANCE','SUPERADMIN'], tier: 'ui' },
-      { label: 'Org-wide analytics',          endpoint: '/leadership/*', roles: ['LEADERSHIP','SUPERADMIN'], tier: 'ui' },
+      { label: 'Team dashboard & approvals (capability-gated)', endpoint: '/team/*', roles: ['EMPLOYEE'], tier: 'ui' },
       { label: 'User Administration console', endpoint: '/admin/dashboard, /admin/users, /admin/roles, /admin/audit', roles: ['ADMIN'], tier: 'ui' },
       { label: 'Organization Masters console', endpoint: '/admin/org-masters', roles: ['ADMIN','SUPERADMIN'], tier: 'ui' },
       { label: 'Executive Dashboard',         endpoint: '/admin/executive-dashboard', roles: ['SUPERADMIN'], tier: 'ui' },
@@ -289,6 +285,19 @@ export default function RolesAccess() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* Concept notes */}
+          <div style={{
+            background: 'var(--panel)', border: '1px solid var(--line)', borderTop: 'none',
+            padding: '12px 20px', display: 'flex', flexWrap: 'wrap', gap: 12,
+          }}>
+            <div style={{ fontSize: 12, color: 'var(--txt-dim)', padding: '8px 12px', background: 'var(--raised2)', border: '1px solid var(--line)', borderRadius: 8 }}>
+              <strong style={{ color: 'var(--txt)' }}>Team Lead</strong> is a project assignment, not a role — any active non-PM user can be assigned as a project&apos;s Team Lead and will see the Team Lead views (team dashboard, approvals, reports) for that project.
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--txt-dim)', padding: '8px 12px', background: 'var(--raised2)', border: '1px solid var(--line)', borderRadius: 8 }}>
+              <strong style={{ color: 'var(--txt)' }}>Reporting Manager</strong> is a hierarchical relationship (manager_id on the user account) — any active user can be set as another user&apos;s reporting manager, regardless of their own role. Users with at least one direct report see the &ldquo;My Reporting Team&rdquo; nav section.
             </div>
           </div>
 

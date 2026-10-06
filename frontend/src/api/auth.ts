@@ -4,14 +4,22 @@ import type { Role } from '../lib/types';
 
 const BACKEND_ROLE_MAP: Record<string, Role> = {
   EMPLOYEE:   'employee',
-  MANAGER:    'lead',
   SUPERADMIN: 'superadmin',
   PM:         'pm',
-  DM:         'dm',
-  FINANCE:    'finance',
-  LEADERSHIP: 'leadership',
   ADMIN:      'admin',
 };
+
+export interface ServerUserCapabilities {
+  leadsProjectIds: number[];
+  leadsProjectNames: string[];
+  managesProjectIds: number[];
+  managesProjectNames: string[];
+  hasDirectReports: boolean;
+  /** null = no EOD submission; 'PROJECT_GROUPED' = task-based; 'PLAIN_LOG' = daily log */
+  eodForm: 'PROJECT_GROUPED' | 'PLAIN_LOG' | null;
+  /** Convenience: true when eodForm is non-null */
+  submitsEod: boolean;
+}
 
 export interface ServerUser {
   id: number;
@@ -21,6 +29,7 @@ export interface ServerUser {
   employeeCode: string;
   status: string;
   mustChangePassword: boolean;
+  capabilities: ServerUserCapabilities;
 }
 
 export function toRole(serverRole: string): Role {

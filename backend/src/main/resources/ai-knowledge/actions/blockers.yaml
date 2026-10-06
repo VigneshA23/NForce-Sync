@@ -5,7 +5,7 @@ knowledge:
     pageId: blockers
     actionId: blockers.manage
     version: 1
-    audience: [EMPLOYEE, MANAGER, PM]
+    audience: [EMPLOYEE, PM]
     title: Raising and resolving a blocker
     synonyms:
       - I'm blocked on a task

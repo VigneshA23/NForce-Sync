@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Menu, X, Search, Bell, LogOut, UserCircle2, HelpCircle, FolderKanban, ChevronDown, KeyRound, Settings } from 'lucide-react';
 import { BrandMark } from './BrandMark';
-import { NAV, ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, navSubItemPath, isNavGroup } from '../lib/nav';
+import { ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, getNavSections, navSubItemPath, isNavGroup } from '../lib/nav';
 import type { NavItem } from '../lib/nav';
 import { useAuth, getHomeRouteForRole } from '../lib/auth';
 import { useAccentColor, ACCENT_BAND_POSITION_X } from '../lib/accentColor';
@@ -91,7 +91,8 @@ function WorkspaceSearch() {
   // expose more than — what NAV[role] actually grants this user.
   const searchableEntries = useMemo<SearchableNavEntry[]>(() => {
     const entries: SearchableNavEntry[] = [];
-    for (const section of NAV[role]) {
+    const caps = user!.capabilities;
+    for (const section of getNavSections(role, caps)) {
       for (const entry of section.items) {
         // A group's children are searchable individually (with the group as parentLabel); the
         // group itself has no path of its own, so it isn't a navigable search result.
@@ -181,8 +182,7 @@ function WorkspaceSearch() {
 
   function projectRoute(): string {
     if (role === 'pm') return '/projects';
-    if (role === 'lead') return '/team/projects';
-    if (role === 'dm') return '/dm/allocation';
+    if ((user!.capabilities?.leadsProjectIds?.length ?? 0) > 0) return '/team/projects';
     if (role === 'employee') return '/my-projects';
     return '/projects';
   }
@@ -517,7 +517,8 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const location = useLocation();
 
   const role = user!.role;
-  const navSections = NAV[role];
+  const caps = user!.capabilities;
+  const navSections = getNavSections(role, caps);
 
   // Expand/collapse state for NavGroups (e.g. Super Admin's "Project Manager Views" / "Team
   // Lead Views") — local to this mounted Shell, so it resets naturally on logout/login (the
@@ -538,21 +539,22 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
     setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
+  const isLead = caps.leadsProjectIds.length > 0;
+  const isPm   = role === 'pm'   || caps.managesProjectIds.length > 0;
+
   // Sidebar Approvals badge, the Team Dashboard "Pending Approval" KPI, and the
   // Approvals page count all read this same live query — see api/approvals.ts.
-  // Shared by both roles that have an Approvals page (Team Lead and Project Manager) —
-  // the query itself resolves "pending for me" differently server-side per role.
-  const pendingApprovalsCount = usePendingApprovalsCount(role === 'lead' || role === 'pm');
+  // Shared by Team Lead and PM sections, regardless of stored role.
+  const pendingApprovalsCount = usePendingApprovalsCount(isLead || isPm);
 
   // Sidebar Blockers badge — same "today" summary query (and cache key) as the Team
-  // Dashboard's "Open Blockers" KPI fallback, warmed by prefetchTeamLeadLanding right
-  // after login, so the two can never disagree. Team Lead only, per that KPI's own scope.
+  // Dashboard's "Open Blockers" KPI fallback. Scoped to Team Lead section users.
   const { data: teamLeadSummary } = useTeamLeadSummary(
     { from: todayISO(), to: todayISO() },
     true,
-    role === 'lead',
+    isLead,
   );
-  const openBlockersCount = role === 'lead' ? (teamLeadSummary?.activeBlockersCount ?? 0) : 0;
+  const openBlockersCount = isLead ? (teamLeadSummary?.activeBlockersCount ?? 0) : 0;
 
   // Sidebar Blockers badge for PM — scoped to the same date range as the PM Blockers page
   // itself (mode/from/to), counting open blockers (status !== RESOLVED) the same way the page's
@@ -565,15 +567,15 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const pmBlockersRange = resolveBlockersDateFilter(
     location.pathname === '/projects/blockers' ? new URLSearchParams(location.search) : new URLSearchParams(),
   ).range;
-  const { data: pmRangeBlockers } = usePmBlockers(pmBlockersRange, role === 'pm');
-  const pmOpenBlockersCount = role === 'pm'
+  const { data: pmRangeBlockers } = usePmBlockers(pmBlockersRange, isPm);
+  const pmOpenBlockersCount = isPm
     ? (pmRangeBlockers ?? []).filter(b => b.status !== 'RESOLVED').length
     : 0;
 
   // Sidebar EOD Inbox badge — open clarification count, for Team Lead, PM, and Employee alike.
   // Shares the "open" list's query cache with the EOD Inbox page itself (see useEodInboxCount).
-  const eodInboxRole = role === 'lead' ? 'lead' : role === 'pm' ? 'pm' : 'employee';
-  const eodInboxCount = useEodInboxCount(eodInboxRole, role === 'lead' || role === 'pm' || role === 'employee');
+  const eodInboxRole = isLead ? 'lead' : isPm ? 'pm' : 'employee';
+  const eodInboxCount = useEodInboxCount(eodInboxRole, isLead || isPm || role === 'employee');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -644,15 +646,11 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 
             {section.items.map((entry) => {
               function badgeFor(item: NavItem): number | undefined {
-                return (role === 'lead' || role === 'pm') && item.key === 'approvals'
-                  ? pendingApprovalsCount
-                  : role === 'lead' && item.key === 'blockers'
-                    ? openBlockersCount
-                    : role === 'pm' && item.key === 'blockers'
-                      ? pmOpenBlockersCount
-                      : (role === 'lead' || role === 'pm' || role === 'employee') && item.key === 'eod-inbox'
-                        ? eodInboxCount
-                        : item.badge;
+                if ((isLead || isPm) && item.key === 'approvals') return pendingApprovalsCount;
+                if (isLead && item.key === 'blockers') return openBlockersCount;
+                if (isPm && item.key === 'blockers') return pmOpenBlockersCount;
+                if ((isLead || isPm || role === 'employee') && item.key === 'eod-inbox') return eodInboxCount;
+                return item.badge;
               }
 
               if (isNavGroup(entry)) {
@@ -713,7 +711,8 @@ export function Shell() {
   const reduced   = useReducedMotion();
 
   const role         = user!.role;
-  const allowedPaths = getNavPaths(role);
+  const userCaps     = user!.capabilities;
+  const allowedPaths = getNavPaths(role, userCaps);
   const isAllowed    = allowedPaths.includes(location.pathname)
     || location.pathname === '/'
     || location.pathname === '/change-password'
@@ -727,7 +726,7 @@ export function Shell() {
     || location.pathname === '/admin/unallocated-resources';
 
   // FIX 4: derive breadcrumb label from nav map
-  const navInfo  = getNavItem(role, location.pathname);
+  const navInfo  = getNavItem(role, location.pathname, userCaps);
   const pageLabel = navInfo?.item.label
     ?? (location.pathname === '/notifications' ? 'Notifications'
       : location.pathname === '/profile' ? 'Profile'

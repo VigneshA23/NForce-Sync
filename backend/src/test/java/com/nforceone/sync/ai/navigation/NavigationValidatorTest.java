@@ -23,7 +23,7 @@ class NavigationValidatorTest {
     }
 
     private static AssistantRequestContext context(AppUser.Role role) {
-        return new AssistantRequestContext(1L, "e@nforceone.com", role, role.name(), null, null);
+        return new AssistantRequestContext(1L, "e@nforceone.com", role, role.name(), null, null, java.util.Set.of());
     }
 
     @Test
@@ -35,16 +35,16 @@ class NavigationValidatorTest {
     }
 
     @Test
-    void placeholderPageNeverValidatesAsANavigationTarget() {
-        assertTrue(validator.validate("dashboard", context(AppUser.Role.DM)).isEmpty());
-        assertTrue(validator.validate("dashboard", context(AppUser.Role.FINANCE)).isEmpty());
-        assertTrue(validator.validate("dashboard", context(AppUser.Role.LEADERSHIP)).isEmpty());
+    void adminOnlyPageDoesNotValidateForEmployee() {
+        assertTrue(validator.validate("user-management", context(AppUser.Role.EMPLOYEE)).isEmpty());
+        assertTrue(validator.validate("audit-log", context(AppUser.Role.EMPLOYEE)).isEmpty());
+        assertTrue(validator.validate("roles-access", context(AppUser.Role.EMPLOYEE)).isEmpty());
     }
 
     @Test
     void pageNotReachableByRoleDoesNotValidate() {
         assertTrue(validator.validate("user-management", context(AppUser.Role.EMPLOYEE)).isEmpty());
-        assertTrue(validator.validate("audit-log", context(AppUser.Role.MANAGER)).isEmpty());
+        assertTrue(validator.validate("audit-log", context(AppUser.Role.EMPLOYEE)).isEmpty());
     }
 
     @Test
@@ -59,10 +59,8 @@ class NavigationValidatorTest {
     }
 
     @Test
-    void currentPageValidationAllowsPlaceholdersForContextOnly() {
-        // A placeholder is fine as "what page am I looking at" context, just never as a target.
-        Optional<PageReference> ref = validator.validateCurrentPage("dashboard", context(AppUser.Role.DM));
+    void currentPageValidationReturnsPresentForKnownRoleAndPage() {
+        Optional<PageReference> ref = validator.validateCurrentPage("dashboard", context(AppUser.Role.EMPLOYEE));
         assertTrue(ref.isPresent());
-        assertTrue(ref.get().placeholder());
     }
 }

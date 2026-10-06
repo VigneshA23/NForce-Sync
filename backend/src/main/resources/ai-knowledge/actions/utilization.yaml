@@ -5,7 +5,7 @@ knowledge:
     pageId: utilization
     actionId: utilization.view
     version: 1
-    audience: [EMPLOYEE, MANAGER, PM]
+    audience: [EMPLOYEE, PM]
     title: How utilization is calculated
     synonyms:
       - what is my utilization

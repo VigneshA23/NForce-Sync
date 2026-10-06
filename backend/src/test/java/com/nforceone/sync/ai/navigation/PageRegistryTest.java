@@ -22,7 +22,7 @@ class PageRegistryTest {
 
     @Test
     void loadsAllExpectedPages() {
-        assertEquals(30, registry.size());
+        assertEquals(23, registry.size());
         assertTrue(registry.exists("dashboard"));
         assertTrue(registry.exists("eod-submit"));
         assertFalse(registry.exists("no-such-page"));
@@ -51,16 +51,10 @@ class PageRegistryTest {
     }
 
     @Test
-    void placeholderPagesAreMarkedAndExcludedFromReachablePages() {
-        Optional<PageReference> dmDashboard = registry.find("dashboard", AppUser.Role.DM);
-        assertTrue(dmDashboard.orElseThrow().placeholder());
-
-        List<PageReference> dmReal = registry.forRole(AppUser.Role.DM);
-        assertTrue(dmReal.stream().noneMatch(p -> p.pageId().equals("dashboard")),
-                "a placeholder page must not appear in forRole()");
-
-        List<PageReference> dmPlaceholders = registry.placeholdersForRole(AppUser.Role.DM);
-        assertTrue(dmPlaceholders.stream().anyMatch(p -> p.pageId().equals("dashboard")));
+    void unknownRoleReturnsEmptyForAnyPage() {
+        // DM/FINANCE/LEADERSHIP no longer exist in AppUser.Role — passing null simulates an
+        // unknown role; find() handles it gracefully with Optional.empty().
+        assertTrue(registry.find("dashboard", null).isEmpty());
     }
 
     @Test

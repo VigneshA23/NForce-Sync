@@ -214,9 +214,9 @@ interface ProjectFormState {
   startDate: string;
   endDate: string;
   /** The project's Team Lead, held as a string because it is bound to a <select>. */
-  pmId: string;
+  leadId: string;
   /** The overseeing PM — what scopes their Approvals queue, dashboard and reports. */
-  projectManagerId: string;
+  pmId: string;
 }
 
 /**
@@ -338,7 +338,7 @@ function dayAfterISO(iso: string): string | undefined {
 
 const EMPTY_PROJECT_FORM: ProjectFormState = {
   code: '', name: '', client: '', projectTypeId: '',
-  status: 'ACTIVE', startDate: todayISO(), endDate: '', pmId: '', projectManagerId: '',
+  status: 'ACTIVE', startDate: todayISO(), endDate: '', leadId: '', pmId: '',
 };
 
 /** Inline validation message shown directly under the field it belongs to. */
@@ -346,6 +346,94 @@ function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
   return (
     <p role="alert" style={{ fontSize: 11, margin: '5px 0 0', color: 'var(--risk)' }}>{msg}</p>
+  );
+}
+
+/**
+ * Combobox that filters a list of options by free-text search. Replaces plain <select> where
+ * the list is long enough that scrolling is impractical (leads, managers, employees).
+ */
+function SearchableSelect({ value, onChange, options, placeholder, autoFocus }: {
+  value: string;
+  onChange: (id: string) => void;
+  options: Array<{ id: number | string; label: string }>;
+  placeholder?: string;
+  autoFocus?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const selected = options.find(o => String(o.id) === value);
+  const displayValue = open ? query : (selected?.label ?? '');
+
+  const filtered = useMemo(() => {
+    if (!query) return options;
+    const q = query.toLowerCase();
+    return options.filter(o => o.label.toLowerCase().includes(q));
+  }, [options, query]);
+
+  function handleFocus() {
+    setOpen(true);
+    setQuery('');
+  }
+
+  function handleBlur() {
+    setTimeout(() => setOpen(false), 120);
+  }
+
+  function handleSelect(id: string) {
+    onChange(id);
+    setQuery('');
+    setOpen(false);
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        style={inputStyle}
+        value={displayValue}
+        onChange={e => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        autoFocus={autoFocus}
+        placeholder={placeholder}
+        autoComplete="off"
+      />
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1000,
+          background: 'var(--panel)', border: '1px solid var(--line2)',
+          borderRadius: 6, marginTop: 2, maxHeight: 200, overflowY: 'auto',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+        }}>
+          {filtered.length > 0 ? filtered.map(o => (
+            <div
+              key={o.id}
+              onMouseDown={e => { e.preventDefault(); handleSelect(String(o.id)); }}
+              style={{
+                padding: '8px 12px', fontSize: 13, cursor: 'pointer',
+                color: String(o.id) === value ? 'var(--brand)' : 'var(--txt)',
+                background: String(o.id) === value
+                  ? 'color-mix(in srgb, var(--brand) 10%, transparent)'
+                  : 'transparent',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--raised)'; }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = String(o.id) === value
+                  ? 'color-mix(in srgb, var(--brand) 10%, transparent)'
+                  : 'transparent';
+              }}
+            >
+              {o.label}
+            </div>
+          )) : (
+            <div style={{ padding: '8px 12px', fontSize: 13, color: 'var(--txt-dim)' }}>
+              No matches
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -381,8 +469,8 @@ function ProjectModal({ open, onClose, editing }: {
       status: editing.status,
       startDate: editing.startDate ?? '',
       endDate: editing.endDate ?? '',
+      leadId: editing.leadId != null ? String(editing.leadId) : '',
       pmId: editing.pmId != null ? String(editing.pmId) : '',
-      projectManagerId: editing.projectManagerId != null ? String(editing.projectManagerId) : '',
     } : EMPTY_PROJECT_FORM);
     setStartDateInvalid(false);
     setEndDateInvalid(false);
@@ -395,14 +483,14 @@ function ProjectModal({ open, onClose, editing }: {
   // holder as an extra option so editing an unrelated field can't silently reassign the project —
   // the server likewise accepts the unchanged holder.
   const leadOptions = leads ?? [];
-  const currentLeadMissing = editing?.pmId != null
-    && !leadOptions.some(l => l.id === editing.pmId);
+  const currentLeadMissing = editing?.leadId != null
+    && !leadOptions.some(l => l.id === editing.leadId);
 
   // Same grandfathering for the overseeing PM: a deactivated PM stays selectable on projects they
   // already hold, so an unrelated edit can't silently move oversight.
   const managerOptions = projectManagers ?? [];
-  const currentManagerMissing = editing?.projectManagerId != null
-    && !managerOptions.some(m => m.id === editing.projectManagerId);
+  const currentManagerMissing = editing?.pmId != null
+    && !managerOptions.some(m => m.id === editing.pmId);
 
   // Project types come from the Organization Master; a project already on a deactivated one keeps
   // it (option rendered below), matching the server's grandfathering.
@@ -427,8 +515,8 @@ function ProjectModal({ open, onClose, editing }: {
   if (form.name.trim() === '')       fieldErrors.name = 'Name is required.';
   if (form.projectTypeId === '')     fieldErrors.projectTypeId = 'Select a project type.';
   if (showClient && form.client.trim() === '') fieldErrors.client = 'Client name is required for this project type.';
-  if (form.pmId === '')              fieldErrors.pmId = 'Select a team lead.';
-  if (form.projectManagerId === '')  fieldErrors.projectManagerId = 'Select a project manager.';
+  if (form.leadId === '')            fieldErrors.leadId = 'Select a team lead.';
+  if (form.pmId === '')              fieldErrors.pmId = 'Select a project manager.';
   if (form.startDate === '')         fieldErrors.startDate = 'Start date is required.';
   if (badDateOrder)                  fieldErrors.endDate = 'End Date must be after Start Date.';
   else if (endDateRequired && form.endDate === '') fieldErrors.endDate = 'Required when status is Completed.';
@@ -487,8 +575,8 @@ function ProjectModal({ open, onClose, editing }: {
             status: form.status,
             startDate: form.startDate,
             endDate: form.endDate || null,
+            leadId: Number(form.leadId),
             pmId: Number(form.pmId),
-            projectManagerId: Number(form.projectManagerId),
           },
         });
         showToast('success', 'Project updated');
@@ -500,8 +588,8 @@ function ProjectModal({ open, onClose, editing }: {
           projectTypeId: Number(form.projectTypeId),
           startDate: form.startDate,
           endDate: form.endDate || null,
+          leadId: Number(form.leadId),
           pmId: Number(form.pmId),
-          projectManagerId: Number(form.projectManagerId),
         });
         showToast('success', 'Project created');
       }
@@ -594,33 +682,29 @@ function ProjectModal({ open, onClose, editing }: {
         <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
             <label style={labelStyle}>Team Lead *</label>
-            <select style={inputStyle} value={form.pmId}
-              onChange={e => setForm(f => ({ ...f, pmId: e.target.value }))}>
-              <option value="">Select Team Lead…</option>
-              {currentLeadMissing && (
-                <option value={String(editing!.pmId)}>{editing!.pmName} (current)</option>
-              )}
-              {leadOptions.map(l => (
-                <option key={l.id} value={l.id}>{l.fullName} ({l.employeeCode})</option>
-              ))}
-            </select>
-            <FieldError msg={errorFor('pmId')} />
+            <SearchableSelect
+              value={form.leadId}
+              onChange={id => setForm(f => ({ ...f, leadId: id }))}
+              options={[
+                ...(currentLeadMissing ? [{ id: editing!.leadId!, label: `${editing!.leadName} (current)` }] : []),
+                ...leadOptions.map(l => ({ id: l.id, label: `${l.fullName} (${l.employeeCode})` })),
+              ]}
+              placeholder="Select Team Lead…"
+            />
+            <FieldError msg={errorFor('leadId')} />
           </div>
           <div>
             <label style={labelStyle}>Project Manager *</label>
-            <select style={inputStyle} value={form.projectManagerId}
-              onChange={e => setForm(f => ({ ...f, projectManagerId: e.target.value }))}>
-              <option value="">Select Project Manager…</option>
-              {currentManagerMissing && (
-                <option value={String(editing!.projectManagerId)}>
-                  {editing!.projectManagerName} (current)
-                </option>
-              )}
-              {managerOptions.map(m => (
-                <option key={m.id} value={m.id}>{m.fullName} ({m.employeeCode})</option>
-              ))}
-            </select>
-            <FieldError msg={errorFor('projectManagerId')} />
+            <SearchableSelect
+              value={form.pmId}
+              onChange={id => setForm(f => ({ ...f, pmId: id }))}
+              options={[
+                ...(currentManagerMissing ? [{ id: editing!.pmId!, label: `${editing!.pmName} (current)` }] : []),
+                ...managerOptions.map(m => ({ id: m.id, label: `${m.fullName} (${m.employeeCode})` })),
+              ]}
+              placeholder="Select Project Manager…"
+            />
+            <FieldError msg={errorFor('pmId')} />
           </div>
         </div>
         <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
@@ -721,8 +805,8 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
     return (data ?? []).filter(p =>
       (term === '' || p.name.toLowerCase().includes(term))
       && (statusFilter === '' || p.status === statusFilter)
-      && (leadFilter === '' || String(p.pmId) === leadFilter)
-      && (pmFilter === '' || String(p.projectManagerId) === pmFilter),
+      && (leadFilter === '' || String(p.leadId) === leadFilter)
+      && (pmFilter === '' || String(p.pmId) === pmFilter),
     );
   }, [data, debouncedSearch, statusFilter, leadFilter, pmFilter]);
 
@@ -744,11 +828,11 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
     [filtered, page],
   );
 
-  // Project Manager options, same derivation as leadOptions below but keyed off projectManagerId.
+  // Project Manager options, same derivation as leadOptions below but keyed off pmId.
   const pmOptions = useMemo(() => {
     const byId = new Map<number, string>();
     for (const p of data ?? []) {
-      if (p.projectManagerId != null) byId.set(p.projectManagerId, p.projectManagerName ?? `#${p.projectManagerId}`);
+      if (p.pmId != null) byId.set(p.pmId, p.pmName ?? `#${p.pmId}`);
     }
     return [...byId.entries()]
       .map(([id, name]) => ({ id, name }))
@@ -760,7 +844,7 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
   const leadOptions = useMemo(() => {
     const byId = new Map<number, string>();
     for (const p of data ?? []) {
-      if (p.pmId != null) byId.set(p.pmId, p.pmName ?? `#${p.pmId}`);
+      if (p.leadId != null) byId.set(p.leadId, p.leadName ?? `#${p.leadId}`);
     }
     return [...byId.entries()]
       .map(([id, name]) => ({ id, name }))
@@ -928,7 +1012,7 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
                       </span>
                     )}
                   </td>
-                  <td style={tdStyle}>{p.pmName ?? '-'}</td>
+                  <td style={tdStyle}>{p.leadName ?? '-'}</td>
                   <td style={tdStyle}>{p.allocatedHeadcount}</td>
                   <td style={tdStyle}><StatusBadge status={p.status} /></td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
@@ -1029,7 +1113,7 @@ function AllocationModal({ open, onClose, projects }: {
    */
   const allocatableProjects = useMemo(() => {
     if (!selectedEmployee?.managerId) return [];
-    return activeProjects.filter(p => p.pmId === selectedEmployee.managerId);
+    return activeProjects.filter(p => p.leadId === selectedEmployee.managerId);
   }, [activeProjects, selectedEmployee]);
 
   const selectedProject = useMemo(
@@ -1103,17 +1187,13 @@ function AllocationModal({ open, onClose, projects }: {
           {/* Changing the employee clears the project: the list below is scoped to the employee's
               manager, so a project picked for the previous one would otherwise stay selected and
               be submittable — exactly the cross-team allocation this is meant to prevent. */}
-          <select
-            style={inputStyle}
+          <SearchableSelect
             value={employeeId}
-            onChange={e => { setEmployeeId(e.target.value); setProjectId(''); }}
+            onChange={id => { setEmployeeId(id); setProjectId(''); }}
+            options={(employees ?? []).map(emp => ({ id: emp.id, label: `${emp.fullName} (${emp.employeeCode})` }))}
+            placeholder="Select employee…"
             autoFocus
-          >
-            <option value="">Select employee…</option>
-            {employees?.map(emp => (
-              <option key={emp.id} value={emp.id}>{emp.fullName} ({emp.employeeCode})</option>
-            ))}
-          </select>
+          />
         </div>
 
         <div style={{ marginBottom: 14 }}>

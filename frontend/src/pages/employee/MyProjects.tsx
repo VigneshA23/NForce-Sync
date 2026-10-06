@@ -38,7 +38,7 @@ function ProjectDetailsModal({ projectId, onClose }: { projectId: number | null;
           <span style={{ ...detailValueStyle, color: 'var(--txt-mut)' }}>{data.client ?? 'Internal'}</span>
 
           <span style={detailLabelStyle}>Team Lead</span>
-          <span style={{ ...detailValueStyle, color: 'var(--txt-mut)' }}>{data.pmName ?? 'Not Assigned'}</span>
+          <span style={{ ...detailValueStyle, color: 'var(--txt-mut)' }}>{data.leadName ?? 'Not Assigned'}</span>
 
           <span style={detailLabelStyle}>Status</span>
           <span><StatusBadge status={data.status} /></span>

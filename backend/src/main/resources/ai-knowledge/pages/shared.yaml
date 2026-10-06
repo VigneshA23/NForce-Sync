@@ -4,7 +4,7 @@ knowledge:
     module: shared
     pageId: notifications
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: Notifications
     synonyms:
       - my notifications
@@ -25,7 +25,7 @@ knowledge:
     module: shared
     pageId: profile
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: Profile
     synonyms:
       - my profile
@@ -44,7 +44,7 @@ knowledge:
     module: shared
     pageId: change-password
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: Change Password
     synonyms:
       - reset my password
@@ -62,7 +62,7 @@ knowledge:
     module: shared
     pageId: preferences
     version: 1
-    audience: [EMPLOYEE, MANAGER, SUPERADMIN, PM, DM, FINANCE, LEADERSHIP, ADMIN]
+    audience: [EMPLOYEE, PM, ADMIN, SUPERADMIN]
     title: Preferences
     synonyms:
       - dark mode

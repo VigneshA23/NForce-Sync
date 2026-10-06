@@ -72,7 +72,7 @@ public class TeamEodByEmployeeReportService {
         // derived from the team's own allocations, which reflects which projects the lead's
         // direct reports happen to work on rather than which projects this lead is the Team
         // Lead of. Those are two different relationships and can legitimately diverge.
-        List<ProjectOptionDto> projects = projectRepository.findByPmIdOrderByNameAsc(lead.getId())
+        List<ProjectOptionDto> projects = projectRepository.findByLeadIdOrderByNameAsc(lead.getId())
                 .stream()
                 .map(p -> new ProjectOptionDto(p.getId(), p.getName(), p.getClient()))
                 .toList();
@@ -261,7 +261,8 @@ public class TeamEodByEmployeeReportService {
         AppUser user = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
-        if (user.getRole() != AppUser.Role.MANAGER && user.getRole() != AppUser.Role.SUPERADMIN) {
+        if (user.getRole() != AppUser.Role.SUPERADMIN
+                && !projectRepository.existsByLeadIdAndStatus(user.getId(), Project.Status.ACTIVE)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team Lead access required");
         }
         return user;
@@ -274,8 +275,6 @@ public class TeamEodByEmployeeReportService {
                     .sorted(Comparator.comparing(AppUser::getFullName))
                     .toList();
         }
-        return appUserRepository.findByManagerId(lead.getId()).stream()
-                .filter(u -> u.getStatus() == AppUser.Status.ACTIVE && u.getDeletedAt() == null)
-                .toList();
+        return allocationRepository.findActiveMembersByProjectLead(lead.getId(), java.time.LocalDate.now());
     }
 }

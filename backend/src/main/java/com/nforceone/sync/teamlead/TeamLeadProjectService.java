@@ -32,8 +32,8 @@ import java.util.List;
  * Backs the Team Lead "My Projects" module.
  *
  * <p>Projects: a project counts as the Team Lead's own when the Team Lead is that project's
- * assigned Team Lead — {@code Project.pm} — not when the Team Lead merely holds a personal
- * Allocation row on it (see {@link ProjectRepository#findByPmIdOrderByNameAsc}).
+ * assigned Team Lead — {@code Project.lead} — not when the Team Lead merely holds a personal
+ * Allocation row on it (see {@link ProjectRepository#findByLeadIdOrderByNameAsc}).
  *
  * <p>Categories: global, generic master data — every Team Lead sees and can add to the same
  * application-wide list (see V60), independent of project, team, or who created each row.
@@ -72,7 +72,7 @@ public class TeamLeadProjectService {
 
     public List<ProjectFullDto> listMyProjects(String actingEmail, LocalDate onDate, Long teamLeadId) {
         Long targetId = resolveTeamLeadId(actingEmail, teamLeadId);
-        return projectRepository.findByPmIdOrderByNameAsc(targetId)
+        return projectRepository.findByLeadIdOrderByNameAsc(targetId)
                 .stream()
                 .map(p -> ProjectFullDto.from(p, activeAssignedEmployees(p.getId(), onDate).size()))
                 .toList();
@@ -108,8 +108,8 @@ public class TeamLeadProjectService {
     return allocationRepository.findByProjectIdWithRefs(projectId)
             .stream()
             .filter(a -> isActiveOn(a, onDate))
-            .filter(a -> project.getPm() == null
-                    || !a.getEmployee().getId().equals(project.getPm().getId()))
+            .filter(a -> project.getLead() == null
+                    || !a.getEmployee().getId().equals(project.getLead().getId()))
             .map(a -> EmployeeRefDto.from(a.getEmployee()))
             .distinct()
             .toList();
@@ -121,9 +121,12 @@ public class TeamLeadProjectService {
     }
 
     public List<ProjectCategoryDto> listCategories(String actingEmail) {
-        // Global list — every Team Lead sees the same application-wide categories, not just
-        // the ones they personally created (see V60 / class javadoc).
-        resolveActor(actingEmail);
+        AppUser actor = resolveActor(actingEmail);
+        if (actor.getRole() != AppUser.Role.ADMIN
+                && actor.getRole() != AppUser.Role.SUPERADMIN
+                && !projectRepository.existsByLeadIdAndStatus(actor.getId(), Project.Status.ACTIVE)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team Lead access required");
+        }
         return categoryRepository.findAllWithRefs()
                 .stream()
                 .map(ProjectCategoryDto::from)
@@ -133,6 +136,10 @@ public class TeamLeadProjectService {
     @Transactional
     public ProjectCategoryDto createCategory(CreateProjectCategoryRequest req, String actingEmail) {
         AppUser actor = resolveActor(actingEmail);
+
+        if (!projectRepository.existsByLeadIdAndStatus(actor.getId(), Project.Status.ACTIVE)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Team Lead access required");
+        }
 
         // Associated Project is optional — a category does not require one. When given, it must
         // be one of this Team Lead's own projects; this is the authorization check.
@@ -298,8 +305,8 @@ public class TeamLeadProjectService {
         if (actor.getRole() == AppUser.Role.SUPERADMIN && requestedTeamLeadId != null) {
             AppUser target = appUserRepository.findById(requestedTeamLeadId)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Team Lead not found"));
-            if (target.getRole() != AppUser.Role.MANAGER) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target user is not a Team Lead");
+            if (!projectRepository.existsByLeadIdAndStatus(target.getId(), Project.Status.ACTIVE)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target user is not an active Team Lead");
             }
             return target.getId();
         }
@@ -313,7 +320,7 @@ public class TeamLeadProjectService {
      * details/categories.
      */
     private Project requireProjectAssignedToTeamLead(Long projectId, Long teamLeadId) {
-        return projectRepository.findByPmIdOrderByNameAsc(teamLeadId)
+        return projectRepository.findByLeadIdOrderByNameAsc(teamLeadId)
                 .stream()
                 .filter(p -> p.getId().equals(projectId))
                 .findFirst()

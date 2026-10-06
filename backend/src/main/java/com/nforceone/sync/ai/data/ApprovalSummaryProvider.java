@@ -27,22 +27,23 @@ final class ApprovalSummaryProvider implements AssistantDataProvider {
 
     @Override public String id() { return "approvals.summary"; }
     @Override public String title() { return "Pending approvals"; }
-    @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.MANAGER, AppUser.Role.PM, AppUser.Role.SUPERADMIN); }
+    @Override public Set<AppUser.Role> audienceRoles() { return Set.of(AppUser.Role.PM, AppUser.Role.SUPERADMIN); }
+    @Override public Set<String> audienceCapabilities() { return Set.of(CAPABILITY_LEADS_PROJECT); }
     @Override public Set<String> modules() { return Set.of("approvals"); }
 
     @Override
     public Optional<String> fetch(AssistantRequestContext context) {
         // pmId/managerId=null — for SUPERADMIN this is deliberately the full backlog (no narrowing
-        // to someone else's queue); for MANAGER/PM it is already self-scoped by the service itself.
+        // to someone else's queue); for leads/PM it is already self-scoped by the service itself.
         List<EodEntryDto> pending = approvalService.getPendingForActor(context.email(), null, null, null, null);
         if (pending.isEmpty()) {
             return Optional.empty();
         }
         long escalated = pending.stream().filter(e -> Boolean.TRUE.equals(e.escalated())).count();
-        // MANAGER/PM have their own approvals page and personally act on this queue, so "pending
-        // your approval" is literally true for them. SUPERADMIN has no approve/reject page at all
-        // (see role.superadmin knowledge) — this is org-wide visibility, not a personal queue, so
-        // it must not be worded as something the Super Admin themself approves.
+        // PM and team leads have their own approvals page and personally act on this queue, so
+        // "pending your approval" is literally true for them. SUPERADMIN has no approve/reject page
+        // at all — this is org-wide visibility, not a personal queue, so it must not be worded as
+        // something the Super Admin themself approves.
         boolean personalQueue = context.role() != AppUser.Role.SUPERADMIN;
         StringBuilder text = new StringBuilder()
                 .append(pending.size()).append(" EOD entr").append(pending.size() == 1 ? "y is" : "ies are")

@@ -38,7 +38,7 @@ final class EodDataProviders {
 
         @Override public String id() { return "eod.today"; }
         @Override public String title() { return "Today's EOD status"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(AppUser.Role.EMPLOYEE); }
         @Override public Set<String> modules() { return Set.of("eod"); }
 
         @Override
@@ -63,7 +63,7 @@ final class EodDataProviders {
 
         @Override public String id() { return "eod.recent"; }
         @Override public String title() { return "Recent EOD activity (last 14 days)"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(AppUser.Role.EMPLOYEE); }
         @Override public Set<String> modules() { return Set.of("eod"); }
 
         @Override
@@ -92,7 +92,7 @@ final class EodDataProviders {
 
         @Override public String id() { return "eod.time-adjustment"; }
         @Override public String title() { return "Time adjustment budget"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(AppUser.Role.EMPLOYEE); }
         @Override public Set<String> modules() { return Set.of("eod"); }
 
         @Override
@@ -118,7 +118,7 @@ final class EodDataProviders {
 
         @Override public String id() { return "clarification.mine"; }
         @Override public String title() { return "My open EOD clarifications"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.EMPLOYEE, AppUser.Role.MANAGER); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(AppUser.Role.EMPLOYEE); }
         @Override public Set<String> modules() { return Set.of("eod"); }
 
         @Override
@@ -142,7 +142,8 @@ final class EodDataProviders {
 
         @Override public String id() { return "clarification.lead"; }
         @Override public String title() { return "Open EOD clarifications on my team"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.MANAGER); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(); }
+        @Override public Set<String> audienceCapabilities() { return Set.of(CAPABILITY_LEADS_PROJECT); }
         @Override public Set<String> modules() { return Set.of("eod", "approvals"); }
 
         @Override
@@ -165,7 +166,7 @@ final class EodDataProviders {
 
         @Override public String id() { return "clarification.pm"; }
         @Override public String title() { return "Open EOD clarifications on my projects"; }
-        @Override public Set<AppUser.Role> audiences() { return Set.of(AppUser.Role.PM); }
+        @Override public Set<AppUser.Role> audienceRoles() { return Set.of(AppUser.Role.PM); }
         @Override public Set<String> modules() { return Set.of("eod", "approvals"); }
 
         @Override

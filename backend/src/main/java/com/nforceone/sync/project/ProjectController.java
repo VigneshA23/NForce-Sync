@@ -38,40 +38,62 @@ public class ProjectController {
         return projectService.listMine(actingEmail(), date != null ? date : LocalDate.now());
     }
 
+    /** Full project list — readable by PM (read-only view), Admin, and Super Admin. */
     @GetMapping("/all")
-    @PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
+    @PreAuthorize("hasAnyRole('PM','ADMIN','SUPERADMIN')")
     public List<ProjectFullDto> listAll() {
         return projectService.listAll();
     }
 
+    /** Create project — Admin and Super Admin only. */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public ProjectFullDto create(@Valid @RequestBody CreateProjectRequest request) {
         return projectService.create(request);
     }
 
-    /** Users assignable as a project's Team Lead — active MANAGERs only. */
+    /** Users assignable as a project's Team Lead — any active non-PM user. */
     @GetMapping("/leads")
-    @PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public List<EmployeeRefDto> listAssignableLeads() {
         return projectService.listAssignableLeads();
     }
 
-    /** Users assignable as a project's overseeing PM — active PM accounts. */
+    /** Users assignable as a project's overseeing PM — PM, Admin, and Super Admin accounts. */
     @GetMapping("/managers")
-    @PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public List<EmployeeRefDto> listAssignableProjectManagers() {
         return projectService.listAssignableProjectManagers();
     }
 
+    /** Update project — Admin and Super Admin only. */
     @PatchMapping("/{id}")
-    @PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public ProjectFullDto update(@PathVariable Long id, @Valid @RequestBody UpdateProjectRequest request) {
         return projectService.update(id, request);
+    }
+
+    /**
+     * Assign a Team Lead to a project. Three-rule validation: target must not be PM-role,
+     * must not already be this project's PM, and must have an active allocation on this project.
+     */
+    @PutMapping("/{id}/lead")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
+    public ProjectFullDto assignLead(@PathVariable Long id, @RequestBody AssignLeadRequest request) {
+        return projectService.assignLead(id, request.leadId());
+    }
+
+    /** Clear the Team Lead; project reverts to PM-as-approver fallback. */
+    @DeleteMapping("/{id}/lead")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
+    public ProjectFullDto clearLead(@PathVariable Long id) {
+        return projectService.clearLead(id);
     }
 
     private String actingEmail() {
         return (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
+
+    record AssignLeadRequest(Long leadId) {}
 }

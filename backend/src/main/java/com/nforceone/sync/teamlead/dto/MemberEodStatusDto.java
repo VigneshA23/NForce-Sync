@@ -13,5 +13,8 @@ public record MemberEodStatusDto(
         BigDecimal utilizationPct,  // null if not computed yet (no approved entry / snapshot)
         boolean    underutilized,
         boolean    overloaded,
-        boolean    hasOpenBlocker
+        boolean    hasOpenBlocker,
+        Long       managerId,       // for hierarchy grouping in My Reporting Team view
+        String     managerName,
+        String     role
 ) {}

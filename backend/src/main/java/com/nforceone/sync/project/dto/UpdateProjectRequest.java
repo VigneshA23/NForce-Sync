@@ -17,14 +17,14 @@ public record UpdateProjectRequest(
         @NotNull LocalDate startDate,
         LocalDate endDate,
         /**
-         * The project's Team Lead. Must be an active MANAGER, except that the project's
+         * The project's Team Lead. Must be an active non-PM user, except that the project's
          * existing owner may be re-sent unchanged — that is what lets legacy superadmin-owned
          * projects be edited without forcing a reassignment.
          */
-        @NotNull Long pmId,
+        @NotNull Long leadId,
         /**
          * The overseeing PM. Must be an active PM, except that the project's current holder may be
          * re-sent unchanged, so an unrelated edit never forces oversight to move.
          */
-        @NotNull Long projectManagerId
+        @NotNull Long pmId
 ) {}

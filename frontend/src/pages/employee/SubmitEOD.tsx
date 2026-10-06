@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, XCircle, Paperclip, X, Loader2, MessageCircleQuestion } from 'lucide-react';
@@ -7,6 +7,8 @@ import { useToast } from '../../lib/toast';
 import { useAuth } from '../../lib/auth';
 import { todayISO, formatDate, formatTime12h } from '../../lib/date';
 import { listProjects } from '../../api/projects';
+import { useMyEmployeeProjects } from '../../api/employeeProjects';
+import { useEntryPieces } from '../../api/approvalPieces';
 import { listTaskCategories } from '../../api/taskCategories';
 import {
   saveDraft, submitEntry, listEntries, getTimeAdjustmentContext, getDayDefaults,
@@ -39,6 +41,12 @@ const WORK_LOCATIONS = ['Office', 'Remote', 'Client Site', 'Field'];
 
 /** Category name, renamed from 'Leave / Holiday' in V35 — Holiday is a day type now. */
 const LEAVE = 'Leave';
+
+const GROUP_PIECE_STATUS_CFG: Record<string, { color: string; label: string; Icon: typeof CheckCircle }> = {
+  APPROVED: { color: '#2FB67C', label: 'Approved', Icon: CheckCircle },
+  REJECTED: { color: '#E4373D', label: 'Rejected', Icon: XCircle },
+  PENDING:  { color: '#9BA1AC', label: 'Pending',  Icon: Clock },
+};
 
 /**
  * Cap on every free-text field on this form (description, blocker reason, next-day plan,
@@ -240,11 +248,12 @@ function rowFromDto(dto: EodTaskDto): TaskRow {
 
 function StatusBadge({ status }: { status: string }) {
   const cfg: Record<string, { color: string; label: string; Icon: React.FC<{ size: number }> }> = {
-    DRAFT:             { color: '#9BA1AC', label: 'Draft',             Icon: Clock },
-    SUBMITTED:         { color: '#4C8DD6', label: 'Submitted',         Icon: Clock },
-    APPROVED:          { color: '#2FB67C', label: 'Approved',          Icon: CheckCircle },
-    REJECTED:          { color: '#E4373D', label: 'Rejected',          Icon: XCircle },
-    MISSED:            { color: '#6B7280', label: 'Missed',            Icon: XCircle },
+    DRAFT:              { color: '#9BA1AC', label: 'Draft',              Icon: Clock },
+    SUBMITTED:          { color: '#4C8DD6', label: 'Submitted',          Icon: Clock },
+    APPROVED:           { color: '#2FB67C', label: 'Approved',           Icon: CheckCircle },
+    PARTIALLY_APPROVED: { color: '#E0A93B', label: 'Partially Approved', Icon: AlertTriangle },
+    REJECTED:           { color: '#E4373D', label: 'Rejected',           Icon: XCircle },
+    MISSED:             { color: '#6B7280', label: 'Missed',             Icon: XCircle },
   };
   const { color, label, Icon } = cfg[status] ?? cfg.DRAFT;
   return (
@@ -467,7 +476,7 @@ function AttachmentList({
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function SubmitEOD() {
-  useAuth(); // ensures protected route; user identity carried by JWT
+  const { user: currentUser } = useAuth();
   const { show: toast } = useToast();
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
@@ -565,6 +574,12 @@ export default function SubmitEOD() {
     queryFn:  () => getTimeAdjustmentContext(selectedDate),
   });
 
+  const { data: myProjects = [] } = useMyEmployeeProjects(selectedDate);
+  const { data: entryPieces = [] } = useEntryPieces(
+    entryStatus === 'SUBMITTED' || entryStatus === 'PARTIALLY_APPROVED' || entryStatus === 'REJECTED'
+      ? entryId : null,
+  );
+
   // The error list renders above the form, so pressing Submit from the bottom of a long task list
   // showed nothing at all until you scrolled up. Bring it into view instead. Same scrollIntoView
   // pattern the Approvals row-highlight uses.
@@ -653,13 +668,9 @@ export default function SubmitEOD() {
 
   // ── Derived state ─────────────────────────────────────────────────────────
 
-  const isReadOnly   = entryStatus === 'SUBMITTED' || entryStatus === 'APPROVED' || entryStatus === 'MISSED';
+  const isReadOnly   = entryStatus === 'SUBMITTED' || entryStatus === 'APPROVED' || entryStatus === 'MISSED' || entryStatus === 'PARTIALLY_APPROVED';
   const isEditable   = !isReadOnly;
-  // Correction flow: the employee must fix THIS day's report. Re-dating it would leave the
-  // flagged entry untouched and write a different day instead, so the date is pinned while
-  // the rest of the form stays editable. Kept separate from isReadOnly, whose dates must stay
-  // navigable.
-  const isDateLocked = entryStatus === 'REJECTED';
+  const isDateLocked = false;
   // A submitted entry is already fully locked by isReadOnly above (isEditable() on the backend
   // only allows DRAFT/REJECTED) — a TL-requested clarification doesn't change that, it's purely
   // an explanatory reason shown on top of the existing "submitted, awaiting review" lock.
@@ -669,6 +680,61 @@ export default function SubmitEOD() {
   const hasOpenClarification = clarificationStatus?.open === true;
   const totalHours   = tasks.reduce((sum, t) => sum + (parseFloat(t.hours) || 0), 0);
   const catMap       = new Map(categories.map(c => [c.id, c]));
+
+  const projectLeadMap = useMemo(() => {
+    const m = new Map<number, { leadName: string | null; leadId: number | null; pmName: string | null }>();
+    for (const p of myProjects) {
+      m.set(p.id, { leadName: p.leadName, leadId: p.leadId, pmName: p.pmName });
+    }
+    return m;
+  }, [myProjects]);
+
+  const projectGroups = useMemo(() => {
+    const seen = new Set<string>();
+    const groups: Array<{
+      projectId: number | null;
+      projectCode: string | null;
+      projectName: string | null;
+      reviewerLabel: string;
+    }> = [];
+    for (const task of tasks) {
+      const key = task.projectId == null ? '__none__' : String(task.projectId);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (task.projectId === null) {
+        groups.push({ projectId: null, projectCode: null, projectName: null, reviewerLabel: 'Your Reporting Manager' });
+      } else {
+        const proj = projects.find(p => p.id === task.projectId);
+        const info = projectLeadMap.get(task.projectId);
+        let reviewerLabel: string;
+        if (info?.leadId != null && info.leadId === currentUser?.id) {
+          reviewerLabel = 'Your Reporting Manager';
+        } else if (info?.leadId != null && info?.leadName) {
+          reviewerLabel = info.leadName;
+        } else if (info?.pmName) {
+          reviewerLabel = `${info.pmName} (Project Manager)`;
+        } else {
+          reviewerLabel = 'Admin Group';
+        }
+        groups.push({
+          projectId: task.projectId,
+          projectCode: proj?.code ?? task.projectCode,
+          projectName: proj?.name ?? null,
+          reviewerLabel,
+        });
+      }
+    }
+    return groups;
+  }, [tasks, projects, projectLeadMap, currentUser?.id]);
+
+  const approvedProjectIds = useMemo(
+    () => new Set(
+      entryPieces
+        .filter(p => p.status === 'APPROVED' && p.projectId != null)
+        .map(p => p.projectId as number),
+    ),
+    [entryPieces],
+  );
 
   // Gates the entry spinner/form-body split below — also waits on dayDefaults so the form
   // doesn't render with stale field values for the beat before auto-population runs.
@@ -1055,8 +1121,11 @@ export default function SubmitEOD() {
     setTasks(prev => prev.map(t => t.localId === localId ? { ...t, ...patch } : t));
   }
 
-  function addTask() {
-    setTasks(prev => [...prev, newRow()]);
+  function addTaskToProject(projectId: number | null, projectCode: string | null) {
+    const row = newRow();
+    row.projectId = projectId;
+    row.projectCode = projectCode;
+    setTasks(prev => [...prev, row]);
   }
 
   function removeTask(localId: string) {
@@ -1142,21 +1211,27 @@ export default function SubmitEOD() {
           display: 'flex', gap: 10, alignItems: 'center',
           padding: '10px 16px', borderRadius: 8, marginTop: 20,
           background: entryStatus === 'APPROVED' ? 'rgba(47,182,124,.08)'
+            : entryStatus === 'PARTIALLY_APPROVED' ? 'rgba(224,169,59,.08)'
             : hasOpenClarification ? 'rgba(224,169,59,.08)' : 'rgba(76,141,214,.08)',
           border: `1px solid ${entryStatus === 'APPROVED' ? 'rgba(47,182,124,.3)'
+            : entryStatus === 'PARTIALLY_APPROVED' ? 'rgba(224,169,59,.3)'
             : hasOpenClarification ? 'rgba(224,169,59,.3)' : 'rgba(76,141,214,.3)'}`,
         }}>
           {entryStatus === 'APPROVED'
             ? <CheckCircle size={14} style={{ color: '#2FB67C', flexShrink: 0 }} aria-hidden />
-            : hasOpenClarification
-              ? <MessageCircleQuestion size={14} style={{ color: '#E0A93B', flexShrink: 0 }} aria-hidden />
-              : <Clock size={14} style={{ color: '#4C8DD6', flexShrink: 0 }} aria-hidden />}
+            : entryStatus === 'PARTIALLY_APPROVED'
+              ? <AlertTriangle size={14} style={{ color: '#E0A93B', flexShrink: 0 }} aria-hidden />
+              : hasOpenClarification
+                ? <MessageCircleQuestion size={14} style={{ color: '#E0A93B', flexShrink: 0 }} aria-hidden />
+                : <Clock size={14} style={{ color: '#4C8DD6', flexShrink: 0 }} aria-hidden />}
           <span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
             {entryStatus === 'APPROVED'
               ? 'This report has been approved. No changes can be made.'
-              : hasOpenClarification
-                ? `Your Team Lead requested clarification on this report — it can't be edited until resolved.`
-                : 'This report has been submitted and is awaiting review.'}
+              : entryStatus === 'PARTIALLY_APPROVED'
+                ? 'Some projects have been approved. Awaiting review for the remaining projects.'
+                : hasOpenClarification
+                  ? `Your Team Lead requested clarification on this report — it can't be edited until resolved.`
+                  : 'This report has been submitted and is awaiting review.'}
           </span>
           {hasOpenClarification && entryId != null && (
             <Link
@@ -1443,67 +1518,147 @@ export default function SubmitEOD() {
             </div>
           )}
 
-          {/* Tasks section. On a Weekend, the row fields stay hidden behind the same "Add task"
-              button (no separate/simplified OT-only control) until the employee clicks it or a
-              real row already exists (showWeekendTaskRows) — Holiday/Leave still hide the whole
-              section outright via isNonWorkDay. A read-only Weekend entry with nothing logged
-              renders neither the button nor an empty section, same as a read-only Holiday/Leave. */}
+          {/* Tasks section — grouped by project. Each group shows the approver so the
+              employee knows who reviews each piece before they submit. */}
           {!isNonWorkDay && (isEditable || !isWeekend || showWeekendTaskRows) && (
           <div style={{ marginTop: 28 }}>
             {isWeekend && !showWeekendTaskRows ? (
               <AddTaskButton onClick={() => setWeekendExpanded(true)} />
             ) : (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                {/* Header: label + hours progress bar */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-mut)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                     Tasks
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {/* Overtime is informational — it never blocks submitting. */}
                     {hasOvertime && (
                       <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--warn)' }}>
                         +{overtimeHrs.toFixed(1)} hrs overtime
                       </span>
                     )}
-                    <div style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
-                      {/* Numerator: task hours + an active adjustment's minutes, in "H.MM" notation
-                          (45 minutes → ".45", NOT decimal-hours ".75") — never decimal math when an
-                          adjustment is active. Denominator: the fixed target, plain decimal, never
-                          touched by the adjustment. */}
-                      <span style={{ color: 'var(--txt)', fontWeight: 600 }}>
-                        {adjActive ? formatHrsMinutes(totalMinutesLogged) : totalHours.toFixed(1)}
-                      </span>
-                      {' '}/ {expectedHrs.toFixed(1)}
-                      {' '}hrs {adjActive ? 'expected' : 'total'}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 72, height: 5, borderRadius: 3, background: 'var(--line2)', overflow: 'hidden' }} aria-hidden="true">
+                        <div style={{
+                          height: '100%', borderRadius: 3, transition: 'width 200ms ease',
+                          width: `${Math.min(100, (effectiveLoggedHours / Math.max(0.01, expectedHrs)) * 100)}%`,
+                          background: hoursShort ? 'var(--warn)' : hasOvertime ? 'var(--warn)' : 'var(--ok)',
+                        }} />
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--txt-mut)', fontVariantNumeric: 'tabular-nums' }}>
+                        {/* Numerator: task hours + an active adjustment's minutes, in "H.MM" notation
+                            (45 minutes → ".45", NOT decimal-hours ".75") — never decimal math when an
+                            adjustment is active. Denominator: the fixed target, plain decimal. */}
+                        <span style={{ color: 'var(--txt)', fontWeight: 600 }}>
+                          {adjActive ? formatHrsMinutes(totalMinutesLogged) : totalHours.toFixed(1)}
+                        </span>
+                        {' '}/ {expectedHrs.toFixed(1)} hrs {adjActive ? 'expected' : 'total'}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {tasks.map((task, idx) => (
-                    <TaskCard
-                      key={task.localId}
-                      task={task}
-                      index={idx}
-                      projects={projects}
-                      categories={categories}
-                      isReadOnly={isReadOnly}
-                      onUpdate={patch => updateTask(task.localId, patch)}
-                      onRemove={() => removeTask(task.localId)}
-                      onCategoryChange={catId => handleCategoryChange(task.localId, catId)}
-                      // Working Day (and Half Leave) always need >= 1 task row, so removal is
-                      // blocked at the last one. Weekend has no such minimum — its only row can
-                      // always be removed, collapsing the section back to the default state
-                      // (handled in removeTask above).
-                      canRemove={isWeekend || tasks.length > 1}
-                      onFileSelected={e => handleTaskFileSelected(task.localId, e)}
-                      onPreviewAttachment={handlePreviewAttachment}
-                      onRemoveAttachment={attachmentId => handleRemoveTaskAttachment(task.localId, attachmentId)}
-                    />
-                  ))}
-                </div>
+                {/* Project groups — one card per unique projectId in tasks */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {projectGroups.length === 0 && isEditable && (
+                    <AddTaskButton onClick={() => addTaskToProject(null, null)} />
+                  )}
+                  {projectGroups.map(group => {
+                    const groupTasks = tasks.filter(t => t.projectId === group.projectId);
+                    const groupApproved = (entryStatus === 'REJECTED' || entryStatus === 'PARTIALLY_APPROVED') && group.projectId != null && approvedProjectIds.has(group.projectId);
+                    const groupIsReadOnly = isReadOnly || groupApproved;
+                    const groupPiece = entryPieces.find(p => p.projectId === group.projectId) ?? null;
+                    const pieceCfg = groupPiece ? (GROUP_PIECE_STATUS_CFG[groupPiece.status] ?? GROUP_PIECE_STATUS_CFG.PENDING) : null;
+                    return (
+                      <div key={group.projectId ?? '__none__'} style={{ border: '1px solid var(--line2)', borderRadius: 10, overflow: 'hidden' }}>
+                        {/* Group header */}
+                        <div style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '9px 14px', background: 'var(--raised)',
+                          borderBottom: '1px solid var(--line)',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{
+                              width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                              background: group.projectId == null ? 'var(--txt-dim)' : 'var(--info)',
+                            }} />
+                            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--txt)' }}>
+                              {group.projectId == null
+                                ? 'Other tasks'
+                                : `${group.projectCode ?? ''}${group.projectCode && group.projectName ? ' · ' : ''}${group.projectName ?? 'Project'}`}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
+                            <div style={{ fontSize: 11, color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Clock size={11} aria-hidden />
+                              <span>Reviewed by: {group.reviewerLabel}</span>
+                            </div>
+                            {pieceCfg && (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                padding: '2px 8px', borderRadius: 20,
+                                background: `${pieceCfg.color}18`, border: `1px solid ${pieceCfg.color}40`,
+                                fontSize: 11, fontWeight: 500, color: pieceCfg.color,
+                              }}>
+                                <pieceCfg.Icon size={10} aria-hidden />
+                                {pieceCfg.label}
+                              </span>
+                            )}
+                          </div>
+                        </div>
 
-                {isEditable && <AddTaskButton onClick={addTask} style={{ marginTop: 10 }} />}
+                        {/* Rejection reason strip */}
+                        {groupPiece?.status === 'REJECTED' && groupPiece?.comment && (
+                          <div style={{
+                            padding: '7px 14px',
+                            background: 'rgba(228,55,61,.06)',
+                            borderBottom: '1px solid rgba(228,55,61,.2)',
+                            display: 'flex', alignItems: 'flex-start', gap: 7,
+                          }}>
+                            <MessageCircleQuestion size={13} style={{ color: '#E4373D', flexShrink: 0, marginTop: 1 }} aria-hidden />
+                            <span style={{ fontSize: 12, color: '#E4373D', lineHeight: 1.45 }}>
+                              <strong>Reason: </strong>{groupPiece.comment}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Tasks in group */}
+                        {groupTasks.length > 0 && (
+                          <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {groupTasks.map((task, idx) => (
+                              <TaskCard
+                                key={task.localId}
+                                task={task}
+                                index={idx}
+                                projects={projects}
+                                categories={categories}
+                                isReadOnly={groupIsReadOnly}
+                                onUpdate={patch => updateTask(task.localId, patch)}
+                                onRemove={() => removeTask(task.localId)}
+                                onCategoryChange={catId => handleCategoryChange(task.localId, catId)}
+                                // Working Day (and Half Leave) always need >= 1 task row, so removal is
+                                // blocked at the last one. Weekend has no such minimum — its only row can
+                                // always be removed, collapsing the section back to the default state
+                                // (handled in removeTask above).
+                                canRemove={isWeekend || tasks.length > 1}
+                                onFileSelected={e => handleTaskFileSelected(task.localId, e)}
+                                onPreviewAttachment={handlePreviewAttachment}
+                                onRemoveAttachment={attachmentId => handleRemoveTaskAttachment(task.localId, attachmentId)}
+                              />
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Add task to this group */}
+                        {!groupIsReadOnly && (
+                          <div style={{ padding: '0 14px 10px', paddingTop: groupTasks.length > 0 ? 0 : 10 }}>
+                            <AddTaskButton onClick={() => addTaskToProject(group.projectId, group.projectCode)} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </>
             )}
           </div>

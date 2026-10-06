@@ -17,6 +17,7 @@ import com.nforceone.sync.org.Designation;
 import com.nforceone.sync.org.DesignationRepository;
 import com.nforceone.sync.project.Allocation;
 import com.nforceone.sync.project.AllocationRepository;
+import com.nforceone.sync.project.PmScopeService;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
 import com.nforceone.sync.reports.dto.MissingEodDayDto;
@@ -62,6 +63,7 @@ public class MissingEodReportService {
     private final DesignationRepository designationRepository;
     private final NotificationService notificationService;
     private final ShiftDefinitionRepository shiftRepository;
+    private final PmScopeService pmScopeService;
 
     public MissingEodReportService(AppUserRepository appUserRepository,
                                     ProjectRepository projectRepository,
@@ -71,7 +73,8 @@ public class MissingEodReportService {
                                     BusinessRuleConfigRepository configRepository,
                                     DesignationRepository designationRepository,
                                     NotificationService notificationService,
-                                    ShiftDefinitionRepository shiftRepository) {
+                                    ShiftDefinitionRepository shiftRepository,
+                                    PmScopeService pmScopeService) {
         this.appUserRepository = appUserRepository;
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
@@ -81,6 +84,7 @@ public class MissingEodReportService {
         this.notificationService = notificationService;
         this.designationRepository = designationRepository;
         this.shiftRepository = shiftRepository;
+        this.pmScopeService = pmScopeService;
     }
 
     /**
@@ -310,8 +314,6 @@ public class MissingEodReportService {
     private boolean isMissing(EodEntry entry) {
         if (entry == null) return true;
         return switch (entry.getStatus()) {
-            // PARTIALLY_APPROVED (per-project approval workflow, not implemented in this
-            // checkout — see EodEntry.Status's own comment) is not "missing" either.
             case APPROVED, SUBMITTED, PARTIALLY_APPROVED -> false;
             case DRAFT, REJECTED, MISSED -> true;
         };
@@ -320,6 +322,10 @@ public class MissingEodReportService {
     // Mirrors ProjectDashboardService.isLeaveOnlyEntry / TeamLeadService's equivalent exactly —
     // no shared leave-request workflow exists yet to look this up directly.
     private boolean isLeaveOnlyEntry(EodEntry entry) {
+        if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+            return entry.getLogTotalHours() != null
+                    && entry.getLogTotalHours().compareTo(java.math.BigDecimal.ZERO) == 0;
+        }
         List<EodTask> tasks = entry.getTasks();
         if (tasks.isEmpty()) return false;
         return tasks.stream().allMatch(t ->
@@ -338,9 +344,7 @@ public class MissingEodReportService {
         AppUser user = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
-        if (user.getRole() != AppUser.Role.PM && user.getRole() != AppUser.Role.SUPERADMIN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Project Manager access required");
-        }
+        pmScopeService.requirePmScope(user);
         return user;
     }
 
@@ -348,7 +352,7 @@ public class MissingEodReportService {
         if (pm.getRole() == AppUser.Role.SUPERADMIN) {
             return projectRepository.findAllWithPmOrderByNameAsc();
         }
-        return projectRepository.findByProjectManagerIdOrderByNameAsc(pm.getId());
+        return projectRepository.findByPmIdOrderByNameAsc(pm.getId());
     }
 
     private BusinessRuleConfig requireConfig() {

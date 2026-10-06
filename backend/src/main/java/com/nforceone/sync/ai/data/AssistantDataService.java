@@ -65,7 +65,10 @@ public class AssistantDataService {
 
         List<ScoredProvider> eligible = new ArrayList<>();
         for (AssistantDataProvider provider : providers) {
-            if (!provider.audiences().contains(context.role())) {
+            boolean roleMatch = provider.audienceRoles().contains(context.role());
+            boolean capMatch  = provider.audienceCapabilities().stream()
+                    .anyMatch(c -> context.capabilities().contains(c));
+            if (!roleMatch && !capMatch) {
                 continue;
             }
             double best = 0.0;

@@ -13,7 +13,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/allocations")
-@PreAuthorize("hasAnyRole('PM','SUPERADMIN')")
 public class AllocationController {
 
     private final AllocationService allocationService;
@@ -22,15 +21,30 @@ public class AllocationController {
         this.allocationService = allocationService;
     }
 
-    // teamLeadId: see AllocationService.listAll(Long, Long) javadoc — narrows to one Team Lead's
-    // projects (Super Admin Reportee Views enhancement); ignored when projectId is also given.
+    /**
+     * All allocations (optionally filtered by project or team lead). PM gets read-only access so
+     * the Projects & Allocation page can still show allocations; write endpoints are ADMIN-only.
+     * teamLeadId: see AllocationService.listAll(Long, Long) javadoc.
+     */
     @GetMapping
+    @PreAuthorize("hasAnyRole('PM','ADMIN','SUPERADMIN')")
     public List<AllocationDto> listAll(@RequestParam(required = false) Long projectId,
                                         @RequestParam(required = false) Long teamLeadId) {
         return allocationService.listAll(projectId, teamLeadId);
     }
 
+    /**
+     * Read-only allocations for one project — accessible to PM so they can see who is on their
+     * projects without being able to create, edit, or delete.
+     */
+    @GetMapping("/project/{projectId}")
+    @PreAuthorize("hasAnyRole('PM','ADMIN','SUPERADMIN')")
+    public List<AllocationDto> listForProject(@PathVariable Long projectId) {
+        return allocationService.listAll(projectId);
+    }
+
     @GetMapping("/employees")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public List<EmployeeRefDto> listAssignableEmployees() {
         return allocationService.listAssignableEmployees();
     }
@@ -38,12 +52,14 @@ public class AllocationController {
     /** Assigns one employee to one project for a date range. */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public AllocationDto create(@Valid @RequestBody CreateAllocationRequest request) {
         return allocationService.create(request);
     }
 
     /** Edits an allocation's date range. Employee and project are fixed. */
     @PatchMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public AllocationDto update(@PathVariable Long id,
                                 @Valid @RequestBody UpdateAllocationRequest request) {
         return allocationService.update(id, request);
@@ -51,6 +67,7 @@ public class AllocationController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public void delete(@PathVariable Long id) {
         allocationService.delete(id);
     }

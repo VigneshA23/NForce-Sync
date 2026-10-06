@@ -4,7 +4,7 @@ knowledge:
     module: approvals
     workflowId: eod.approval
     version: 1
-    audience: [EMPLOYEE, MANAGER, PM, SUPERADMIN]
+    audience: [EMPLOYEE, PM, SUPERADMIN]
     title: How an EOD entry gets approved
     synonyms:
       - who approves my eod
@@ -41,7 +41,8 @@ knowledge:
     pageId: approvals
     actionId: approvals.review
     version: 1
-    audience: [MANAGER, PM]
+    audience: [PM]
+    capabilities: [LEADS_PROJECT]
     title: Reviewing pending approvals
     synonyms:
       - see pending approvals
@@ -72,7 +73,7 @@ knowledge:
     module: approvals
     actionId: eod.history-visibility
     version: 1
-    audience: [EMPLOYEE, MANAGER, PM, SUPERADMIN]
+    audience: [EMPLOYEE, PM, SUPERADMIN]
     title: Who can see an entry's approval history
     synonyms:
       - why was my eod rejected

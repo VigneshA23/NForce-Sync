@@ -14,6 +14,7 @@ import com.nforceone.sync.ai.contract.PageReference;
 import com.nforceone.sync.ai.contract.RetrievalQuery;
 import com.nforceone.sync.ai.contract.RetrievalResult;
 import com.nforceone.sync.ai.contract.RoleLabels;
+import com.nforceone.sync.ai.data.AssistantDataProvider;
 import com.nforceone.sync.ai.data.AssistantDataService;
 import com.nforceone.sync.ai.entity.AiConversation;
 import com.nforceone.sync.ai.exception.AiProviderException;
@@ -25,6 +26,7 @@ import com.nforceone.sync.ai.response.ResponseValidator;
 import com.nforceone.sync.ai.response.UnknownResponses;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.teamlead.LeadAccessService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -70,12 +72,13 @@ public class AiAssistantService {
     private final ResponseValidator responseValidator;
     private final ConversationService conversationService;
     private final AiInteractionLogger interactionLogger;
+    private final LeadAccessService leadAccess;
 
     public AiAssistantService(AppUserRepository appUserRepository, AiProperties properties,
             AiRateLimiter rateLimiter, NavigationValidator navigationValidator, KnowledgeRetriever retriever,
             AssistantDataService dataService, PromptBuilder promptBuilder, LlmProvider llmProvider,
             ResponseValidator responseValidator, ConversationService conversationService,
-            AiInteractionLogger interactionLogger) {
+            AiInteractionLogger interactionLogger, LeadAccessService leadAccess) {
         this.appUserRepository = appUserRepository;
         this.properties = properties;
         this.rateLimiter = rateLimiter;
@@ -87,6 +90,7 @@ public class AiAssistantService {
         this.responseValidator = responseValidator;
         this.conversationService = conversationService;
         this.interactionLogger = interactionLogger;
+        this.leadAccess = leadAccess;
     }
 
     public AssistantResponse chat(String actorEmail, String message, String conversationId, String currentPageId) {
@@ -103,8 +107,10 @@ public class AiAssistantService {
         }
         AppUser user = userOpt.get();
 
+        Set<String> capabilities = leadAccess.leadsAnyProject(user.getId())
+                ? Set.of(AssistantDataProvider.CAPABILITY_LEADS_PROJECT) : Set.of();
         AssistantRequestContext context = new AssistantRequestContext(
-                user.getId(), user.getEmail(), user.getRole(), RoleLabels.label(user.getRole()), null, null);
+                user.getId(), user.getEmail(), user.getRole(), RoleLabels.label(user.getRole()), null, null, capabilities);
 
         String trimmed = message == null ? "" : message.trim();
         int maxMessageChars = properties.getLimits().getMaxMessageChars();
@@ -157,7 +163,10 @@ public class AiAssistantService {
 
         List<RetrievalResult> knowledge;
         try {
-            RetrievalQuery query = new RetrievalQuery(retrievalText, null, Set.of(context.role().name()),
+            Set<String> audienceSet = new java.util.HashSet<>();
+            audienceSet.add(context.role().name());
+            audienceSet.addAll(context.capabilities());
+            RetrievalQuery query = new RetrievalQuery(retrievalText, null, java.util.Collections.unmodifiableSet(audienceSet),
                     context.currentModule(), context.currentPageId(), 0, 0);
             knowledge = retriever.retrieve(query, deadline);
         } catch (AiProviderException e) {

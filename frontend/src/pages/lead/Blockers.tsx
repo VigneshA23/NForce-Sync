@@ -572,7 +572,7 @@ export default function Blockers() {
     <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: selectedBlocker ? '1.7fr 1fr' : '1fr', gap: 16, alignItems: 'start' }}>
       <div>
         {isSuperAdmin && (
-          <ReporteeScopePicker role="MANAGER" label="Team Lead" value={teamLeadId} onChange={setTeamLeadId} />
+          <ReporteeScopePicker role="LEAD" label="Team Lead" value={teamLeadId} onChange={setTeamLeadId} />
         )}
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>

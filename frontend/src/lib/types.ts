@@ -1,10 +1,6 @@
 export type Role =
   | 'employee'
-  | 'lead'
   | 'pm'
-  | 'dm'
-  | 'finance'
-  | 'leadership'
   | 'admin'
   | 'superadmin';
 

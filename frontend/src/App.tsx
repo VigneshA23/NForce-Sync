@@ -14,7 +14,6 @@ import { Shell } from './components/Shell';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { GlobalLoader } from './components/GlobalLoader';
 import { NotAuthorized } from './pages/NotAuthorized';
-import { Placeholder } from './pages/Placeholder';
 import Login               from './pages/auth/Login';
 import Forgot              from './pages/auth/Forgot';
 import Reset               from './pages/auth/Reset';
@@ -37,6 +36,7 @@ const MyBlockers          = lazy(() => import('./pages/employee/MyBlockers'));
 const EmployeeEodInbox    = lazy(() => import('./pages/employee/EodInbox'));
 const MyUtilization       = lazy(() => import('./pages/employee/MyUtilization'));
 const SubmitEOD           = lazy(() => import('./pages/employee/SubmitEOD'));
+const DailyLogForm        = lazy(() => import('./pages/employee/DailyLogForm'));
 const EodHistory          = lazy(() => import('./pages/employee/EodHistory'));
 const TeamDashboard       = lazy(() => import('./pages/lead/TeamDashboard'));
 const MyProjects          = lazy(() => import('./pages/lead/MyProjects'));
@@ -52,6 +52,12 @@ const ReportsDashboard    = lazy(() => import('./pages/pm/ReportsDashboard'));
 const LeadReportsDashboard = lazy(() => import('./pages/lead/ReportsDashboard'));
 const PmBlockers          = lazy(() => import('./pages/pm/Blockers'));
 const PmEodInbox          = lazy(() => import('./pages/pm/EodInbox'));
+
+// My Reports (Reporting Manager)
+const MyReportsOverview    = lazy(() => import('./pages/my-reports/Overview'));
+const MyReportsEodStatus   = lazy(() => import('./pages/my-reports/EodStatus'));
+const MyReportsUtilization = lazy(() => import('./pages/my-reports/Utilization'));
+const MyReportsApprovals   = lazy(() => import('./pages/my-reports/Approvals'));
 
 // Super Admin Reportee Views — Project Manager Views only (Team Lead Views was removed from
 // Super Admin's navigation/access; Team Lead's own navigation/permissions are unaffected).
@@ -92,6 +98,7 @@ function ChunkPrefetcher() {
     } else if (user.role === 'admin') {
       import('./pages/admin/Dashboard');
       import('./pages/admin/UserManagement');
+      import('./pages/pm/ProjectsAllocation');
       import('./pages/admin/AuditLog');
       import('./pages/admin/RolesAccess');
       import('./pages/admin/OrganizationMasters');
@@ -103,7 +110,7 @@ function ChunkPrefetcher() {
       // Reportee Views (Super Admin visibility into PM operational pages — Team Lead Views was
       // removed from Super Admin's navigation/access).
       import('./pages/admin/reportee/PmProjects');
-    } else if (user.role === 'lead') {
+    } else if ((user.capabilities?.leadsProjectIds?.length ?? 0) > 0) {
       import('./pages/lead/TeamDashboard');
       import('./pages/lead/MyProjects');
       import('./pages/Approvals');
@@ -161,6 +168,14 @@ function RoleLanding() {
   return <Navigate to={ROLE_LANDING[user!.role]} replace />;
 }
 
+/** Routes /eod/submit to the correct form based on the user's computed eodForm capability. */
+function EodSubmitRoute() {
+  const { user } = useAuth();
+  const eodForm = user?.capabilities?.eodForm;
+  if (eodForm === 'PLAIN_LOG') return <DailyLogForm />;
+  return <SubmitEOD />;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -192,7 +207,7 @@ function AppRoutes() {
             <Route path="/my-projects"  element={<EmployeeMyProjects />} />
             <Route path="/blockers"     element={<MyBlockers />} />
             <Route path="/employee/eod-inbox" element={<EmployeeEodInbox />} />
-            <Route path="/eod/submit"  element={<SubmitEOD />} />
+            <Route path="/eod/submit"  element={<EodSubmitRoute />} />
             <Route path="/eod/history" element={<EodHistory />} />
             <Route path="/utilization" element={<MyUtilization />} />
 
@@ -207,7 +222,7 @@ function AppRoutes() {
 
             {/* ── Project Manager ────────────────────── */}
             <Route path="/projects/dashboard"      element={<ProjectDashboard />} />
-            <Route path="/projects"                element={<ProjectsAllocation />} />
+            <Route path="/projects"                element={<ProjectsAllocation readOnly={true} />} />
             <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
             <Route path="/projects/utilization"     element={<ProjectsUtilization />} />
             <Route path="/projects/blockers"       element={<PmBlockers />} />
@@ -215,29 +230,10 @@ function AppRoutes() {
             <Route path="/projects/approvals"      element={<ApprovalsPM />} />
             <Route path="/projects/reports"        element={<ReportsDashboard />} />
 
-            {/* ── Delivery Manager ───────────────────── */}
-            <Route path="/dm/dashboard"      element={<Placeholder title="Delivery Dashboard" />} />
-            <Route path="/dm/escalations"    element={<Placeholder title="Escalations" />} />
-            <Route path="/dm/allocation"     element={<Placeholder title="Allocation" />} />
-            <Route path="/dm/heatmap"        element={<Placeholder title="Allocation Heatmap" />} />
-            <Route path="/dm/utilization"    element={<Placeholder title="Cross-Project Util" />} />
-            <Route path="/dm/reports"        element={<Placeholder title="Reports" />} />
-
-            {/* ── Finance Admin ──────────────────────── */}
-            <Route path="/finance/dashboard"     element={<Placeholder title="Finance Dashboard" />} />
-            <Route path="/finance/billable"      element={<Placeholder title="Billable Data" />} />
-            <Route path="/finance/profitability" element={<Placeholder title="Profitability" />} />
-            <Route path="/finance/reports"       element={<Placeholder title="Reports" />} />
-
-            {/* ── Leadership ─────────────────────────── */}
-            <Route path="/leadership/dashboard" element={<Placeholder title="Org Dashboard" />} />
-            <Route path="/leadership/trends"    element={<Placeholder title="Trends & Drilldown" />} />
-            <Route path="/leadership/teams"     element={<Placeholder title="Team Rankings" />} />
-            <Route path="/leadership/reports"   element={<Placeholder title="Reports" />} />
-
             {/* ── Admin (user administration) ───────── */}
             <Route path="/admin/dashboard"    element={<AdminDashboard />} />
             <Route path="/admin/users"        element={<UserManagement />} />
+            <Route path="/admin/projects"     element={<ProjectsAllocation />} />
             <Route path="/admin/roles"        element={<RolesAccess />} />
             <Route path="/admin/audit"        element={<AuditLog />} />
 
@@ -254,6 +250,12 @@ function AppRoutes() {
             <Route path="/admin/reportee/pm/projects"      element={<ReporteePmProjects />} />
             <Route path="/admin/reportee/pm/eod"           element={<ReporteePmEod />} />
             <Route path="/admin/reportee/pm/utilization"   element={<ReporteePmUtilization />} />
+
+            {/* ── My Reports (Reporting Manager) ─────── */}
+            <Route path="/my-reports/overview"    element={<MyReportsOverview />} />
+            <Route path="/my-reports/eod-status"  element={<MyReportsEodStatus />} />
+            <Route path="/my-reports/utilization" element={<MyReportsUtilization />} />
+            <Route path="/my-reports/approvals"   element={<MyReportsApprovals />} />
 
             {/* ── Shared ─────────────────────────────── */}
             <Route path="/notifications"   element={<Notifications />} />

@@ -6,6 +6,7 @@ import {
   Search, ArrowUp, ArrowDown, Calendar as CalendarIcon,
 } from 'lucide-react';
 import { listEntries, getDayDefaults } from '../../api/eod';
+import { useEntryPieces } from '../../api/approvalPieces';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { Pagination } from '../../components/Pagination';
 import type { EodHistoryEntryDto } from '../../api/eod';
@@ -36,13 +37,14 @@ const DAY_TYPE_LABELS: Record<string, string> = {
 // ── Status helpers ─────────────────────────────────────────────────────────────
 
 const STATUS_META: Record<string, { color: string; label: string; Icon: React.FC<{ size: number }> }> = {
-  DRAFT:             { color: '#9BA1AC', label: 'Draft',             Icon: Clock },
-  SUBMITTED:         { color: '#4C8DD6', label: 'Submitted',         Icon: Clock },
-  APPROVED:          { color: '#2FB67C', label: 'Approved',          Icon: CheckCircle },
-  REJECTED:          { color: '#E4373D', label: 'Rejected',          Icon: XCircle },
+  DRAFT:              { color: '#9BA1AC', label: 'Draft',              Icon: Clock },
+  SUBMITTED:          { color: '#4C8DD6', label: 'Submitted',          Icon: Clock },
+  APPROVED:           { color: '#2FB67C', label: 'Approved',           Icon: CheckCircle },
+  PARTIALLY_APPROVED: { color: '#E0A93B', label: 'Partially Approved', Icon: AlertTriangle },
+  REJECTED:           { color: '#E4373D', label: 'Rejected',           Icon: XCircle },
   // Amber, not the old #6B7280 — index.css flags that grey as failing AA, and these rows only
   // started rendering once missing days were synthesized. Distinct from Draft's grey too.
-  MISSED:            { color: '#E0A93B', label: 'Missing',           Icon: AlertTriangle },
+  MISSED:             { color: '#E0A93B', label: 'Missing',            Icon: AlertTriangle },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -60,15 +62,61 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+// ── Per-piece status chips ─────────────────────────────────────────────────────
+
+const PIECE_STATUS_META: Record<string, { color: string; label: string; Icon: React.FC<{ size: number }> }> = {
+  APPROVED: { color: '#2FB67C', label: 'Approved', Icon: CheckCircle },
+  REJECTED: { color: '#E4373D', label: 'Rejected', Icon: XCircle },
+  PENDING:  { color: '#9BA1AC', label: 'Pending',  Icon: Clock },
+};
+
+function EntryPieceChipsWithFallback({ entryId, status }: { entryId: number; status: string }) {
+  const { data: pieces } = useEntryPieces(entryId);
+  if (!pieces || pieces.length === 0) return <StatusBadge status={status} />;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {pieces.map(piece => {
+        const m = PIECE_STATUS_META[piece.status] ?? PIECE_STATUS_META.PENDING;
+        return (
+          <div key={piece.id}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '2px 8px', borderRadius: 20,
+              background: `${m.color}18`, border: `1px solid ${m.color}40`,
+              fontSize: 11, fontWeight: 500, color: m.color, whiteSpace: 'nowrap',
+            }}>
+              <m.Icon size={10} aria-hidden />
+              {piece.projectName ?? 'Other'}: {m.label}
+            </span>
+            {piece.status === 'REJECTED' && piece.comment && (
+              <div
+                title={piece.comment}
+                style={{
+                  fontSize: 10, color: '#E4373D', marginTop: 2,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  maxWidth: 190, paddingLeft: 4,
+                }}
+              >
+                "{piece.comment}"
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Filter options ─────────────────────────────────────────────────────────────
 
 const STATUS_FILTERS = [
-  { value: '',                 label: 'All' },
-  { value: 'SUBMITTED',        label: 'Submitted' },
-  { value: 'APPROVED',         label: 'Approved' },
-  { value: 'REJECTED',         label: 'Rejected' },
-  { value: 'DRAFT',            label: 'Draft' },
-  { value: 'MISSED',           label: 'Missing' },
+  { value: '',                  label: 'All' },
+  { value: 'SUBMITTED',         label: 'Submitted' },
+  { value: 'APPROVED',          label: 'Approved' },
+  { value: 'PARTIALLY_APPROVED', label: 'Partially Approved' },
+  { value: 'REJECTED',          label: 'Rejected' },
+  { value: 'DRAFT',             label: 'Draft' },
+  { value: 'MISSED',            label: 'Missing' },
 ];
 
 const PAGE_SIZE = 10;
@@ -192,16 +240,23 @@ export default function EodHistory() {
   });
   const workingHoursPerDay = dayDefaults?.workingHoursPerDay ?? 8;
 
-  const totalHours = (entry: EodHistoryEntryDto) =>
-    entry.tasks.reduce((sum, t) => sum + (Number(t.hours) || 0), 0);
+  const totalHours = (entry: EodHistoryEntryDto) => {
+    if (entry.entryForm === 'PLAIN_LOG') return entry.logTotalHours ?? 0;
+    return entry.tasks.reduce((sum, t) => sum + (Number(t.hours) || 0), 0);
+  };
 
   const projectSummary = (entry: EodHistoryEntryDto): string => {
+    if (entry.entryForm === 'PLAIN_LOG') return 'Daily log';
     const codes = Array.from(new Set(entry.tasks.map(t => t.projectCode).filter(Boolean))) as string[];
     if (codes.length === 0) return '-';
     return codes.length === 1 ? codes[0] : `${codes[0]} +${codes.length - 1}`;
   };
 
   const taskSummary = (entry: EodHistoryEntryDto): string => {
+    if (entry.entryForm === 'PLAIN_LOG') {
+      if ((entry.logTotalHours ?? 0) === 0) return 'Leave day';
+      return entry.logSummary ? (entry.logSummary.length > 60 ? entry.logSummary.slice(0, 57) + '…' : entry.logSummary) : 'Daily log';
+    }
     if (entry.tasks.length === 0) {
       return entry.dayType !== 'WORKING_DAY'
         ? (DAY_TYPE_LABELS[entry.dayType] ?? entry.dayType.replace('_', ' '))
@@ -222,6 +277,8 @@ export default function EodHistory() {
       rows = rows.filter(e => {
         const haystack = [
           e.entryDate,
+          e.logSummary ?? '',
+          e.logNotes ?? '',
           ...e.tasks.map(t => t.projectCode ?? ''),
           ...e.tasks.map(t => t.categoryName ?? ''),
           ...e.tasks.map(t => t.description ?? ''),
@@ -668,7 +725,11 @@ export default function EodHistory() {
                   );
                 })()}
               </div>
-              <div><StatusBadge status={entry.status} /></div>
+              <div>
+                {entry.id != null
+                  ? <EntryPieceChipsWithFallback entryId={entry.id} status={entry.status} />
+                  : <StatusBadge status={entry.status} />}
+              </div>
               <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
                 {entry.submittedAt ? formatDateTime(entry.submittedAt) : '-'}
               </div>

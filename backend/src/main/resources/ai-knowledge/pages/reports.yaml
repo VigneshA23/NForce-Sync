@@ -4,7 +4,8 @@ knowledge:
     module: reports
     pageId: reports
     version: 1
-    audience: [MANAGER, PM]
+    audience: [PM]
+    capabilities: [LEADS_PROJECT]
     title: Reports
     synonyms:
       - eod reports
