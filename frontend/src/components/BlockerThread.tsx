@@ -61,7 +61,16 @@ const EMOJI_OPTIONS = [
   '🚀', '💡', '⏰', '📌', '❓', '❗', '🎉', '👀', '💯', '🙌',
 ];
 
-export function Avatar({ name, bg, size = 30 }: { name: string; bg: string; size?: number }) {
+export function Avatar({ name, bg, size = 30, photoUrl }: { name: string; bg: string; size?: number; photoUrl?: string | null }) {
+  if (photoUrl) {
+    return (
+      <img
+        src={photoUrl}
+        alt=""
+        style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, objectFit: 'cover', display: 'block' }}
+      />
+    );
+  }
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0, background: bg,

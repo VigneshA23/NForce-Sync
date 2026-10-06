@@ -57,6 +57,15 @@ public class UserController {
         return userService.getUser(id);
     }
 
+    // Returned as the same "data:<mime>;base64,..." string the self-service upload at
+    // POST /api/profile/photo stores, not raw bytes — the frontend drops it straight into
+    // an <img src> either way, and this skips decoding it server-side just to re-encode it.
+    @GetMapping("/{id}/photo")
+    public Map<String, String> getUserPhoto(@PathVariable Long id) {
+        String photoDataUrl = userService.getUserPhotoDataUrl(id);
+        return Map.of("photoDataUrl", photoDataUrl != null ? photoDataUrl : "");
+    }
+
     @PatchMapping("/{id}")
     public UserDto updateUser(@PathVariable Long id,
                               @Valid @RequestBody UpdateUserRequest request) {

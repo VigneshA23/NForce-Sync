@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
+import { StatusGlyph } from '../lib/statusCues';
 
 export interface StatusMeta { label: string; color: string; }
 
@@ -33,7 +34,7 @@ export function StatusDropdown<T extends string>({ status, options, meta, onChan
           whiteSpace: 'nowrap', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.7 : 1,
         }}
       >
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+        <StatusGlyph color={color} size={12} fallback={<span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />} />
         {label}
         <ChevronDown size={12} aria-hidden="true" />
       </button>
@@ -61,7 +62,7 @@ export function StatusDropdown<T extends string>({ status, options, meta, onChan
                     fontSize: 12.5, fontWeight: isSelected ? 700 : 500, cursor: 'pointer',
                   }}
                 >
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: optMeta.color, flexShrink: 0 }} />
+                  <StatusGlyph color={optMeta.color} size={13} fallback={<span style={{ width: 7, height: 7, borderRadius: '50%', background: optMeta.color, flexShrink: 0 }} />} />
                   <span style={{ flex: 1 }}>{optMeta.label}</span>
                   {isSelected && <Check size={13} aria-hidden="true" />}
                 </button>
@@ -80,12 +81,13 @@ export function StatusBadge<T extends string>({ status, meta }: { status: T; met
   const { label, color } = meta[status];
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 20,
+      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 20,
       fontSize: 11, fontWeight: 700, color,
       background: `color-mix(in srgb, ${color} 16%, transparent)`,
       border: `1px solid color-mix(in srgb, ${color} 32%, transparent)`,
       whiteSpace: 'nowrap',
     }}>
+      <StatusGlyph color={color} size={11} />
       {label}
     </span>
   );

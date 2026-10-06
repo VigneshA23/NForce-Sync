@@ -92,6 +92,11 @@ export const ROLE_LANDING: Record<Role, string> = {
   superadmin: '/admin/executive-dashboard',
 };
 
+/** Landing route for a role — the screen shown after login; also the target of the sidebar logo. */
+export function getHomeRouteForRole(role: Role): string {
+  return ROLE_LANDING[role];
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

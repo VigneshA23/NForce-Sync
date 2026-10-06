@@ -1235,6 +1235,7 @@ export default function SubmitEOD() {
           </span>
           {hasOpenClarification && entryId != null && (
             <Link
+              className="nf-link"
               to={`/employee/eod-inbox?highlight=${entryId}`}
               style={{
                 marginLeft: 'auto', flexShrink: 0, fontSize: 12.5, fontWeight: 600,

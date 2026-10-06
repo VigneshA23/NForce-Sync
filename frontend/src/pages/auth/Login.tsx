@@ -305,11 +305,15 @@ export default function Login() {
                     type="button"
                     aria-label={showPass ? 'Hide password' : 'Show password'}
                     onClick={() => setShowPass((v) => !v)}
+                    aria-pressed={showPass}
+                    title={showPass ? 'Hide password' : 'Show password'}
                     style={eyeButtonStyle}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.95)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = eyeButtonStyle.color as string)}
                   >
                     {showPass
-                      ? <Eye     size={15} aria-hidden="true" />
-                      : <EyeOff  size={15} aria-hidden="true" />
+                      ? <EyeOff size={18} aria-hidden="true" />
+                      : <Eye    size={18} aria-hidden="true" />
                     }
                   </button>
                 </div>
@@ -335,6 +339,7 @@ export default function Login() {
             <a
               href="/forgot"
               onClick={(e) => { e.preventDefault(); navigate('/forgot'); }}
+              className="nf-link"
               style={mutedLinkStyle}
               onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.72)')}
               onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.38)')}
@@ -422,6 +427,9 @@ const labelStyle: React.CSSProperties = {
 
 
 const eyeButtonStyle: React.CSSProperties = {
+  // Must sit above .nf-input-inner (position: relative; z-index: 1, opaque background in
+  // AuthLayout) — a z-auto button is painted underneath it and is invisible.
+  zIndex: 3,
   position: 'absolute',
   right: 11,
   top: '50%',
@@ -429,12 +437,11 @@ const eyeButtonStyle: React.CSSProperties = {
   background: 'none',
   border: 'none',
   cursor: 'pointer',
-  color: 'rgba(255,255,255,0.35)',
+  color: 'rgba(255,255,255,0.65)',
   display: 'flex',
   alignItems: 'center',
   padding: 4,
   borderRadius: 4,
-  zIndex: 2,
 };
 
 const mutedLinkStyle: React.CSSProperties = {
