@@ -6,7 +6,7 @@ import { Menu, X, Search, Bell, LogOut, UserCircle2, HelpCircle, FolderKanban, C
 import { BrandMark } from './BrandMark';
 import { ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, getNavSections, navSubItemPath, isNavGroup } from '../lib/nav';
 import type { NavItem } from '../lib/nav';
-import { useAuth } from '../lib/auth';
+import { useAuth, getHomeRouteForRole } from '../lib/auth';
 import { useAccentColor, ACCENT_BAND_POSITION_X } from '../lib/accentColor';
 import sidebarDecoration from '../assets/sidebar-decoration.png';
 import { NotAuthorized } from '../pages/NotAuthorized';
@@ -590,6 +590,16 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         gap: 10,
         flexShrink: 0,
       }}>
+        {/* Whole brand block is one link to the user's landing page (same route as after login). */}
+        <Link
+          to={getHomeRouteForRole(role)}
+          onClick={onNavClick}
+          aria-label="Go to dashboard"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            color: 'inherit', textDecoration: 'none', cursor: 'pointer', borderRadius: 6,
+          }}
+        >
         <BrandMark size="sm" />
         <div>
           <div style={{
@@ -611,6 +621,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
             EOD & Utilization
           </div>
         </div>
+        </Link>
       </div>
 
       {/* Scrollable nav sections */}

@@ -22,6 +22,7 @@ import { Pagination } from '../../components/Pagination';
 import { utilColor, fmtPct } from '../../lib/rules';
 import { formatDate, formatDateTime, formatTime12h, toLocalISODate, todayISO } from '../../lib/date';
 import { useHashScroll } from '../../lib/useHashScroll';
+import { StatusGlyph, type StatusTone } from '../../lib/statusCues';
 
 // ── Primitives ─────────────────────────────────────────────────────────────────
 
@@ -124,6 +125,19 @@ function cellDotColor(day: CalendarDay): string {
     case 'MISSED':    return DAY_COLORS.MISSED.text;
     case 'REJECTED':  return DAY_COLORS.REJECTED.text;
     default:          return 'transparent';
+  }
+}
+
+// Shape cue for the calendar when "Color-blind friendly status cues" is on — null means the
+// day has no status of its own (weekend, holiday, future, no entry) and keeps the plain dot.
+function cellTone(day: CalendarDay): StatusTone | null {
+  if (day.status === 'HOLIDAY' || day.isWeekend) return null;
+  switch (day.status) {
+    case 'APPROVED':  return 'ok';
+    case 'SUBMITTED': return 'info';
+    case 'REJECTED':  return 'warn';
+    case 'MISSED':    return 'risk';
+    default:          return null;
   }
 }
 
@@ -335,10 +349,16 @@ function CalendarHeatmap({
                 {dayNum}
               </span>
               {showDot && (
-                <span style={{
-                  width: 4, height: 4, borderRadius: '50%',
-                  background: cellDotColor(day), flexShrink: 0,
-                }} />
+                <span style={{ display: 'flex', color: isToday ? '#fff' : cellDotColor(day) }}>
+                  <StatusGlyph
+                    tone={cellTone(day) ?? undefined}
+                    size={9}
+                    fallback={<span style={{
+                      width: 4, height: 4, borderRadius: '50%',
+                      background: cellDotColor(day), flexShrink: 0,
+                    }} />}
+                  />
+                </span>
               )}
             </div>
           );
@@ -351,19 +371,20 @@ function CalendarHeatmap({
         fontSize: 12, color: 'var(--txt)', fontWeight: 500, width: gridWidth,
       }}>
         {[
-          { bg: DAY_COLORS.APPROVED.bg,  border: DAY_COLORS.APPROVED.text,  label: 'Approved' },
-          { bg: DAY_COLORS.SUBMITTED.bg, border: DAY_COLORS.SUBMITTED.text, label: 'Pending' },
-          { bg: DAY_COLORS.REJECTED.bg,  border: DAY_COLORS.REJECTED.text,  label: 'Rejected' },
-          { bg: DAY_COLORS.MISSED.bg,    border: DAY_COLORS.MISSED.text,    label: 'Missed' },
-          { bg: DAY_COLORS.HOLIDAY.bg,   border: DAY_COLORS.HOLIDAY.text,   label: 'Holiday' },
-          { bg: DAY_COLORS.WEEKEND.bg,   border: 'var(--line2)',             label: 'Weekly off' },
-          { bg: DAY_COLORS.EMPTY.bg,     border: 'var(--line)',              label: 'No entry' },
-        ].map(({ bg, border, label }) => (
+          { bg: DAY_COLORS.APPROVED.bg,  border: DAY_COLORS.APPROVED.text,  label: 'Approved', tone: 'ok' as StatusTone },
+          { bg: DAY_COLORS.SUBMITTED.bg, border: DAY_COLORS.SUBMITTED.text, label: 'Pending', tone: 'info' as StatusTone },
+          { bg: DAY_COLORS.REJECTED.bg,  border: DAY_COLORS.REJECTED.text,  label: 'Rejected', tone: 'warn' as StatusTone },
+          { bg: DAY_COLORS.MISSED.bg,    border: DAY_COLORS.MISSED.text,    label: 'Missed', tone: 'risk' as StatusTone },
+          { bg: DAY_COLORS.HOLIDAY.bg,   border: DAY_COLORS.HOLIDAY.text,   label: 'Holiday', tone: undefined },
+          { bg: DAY_COLORS.WEEKEND.bg,   border: 'var(--line2)',             label: 'Weekly off', tone: undefined },
+          { bg: DAY_COLORS.EMPTY.bg,     border: 'var(--line)',              label: 'No entry', tone: undefined },
+        ].map(({ bg, border, label, tone }) => (
           <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{
               width: 12, height: 12, borderRadius: 3, flexShrink: 0,
               background: bg, border: `1.5px solid ${border}`, boxSizing: 'border-box',
             }} />
+            {tone && <StatusGlyph tone={tone} size={12} />}
             {label}
           </span>
         ))}
@@ -780,6 +801,7 @@ function BlockersPanel({ tasks, onSelect }: { tasks: BlockedTask[]; onSelect: (t
       <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <SectionLabel id="dashboard-blockers" style={{ marginBottom: 0 }}>My Blockers</SectionLabel>
         <Link
+          className="nf-link"
           to="/blockers"
           style={{
             display: 'flex', alignItems: 'center', gap: 4,

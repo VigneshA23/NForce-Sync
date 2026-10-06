@@ -1,14 +1,15 @@
-import { useState, useId, useEffect, useMemo, useRef } from 'react';
+import { useState, useId, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   UserPlus, X, Pencil, Power, PowerOff, RotateCcw, Trash2,
   AlertTriangle, Copy, Check, RefreshCw, ChevronDown,
-  Search, Filter, ArrowUp, ArrowDown, Download,
+  Search, ArrowUp, ArrowDown, Download,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { Avatar, avatarColor } from '../../components/BlockerThread';
 import { formatDate, formatTime12h } from '../../lib/date';
 import {
   listUsers, createUser, updateUser, setUserStatus, resetPassword,
@@ -17,12 +18,14 @@ import {
   createDepartment, createDesignation, createLocation,
   listShifts,
   getAdminStats,
+  getUserPhoto,
 } from '../../api/admin';
 import type { UserDto, CreateUserPayload, UpdateUserPayload, DepartmentDto, DesignationDto, OrgLocationDto, ShiftDefinitionDto } from '../../api/admin';
 import { toRole } from '../../api/auth';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 import { Modal } from '../../components/Modal';
 import { Pagination } from '../../components/Pagination';
+import { DropdownMenu } from '../../components/DropdownMenu';
 import { DatePicker } from '../../components/DatePicker';
 import { useToast } from '../../lib/toast';
 import { useBodyScrollLock } from '../../lib/useBodyScrollLock';
@@ -182,6 +185,19 @@ function StatusBadge({ status }: { status: string }) {
       {active ? 'Active' : 'Inactive'}
     </span>
   );
+}
+
+// Fetched per-row (not bundled into the UserDto list payload) so the uploaded photo
+// doesn't balloon the audit-log snapshots that wrap UserDto on every create/update — see
+// UserService.getUserPhotoDataUrl on the backend. react-query dedupes/caches per userId,
+// so revisiting the page or re-sorting doesn't refetch a photo already seen this session.
+function UserRowAvatar({ id, fullName }: { id: number; fullName: string }) {
+  const { data: photoUrl } = useQuery({
+    queryKey: ['userPhoto', id],
+    queryFn: () => getUserPhoto(id),
+    staleTime: 300_000,
+  });
+  return <Avatar name={fullName} bg={avatarColor(fullName)} size={32} photoUrl={photoUrl || null} />;
 }
 
 function FieldError({ msg }: { msg?: string }) {
@@ -1549,174 +1565,276 @@ function DeleteModal({
   );
 }
 
-// ── Action Button ─────────────────────────────────────────────────────────────
-
-function ActionBtn({
-  icon, label, onClick, danger = false, disabled = false, disabledTitle,
-}: {
-  icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean;
-  /** Renders the control inert — no click, no hover affordance — rather than merely styling it
-   *  dim, so an invalid action (e.g. resetting an inactive user's password) can't be triggered
-   *  at all rather than being caught after the fact. */
-  disabled?: boolean;
-  /** Tooltip/aria-label shown while disabled, explaining why. Falls back to `label` if omitted. */
-  disabledTitle?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      aria-label={disabled ? (disabledTitle ?? label) : label}
-      title={disabled ? (disabledTitle ?? label) : label}
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        width: 30, height: 30,
-        background: danger && !disabled ? 'rgba(228,55,61,.08)' : 'var(--raised2)',
-        border: `1px solid ${danger && !disabled ? 'rgba(228,55,61,.25)' : 'var(--line2)'}`,
-        borderRadius: 6, cursor: disabled ? 'not-allowed' : 'pointer',
-        color: danger && !disabled ? '#E4373D' : 'var(--txt-dim)',
-        opacity: disabled ? 0.45 : 1,
-        transition: 'background 0.14s, color 0.14s, border-color 0.14s',
-      }}
-      onMouseEnter={disabled ? undefined : e => {
-        e.currentTarget.style.color = danger ? '#E4373D' : 'var(--txt)';
-        e.currentTarget.style.borderColor = danger ? 'rgba(228,55,61,.5)' : 'var(--txt-dim)';
-        e.currentTarget.style.background = danger ? 'rgba(228,55,61,.14)' : 'var(--raised)';
-      }}
-      onMouseLeave={disabled ? undefined : e => {
-        e.currentTarget.style.color = danger ? '#E4373D' : 'var(--txt-dim)';
-        e.currentTarget.style.borderColor = danger ? 'rgba(228,55,61,.25)' : 'var(--line2)';
-        e.currentTarget.style.background = danger ? 'rgba(228,55,61,.08)' : 'var(--raised2)';
-      }}
-    >
-      {icon}
-    </button>
-  );
-}
-
-// ── Column filter dropdown ─────────────────────────────────────────────────────
+// ── Top-bar filter pill ────────────────────────────────────────────────────────
 
 interface FilterOption { value: string; label: string }
 
-function ColumnFilterHeader({
-  label, options, selected, onChange,
+/**
+ * Dropdown pill used for every filter in the bar above the table. The panel renders through a
+ * portal (the card/table wrappers clip overflow), is positioned from the trigger's rect and flips
+ * upward when there isn't room below. `multi` shows checkboxes; otherwise it is single-select.
+ * An "All" row at the top clears the selection. Keyboard: Enter/Space/ArrowDown on the trigger
+ * opens it, ArrowUp/Down move between rows (search box included), Enter toggles, Escape closes.
+ */
+function FilterPill({
+  label, options, selected, onChange, multi = false, searchable = true, searchNoun, counts, allLabel = 'All',
 }: {
   label: string;
   options: FilterOption[];
-  selected: string; // '' = All
-  onChange: (value: string) => void;
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+  multi?: boolean;
+  /** Search box at the top of the popover (default on; Status turns it off — only two options). */
+  searchable?: boolean;
+  /** Word used in the search placeholder, e.g. "manager" → "Search manager…". Defaults to the label. */
+  searchNoun?: string;
+  /** Optional per-option counts shown beside the label (keyed by option value; '' = All row). */
+  counts?: Record<string, number>;
+  allLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
-  const triggerRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [q, setQ] = useState('');
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const active = selected !== '';
+  const active = selected.size > 0;
 
-  // Rendered through a portal (see below) so the table's own overflow-x:auto
-  // wrapper — which forces overflow-y to clip too, per CSS overflow coupling —
-  // can't cut the dropdown off. Position is computed from the trigger's rect
-  // rather than relying on normal-flow placement, since a portaled node is no
-  // longer a DOM descendant of this header.
-  useEffect(() => {
-    if (!open || !triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    setCoords({ top: rect.bottom + 6, left: rect.left });
-  }, [open]);
+  const triggerText = !active
+    ? label
+    : selected.size === 1
+      ? `${label}: ${options.find(o => o.value === [...selected][0])?.label ?? ''}`
+      : `${label} (${selected.size})`;
+
+  const visible = searchable && q.trim()
+    ? options.filter(o => o.label.toLowerCase().includes(q.trim().toLowerCase()))
+    : options;
+
+  function place() {
+    const t = triggerRef.current;
+    if (!t) return;
+    const r = t.getBoundingClientRect();
+    const h = panelRef.current?.offsetHeight ?? 0;
+    const w = panelRef.current?.offsetWidth ?? 220;
+    const below = window.innerHeight - r.bottom;
+    const up = below < h + 14 && r.top > h + 14;
+    setPos({
+      top: up ? r.top - h - 6 : r.bottom + 6,
+      left: Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - w - 8)),
+    });
+  }
+
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); setQ(''); return; }
+    place();
+  }, [open, visible.length]);
 
   useEffect(() => {
     if (!open) return;
-    function onDocMouseDown(e: MouseEvent) {
-      const target = e.target as Node;
-      if (triggerRef.current?.contains(target)) return;
-      if (panelRef.current?.contains(target)) return;
+    function onMouseDown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || panelRef.current?.contains(t)) return;
       setOpen(false);
     }
-    // Position isn't tracked continuously — close on scroll/resize rather than
-    // let it drift out of alignment with the trigger. Scrolling *inside* the
-    // panel's own option list must not close it — the capture-phase listener
-    // sees that scroll too, so ignore anything whose target is inside panelRef.
-    function onScrollOrResize(e: Event) {
+    function onScrollResize(e: Event) {
       if (panelRef.current && e.target instanceof Node && panelRef.current.contains(e.target)) return;
-      setOpen(false);
+      place();
     }
-    document.addEventListener('mousedown', onDocMouseDown);
-    window.addEventListener('scroll', onScrollOrResize, true);
-    window.addEventListener('resize', onScrollOrResize);
+    document.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('scroll', onScrollResize, true);
+    window.addEventListener('resize', onScrollResize);
     return () => {
-      document.removeEventListener('mousedown', onDocMouseDown);
-      window.removeEventListener('scroll', onScrollOrResize, true);
-      window.removeEventListener('resize', onScrollOrResize);
+      document.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('scroll', onScrollResize, true);
+      window.removeEventListener('resize', onScrollResize);
     };
   }, [open]);
 
-  return (
-    <div ref={triggerRef} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-      <span>{label}</span>
+  // Focus the search box (or the first row) once the panel is positioned.
+  const placed = pos !== null;
+  useEffect(() => {
+    if (!open || !placed) return;
+    const el = panelRef.current?.querySelector<HTMLElement>(searchable ? 'input' : '[data-row]');
+    el?.focus();
+  }, [open, placed, searchable]);
+
+  function clearThis() {
+    onChange(new Set());
+    setQ('');
+    if (!multi) setOpen(false);
+  }
+
+  function pick(value: string) {
+    if (value === '') { onChange(new Set()); if (!multi) setOpen(false); return; }
+    if (multi) {
+      const next = new Set(selected);
+      if (next.has(value)) next.delete(value); else next.add(value);
+      onChange(next);
+    } else {
+      onChange(new Set([value]));
+      setOpen(false);
+    }
+  }
+
+  function onPanelKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); triggerRef.current?.focus(); return; }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+    const els = Array.from(panelRef.current?.querySelectorAll<HTMLElement>('input, [data-row]') ?? []);
+    if (els.length === 0) return;
+    const idx = els.indexOf(document.activeElement as HTMLElement);
+    if ((e.key === 'Home' || e.key === 'End') && document.activeElement instanceof HTMLInputElement) return;
+    e.preventDefault();
+    const next = e.key === 'Home' ? 0
+      : e.key === 'End' ? els.length - 1
+      : e.key === 'ArrowDown' ? Math.min(els.length - 1, idx + 1)
+      : Math.max(0, idx - 1);
+    els[next].focus();
+  }
+
+  const rowStyle = (isSel: boolean): React.CSSProperties => ({
+    display: 'flex', alignItems: 'center', gap: 8, width: '100%', boxSizing: 'border-box',
+    padding: '7px 12px', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: 12,
+    color: isSel ? 'var(--brand-bright)' : 'var(--txt)',
+    background: isSel ? 'rgba(176,17,22,.1)' : 'transparent', fontFamily: 'inherit',
+  });
+
+  function renderRow(value: string, text: string) {
+    const isSel = value === '' ? selected.size === 0 : selected.has(value);
+    const count = counts?.[value];
+    return (
       <button
+        key={value}
         type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-label={`Filter by ${label}`}
+        data-row
+        role="option"
+        aria-selected={isSel}
+        onClick={() => pick(value)}
+        style={rowStyle(isSel)}
+        onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = 'var(--raised)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = isSel ? 'rgba(176,17,22,.1)' : 'transparent'; }}
+        onFocus={e => { if (!isSel) e.currentTarget.style.background = 'var(--raised)'; }}
+        onBlur={e => { e.currentTarget.style.background = isSel ? 'rgba(176,17,22,.1)' : 'transparent'; }}
+      >
+        {multi && value !== '' && (
+          <span aria-hidden="true" style={{
+            width: 14, height: 14, flexShrink: 0, borderRadius: 3, display: 'inline-flex',
+            alignItems: 'center', justifyContent: 'center',
+            border: `1px solid ${isSel ? 'var(--brand-bright)' : 'var(--line2)'}`,
+            background: isSel ? 'var(--brand-bright)' : 'transparent', color: '#fff',
+          }}>
+            {isSel && <Check size={10} />}
+          </span>
+        )}
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
+        {count != null && <span style={{ color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>({count})</span>}
+      </button>
+    );
+  }
+
+  return (
+    <>
+      {/* Pill = trigger + (when active) a sibling "x" that clears just this filter without opening it. */}
+      <span
         style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 18, height: 18, padding: 0, border: 'none', borderRadius: 4, cursor: 'pointer',
-          background: active ? 'rgba(176,17,22,.16)' : 'transparent',
-          color: active ? 'var(--brand-bright)' : 'var(--txt-dim)',
+          display: 'inline-flex', alignItems: 'center', maxWidth: '100%', borderRadius: 20,
+          border: `1px solid ${active ? 'var(--brand-bright)' : 'var(--line2)'}`,
+          background: active ? 'rgba(176,17,22,.12)' : 'transparent',
+          color: active ? 'var(--brand-bright)' : 'var(--txt-mut)',
         }}
       >
-        <Filter size={11} aria-hidden="true" />
-      </button>
-      {open && coords && createPortal(
-        <div
-          ref={panelRef}
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => setOpen(o => !o)}
           style={{
-            // Clamped against the viewport: coords come straight from
-            // getBoundingClientRect(), so a trigger near the right edge of a
-            // narrow screen would otherwise place the panel partly offscreen.
-            position: 'fixed', top: coords.top,
-            left: Math.min(coords.left, Math.max(8, window.innerWidth - 178)),
-            zIndex: 2000,
-            minWidth: 170, maxWidth: 'calc(100vw - 16px)',
-            maxHeight: 260, overflowY: 'auto', overscrollBehavior: 'contain',
-            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 7,
-            boxShadow: '0 8px 24px rgba(0,0,0,.35)',
-            textTransform: 'none', letterSpacing: 'normal', fontWeight: 400,
+            display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0,
+            padding: active ? '6px 4px 6px 12px' : '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+            cursor: 'pointer', border: 'none', background: 'transparent', color: 'inherit', whiteSpace: 'nowrap',
           }}
         >
-          <div
-            onClick={() => { onChange(''); setOpen(false); }}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{triggerText}</span>
+          <ChevronDown size={12} aria-hidden="true" />
+        </button>
+        {active && (
+          <button
+            type="button"
+            aria-label={`Clear ${label} filter`}
+            title={`Clear ${label} filter`}
+            onClick={clearThis}
             style={{
-              padding: '8px 12px', fontSize: 12, cursor: 'pointer',
-              color: selected === '' ? 'var(--brand-bright)' : 'var(--txt)',
-              background: selected === '' ? 'rgba(176,17,22,.1)' : 'transparent',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20,
+              marginRight: 6, padding: 0, borderRadius: '50%', border: 'none', background: 'transparent',
+              color: 'inherit', cursor: 'pointer',
             }}
           >
-            All {label}
-          </div>
-          {options.map(opt => (
-            <div
-              key={opt.value}
-              onClick={() => { onChange(opt.value); setOpen(false); }}
-              style={{
-                padding: '8px 12px', fontSize: 12, cursor: 'pointer',
-                color: selected === opt.value ? 'var(--brand-bright)' : 'var(--txt)',
-                background: selected === opt.value ? 'rgba(176,17,22,.1)' : 'transparent',
-              }}
-              onMouseEnter={e => { if (selected !== opt.value) e.currentTarget.style.background = 'var(--raised)'; }}
-              onMouseLeave={e => { if (selected !== opt.value) e.currentTarget.style.background = 'transparent'; }}
-            >
-              {opt.label}
+            <X size={12} aria-hidden="true" />
+          </button>
+        )}
+      </span>
+      {open && createPortal(
+        <div
+          ref={panelRef}
+          role="presentation"
+          onKeyDown={onPanelKeyDown}
+          style={{
+            position: 'fixed', top: pos?.top ?? -9999, left: pos?.left ?? -9999,
+            visibility: pos ? 'visible' : 'hidden', zIndex: 2000,
+            minWidth: 200, maxWidth: 'calc(100vw - 16px)', maxHeight: 300,
+            display: 'flex', flexDirection: 'column',
+            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,.35)',
+          }}
+        >
+          {searchable && (
+            <div style={{ padding: 8, borderBottom: '1px solid var(--line)' }}>
+              <input
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder={`Search ${(searchNoun ?? label).toLowerCase()}…`}
+                aria-label={`Search ${label}`}
+                style={{
+                  width: '100%', boxSizing: 'border-box', background: 'var(--shell)', border: '1px solid var(--line2)',
+                  borderRadius: 6, padding: '6px 8px', color: 'var(--txt)', fontSize: 12, outline: 'none',
+                  fontFamily: 'Inter, sans-serif',
+                }}
+              />
             </div>
-          ))}
-          {options.length === 0 && (
-            <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--txt-dim)' }}>No values</div>
           )}
+          <div
+            role="listbox"
+            aria-label={`${label} options`}
+            aria-multiselectable={multi}
+            style={{ overflowY: 'auto', overscrollBehavior: 'contain', padding: '4px 0', minHeight: 0 }}
+          >
+            {!(searchable && q.trim()) && renderRow('', allLabel)}
+            {visible.map(o => renderRow(o.value, o.label))}
+            {visible.length === 0 && (
+              <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--txt-dim)' }}>No results found</div>
+            )}
+          </div>
+          <div style={{ padding: 8, borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={clearThis}
+              disabled={!active}
+              aria-label={`Clear ${label} filter`}
+              style={{
+                background: 'none', border: 'none', padding: '4px 6px', fontSize: 12, fontWeight: 500,
+                color: active ? 'var(--brand-bright)' : 'var(--txt-dim)',
+                cursor: active ? 'pointer' : 'not-allowed', opacity: active ? 1 : 0.6,
+              }}
+            >
+              Clear
+            </button>
+          </div>
         </div>,
         document.body,
       )}
-    </div>
+    </>
   );
 }
+
 
 // Distinct values actually present among the current users, not the full org master
 // list — e.g. Department filter only offers departments someone is actually in.
@@ -1738,7 +1856,7 @@ function distinctIdOptions(
     .filter((id): id is number => id != null)
     .sort((a, b) => resolveName(a).localeCompare(resolveName(b)))
     .map(id => ({ value: String(id), label: resolveName(id) }));
-  if (ids.has(null)) opts.push({ value: '__none__', label: '—' });
+  if (ids.has(null)) opts.push({ value: '__none__', label: 'Not set' });
   return opts;
 }
 
@@ -1825,9 +1943,11 @@ export default function UserManagement() {
   // ── Search / filters / sort ──────────────────────────────────────────────────
   const [search,       setSearch]       = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
-  const [roleFilter,   setRoleFilter]   = useState(''); // '' = all
-  const [deptFilter,   setDeptFilter]   = useState(''); // '' = all, '__none__' = unset
-  const [locFilter,    setLocFilter]    = useState(''); // '' = all, '__none__' = unset
+  // Multi-select filters: empty set = All; '__none__' = users with the field unset.
+  const [roleFilter,    setRoleFilter]    = useState<Set<string>>(new Set());
+  const [deptFilter,    setDeptFilter]    = useState<Set<string>>(new Set());
+  const [locFilter,     setLocFilter]     = useState<Set<string>>(new Set());
+  const [managerFilter, setManagerFilter] = useState<Set<string>>(new Set());
   const [sortDir,      setSortDir]      = useState<'asc' | 'desc'>('asc');
 
   const roleOptions = useMemo(() => distinctRoleOptions(users ?? []), [users]);
@@ -1838,17 +1958,38 @@ export default function UserManagement() {
     users ?? [], u => u.locationId, id => locations.find(l => l.id === id)?.name ?? `#${id}`,
   ), [users, locations]);
 
+  // Built from the full user list (not the current page), so options never depend on pagination.
+  const managerOptions = useMemo(() => {
+    const all = users ?? [];
+    const ids = new Set<number | null>(all.map(u => u.managerId));
+    const opts: FilterOption[] = Array.from(ids)
+      .filter((id): id is number => id != null)
+      .map(id => ({ value: String(id), label: all.find(u => u.id === id)?.fullName ?? `#${id}` }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    if (ids.has(null)) opts.push({ value: '__none__', label: 'No manager' });
+    return opts;
+  }, [users]);
+
+  // Always the org-wide totals (never narrowed by the other filters).
+  const statusCounts = useMemo(() => ({
+    '': stats?.totalUsers ?? users?.length ?? 0,
+    ACTIVE: stats?.activeUsers ?? users?.filter(u => u.status === 'ACTIVE').length ?? 0,
+    INACTIVE: stats?.inactiveUsers ?? users?.filter(u => u.status !== 'ACTIVE').length ?? 0,
+  }), [stats, users]);
+  const statusOptions: FilterOption[] = [
+    { value: 'ACTIVE', label: 'Active' },
+    { value: 'INACTIVE', label: 'Inactive' },
+  ];
+
   const filteredUsers = useMemo(() => {
     if (!users) return undefined;
     let list = users;
     if (statusFilter !== 'ALL') list = list.filter(u => u.status === statusFilter);
-    if (roleFilter) list = list.filter(u => u.role === roleFilter);
-    if (deptFilter) {
-      list = list.filter(u => deptFilter === '__none__' ? u.departmentId == null : String(u.departmentId) === deptFilter);
-    }
-    if (locFilter) {
-      list = list.filter(u => locFilter === '__none__' ? u.locationId == null : String(u.locationId) === locFilter);
-    }
+    const idMatch = (sel: Set<string>, id: number | null) => sel.has(id == null ? '__none__' : String(id));
+    if (roleFilter.size) list = list.filter(u => roleFilter.has(u.role));
+    if (deptFilter.size) list = list.filter(u => idMatch(deptFilter, u.departmentId));
+    if (locFilter.size) list = list.filter(u => idMatch(locFilter, u.locationId));
+    if (managerFilter.size) list = list.filter(u => idMatch(managerFilter, u.managerId));
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(u =>
@@ -1858,21 +1999,23 @@ export default function UserManagement() {
     }
     return [...list].sort((a, b) =>
       sortDir === 'asc' ? a.fullName.localeCompare(b.fullName) : b.fullName.localeCompare(a.fullName));
-  }, [users, statusFilter, roleFilter, deptFilter, locFilter, search, sortDir]);
+  }, [users, statusFilter, roleFilter, deptFilter, locFilter, managerFilter, search, sortDir]);
 
   const activeFilterCount =
     (statusFilter !== 'ALL' ? 1 : 0) +
-    (roleFilter ? 1 : 0) +
-    (deptFilter ? 1 : 0) +
-    (locFilter ? 1 : 0) +
+    (roleFilter.size ? 1 : 0) +
+    (deptFilter.size ? 1 : 0) +
+    (locFilter.size ? 1 : 0) +
+    (managerFilter.size ? 1 : 0) +
     (search.trim() ? 1 : 0);
 
   function clearAllFilters() {
     setSearch('');
     setStatusFilter('ALL');
-    setRoleFilter('');
-    setDeptFilter('');
-    setLocFilter('');
+    setRoleFilter(new Set());
+    setDeptFilter(new Set());
+    setLocFilter(new Set());
+    setManagerFilter(new Set());
   }
 
   // ── Pagination — 11 rows per page (see the shared Pagination component) ──────
@@ -1881,7 +2024,7 @@ export default function UserManagement() {
 
   // Jump back to page 1 whenever the filtered set changes shape — otherwise a
   // narrower filter/search can leave the user stranded on a now-nonexistent page.
-  useEffect(() => { setPage(1); }, [statusFilter, roleFilter, deptFilter, locFilter, search, sortDir]);
+  useEffect(() => { setPage(1); }, [statusFilter, roleFilter, deptFilter, locFilter, managerFilter, search, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil((filteredUsers?.length ?? 0) / USERS_PAGE_SIZE));
   const pagedUsers = useMemo(
@@ -1889,6 +2032,7 @@ export default function UserManagement() {
     [filteredUsers, page],
   );
 
+  const [menuOpenId,       setMenuOpenId]        = useState<number | null>(null);
   const [showAdd,          setShowAdd]          = useState(false);
   const [editTarget,       setEditTarget]        = useState<UserDto | null>(null);
   const [statusTarget,     setStatusTarget]      = useState<UserDto | null>(null);
@@ -1992,7 +2136,7 @@ export default function UserManagement() {
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--line)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
-              All Users {users && (
+              Users {users && (
                 <span style={{ color: 'var(--txt-dim)', fontWeight: 400 }}>
                   ({filteredUsers?.length ?? 0}{activeFilterCount > 0 ? ` of ${users.length}` : ''})
                 </span>
@@ -2015,47 +2159,27 @@ export default function UserManagement() {
               />
             </div>
 
-            <div style={{ display: 'flex', gap: 6 }}>
-              {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map(s => {
-                const isSelected = statusFilter === s;
-                const label = s === 'ALL' ? 'All' : s === 'ACTIVE' ? 'Active' : 'Inactive';
-                const count = stats && (
-                  s === 'ALL' ? stats.totalUsers : s === 'ACTIVE' ? stats.activeUsers : stats.inactiveUsers
-                );
-                return (
-                  <button
-                    key={s}
-                    onClick={() => setStatusFilter(s)}
-                    style={{
-                      padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                      border: `1px solid ${isSelected ? 'var(--brand-bright)' : 'var(--line2)'}`,
-                      background: isSelected ? 'rgba(176,17,22,.12)' : 'transparent',
-                      color: isSelected ? 'var(--brand-bright)' : 'var(--txt-mut)',
-                    }}
-                  >
-                    {label}{count != null ? ` (${count})` : ''}
-                  </button>
-                );
-              })}
-            </div>
+            <FilterPill label="Role" multi options={roleOptions} selected={roleFilter} onChange={setRoleFilter} />
+            <FilterPill label="Department" multi options={deptOptions} selected={deptFilter} onChange={setDeptFilter} />
+            <FilterPill label="Location" multi options={locOptions} selected={locFilter} onChange={setLocFilter} />
+            <FilterPill label="Reporting Manager" searchNoun="manager" multi options={managerOptions} selected={managerFilter} onChange={setManagerFilter} />
+            <FilterPill
+              label="Status"
+              searchable={false}
+              options={statusOptions}
+              counts={statusCounts}
+              selected={new Set(statusFilter === 'ALL' ? [] : [statusFilter])}
+              onChange={sel => setStatusFilter(sel.size ? ([...sel][0] as 'ACTIVE' | 'INACTIVE') : 'ALL')}
+            />
 
             {activeFilterCount > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  fontSize: 11, fontWeight: 600, color: 'var(--brand-bright)',
-                  background: 'rgba(176,17,22,.12)', border: '1px solid rgba(176,17,22,.3)',
-                  borderRadius: 20, padding: '3px 9px',
-                }}>
-                  <Filter size={10} aria-hidden="true" /> {activeFilterCount} filter{activeFilterCount === 1 ? '' : 's'}
-                </span>
-                <button
-                  onClick={clearAllFilters}
-                  style={{ background: 'none', border: 'none', color: 'var(--txt-mut)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
-                >
-                  Clear all
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                style={{ background: 'none', border: 'none', color: 'var(--brand-bright)', fontSize: 12, fontWeight: 500, cursor: 'pointer', padding: '4px 6px' }}
+              >
+                Clear filters
+              </button>
             )}
           </div>
         </div>
@@ -2095,7 +2219,6 @@ export default function UserManagement() {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
               <thead>
                 <tr>
-                  <th style={thStyle}>Employee ID</th>
                   <th style={thStyle}>
                     <button
                       type="button"
@@ -2111,15 +2234,9 @@ export default function UserManagement() {
                     </button>
                   </th>
                   <th style={thStyle}>Email</th>
-                  <th style={thStyle}>
-                    <ColumnFilterHeader label="Role" options={roleOptions} selected={roleFilter} onChange={setRoleFilter} />
-                  </th>
-                  <th style={thStyle}>
-                    <ColumnFilterHeader label="Department" options={deptOptions} selected={deptFilter} onChange={setDeptFilter} />
-                  </th>
-                  <th style={thStyle}>
-                    <ColumnFilterHeader label="Location" options={locOptions} selected={locFilter} onChange={setLocFilter} />
-                  </th>
+                  <th style={thStyle}>Role</th>
+                  <th style={thStyle}>Department</th>
+                  <th style={thStyle}>Location</th>
                   <th style={thStyle}>Reporting Manager</th>
                   <th style={thStyle}>Status</th>
                   {/* Sticky to the scroll container's right edge — on a laptop-width viewport the
@@ -2131,7 +2248,7 @@ export default function UserManagement() {
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ padding: '48px 20px', textAlign: 'center' }}>
+                    <td colSpan={8} style={{ padding: '48px 20px', textAlign: 'center' }}>
                       {users && users.length === 0 ? (
                         <>
                           <div style={{ fontSize: 15, color: 'var(--txt-mut)', marginBottom: 8 }}>No users yet</div>
@@ -2139,12 +2256,12 @@ export default function UserManagement() {
                         </>
                       ) : (
                         <>
-                          <div style={{ fontSize: 15, color: 'var(--txt-mut)', marginBottom: 8 }}>No users match the current filters</div>
+                          <div style={{ fontSize: 15, color: 'var(--txt-mut)', marginBottom: 8 }}>No users match the selected filters</div>
                           <button
                             onClick={clearAllFilters}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 12, cursor: 'pointer' }}
                           >
-                            Clear all filters
+                            Clear filters
                           </button>
                         </>
                       )}
@@ -2170,13 +2287,12 @@ export default function UserManagement() {
                       }}
                     >
                       <td style={tdStyle}>
-                        <span style={{ fontSize: 12, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>
-                          {user.employeeCode}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                          <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>{user.fullName}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <UserRowAvatar id={user.id} fullName={user.fullName} />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 600 }}>{user.fullName}</span>
+                            <span style={{ fontSize: 11, color: 'var(--txt-dim)', fontVariantNumeric: 'tabular-nums' }}>{user.employeeCode}</span>
+                          </div>
                         </div>
                       </td>
                       <td style={tdStyle}>
@@ -2212,23 +2328,21 @@ export default function UserManagement() {
                           boxShadow: '-6px 0 6px -6px rgba(0,0,0,.25)',
                         }}
                       >
-                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                          <ActionBtn icon={<Pencil size={13} />} label="Edit user" onClick={() => handleEditOpen(user)} />
-                          <ActionBtn
-                            icon={<RotateCcw size={13} />}
-                            label="Reset password"
-                            onClick={() => setResetTarget(user)}
-                            disabled={user.status !== 'ACTIVE'}
-                            disabledTitle="Password reset is unavailable for inactive accounts"
-                          />
-                          <ActionBtn
-                            icon={user.status === 'ACTIVE' ? <PowerOff size={13} /> : <Power size={13} />}
-                            label={user.status === 'ACTIVE' ? 'Deactivate user' : 'Reactivate user'}
-                            onClick={() => setStatusTarget(user)}
-                            danger={user.status === 'ACTIVE'}
-                          />
-                          <ActionBtn icon={<Trash2 size={13} />} label="Delete user" onClick={() => setDeleteTarget(user)} danger />
-                        </div>
+                        <DropdownMenu
+                          ariaLabel={`Actions for ${user.fullName}`}
+                          triggerTitle="Actions"
+                          keyboardNav
+                          open={menuOpenId === user.id}
+                          onOpenChange={o => setMenuOpenId(o ? user.id : null)}
+                          items={[
+                            { key: 'edit', label: 'Edit', icon: Pencil, onSelect: () => handleEditOpen(user) },
+                            { key: 'reset', label: 'Reset Password', icon: RotateCcw, onSelect: () => setResetTarget(user), disabled: user.status !== 'ACTIVE' },
+                            user.status === 'ACTIVE'
+                              ? { key: 'status', label: 'Deactivate', icon: PowerOff, onSelect: () => setStatusTarget(user) }
+                              : { key: 'status', label: 'Activate', icon: Power, onSelect: () => setStatusTarget(user) },
+                            { key: 'delete', label: 'Delete', icon: Trash2, color: '#E4373D', dividerBefore: true, onSelect: () => setDeleteTarget(user) },
+                          ]}
+                        />
                       </td>
                     </tr>
                   ))

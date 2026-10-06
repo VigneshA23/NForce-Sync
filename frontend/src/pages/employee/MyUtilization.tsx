@@ -10,6 +10,7 @@ import { useUtilizationDetail } from '../../api/employee';
 import type { WeekTrend, HistoryDay } from '../../api/employee';
 import { UtilBar, UtilLegend } from '../../components/UtilBar';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { Pagination } from '../../components/Pagination';
 import { RULES, utilColor, utilState, fmtPct } from '../../lib/rules';
 import { todayISO, toLocalISODate } from '../../lib/date';
 import { useHashScroll } from '../../lib/useHashScroll';
@@ -244,7 +245,9 @@ function HistoryTable({ rows }: { rows: HistoryDay[] }) {
   const sorted = [...rows].sort((a, b) => b.date.localeCompare(a.date));
   const total  = sorted.length;
   const pages  = Math.ceil(total / PAGE_SIZE);
-  const slice  = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  // Clamp so a shrinking data set (refetch) can never leave us past the last page.
+  const pageSafe = Math.min(page, Math.max(0, pages - 1));
+  const slice  = sorted.slice(pageSafe * PAGE_SIZE, (pageSafe + 1) * PAGE_SIZE);
 
   if (total === 0) {
     return (
@@ -255,8 +258,15 @@ function HistoryTable({ rows }: { rows: HistoryDay[] }) {
   }
 
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <div style={{ minWidth: 560 }}>
+    <div>
+      <div className="nf-r-scroll">
+        {/* Horizontal padding here is load-bearing, not decorative: each row below bleeds
+            into it via `margin: '0 -6px'` (a full-bleed hover trick) so the row's hover
+            background reaches this wrapper's own edge exactly, with zero overflow. Without
+            this padding, that negative margin genuinely exceeds this scroll container's
+            box by 6px each side — real (if tiny) overflow that forces the horizontal
+            scrollbar to show at every viewport width, independent of --nf-r-min. */}
+        <div className="nf-r-scroll-inner" style={{ '--nf-r-min': '560px', padding: '0 6px' } as React.CSSProperties}>
       {/* Column headers */}
       <div style={{
         display: 'grid', gridTemplateColumns: '130px 80px 90px 1fr',
@@ -304,42 +314,16 @@ function HistoryTable({ rows }: { rows: HistoryDay[] }) {
           </div>
         );
       })}
+        </div>
       </div>
 
       {/* Pagination */}
       {pages > 1 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          marginTop: 12, fontSize: 11, color: 'var(--txt-dim)',
-        }}>
-          <span>{total} days · page {page + 1} of {pages}</span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {page > 0 && (
-              <button
-                onClick={() => setPage(p => p - 1)}
-                style={{
-                  padding: '4px 10px', borderRadius: 5,
-                  background: 'var(--raised2)', border: '1px solid var(--line2)',
-                  color: 'var(--txt)', fontSize: 11, cursor: 'pointer',
-                }}
-              >
-                ← Prev
-              </button>
-            )}
-            {page < pages - 1 && (
-              <button
-                onClick={() => setPage(p => p + 1)}
-                style={{
-                  padding: '4px 10px', borderRadius: 5,
-                  background: 'var(--raised2)', border: '1px solid var(--line2)',
-                  color: 'var(--txt)', fontSize: 11, cursor: 'pointer',
-                }}
-              >
-                Next →
-              </button>
-            )}
-          </div>
-        </div>
+        <Pagination
+          page={pageSafe + 1} totalPages={pages} totalItems={total} pageSize={PAGE_SIZE}
+          onPageChange={p => setPage(p - 1)} itemLabel="days"
+          style={{ padding: 0, borderTop: 'none', marginTop: 12 }}
+        />
       )}
     </div>
   );
@@ -559,7 +543,8 @@ export default function MyUtilization() {
           <SectionLabel id="daily-history" icon={<Clock size={13} color="var(--txt-mut)" />}>Daily History</SectionLabel>
         </div>
         <div style={{ padding: '0 20px 16px' }}>
-          <HistoryTable rows={history} />
+          {/* key remounts the table on range change, resetting to page 1 */}
+          <HistoryTable key={rangeIdx} rows={history} />
         </div>
         <UtilLegend />
       </Card>

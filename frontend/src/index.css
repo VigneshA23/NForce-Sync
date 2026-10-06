@@ -175,16 +175,6 @@ html[data-density="Spacious"] {
   --nf-density-nav-pad:  12px 15px;
 }
 
-/* ─── Explicit "reduce motion" preference (Preferences → Accessibility) ─────── */
-/* Same effect as prefers-reduced-motion, but as an app-level opt-in independent of OS setting. */
-html[data-reduce-motion="true"] *,
-html[data-reduce-motion="true"] *::before,
-html[data-reduce-motion="true"] *::after {
-  animation-duration: 0.001ms !important;
-  animation-iteration-count: 1 !important;
-  transition-duration: 0.001ms !important;
-  scroll-behavior: auto !important;
-}
 
 /* ─── Base ─────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
@@ -833,6 +823,98 @@ textarea:-webkit-autofill:focus {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ─── Accessibility preferences (Preferences → Accessibility) ───── */
+/* Toggled by lib/accessibility.tsx via data-* attributes on <html>. Order matters: the
+   color-vision palette comes first so High contrast can refine it, and the combined
+   (both-on) rules at the end win over either alone. */
+
+/* Reduce motion — app-level opt-in, same effect as the OS prefers-reduced-motion block above.
+   JS-driven (framer-motion) animations are handled separately via MotionConfig. */
+html[data-reduce-motion="true"] *,
+html[data-reduce-motion="true"] *::before,
+html[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Enhanced focus outline — thick two-tone ring (text color outside, brand inside) so it stays
+   visible on any surface, and !important so it beats the many inline `outline: 'none'` inputs.
+   Toolbar select and recharts keep their deliberate exceptions. */
+html[data-enhanced-focus="true"] *:focus-visible:not(.nf-toolbar-select):not(.recharts-wrapper *) {
+  outline: 3px solid var(--txt) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 2px var(--brand-bright) !important;
+}
+/* Bare inputs inside a bordered wrapper (search boxes etc.) draw no ring of their own, so
+   ring the wrapper instead. */
+html[data-enhanced-focus="true"] *:has(> input:focus-visible:not([type="checkbox"]):not([type="radio"])) {
+  outline: 3px solid var(--txt);
+  outline-offset: 2px;
+}
+
+/* Underline links — genuine text links carry the nf-link class; the rest of the page's
+   links are buttons/cards where an underline would look wrong. */
+html[data-underline-links="true"] .nf-link,
+html[data-underline-links="true"] main p a,
+html[data-underline-links="true"] [role="link"] {
+  text-decoration: underline !important;
+  text-underline-offset: 3px;
+}
+
+/* Color-blind friendly status colors — replace the red/green pair with a teal/vermillion pair
+   that stays distinguishable under the common color-vision deficiencies. Icons (StatusGlyph)
+   carry the rest of the meaning. */
+html[data-status-cues="true"][data-theme="dark"] {
+  --ok: #2CB5C9;
+  --day-approved-bg: #123B44; --day-approved-text: #7FDCEB;
+}
+html[data-status-cues="true"][data-theme="light"] {
+  --ok: #0E6F80;
+  --day-approved-bg: #BFE6EE; --day-approved-text: #0B5566;
+}
+
+/* High contrast — stronger text, borders and semantic colors (target WCAG AA 4.5:1 text,
+   3:1 UI components against the surfaces below). */
+html[data-high-contrast="true"][data-theme="dark"] {
+  --shell: #000000; --panel: #0A0A0A; --raised: #111111; --raised2: #1A1A1A;
+  --line: #8A8F99; --line2: #B4B9C2;
+  --brand-bright: #FF6B70;
+  --txt: #FFFFFF; --txt-mut: #E6E8EB; --txt-dim: #D2D6DB;
+  --ok: #4ADE9A; --warn: #FFD166; --risk: #FF7B80; --info: #8CC0FF;
+  --day-approved-bg: #0F4D26;  --day-approved-text: #D6FFE2;
+  --day-pending-bg:  #0F3D75;  --day-pending-text:  #DCEEFF;
+  --day-rejected-bg: #6B4A00;  --day-rejected-text: #FFEBB8;
+  --day-missed-bg:   #7A1F1F;  --day-missed-text:   #FFE0E0;
+  --day-holiday-bg:  #43358A;  --day-holiday-text:  #EDE8FF;
+  --day-weekend-bg:  #2E3C48;  --day-weekend-text:  #E3EEF6;
+  --day-empty-bg:    #2A2A2A;  --day-empty-text:    #E6E6E6;
+}
+html[data-high-contrast="true"][data-theme="light"] {
+  --shell: #FFFFFF; --panel: #FFFFFF; --raised: #FFFFFF; --raised2: #EFEFEF;
+  --line: #5A5F69; --line2: #3A3F48;
+  --brand-bright: #A30D12;
+  --txt: #000000; --txt-mut: #1F2328; --txt-dim: #2F353D;
+  --ok: #0B5A3A; --warn: #6B4A00; --risk: #A30D12; --info: #0B4A8A;
+  --day-approved-bg: #B5E3B0;  --day-approved-text: #0B3D12;
+  --day-pending-bg:  #B3D4F5;  --day-pending-text:  #052E5C;
+  --day-rejected-bg: #F5D98A;  --day-rejected-text: #4A3000;
+  --day-missed-bg:   #F5B3B3;  --day-missed-text:   #5E0E0E;
+  --day-holiday-bg:  #D0C6F7;  --day-holiday-text:  #2B1E73;
+  --day-weekend-bg:  #C5D3DF;  --day-weekend-text:  #1B2E3D;
+  --day-empty-bg:    #E4E4E4;  --day-empty-text:    #222222;
+}
+/* Both on: keep the color-blind-safe "ok" hue at high-contrast strength. */
+html[data-high-contrast="true"][data-status-cues="true"][data-theme="dark"] {
+  --ok: #5FD6E8;
+  --day-approved-bg: #0B4A55;  --day-approved-text: #D9F8FF;
+}
+html[data-high-contrast="true"][data-status-cues="true"][data-theme="light"] {
+  --ok: #08515F;
+  --day-approved-bg: #A9DCE7;  --day-approved-text: #053642;
 }
 
 /* ─── AI assistant ─────────────────────────────────────────────── */

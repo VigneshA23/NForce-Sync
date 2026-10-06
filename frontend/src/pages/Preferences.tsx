@@ -5,30 +5,8 @@ import { useTheme, type ThemeMode } from '../lib/theme';
 import { useAccentColor, ACCENT_SWATCHES, type AccentColor } from '../lib/accentColor';
 import { useDensity, type Density } from '../lib/density';
 import { useFontSize, type FontSize } from '../lib/fontSize';
+import { useAccessibility, type AccessibilityKey } from '../lib/accessibility';
 import { Card } from '../components/KpiCard';
-
-// ── Local, localStorage-only preferences (no backend endpoint yet — matches how theme/accent
-// already persist). Each is read once at mount and written on change. ──────────────────────
-
-function usePersistedBool(key: string, fallback: boolean) {
-  const [value, setValue] = useState<boolean>(() => {
-    try {
-      const stored = localStorage.getItem(key);
-      return stored === null ? fallback : stored === 'true';
-    } catch {
-      return fallback;
-    }
-  });
-  function set(next: boolean) {
-    setValue(next);
-    try {
-      localStorage.setItem(key, String(next));
-    } catch {
-      // localStorage unavailable — preference still applies for this page load, just won't persist.
-    }
-  }
-  return [value, set] as const;
-}
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
@@ -64,7 +42,7 @@ function PillButton({ active, onClick, children }: { active: boolean; onClick: (
 
 function ToggleSwitch({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '10px 0' }}>
       <div>
         <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>{label}</div>
         {hint && <div style={{ fontSize: 11.5, color: 'var(--txt-mut)', marginTop: 2 }}>{hint}</div>}
@@ -92,6 +70,14 @@ function ToggleSwitch({ checked, onChange, label, hint }: { checked: boolean; on
   );
 }
 
+const ACCESSIBILITY_TOGGLES: { key: AccessibilityKey; title: string; label: string; hint: string }[] = [
+  { key: 'highContrast',   title: 'Contrast',       label: 'High contrast',                    hint: 'Stronger text, borders and status colors for easier reading.' },
+  { key: 'enhancedFocus',  title: 'Keyboard focus', label: 'Enhanced focus outline',           hint: 'A thicker, two-tone outline around whatever you tab to.' },
+  { key: 'reduceMotion',   title: 'Motion',         label: 'Reduce motion',                    hint: 'Turn off animations and transitions across the app.' },
+  { key: 'underlineLinks', title: 'Links',          label: 'Underline links',                  hint: "Underline text links so they don't rely on color alone." },
+  { key: 'statusCues',     title: 'Color vision',   label: 'Color-blind friendly status cues', hint: 'Add icons to status colors and use a red/green-safe palette.' },
+];
+
 const SELECT_STYLE: React.CSSProperties = {
   width: '100%', maxWidth: 280, boxSizing: 'border-box',
   background: 'var(--raised)', border: '1px solid var(--line2)',
@@ -108,7 +94,7 @@ const DISPLAY_MODES: { key: ThemeMode; label: string; icon: React.ComponentType<
 const DENSITIES: Density[] = ['Compact', 'Comfortable', 'Spacious'];
 const FONT_SIZES: FontSize[] = ['Small', 'Default', 'Large'];
 
-const TABS = ['Appearance', 'Notifications', 'Accessibility'] as const;
+const TABS = ['Appearance', 'Accessibility'] as const;
 type Tab = typeof TABS[number];
 
 // ── Page ─────────────────────────────────────────────────────────────────────
@@ -120,19 +106,8 @@ export default function Preferences() {
   const { density, setDensity } = useDensity();
   const [tab, setTab] = useState<Tab>('Appearance');
 
-  const [emailDigest, setEmailDigest]       = usePersistedBool('nf-notif-email', true);
-  const [pushNotifs, setPushNotifs]         = usePersistedBool('nf-notif-push', true);
-  const [announcements, setAnnouncements]   = usePersistedBool('nf-notif-announcements', true);
-  const [approvalUpdates, setApprovalUpdates] = usePersistedBool('nf-notif-approvals', true);
-  const [blockerUpdates, setBlockerUpdates] = usePersistedBool('nf-notif-blockers', true);
-
-  const [reduceMotion, setReduceMotionState] = usePersistedBool('nf-reduce-motion', false);
   const { fontSize, setFontSize } = useFontSize();
-
-  function toggleReduceMotion(next: boolean) {
-    setReduceMotionState(next);
-    document.documentElement.setAttribute('data-reduce-motion', String(next));
-  }
+  const { settings: a11y, setSetting, reset: resetAccessibility } = useAccessibility();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
@@ -147,7 +122,7 @@ export default function Preferences() {
           <ArrowLeft size={14} aria-hidden="true" /> Back to Application
         </button>
         <h1 style={{ margin: 0, marginBottom: 4, fontSize: 20, fontWeight: 700, color: 'var(--txt)' }}>User Preferences</h1>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--txt-mut)' }}>Manage your personal appearance, notifications, and accessibility settings.</p>
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--txt-mut)' }}>Manage your personal appearance and accessibility settings.</p>
       </div>
 
       <div className="nf-r-preferences-layout" style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
@@ -212,37 +187,34 @@ export default function Preferences() {
             </div>
           )}
 
-          {tab === 'Notifications' && (
-            <div>
-              <SectionTitle>Notifications</SectionTitle>
-              <SectionHint>Choose what you'd like to be notified about. These preferences are saved to this browser only and aren't yet enforced by the server.</SectionHint>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <ToggleSwitch checked={emailDigest} onChange={setEmailDigest} label="Email digest" hint="Daily summary of activity relevant to you" />
-                <div style={{ borderTop: '1px solid var(--line)' }} />
-                <ToggleSwitch checked={pushNotifs} onChange={setPushNotifs} label="Push notifications" hint="Real-time alerts in this browser" />
-                <div style={{ borderTop: '1px solid var(--line)' }} />
-                <ToggleSwitch checked={announcements} onChange={setAnnouncements} label="Announcements" hint="Company-wide announcements and policy updates" />
-                <div style={{ borderTop: '1px solid var(--line)' }} />
-                <ToggleSwitch checked={approvalUpdates} onChange={setApprovalUpdates} label="Approval updates" hint="Status changes on requests you submitted or need to review" />
-                <div style={{ borderTop: '1px solid var(--line)' }} />
-                <ToggleSwitch checked={blockerUpdates} onChange={setBlockerUpdates} label="Blocker updates" hint="Replies and status changes on blockers you're involved in" />
-              </div>
-            </div>
-          )}
-
           {tab === 'Accessibility' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
-              <div>
-                <SectionTitle>Motion</SectionTitle>
-                <SectionHint>Reduce animations and transitions app-wide, independent of your system setting.</SectionHint>
-                <ToggleSwitch checked={reduceMotion} onChange={toggleReduceMotion} label="Reduce motion" />
-              </div>
               <div>
                 <SectionTitle>Text size</SectionTitle>
                 <SectionHint>Adjust the base text size used across the app.</SectionHint>
                 <select value={fontSize} onChange={e => setFontSize(e.target.value as FontSize)} style={SELECT_STYLE}>
                   {FONT_SIZES.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
+              </div>
+
+              {ACCESSIBILITY_TOGGLES.map(({ key, title, label, hint }) => (
+                <div key={key}>
+                  <SectionTitle>{title}</SectionTitle>
+                  <ToggleSwitch checked={a11y[key]} onChange={v => setSetting(key, v)} label={label} hint={hint} />
+                </div>
+              ))}
+
+              <div>
+                <button
+                  type="button"
+                  onClick={resetAccessibility}
+                  style={{
+                    padding: '8px 14px', borderRadius: 8, border: '1px solid var(--line2)',
+                    background: 'var(--raised2)', color: 'var(--txt)', cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                  }}
+                >
+                  Reset accessibility settings
+                </button>
               </div>
             </div>
           )}

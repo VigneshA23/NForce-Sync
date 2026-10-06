@@ -92,6 +92,17 @@ export function describeAuditEvent(event: AuditLogDto): AuditDisplay {
   const after  = safeParse(event.afterValue);
   const actor  = event.actorName ?? 'System';
 
+  // EOD approval-escalation events recorded by the approval workflow — plain-language wording instead
+  // of the raw action codes (wording inferred from the action names).
+  switch (event.action) {
+    case 'ESCALATION_SKIPPED_PM_IS_LEAD':
+      return { message: "Escalation to the Project Manager skipped — the PM is also the project's lead", category: 'eod-approval' };
+    case 'ESCALATION_SKIPPED_NO_PM':
+      return { message: 'Escalation skipped — no Project Manager is assigned to the project', category: 'eod-approval' };
+    case 'LEAD_PIECE_ESCALATED_TO_PM':
+      return { message: `${actor}'s EOD approval was escalated to the Project Manager`, category: 'eod-approval' };
+  }
+
   if (event.entityType === 'APP_USER') {
     const name = (after?.fullName as string | undefined)
       ?? (before?.fullName as string | undefined)
@@ -158,7 +169,8 @@ export function describeAuditEvent(event: AuditLogDto): AuditDisplay {
     return { message: `${actor} ${verb}d business rule${suffix}`, category: 'business-rule' };
   }
 
-  return { message: `${actor} performed ${event.action} on ${entityLabel}`, category: 'other' };
+  const actionLabel = event.action?.toLowerCase().replace(/_/g, ' ') ?? 'an action';
+  return { message: `${actor} performed ${actionLabel} on ${entityLabel}`, category: 'other' };
 }
 
 export function formatRelative(iso: string): string {
@@ -188,6 +200,9 @@ export function auditActionBadgeStyle(action: string): { bg: string; color: stri
     EOD_APPROVED:          { bg: 'rgba(232,144,36,.12)',  color: '#E89024' },
     EOD_REJECTED:          { bg: 'rgba(155,109,255,.12)', color: '#9B6DFF' },
     EOD_CHANGES_REQUESTED: { bg: 'rgba(224,169,59,.12)',  color: '#E0A93B' },
+    ESCALATION_SKIPPED_PM_IS_LEAD: { bg: 'rgba(224,169,59,.12)', color: '#E0A93B' },
+    ESCALATION_SKIPPED_NO_PM:      { bg: 'rgba(224,169,59,.12)', color: '#E0A93B' },
+    LEAD_PIECE_ESCALATED_TO_PM:    { bg: 'rgba(232,144,36,.12)', color: '#E89024' },
   };
   return map[action] ?? { bg: 'var(--raised2)', color: 'var(--txt-dim)' };
 }
@@ -208,6 +223,8 @@ export function auditActionDisplay(entry: AuditLogDto): { label: string; bg: str
     CREATE: 'Create', UPDATE: 'Update', SOFT_DELETE: 'Delete',
     PASSWORD_RESET: 'Password Reset', EOD_APPROVED: 'Approve', EOD_REJECTED: 'Reject',
     EOD_CHANGES_REQUESTED: 'Changes Requested',
+    ESCALATION_SKIPPED_PM_IS_LEAD: 'Escalation skipped', ESCALATION_SKIPPED_NO_PM: 'Escalation skipped',
+    LEAD_PIECE_ESCALATED_TO_PM: 'Escalated to PM',
   };
   const style = auditActionBadgeStyle(entry.action);
   return { label: labels[entry.action] ?? entry.action.replace(/_/g, ' '), ...style };
