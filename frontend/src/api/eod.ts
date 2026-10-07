@@ -67,6 +67,24 @@ export interface EodEntryDto {
   logNotes: string | null;
   logApproverName: string | null;
   logApproverType: string | null;
+  // V110+ line items — empty [] for legacy PLAIN_LOG entries, absent for PROJECT_GROUPED
+  logLines: EodLogLineDto[];
+}
+
+export interface EodLogLineDto {
+  id: number;
+  categoryId: number;
+  categoryName: string;
+  hours: number;
+  description: string;
+  sortOrder: number;
+}
+
+export interface SaveLogLineRequest {
+  categoryId: number;
+  hours: number;
+  description: string;
+  sortOrder?: number;
 }
 
 export interface SaveTaskRequest {
@@ -97,6 +115,9 @@ export interface SaveEodRequest {
   attachmentIds: number[];
   // PLAIN_LOG — omitted for PROJECT_GROUPED saves
   entryForm?: 'PROJECT_GROUPED' | 'PLAIN_LOG';
+  // V110+: line items (server computes logTotalHours from sum; logSummary ignored when present)
+  logLines?: SaveLogLineRequest[] | null;
+  // Legacy fields — still accepted for backward compat; ignored when logLines is non-null
   logSummary?: string | null;
   logTotalHours?: number | null;
   logNotes?: string | null;

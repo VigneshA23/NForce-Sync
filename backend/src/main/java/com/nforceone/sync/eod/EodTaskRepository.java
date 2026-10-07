@@ -209,4 +209,9 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
                                       @Param("from") LocalDate from,
                                       @Param("to") LocalDate to);
 
+    // Batch task lookup for ApprovalPieceDto — avoids N+1 when building task lines for PM/TL pieces.
+    @Query("SELECT t FROM EodTask t LEFT JOIN FETCH t.project LEFT JOIN FETCH t.taskCategory " +
+           "WHERE t.eodEntry.id IN :entryIds ORDER BY t.id ASC")
+    List<EodTask> findByEodEntryIdInWithDetails(@Param("entryIds") List<Long> entryIds);
+
 }

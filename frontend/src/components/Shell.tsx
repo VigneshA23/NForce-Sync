@@ -16,6 +16,8 @@ import { toRole } from '../api/auth';
 import { fetchProfile } from '../api/profile';
 import { useUnreadNotificationsCount } from '../api/notifications';
 import { usePendingApprovalsCount } from '../api/approvals';
+import { usePendingPiecesCount } from '../api/approvalPieces';
+import { useMyReportsPendingCount } from '../api/myReports';
 import { useTeamLeadSummary } from '../api/teamLead';
 import { usePmBlockers } from '../api/pmBlockers';
 import { useEodInboxCount } from '../api/eodClarification';
@@ -542,10 +544,12 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const isLead = caps.leadsProjectIds.length > 0;
   const isPm   = role === 'pm'   || caps.managesProjectIds.length > 0;
 
-  // Sidebar Approvals badge, the Team Dashboard "Pending Approval" KPI, and the
-  // Approvals page count all read this same live query — see api/approvals.ts.
-  // Shared by Team Lead and PM sections, regardless of stored role.
-  const pendingApprovalsCount = usePendingApprovalsCount(isLead || isPm);
+  // Sidebar TL Approvals badge (v1 endpoint, shared with Team Dashboard KPI).
+  const pendingApprovalsCount = usePendingApprovalsCount(isLead);
+  // Sidebar PM Approvals badge — v2 pending pieces (all pending = escalated count for PM).
+  const pmPendingCount = usePendingPiecesCount(isPm);
+  // Sidebar RM Approvals badge — RM pending pieces.
+  const rmPendingCount = useMyReportsPendingCount(caps.hasDirectReports);
 
   // Sidebar Blockers badge — same "today" summary query (and cache key) as the Team
   // Dashboard's "Open Blockers" KPI fallback. Scoped to Team Lead section users.
@@ -646,7 +650,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 
             {section.items.map((entry) => {
               function badgeFor(item: NavItem): number | undefined {
-                if ((isLead || isPm) && item.key === 'approvals') return pendingApprovalsCount;
+                if (item.key === 'approvals' && item.path === '/team/approvals') return pendingApprovalsCount;
+                if (item.key === 'approvals' && item.path === '/projects/approvals') return pmPendingCount;
+                if (item.key === 'rm-approvals') return rmPendingCount;
                 if (isLead && item.key === 'blockers') return openBlockersCount;
                 if (isPm && item.key === 'blockers') return pmOpenBlockersCount;
                 if ((isLead || isPm || role === 'employee') && item.key === 'eod-inbox') return eodInboxCount;

@@ -61,6 +61,11 @@ public class MyReportsService {
         ).stream().map(ApprovalPieceDto::from).toList();
     }
 
+    public List<ApprovalPieceDto> getDecidedApprovals(String actingEmail, String statusName) {
+        requireManager(actingEmail);
+        return approvalPieceService.getDecidedReportingManagerPieces(actingEmail, statusName);
+    }
+
     @org.springframework.transaction.annotation.Transactional
     public ApprovalPieceDto approve(Long pieceId, String actingEmail, String comment) {
         requireManager(actingEmail);

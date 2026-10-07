@@ -48,7 +48,7 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   `SchemaManagementException: missing column`. That's a skipped migration, not a code bug.
 - Flyway expands `${...}` as a placeholder EVEN INSIDE `--` comments — never put `${}` (e.g. a JS
   template literal) in a migration comment; it fails to parse before touching the DB.
-- Top version as of 2026-10-05 is **V109** (add log_notes to eod_entry). Re-run the query above before adding the next migration; other branches may have moved past V109 since.
+- Top version as of 2026-10-06 is **V110** (daily log line items: eod_log_line table, task_category.scope). Re-run the query above before adding the next migration; other branches may have moved past V110 since.
 - **Fresh DB — resolved.** `beforeMigrate.sql` Flyway SQL callback (runs before any migration) now creates `business_rule_config` if absent. Any new environment provisioned from V1 will apply the callback first, so V33 ALTER never fails on a missing table.
 - An earlier, uncommitted Cerebras-based assistant prototype had applied `assistant_conversation`,
   `assistant_message` and `assistant_knowledge` out-of-band (V78–V81). **These are gone** — V91
@@ -108,11 +108,17 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   and therefore NO capacity ceiling. Nothing currently stops the same employee being allocated
   to unlimited overlapping projects, or to the same project twice; a unique employee+project
   guard over overlapping dates is the open follow-up.
-- task_category: id, name (UNIQUE), is_productive BOOLEAN, active BOOLEAN
-  Seeded with 19 PRD categories. NOT productive: "Leave", "Bench Activity". All others productive.
+- task_category: id, name, is_productive BOOLEAN, active BOOLEAN, scope VARCHAR(20) NOT NULL DEFAULT 'EMPLOYEE' (CHECK scope IN ('EMPLOYEE','MANAGEMENT'))
+  Seeded with 19 EMPLOYEE-scope PRD categories. NOT productive: "Leave", "Bench Activity". All others productive.
   "Leave / Holiday" was renamed to "Leave" in V35 (same id 19, no rows repointed) once Holiday
   became a day type rather than a category. is_billable_default was dropped with the
   Billable/Non-Billable classification removal (it was write-only, never read).
+  V110 added scope column and 12 MANAGEMENT-scope categories (Meetings and Calls, Reviews and
+  Approvals, Planning and Strategy, People and 1:1s, Hiring and Interviews, Client and Stakeholder,
+  Reporting and Analysis, Administration, Escalations and Issue Resolution, Documentation, Training
+  and Mentoring, Travel). Unique index is now per-scope: (scope, lower(btrim(name))).
+  GET /api/task-categories?scope=EMPLOYEE (default) — employee Submit EOD never receives MANAGEMENT
+  categories. DailyLogForm calls ?scope=MANAGEMENT explicitly.
 - Early seed (now superseded): Priya Nair (id=2) set as manager_id for employees id=3,4,5
 
 ## EOD tables (V4 migration)
@@ -129,6 +135,14 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   is_billable and billable_decided (V52/V56/V64) were dropped with the Billable/Non-Billable
   classification removal, along with the approval gate that used to require a per-task billable
   decision before an entry could be approved.
+- eod_log_line (V110): id BIGSERIAL PK, entry_id BIGINT FK eod_entry ON DELETE CASCADE,
+  category_id BIGINT FK task_category, hours NUMERIC(5,2) NOT NULL CHECK (>0 AND <=24),
+  description TEXT NOT NULL, sort_order INT NOT NULL DEFAULT 0.
+  Used ONLY for PLAIN_LOG entries. eod_task rows are NOT used for PLAIN_LOG (would corrupt
+  EodByEmployeeReportService which iterates entry.getTasks() without PLAIN_LOG filter).
+  logTotalHours on eod_entry is computed server-side as SUM(eod_log_line.hours) — client never
+  sends it. Empty logLines = leave day (auto-approved). Legacy PLAIN_LOG entries (pre-V110) have
+  no rows here; frontend shows a synthetic "Summary" row from logSummary/logTotalHours.
 - Status uppercase to match existing conventions (ACTIVE, SUPERADMIN pattern)
 - Business rules: submitted entries are immutable; edit only allowed in REJECTED or
   CHANGES_REQUESTED status

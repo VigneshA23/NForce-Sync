@@ -2,9 +2,12 @@ package com.nforceone.sync.approval2.dto;
 
 import com.nforceone.sync.approval2.EodProjectApproval;
 import com.nforceone.sync.eod.EodEntry;
+import com.nforceone.sync.eod.EodTask;
+import com.nforceone.sync.eod.dto.EodLogLineDto;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 public record ApprovalPieceDto(
     Long id,
@@ -27,13 +30,33 @@ public record ApprovalPieceDto(
     String logSummary,
     BigDecimal logTotalHours,
     String logNotes,
+    // V110+ line items — empty for legacy PLAIN_LOG entries
+    List<EodLogLineDto> logLines,
     // Escalation fields — null when piece has not been escalated
     OffsetDateTime escalatedAt,
     Long escalatedToId,
     String escalatedToName,
-    Double hoursPending
+    Double hoursPending,
+    // Day-type metadata for PLAIN_LOG pieces — null for PROJECT_GROUPED
+    String dayType,
+    String workLocation,
+    String nextDayPlan,
+    String remarks,
+    // Task lines for PROJECT_GROUPED pieces — empty for PLAIN_LOG
+    List<TaskLineDto> taskLines
 ) {
+    public record TaskLineDto(String projectCode, String projectName, String categoryName, BigDecimal hours, String description) {}
+
     public static ApprovalPieceDto from(EodProjectApproval p) {
+        return from(p, List.of(), List.of());
+    }
+
+    public static ApprovalPieceDto from(EodProjectApproval p, List<EodLogLineDto> logLines) {
+        return from(p, logLines, List.of());
+    }
+
+    public static ApprovalPieceDto from(EodProjectApproval p, List<EodLogLineDto> logLines,
+                                        List<TaskLineDto> taskLines) {
         EodEntry entry = p.getEodEntry();
         boolean isPlainLog = entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG;
         return new ApprovalPieceDto(
@@ -56,12 +79,31 @@ public record ApprovalPieceDto(
                 isPlainLog ? entry.getLogSummary() : null,
                 isPlainLog ? entry.getLogTotalHours() : null,
                 isPlainLog ? entry.getLogNotes() : null,
+                isPlainLog ? logLines : List.of(),
                 p.getEscalatedAt(),
                 p.getEscalatedTo() != null ? p.getEscalatedTo().getId() : null,
                 p.getEscalatedTo() != null ? p.getEscalatedTo().getFullName() : null,
                 p.getFrozenAt() != null
                         ? (double) java.time.Duration.between(p.getFrozenAt(), java.time.OffsetDateTime.now()).toMinutes() / 60.0
-                        : null
+                        : null,
+                isPlainLog && entry.getDayType() != null ? entry.getDayType().name() : null,
+                isPlainLog ? entry.getWorkLocation() : null,
+                isPlainLog ? entry.getNextDayPlan() : null,
+                isPlainLog ? entry.getRemarks() : null,
+                isPlainLog ? List.of() : taskLines
         );
+    }
+
+    /** Convenience factory: builds TaskLineDto list from raw EodTask list scoped to one project. */
+    public static List<TaskLineDto> taskLinesFor(List<EodTask> tasks, Long projectId) {
+        return tasks.stream()
+                .filter(t -> t.getProject() != null && t.getProject().getId().equals(projectId))
+                .map(t -> new TaskLineDto(
+                        t.getProject().getCode(),
+                        t.getProject().getName(),
+                        t.getTaskCategory() != null ? t.getTaskCategory().getName() : null,
+                        t.getHours(),
+                        t.getDescription()))
+                .toList();
     }
 }

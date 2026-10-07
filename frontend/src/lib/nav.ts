@@ -137,18 +137,13 @@ export const NAV: Record<Role, RoleNav> = {
     {
       section: 'Projects',
       items: [
-        { key: 'pm-dash',        label: 'Project Dashboard', path: '/projects/dashboard',     icon: LayoutDashboard },
-        { key: 'projects',       label: 'Projects & Allocation', path: '/projects',               icon: FolderKanban },
+        { key: 'pm-dash',        label: 'Project Dashboard',    path: '/projects/dashboard',    icon: LayoutDashboard },
+        { key: 'projects',       label: 'Projects & Allocation', path: '/projects',              icon: FolderKanban },
         { key: 'pm-util',        label: 'Projects Utilization', path: '/projects/utilization',  icon: Activity },
-        { key: 'blockers',       label: 'Blockers',           path: '/projects/blockers',       icon: AlertOctagon },
-        { key: 'eod-inbox',      label: 'EOD Inbox',          path: '/projects/eod-inbox',      icon: Inbox },
-      ],
-    },
-    {
-      section: 'Work',
-      items: [
-        { key: 'approvals',     label: 'Approvals',      path: '/projects/approvals', icon: ClipboardCheck },
-        { key: 'reports',       label: 'Reports',         path: '/projects/reports',   icon: BarChart3 },
+        { key: 'blockers',       label: 'Blockers',             path: '/projects/blockers',      icon: AlertOctagon },
+        { key: 'eod-inbox',      label: 'EOD Inbox',            path: '/projects/eod-inbox',     icon: Inbox },
+        { key: 'approvals',      label: 'Approvals',            path: '/projects/approvals',     icon: ClipboardCheck },
+        { key: 'reports',        label: 'Reports',              path: '/projects/reports',       icon: BarChart3 },
       ],
     },
   ],
@@ -354,8 +349,19 @@ export function getNavSections(role: Role, capabilities: ServerUserCapabilities)
     }
   }
 
-  if (role !== 'pm' && capabilities.managesProjectIds.length > 0) {
-    sections.push(...NAV.pm);
+  if (capabilities.managesProjectIds.length > 0) {
+    // Non-PM roles that manage projects get the full PM nav appended.
+    // PM role already has NAV.pm as its base — never push again to avoid duplication.
+    if (role !== 'pm') {
+      sections.push(...NAV.pm);
+    }
+  } else if (role === 'pm') {
+    // PM role but manages no projects: strip the Approvals entry (it has nothing to show).
+    // All other PM pages (Projects, Utilization, etc.) stay as they serve general oversight.
+    sections = sections.map(s => ({
+      ...s,
+      items: s.items.filter(e => !('path' in e) || (e as NavItem).path !== '/projects/approvals'),
+    }));
   }
 
   if (capabilities.hasDirectReports) {

@@ -6,11 +6,13 @@ import {
   listDesignations, createDesignation, toggleDesignation, deleteDesignation,
   listLocations, createLocation, toggleLocation, deleteLocation,
   listProjectTypes, createProjectType, toggleProjectType, deleteProjectType,
+  listAllCategories, createTaskCategory, toggleTaskCategory, renameTaskCategory,
   extractApiError, isHttpStatus,
 } from '../../api/admin';
 import type {
   DepartmentDto, DesignationDto, OrgLocationDto,
   ProjectTypeDto, CreateProjectTypePayload,
+  TaskCategoryAdminDto,
 } from '../../api/admin';
 import { Modal } from '../../components/Modal';
 import { GlobalLoader } from '../../components/GlobalLoader';
@@ -57,7 +59,7 @@ const tdStyle: React.CSSProperties = {
   borderBottom: '1px solid var(--line)',
 };
 
-type Tab = 'departments' | 'designations' | 'locations' | 'project-types';
+type Tab = 'departments' | 'designations' | 'locations' | 'project-types' | 'task-categories';
 
 // ── Status pill ────────────────────────────────────────────────────────────────
 
@@ -1130,13 +1132,232 @@ function LocationsTab() {
   );
 }
 
+// ── Task Categories tab ────────────────────────────────────────────────────────
+
+function TaskCategoriesTab() {
+  const qc = useQueryClient();
+  const { show: toast } = useToast();
+  const [scopeFilter, setScopeFilter] = useState<'ALL' | 'EMPLOYEE' | 'MANAGEMENT'>('ALL');
+  const [addOpen, setAddOpen] = useState(false);
+  const [addName, setAddName] = useState('');
+  const [addScope, setAddScope] = useState<'EMPLOYEE' | 'MANAGEMENT'>('MANAGEMENT');
+  const [addProductive, setAddProductive] = useState(true);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameText, setRenameText] = useState('');
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  const { data: categories = [], isLoading } = useQuery<TaskCategoryAdminDto[]>({
+    queryKey: ['org', 'task-categories', 'all'],
+    queryFn: listAllCategories,
+    staleTime: 15_000,
+  });
+
+  const createMut = useMutation({
+    mutationFn: createTaskCategory,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['org', 'task-categories'] });
+      qc.invalidateQueries({ queryKey: ['task-categories'] });
+      toast('Category added');
+      setAddOpen(false);
+      setAddName('');
+      setAddError(null);
+    },
+    onError: (err) => setAddError(extractApiError(err)),
+  });
+
+  const toggleMut = useMutation({
+    mutationFn: (id: number) => toggleTaskCategory(id),
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ['org', 'task-categories'] });
+      qc.invalidateQueries({ queryKey: ['task-categories'] });
+      toast(updated.active ? 'Category activated' : 'Category deactivated');
+    },
+    onError: (err) => toast(extractApiError(err), 'error'),
+  });
+
+  const renameMut = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) => renameTaskCategory(id, name),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['org', 'task-categories'] });
+      qc.invalidateQueries({ queryKey: ['task-categories'] });
+      toast('Renamed');
+      setRenamingId(null);
+      setRenameError(null);
+    },
+    onError: (err) => setRenameError(extractApiError(err)),
+  });
+
+  const filtered = scopeFilter === 'ALL' ? categories : categories.filter(c => c.scope === scopeFilter);
+
+  if (isLoading) return <GlobalLoader fullScreen={false} />;
+
+  return (
+    <div>
+      {/* toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['ALL', 'EMPLOYEE', 'MANAGEMENT'] as const).map(s => (
+            <button key={s} onClick={() => setScopeFilter(s)} style={{
+              padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+              border: '1px solid var(--line)',
+              background: scopeFilter === s ? 'var(--brand)' : 'var(--raised2)',
+              color: scopeFilter === s ? '#fff' : 'var(--txt)',
+              cursor: 'pointer',
+            }}>{s === 'ALL' ? 'All' : s === 'EMPLOYEE' ? 'Employee' : 'Daily Log'}</button>
+          ))}
+        </div>
+        <div style={{ marginLeft: 'auto' }}>
+          <button onClick={() => { setAddOpen(true); setAddError(null); }} style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '7px 14px', borderRadius: 7, fontSize: 13, fontWeight: 600,
+            background: 'var(--brand)', border: 'none', color: '#fff', cursor: 'pointer',
+          }}>
+            <Plus size={14} /> Add category
+          </button>
+        </div>
+      </div>
+
+      {/* table */}
+      <div style={{ border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
+        <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '560px' } as React.CSSProperties}>
+          <thead>
+            <tr>
+              <th style={thStyle}>Name</th>
+              <th style={thStyle}>Scope</th>
+              <th style={thStyle}>Productive</th>
+              <th style={thStyle}>Status</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 && (
+              <tr><td colSpan={5} style={{ ...tdStyle, color: 'var(--txt-dim)', textAlign: 'center' }}>No categories found.</td></tr>
+            )}
+            {filtered.map(cat => (
+              <tr key={cat.id}
+                onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--raised)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = ''; }}
+              >
+                <td style={tdStyle}>
+                  {renamingId === cat.id ? (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input
+                        value={renameText}
+                        onChange={e => setRenameText(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') renameMut.mutate({ id: cat.id, name: renameText });
+                          if (e.key === 'Escape') { setRenamingId(null); setRenameError(null); }
+                        }}
+                        style={{ ...inputStyle, fontSize: 13, padding: '5px 8px' }}
+                        autoFocus
+                      />
+                      <button onClick={() => renameMut.mutate({ id: cat.id, name: renameText })}
+                        disabled={renameMut.isPending}
+                        style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'var(--ok)', border: 'none', color: '#fff', cursor: 'pointer' }}>
+                        Save
+                      </button>
+                      <button onClick={() => { setRenamingId(null); setRenameError(null); }}
+                        style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line)', color: 'var(--txt)', cursor: 'pointer' }}>
+                        Cancel
+                      </button>
+                      {renameError && <span style={{ fontSize: 12, color: 'var(--risk)' }}>{renameError}</span>}
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 13, fontWeight: 500, color: cat.active ? 'var(--txt)' : 'var(--txt-dim)' }}>{cat.name}</span>
+                  )}
+                </td>
+                <td style={tdStyle}>
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
+                    background: cat.scope === 'MANAGEMENT' ? 'rgba(99,102,241,0.12)' : 'rgba(14,165,233,0.12)',
+                    color: cat.scope === 'MANAGEMENT' ? 'var(--info)' : 'var(--brand)',
+                  }}>
+                    {cat.scope === 'MANAGEMENT' ? 'Daily Log' : 'Employee'}
+                  </span>
+                </td>
+                <td style={{ ...tdStyle, fontSize: 12, color: 'var(--txt-dim)' }}>
+                  {cat.isProductive ? 'Productive' : 'Non-productive'}
+                </td>
+                <td style={tdStyle}><ActiveBadge active={cat.active} /></td>
+                <td style={{ ...tdStyle, textAlign: 'right' }}>
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => { setRenamingId(cat.id); setRenameText(cat.name); setRenameError(null); }}
+                      style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line)', color: 'var(--txt)', cursor: 'pointer' }}>
+                      Rename
+                    </button>
+                    <button
+                      onClick={() => toggleMut.mutate(cat.id)}
+                      disabled={toggleMut.isPending}
+                      style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--line)', cursor: 'pointer',
+                        background: cat.active ? 'rgba(228,55,61,0.08)' : 'rgba(47,182,124,0.08)',
+                        color: cat.active ? 'var(--risk)' : 'var(--ok)',
+                      }}>
+                      {cat.active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Add category modal */}
+      {addOpen && (
+        <Modal open={addOpen} title="Add category" onClose={() => { setAddOpen(false); setAddError(null); }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-mut)', display: 'block', marginBottom: 5 }}>Name</label>
+              <input
+                value={addName}
+                onChange={e => setAddName(e.target.value)}
+                placeholder="Category name"
+                style={inputStyle}
+                autoFocus
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-mut)', display: 'block', marginBottom: 5 }}>Scope</label>
+              <select value={addScope} onChange={e => setAddScope(e.target.value as 'EMPLOYEE' | 'MANAGEMENT')}
+                style={inputStyle}>
+                <option value="EMPLOYEE">Employee (Submit EOD)</option>
+                <option value="MANAGEMENT">Daily Log</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={addProductive} onChange={e => setAddProductive(e.target.checked)} id="addProd" />
+              <label htmlFor="addProd" style={{ fontSize: 13, color: 'var(--txt)', cursor: 'pointer' }}>Productive</label>
+            </div>
+            {addError && <ErrorBanner message={addError} />}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setAddOpen(false); setAddError(null); }}
+                style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid var(--line)', background: 'var(--raised2)', color: 'var(--txt)', cursor: 'pointer', fontSize: 13 }}>
+                Cancel
+              </button>
+              <button
+                onClick={() => createMut.mutate({ name: addName, scope: addScope, isProductive: addProductive })}
+                disabled={createMut.isPending || !addName.trim()}
+                style={{ padding: '8px 16px', borderRadius: 7, border: 'none', background: 'var(--brand)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                {createMut.isPending ? 'Adding…' : 'Add'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'departments',  label: 'Departments' },
-  { key: 'designations', label: 'Designations' },
-  { key: 'locations',    label: 'Locations' },
-  { key: 'project-types',  label: 'Project Types' },
+  { key: 'departments',     label: 'Departments' },
+  { key: 'designations',    label: 'Designations' },
+  { key: 'locations',       label: 'Locations' },
+  { key: 'project-types',   label: 'Project Types' },
+  { key: 'task-categories', label: 'Daily Log Categories' },
 ];
 
 export default function OrganizationMasters() {
@@ -1157,7 +1378,7 @@ export default function OrganizationMasters() {
           Organization Masters
         </h1>
         <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-          Manage departments, designations, locations, and project types used across the platform.
+          Manage departments, designations, locations, project types, and Daily Log categories used across the platform.
         </p>
       </div>
 
@@ -1194,10 +1415,11 @@ export default function OrganizationMasters() {
       </div>
 
       {/* Tab content */}
-      {activeTab === 'departments'  && <DepartmentsTab />}
-      {activeTab === 'designations' && <DesignationsTab />}
-      {activeTab === 'locations'    && <LocationsTab />}
-      {activeTab === 'project-types'  && <ProjectTypesTab />}
+      {activeTab === 'departments'     && <DepartmentsTab />}
+      {activeTab === 'designations'    && <DesignationsTab />}
+      {activeTab === 'locations'       && <LocationsTab />}
+      {activeTab === 'project-types'   && <ProjectTypesTab />}
+      {activeTab === 'task-categories' && <TaskCategoriesTab />}
     </div>
   );
 }

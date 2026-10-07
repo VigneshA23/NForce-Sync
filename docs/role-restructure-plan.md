@@ -4,7 +4,7 @@
 **Backup branch:** `backup/pre-role-restructure-2026-09-28` (pushed to origin)
 **DB export:** manual pg_dump taken 2026-09-28 — confirm file exists before Phase 8
 **Source doc:** `docs/NForce_Sync_Approvals_and_Roles_Team_Guide.docx` (v1.0)
-**Status:** All phases complete as of 2026-10-05 (vigneshdev branch). V109 is the current top migration.
+**Status:** All phases complete as of 2026-10-06 (vigneshdev branch). V110 is the current top migration.
 
 ---
 
@@ -184,6 +184,34 @@ ALTER TABLE eod_entry
 `entry_form` is stored at draft creation from the submitter's role so it survives role changes.
 `log_summary` and `log_total_hours` are non-null only when `entry_form = 'PLAIN_LOG'`.
 Java: add `entryForm` enum field (`PROJECT_GROUPED`, `PLAIN_LOG`), `logSummary`, `logTotalHours` to `EodEntry`.
+
+### V110 — Daily Log line items (2026-10-06)
+
+Replaces the single summary textarea with category-based line items for PLAIN_LOG entries.
+
+**New table: `eod_log_line`**
+```sql
+CREATE TABLE eod_log_line (
+    id          BIGSERIAL    PRIMARY KEY,
+    entry_id    BIGINT       NOT NULL REFERENCES eod_entry (id) ON DELETE CASCADE,
+    category_id BIGINT       NOT NULL REFERENCES task_category (id),
+    hours       NUMERIC(5,2) NOT NULL CHECK (hours > 0 AND hours <= 24),
+    description TEXT         NOT NULL,
+    sort_order  INT          NOT NULL DEFAULT 0
+);
+```
+
+**task_category.scope** — new VARCHAR(20) column (`EMPLOYEE` | `MANAGEMENT`, DEFAULT 'EMPLOYEE').
+- Old global unique index dropped; replaced by per-scope: `(scope, lower(btrim(name)))`.
+- 12 MANAGEMENT categories seeded (Meetings and Calls, Reviews and Approvals, Planning and Strategy, People and 1:1s, Hiring and Interviews, Client and Stakeholder, Reporting and Analysis, Administration, Escalations and Issue Resolution, Documentation, Training and Mentoring, Travel).
+- `GET /api/task-categories` defaults to `?scope=EMPLOYEE` — employee Submit EOD never receives management categories.
+- `DailyLogForm` calls `?scope=MANAGEMENT` explicitly.
+
+**Rules:**
+- `log_total_hours` computed server-side as `SUM(eod_log_line.hours)` — client never sends it.
+- Empty `logLines` = leave day (auto-approved).
+- Legacy PLAIN_LOG entries (pre-V110) have no rows in `eod_log_line`; frontend renders a synthetic "Summary" row from `logSummary`/`logTotalHours`.
+- Do NOT use `eod_task` rows for PLAIN_LOG (corrupts `EodByEmployeeReportService` which iterates `entry.getTasks()` without a PLAIN_LOG guard).
 
 ### Verification
 

@@ -279,7 +279,9 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
             <span>·</span>
             <span>Submitted {formatRelative(piece.frozenAt)}</span>
             <span>·</span>
-            <span>{projectTasks.length} task{projectTasks.length !== 1 ? 's' : ''}</span>
+            {piece.entryForm === 'PLAIN_LOG'
+              ? <span>{(piece.logTotalHours ?? 0) === 0 ? 'Leave day' : `Daily log · ${piece.logLines?.length ?? 0} item${(piece.logLines?.length ?? 0) !== 1 ? 's' : ''}`}</span>
+              : <span>{projectTasks.length} task{projectTasks.length !== 1 ? 's' : ''}</span>}
           </div>
 
           {/* Escalation note — shown on the lead's view when their piece was escalated to PM */}
@@ -296,8 +298,45 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
             </div>
           )}
 
-          {/* Task summary table — identical rows to EntryRow */}
-          {projectTasks.length > 0 && (
+          {/* PLAIN_LOG: line items table (V110) or legacy summary */}
+          {piece.entryForm === 'PLAIN_LOG' && (piece.logLines?.length ?? 0) > 0 && (
+            <div style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)' }}>
+              {piece.logLines!.map((l, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '4px 11px', fontSize: 11, color: 'var(--txt-dim)',
+                  borderBottom: '1px solid var(--line)',
+                }}>
+                  <span style={{ color: 'var(--txt)', fontWeight: 600, minWidth: 150, flexShrink: 0 }}>{l.categoryName}</span>
+                  <span style={{ flex: 1 }}>{l.description}</span>
+                  <span style={{ color: 'var(--txt)', fontWeight: 700, minWidth: 36, textAlign: 'right', flexShrink: 0 }}>
+                    {l.hours}h
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {piece.entryForm === 'PLAIN_LOG' && (piece.logLines?.length ?? 0) === 0 && piece.logSummary && (
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--txt-dim)', lineHeight: 1.5 }}>
+              {piece.logSummary}
+            </div>
+          )}
+          {/* PLAIN_LOG: next-day plan and remarks (Part B) */}
+          {piece.entryForm === 'PLAIN_LOG' && piece.nextDayPlan && (
+            <div style={{ marginTop: 8, fontSize: 12 }}>
+              <span style={{ fontWeight: 600, color: 'var(--txt-mut)', letterSpacing: '0.05em', textTransform: 'uppercase', fontSize: 10 }}>Next-day plan</span>
+              <div style={{ color: 'var(--txt)', lineHeight: 1.5, marginTop: 2 }}>{piece.nextDayPlan}</div>
+            </div>
+          )}
+          {piece.entryForm === 'PLAIN_LOG' && piece.remarks && (
+            <div style={{ marginTop: 6, fontSize: 12 }}>
+              <span style={{ fontWeight: 600, color: 'var(--txt-mut)', letterSpacing: '0.05em', textTransform: 'uppercase', fontSize: 10 }}>Remarks</span>
+              <div style={{ color: 'var(--txt)', lineHeight: 1.5, marginTop: 2 }}>{piece.remarks}</div>
+            </div>
+          )}
+
+          {/* PROJECT_GROUPED: task summary table */}
+          {piece.entryForm !== 'PLAIN_LOG' && projectTasks.length > 0 && (
             <div style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)' }}>
               {projectTasks.map(t => (
                 <div key={t.id} style={{
@@ -317,7 +356,9 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
 
           {/* Chips row — mirrors EntryRow's hours/status chip strip */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 9 }}>
-            <Chip tone="neutral">{hrs(totalHours)}h logged</Chip>
+            <Chip tone="neutral">
+              {hrs(piece.entryForm === 'PLAIN_LOG' ? (piece.logTotalHours ?? 0) : totalHours)}h logged
+            </Chip>
           </div>
         </div>
 

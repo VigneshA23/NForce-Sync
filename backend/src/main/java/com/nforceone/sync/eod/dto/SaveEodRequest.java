@@ -39,13 +39,18 @@ public record SaveEodRequest(
         // Persisted once at draft creation; ignored on subsequent saves of an existing entry.
         EodEntry.EntryForm entryForm,
 
-        // Required when logTotalHours > 0; optional when hours == 0 (leave / no-work day).
-        // 20–4000 characters, trimmed. Enforced at submit time, not draft save.
+        // V110+: line-item entries. When non-null, logTotalHours is computed server-side as
+        // SUM(line.hours) and logSummary is ignored. Empty list = leave day (AUTO_APPROVED).
+        // Null = legacy path: logSummary + logTotalHours are used as before (backward compat).
+        @Valid List<SaveEodLogLineRequest> logLines,
+
+        // Legacy (pre-V110) PLAIN_LOG fields — still accepted for backward compat.
+        // Ignored by the server when logLines is non-null.
         @Size(max = 4000) String logSummary,
 
-        // 0.00–24.00 in 0.25-hour increments. 0 signals a leave day (AUTO_APPROVED).
+        // Legacy: client-supplied total hours. Ignored when logLines is non-null (server computes).
         BigDecimal logTotalHours,
 
-        // Optional additional context. No SQL column length limit; capped at 8000 here.
+        // Optional additional context — still used in V110+.
         @Size(max = 8000) String logNotes
 ) {}

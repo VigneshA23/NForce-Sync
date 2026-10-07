@@ -18,11 +18,18 @@ public interface TaskCategoryRepository extends JpaRepository<TaskCategory, Long
     @Query("SELECT c.id FROM TaskCategory c WHERE c.name = :name")
     Optional<Long> findIdByName(@Param("name") String name);
 
-  // Global category master — every employee sees the same active categories.
-@Query("SELECT c FROM TaskCategory c WHERE c.active = true ORDER BY c.name ASC")
-List<TaskCategory> findVisibleTo();
     // The global category master — every employee, regardless of team/project, sees the same
     // list. See V60: task_category is application-wide data, never scoped to a Team Lead.
     @Query("SELECT c FROM TaskCategory c WHERE c.active = true ORDER BY c.name ASC")
     List<TaskCategory> findAllActiveOrderByName();
+
+    // Scope-filtered — V110: EMPLOYEE scope for Submit EOD; MANAGEMENT scope for Daily Log.
+    @Query("SELECT c FROM TaskCategory c WHERE c.scope = :scope AND c.active = true ORDER BY c.name ASC")
+    List<TaskCategory> findByScopeAndActiveTrueOrderByNameAsc(@Param("scope") String scope);
+
+    // Admin view — all scopes, all active states, sorted scope then name.
+    @Query("SELECT c FROM TaskCategory c ORDER BY c.scope ASC, c.name ASC")
+    List<TaskCategory> findAllOrderByScopeAscNameAsc();
+
+    boolean existsByNameIgnoreCaseAndScope(String name, String scope);
 }

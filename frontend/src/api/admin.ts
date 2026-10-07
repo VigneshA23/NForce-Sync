@@ -389,3 +389,39 @@ export async function deleteDesignation(id: number): Promise<void> {
 export async function deleteLocation(id: number): Promise<void> {
   await api.delete(`/org/locations/${id}`);
 }
+
+// ── Task Categories (V110) ─────────────────────────────────────────────────────
+
+export interface TaskCategoryAdminDto {
+  id: number;
+  name: string;
+  isProductive: boolean;
+  active: boolean;
+  scope: 'EMPLOYEE' | 'MANAGEMENT';
+}
+
+export interface CreateTaskCategoryPayload {
+  name: string;
+  isProductive: boolean;
+  scope: 'EMPLOYEE' | 'MANAGEMENT';
+}
+
+export async function listAllCategories(): Promise<TaskCategoryAdminDto[]> {
+  const res = await api.get<TaskCategoryAdminDto[]>('/task-categories/all');
+  return res.data;
+}
+
+export async function createTaskCategory(data: CreateTaskCategoryPayload): Promise<TaskCategoryAdminDto> {
+  const res = await api.post<TaskCategoryAdminDto>('/task-categories', data);
+  return res.data;
+}
+
+export async function toggleTaskCategory(id: number): Promise<TaskCategoryAdminDto> {
+  const res = await api.patch<TaskCategoryAdminDto>(`/task-categories/${id}/toggle`);
+  return res.data;
+}
+
+export async function renameTaskCategory(id: number, name: string): Promise<TaskCategoryAdminDto> {
+  const res = await api.patch<TaskCategoryAdminDto>(`/task-categories/${id}/rename`, { name });
+  return res.data;
+}

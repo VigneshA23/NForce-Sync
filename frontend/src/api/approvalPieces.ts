@@ -23,14 +23,35 @@ export interface ApprovalPieceDto {
   logSummary: string | null;
   logTotalHours: number | null;
   logNotes: string | null;
+  // V110+ line items — empty [] for legacy PLAIN_LOG entries
+  logLines: import('./eod').EodLogLineDto[];
   // Escalation fields — null when piece has not been escalated
   escalatedAt: string | null;
   escalatedToId: number | null;
   escalatedToName: string | null;
   hoursPending: number | null;
+  // Day-type metadata — null for PROJECT_GROUPED pieces
+  dayType: string | null;
+  workLocation: string | null;
+  nextDayPlan: string | null;
+  remarks: string | null;
+  // Task lines for PROJECT_GROUPED pieces — empty [] for PLAIN_LOG
+  taskLines: { projectCode: string | null; projectName: string | null; categoryName: string | null; hours: number | null; description: string | null }[];
 }
 
 const STALE = 10_000;
+
+export function usePendingPiecesCount(enabled = true): number {
+  return useQuery({
+    queryKey: ['v2', 'approvals', 'pending'],
+    queryFn: () => api.get<ApprovalPieceDto[]>('/v2/approvals/pending').then(r => r.data),
+    enabled,
+    select: (d) => d.length,
+    staleTime: STALE,
+    refetchInterval: STALE,
+    refetchIntervalInBackground: true,
+  }).data ?? 0;
+}
 
 export function usePendingPieces() {
   return useQuery({
@@ -59,6 +80,16 @@ export function useDecidedEntriesV2(status: 'APPROVED' | 'REJECTED') {
   return useQuery({
     queryKey: ['v2', 'approvals', 'decided', status],
     queryFn: () => api.get<EodEntryDto[]>(`/v2/approvals/decided-entries?status=${status}`).then(r => r.data),
+    staleTime: 10_000,
+    refetchInterval: 10_000,
+  });
+}
+
+/** PM Approved/Rejected tabs — PROJECT_GROUPED pieces only (no PLAIN_LOG). */
+export function useDecidedPmPieces(status: 'APPROVED' | 'REJECTED') {
+  return useQuery({
+    queryKey: ['v2', 'approvals', 'pm-decided', status],
+    queryFn: () => api.get<ApprovalPieceDto[]>(`/v2/approvals/pm-decided-pieces?status=${status}`).then(r => r.data),
     staleTime: 10_000,
     refetchInterval: 10_000,
   });

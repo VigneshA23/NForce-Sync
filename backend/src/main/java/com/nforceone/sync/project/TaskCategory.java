@@ -4,9 +4,10 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
-// Global, application-wide master data — see V60. Never scoped to a Team Lead, team, project,
-// or employee; uniqueness is enforced DB-side via task_category_normalized_name_uq
-// (case-insensitive, whitespace-normalized on name).
+// Global master data — see V60, V110.
+// Scoped by `scope`: EMPLOYEE categories appear in the employee Submit EOD dropdown;
+// MANAGEMENT categories appear in the Daily Log (PLAIN_LOG) form.
+// Uniqueness is per-scope: (scope, lower(btrim(name))) — see task_category_scope_name_uq.
 @Entity
 @Table(name = "task_category")
 @Getter
@@ -25,4 +26,9 @@ public class TaskCategory {
 
     @Column(nullable = false)
     private Boolean active;
+
+    // EMPLOYEE: shown in the project-task category dropdown on Submit EOD.
+    // MANAGEMENT: shown in the Daily Log line-item category dropdown.
+    @Column(nullable = false, length = 20)
+    private String scope = "EMPLOYEE";
 }

@@ -53,6 +53,12 @@ public class ApprovalPieceController {
         return pieceService.getDecidedEntriesForActor(actingEmail(), status);
     }
 
+    /** PM Approved/Rejected tabs — PROJECT_GROUPED pieces only, no PLAIN_LOG. */
+    @GetMapping("/pm-decided-pieces")
+    public List<ApprovalPieceDto> getPmDecidedPieces(@RequestParam String status) {
+        return pieceService.getDecidedPmPieces(actingEmail(), status);
+    }
+
     @PostMapping("/pieces/{pieceId}/approve")
     public ApprovalPieceDto approve(@PathVariable Long pieceId,
                                      @RequestBody(required = false) ApprovePieceRequest request) {
