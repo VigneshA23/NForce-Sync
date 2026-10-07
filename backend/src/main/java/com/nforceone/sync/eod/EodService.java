@@ -100,6 +100,7 @@ public class EodService {
     private final LeadAccessService leadAccess;
     private final com.nforceone.sync.project.AllocationRepository allocationRepository;
     private final AuditLogRepository auditLogRepository;
+    private final EodLogLineRepository logLineRepository;
 
     public EodService(EodEntryRepository entryRepository,
                       EodTaskRepository taskRepository,
@@ -117,7 +118,8 @@ public class EodService {
                       EodAccessPolicy accessPolicy,
                       LeadAccessService leadAccess,
                       com.nforceone.sync.project.AllocationRepository allocationRepository,
-                      AuditLogRepository auditLogRepository) {
+                      AuditLogRepository auditLogRepository,
+                      EodLogLineRepository logLineRepository) {
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
         this.userRepository    = userRepository;
@@ -135,6 +137,7 @@ public class EodService {
         this.leadAccess = leadAccess;
         this.allocationRepository = allocationRepository;
         this.auditLogRepository = auditLogRepository;
+        this.logLineRepository = logLineRepository;
     }
 
     public EodEntryDto saveDraft(SaveEodRequest request, String actingEmail) {
@@ -172,12 +175,39 @@ public class EodService {
             entry.setStatus(EodEntry.Status.DRAFT);
         }
 
-        // PLAIN_LOG draft: persist the summary/hours/notes, skip task processing.
+        // PLAIN_LOG draft: persist log lines (V110+) or legacy summary/hours, skip task processing.
         if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
-            if (request.logSummary() != null) entry.setLogSummary(request.logSummary());
-            if (request.logTotalHours() != null) entry.setLogTotalHours(request.logTotalHours());
+            boolean hasLines = request.logLines() != null;
+            if (hasLines) {
+                // V110+ path: server computes logTotalHours from line sum.
+                BigDecimal total = request.logLines().stream()
+                        .map(l -> l.hours() != null ? l.hours() : BigDecimal.ZERO)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                entry.setLogTotalHours(total);
+                entry.setLogSummary(null);
+            } else {
+                // Legacy path: client supplies logSummary + logTotalHours.
+                if (request.logSummary() != null) entry.setLogSummary(request.logSummary());
+                if (request.logTotalHours() != null) entry.setLogTotalHours(request.logTotalHours());
+            }
             if (request.logNotes() != null) entry.setLogNotes(request.logNotes());
+
+            // Store dayType, workLocation, nextDayPlan, remarks for PLAIN_LOG (same columns as
+            // the employee form — saveDraft previously left them null; now they are carried through).
+            EodEntry.DayType plainDayType = request.dayType() != null
+                    ? request.dayType() : EodEntry.DayType.WORKING_DAY;
+            entry.setDayType(plainDayType);
+            boolean plainNonWork = plainDayType == EodEntry.DayType.LEAVE
+                    || plainDayType == EodEntry.DayType.FIRST_HALF_LEAVE
+                    || plainDayType == EodEntry.DayType.SECOND_HALF_LEAVE
+                    || plainDayType == EodEntry.DayType.HOLIDAY;
+            boolean plainIsWeekend = plainDayType == EodEntry.DayType.WEEKEND;
+            entry.setWorkLocation((plainNonWork || plainIsWeekend) ? null : request.workLocation());
+            entry.setNextDayPlan(request.nextDayPlan());
+            entry.setRemarks(request.remarks());
+
             entry.setUpdatedAt(now);
+
             EodEntry savedPlain;
             try {
                 savedPlain = entryRepository.save(entry);
@@ -185,11 +215,42 @@ public class EodService {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "An entry for this date was just created — reload and try again");
             }
+
+            // V110+: replace log lines on every save (delete + insert), same pattern as eod_task.
+            if (hasLines) {
+                logLineRepository.deleteByEntryId(savedPlain.getId());
+                int order = 0;
+                for (com.nforceone.sync.eod.dto.SaveEodLogLineRequest lineReq : request.logLines()) {
+                    EodLogLine line = new EodLogLine();
+                    line.setEntry(savedPlain);
+                    com.nforceone.sync.project.TaskCategory category = categoryRepository.findById(lineReq.categoryId())
+                            .orElseThrow(() -> new ResponseStatusException(
+                                    HttpStatus.NOT_FOUND, "Task category not found: " + lineReq.categoryId()));
+                    if (!"MANAGEMENT".equals(category.getScope())) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "Category \"" + category.getName() + "\" is not a daily log category (scope=MANAGEMENT)");
+                    }
+                    if (!Boolean.TRUE.equals(category.getActive())) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "Category \"" + category.getName() + "\" is inactive");
+                    }
+                    line.setCategory(category);
+                    line.setHours(lineReq.hours());
+                    line.setDescription(lineReq.description().strip());
+                    line.setSortOrder(lineReq.sortOrder() != null ? lineReq.sortOrder() : order);
+                    logLineRepository.save(line);
+                    order++;
+                }
+            }
+
+            List<com.nforceone.sync.eod.dto.EodLogLineDto> logLines =
+                    logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(savedPlain.getId())
+                            .stream().map(com.nforceone.sync.eod.dto.EodLogLineDto::from).toList();
             EodAttachmentService.AttachmentsByScope attachments =
                     attachmentService.loadForEntries(List.of(savedPlain.getId()));
             return EodEntryDto.from(savedPlain, null, null,
                     attachments.entryLevelByEntryId().getOrDefault(savedPlain.getId(), List.of()),
-                    java.util.Map.of());
+                    java.util.Map.of(), logLines);
         }
 
         EodEntry.DayType dayType = request.dayType() != null
@@ -395,9 +456,13 @@ public class EodService {
 
         EodAttachmentService.AttachmentsByScope attachments =
                 attachmentService.loadForEntries(List.of(saved.getId()));
+        List<com.nforceone.sync.eod.dto.EodLogLineDto> logLines = saved.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG
+                ? logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(saved.getId())
+                        .stream().map(com.nforceone.sync.eod.dto.EodLogLineDto::from).toList()
+                : List.of();
         return EodEntryDto.from(saved, null, null,
                 attachments.entryLevelByEntryId().getOrDefault(saved.getId(), List.of()),
-                attachments.byTaskId());
+                attachments.byTaskId(), logLines);
     }
 
     private void notifySubmitApprovers(List<ApprovalPieceSpec> specs, AppUser employee, EodEntry saved) {
@@ -549,7 +614,7 @@ public class EodService {
                 null, null, null, List.of(), List.of(),
                 null, null, null, null, null, null, null, null, null, null,
                 // PLAIN_LOG fields — synthetic rows are always PROJECT_GROUPED context
-                EodEntry.EntryForm.PROJECT_GROUPED.name(), null, null, null, null, null);
+                EodEntry.EntryForm.PROJECT_GROUPED.name(), null, null, null, null, null, List.of());
     }
 
     @Transactional(readOnly = true)
@@ -563,9 +628,13 @@ public class EodService {
         }
         EodAttachmentService.AttachmentsByScope attachments =
                 attachmentService.loadForEntries(List.of(entry.getId()));
+        List<com.nforceone.sync.eod.dto.EodLogLineDto> logLines = entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG
+                ? logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(entry.getId())
+                        .stream().map(com.nforceone.sync.eod.dto.EodLogLineDto::from).toList()
+                : List.of();
         return EodEntryDto.from(entry, latestReviewerComment(entry), null,
                 attachments.entryLevelByEntryId().getOrDefault(entry.getId(), List.of()),
-                attachments.byTaskId());
+                attachments.byTaskId(), logLines);
     }
 
     @Transactional(readOnly = true)
@@ -748,19 +817,48 @@ public class EodService {
     /**
      * Validation for PLAIN_LOG submissions.
      *
-     * <p>Rules:
-     * <ul>
-     *   <li>logTotalHours required; must be 0.00–24.00 in 0.25-hour steps (15-min granularity).
-     *   <li>Hours == 0 is a leave day — logSummary is optional.
-     *   <li>Hours > 0 — logSummary required (20–4000 chars).
-     *   <li>logNotes, when present, must not exceed 8000 chars.
-     * </ul>
+     * V110+: validates line items when present (logLines loaded from DB).
+     * Legacy: validates logTotalHours + logSummary when no line items exist.
      */
     private void validatePlainLog(EodEntry entry) {
-        String error = PlainLogValidation.validate(
-                entry.getLogTotalHours(), entry.getLogSummary(), entry.getLogNotes());
+        List<EodLogLine> lines = logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(entry.getId());
+        String error;
+        if (!lines.isEmpty()) {
+            // V110+ path: convert persisted lines to SaveEodLogLineRequest for stateless validation.
+            List<com.nforceone.sync.eod.dto.SaveEodLogLineRequest> lineReqs = lines.stream()
+                    .map(l -> new com.nforceone.sync.eod.dto.SaveEodLogLineRequest(
+                            l.getCategory().getId(), l.getHours(), l.getDescription(), l.getSortOrder()))
+                    .toList();
+            error = PlainLogValidation.validate(lineReqs, entry.getLogNotes());
+        } else {
+            // Legacy path: no log lines — use logTotalHours + logSummary.
+            error = PlainLogValidation.validateLegacy(
+                    entry.getLogTotalHours(), entry.getLogSummary(), entry.getLogNotes());
+        }
         if (error != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
+        }
+
+        // Validate dayType-dependent fields — same rules as the employee form (validateLoggedDay),
+        // applied to PLAIN_LOG's day-type metadata added in Part B of the daily-log redesign.
+        EodEntry.DayType plainDayType = entry.getDayType() != null
+                ? entry.getDayType() : EodEntry.DayType.WORKING_DAY;
+        boolean plainNonWork = plainDayType == EodEntry.DayType.LEAVE
+                || plainDayType == EodEntry.DayType.FIRST_HALF_LEAVE
+                || plainDayType == EodEntry.DayType.SECOND_HALF_LEAVE
+                || plainDayType == EodEntry.DayType.HOLIDAY;
+        boolean plainIsWeekend = plainDayType == EodEntry.DayType.WEEKEND;
+
+        if (!plainNonWork && !plainIsWeekend) {
+            boolean hasContent = !lines.isEmpty()
+                    || (entry.getLogTotalHours() != null
+                            && entry.getLogTotalHours().compareTo(BigDecimal.ZERO) > 0);
+            if (hasContent && (entry.getWorkLocation() == null || entry.getWorkLocation().isBlank())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Work location is required.");
+            }
+            if (entry.getNextDayPlan() == null || entry.getNextDayPlan().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Next-day plan is required.");
+            }
         }
     }
 
@@ -1057,10 +1155,25 @@ public class EodService {
         List<Long> entryIds = entries.stream().map(EodEntry::getId).toList();
         EodAttachmentService.AttachmentsByScope attachments = attachmentService.loadForEntries(entryIds);
 
+        // Batch-load log lines for all PLAIN_LOG entries — single query for the whole list.
+        List<Long> plainLogIds = entries.stream()
+                .filter(e -> e.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG)
+                .map(EodEntry::getId)
+                .toList();
+        Map<Long, List<com.nforceone.sync.eod.dto.EodLogLineDto>> logLinesByEntryId = new HashMap<>();
+        if (!plainLogIds.isEmpty()) {
+            for (EodLogLine line : logLineRepository.findByEntryIdInOrderBySortOrderAscIdAsc(plainLogIds)) {
+                logLinesByEntryId
+                        .computeIfAbsent(line.getEntry().getId(), k -> new java.util.ArrayList<>())
+                        .add(com.nforceone.sync.eod.dto.EodLogLineDto.from(line));
+            }
+        }
+
         return entries.stream()
                 .map(e -> EodEntryDto.from(e, commentMap.get(e.getId()), null,
                         attachments.entryLevelByEntryId().getOrDefault(e.getId(), List.of()),
-                        attachments.byTaskId()))
+                        attachments.byTaskId(),
+                        logLinesByEntryId.getOrDefault(e.getId(), List.of())))
                 .toList();
     }
 

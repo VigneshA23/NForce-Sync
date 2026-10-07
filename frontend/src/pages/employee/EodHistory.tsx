@@ -255,6 +255,10 @@ export default function EodHistory() {
   const taskSummary = (entry: EodHistoryEntryDto): string => {
     if (entry.entryForm === 'PLAIN_LOG') {
       if ((entry.logTotalHours ?? 0) === 0) return 'Leave day';
+      if (entry.logLines && entry.logLines.length > 0) {
+        const first = entry.logLines[0].categoryName;
+        return entry.logLines.length === 1 ? first : `${first} +${entry.logLines.length - 1} more`;
+      }
       return entry.logSummary ? (entry.logSummary.length > 60 ? entry.logSummary.slice(0, 57) + '…' : entry.logSummary) : 'Daily log';
     }
     if (entry.tasks.length === 0) {
@@ -279,6 +283,8 @@ export default function EodHistory() {
           e.entryDate,
           e.logSummary ?? '',
           e.logNotes ?? '',
+          ...(e.logLines ?? []).map(l => l.categoryName),
+          ...(e.logLines ?? []).map(l => l.description),
           ...e.tasks.map(t => t.projectCode ?? ''),
           ...e.tasks.map(t => t.categoryName ?? ''),
           ...e.tasks.map(t => t.description ?? ''),
@@ -418,14 +424,6 @@ export default function EodHistory() {
     <div>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '3px 10px', background: 'var(--raised2)', border: '1px solid var(--line2)',
-          borderRadius: 20, marginBottom: 10,
-        }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4C8DD6', flexShrink: 0 }} />
-          <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-mut)', letterSpacing: '0.04em' }}>Employee</span>
-        </div>
         <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', margin: 0, letterSpacing: '-0.01em' }}>
           My EOD History
         </h1>

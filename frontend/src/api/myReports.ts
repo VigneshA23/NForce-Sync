@@ -43,6 +43,30 @@ export function useMyReportsPendingApprovals(enabled = true) {
   });
 }
 
+export function useMyReportsPendingCount(enabled = true): number {
+  return useQuery({
+    queryKey: ['my-reports', 'approvals', 'pending'],
+    queryFn: () =>
+      api.get<ApprovalPieceDto[]>('/my-reports/approvals/pending').then(r => r.data),
+    enabled,
+    select: (d) => d.length,
+    staleTime: STALE,
+    refetchInterval: STALE,
+    refetchIntervalInBackground: true,
+  }).data ?? 0;
+}
+
+export function useMyReportsDecidedPieces(status: 'APPROVED' | 'REJECTED', enabled = true) {
+  return useQuery({
+    queryKey: ['my-reports', 'approvals', 'decided', status],
+    queryFn: () =>
+      api.get<ApprovalPieceDto[]>(`/my-reports/approvals/decided-entries?status=${status}`).then(r => r.data),
+    enabled,
+    staleTime: STALE,
+    refetchInterval: STALE,
+  });
+}
+
 export function useMyReportsApprovePiece() {
   const qc = useQueryClient();
   return useMutation({

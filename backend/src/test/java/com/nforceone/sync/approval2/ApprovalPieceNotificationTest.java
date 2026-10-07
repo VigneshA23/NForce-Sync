@@ -5,6 +5,8 @@ import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.auth.AuditLogRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
+import com.nforceone.sync.eod.EodLogLineRepository;
+import com.nforceone.sync.eod.EodTaskRepository;
 import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.utilization.UtilizationService;
@@ -41,6 +43,8 @@ class ApprovalPieceNotificationTest {
     @Mock UtilizationService utilizationService;
     @Mock NotificationService notificationService;
     @Mock AuditLogRepository auditLogRepository;
+    @Mock EodLogLineRepository logLineRepository;
+    @Mock EodTaskRepository taskRepository;
 
     @InjectMocks ApprovalPieceService service;
 
@@ -54,6 +58,10 @@ class ApprovalPieceNotificationTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(any()))
+                .thenReturn(List.of());
+        lenient().when(taskRepository.findByEodEntryIdInWithDetails(any())).thenReturn(List.of());
+
         actor = user(10L, AppUser.Role.EMPLOYEE, "Vignesh A", ACTOR_EMAIL);
         employee = user(20L, AppUser.Role.EMPLOYEE, "Akhila S", "akhila@example.com");
 

@@ -50,7 +50,9 @@ public record EodEntryDto(
         String           logNotes,
         // Approver name + type for the plain-log piece, populated for PLAIN_LOG entries only.
         String           logApproverName,
-        String           logApproverType
+        String           logApproverType,
+        // V110+ line items — empty for legacy PLAIN_LOG entries (frontend renders synthetic row).
+        List<EodLogLineDto> logLines
 ) {
     // Default factory — no reviewer comment (used in approval flow, saveDraft, submit)
     public static EodEntryDto from(EodEntry e) {
@@ -70,16 +72,20 @@ public record EodEntryDto(
     }
 
     /**
-     * Full factory — also threads through pre-batch-fetched attachments, so no call site does an
-     * N+1 lookup per entry. {@code entryAttachments} are this entry's own EOD-level rows;
-     * {@code taskAttachmentsById} maps eod_task.id -> that task's attachment rows (looked up per
-     * task below). Callers that haven't been updated to batch-fetch attachments use the 3-arg
-     * overload above, which passes empty defaults — they simply render no attachments rather
-     * than N+1ing or failing.
+     * Full factory — threads through pre-batch-fetched attachments and V110 log lines.
+     * Callers that haven't been updated to supply logLines use the 3-arg overload, which passes
+     * empty defaults — they render no attachments or log lines rather than N+1ing or failing.
      */
     public static EodEntryDto from(EodEntry e, String reviewerComment, EodEntryEnrichment enrichment,
                                     List<EodAttachmentDto> entryAttachments,
                                     Map<Long, List<EodAttachmentDto>> taskAttachmentsById) {
+        return from(e, reviewerComment, enrichment, entryAttachments, taskAttachmentsById, List.of());
+    }
+
+    public static EodEntryDto from(EodEntry e, String reviewerComment, EodEntryEnrichment enrichment,
+                                    List<EodAttachmentDto> entryAttachments,
+                                    Map<Long, List<EodAttachmentDto>> taskAttachmentsById,
+                                    List<EodLogLineDto> logLines) {
         return new EodEntryDto(
                 e.getId(),
                 e.getEmployee().getId(),
@@ -118,7 +124,8 @@ public record EodEntryDto(
                 e.getLogTotalHours(),
                 e.getLogNotes(),
                 null, // logApproverName — populated by ApprovalPieceService when needed
-                null  // logApproverType
+                null, // logApproverType
+                logLines != null ? logLines : List.of()
         );
     }
 }

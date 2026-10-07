@@ -7,7 +7,12 @@ import com.nforceone.sync.auth.AuditLog;
 import com.nforceone.sync.auth.AuditLogRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
+import com.nforceone.sync.eod.EodLogLine;
+import com.nforceone.sync.eod.EodLogLineRepository;
+import com.nforceone.sync.eod.EodTask;
+import com.nforceone.sync.eod.EodTaskRepository;
 import com.nforceone.sync.eod.dto.EodEntryDto;
+import com.nforceone.sync.eod.dto.EodLogLineDto;
 import com.nforceone.sync.notification.NotificationDates;
 import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.project.PmScopeService;
@@ -32,6 +37,8 @@ public class ApprovalPieceService {
     private final NotificationService notificationService;
     private final AuditLogRepository auditLogRepository;
     private final PmScopeService pmScopeService;
+    private final EodLogLineRepository logLineRepository;
+    private final EodTaskRepository taskRepository;
 
     public ApprovalPieceService(EodProjectApprovalRepository pieceRepository,
                                  EodProjectApprovalActionRepository actionRepository,
@@ -40,7 +47,9 @@ public class ApprovalPieceService {
                                  UtilizationService utilizationService,
                                  NotificationService notificationService,
                                  AuditLogRepository auditLogRepository,
-                                 PmScopeService pmScopeService) {
+                                 PmScopeService pmScopeService,
+                                 EodLogLineRepository logLineRepository,
+                                 EodTaskRepository taskRepository) {
         this.pieceRepository = pieceRepository;
         this.actionRepository = actionRepository;
         this.entryRepository = entryRepository;
@@ -49,6 +58,8 @@ public class ApprovalPieceService {
         this.notificationService = notificationService;
         this.auditLogRepository = auditLogRepository;
         this.pmScopeService = pmScopeService;
+        this.logLineRepository = logLineRepository;
+        this.taskRepository = taskRepository;
     }
 
     @Transactional(readOnly = true)
@@ -68,9 +79,10 @@ public class ApprovalPieceService {
             for (EodProjectApproval p : assigned) { if (seen.add(p.getId())) pieces.add(p); }
             for (EodProjectApproval p : adminGroup) { if (seen.add(p.getId())) pieces.add(p); }
         } else if (actor.getRole() == AppUser.Role.PM || pmScopeService.isProjectManager(actor)) {
-            // PM-type pieces (no lead) + escalated LEAD pieces where PM is the designated fallback.
-            List<EodProjectApproval> pmPieces = pieceRepository.findByApproverIdAndStatus(
-                    actor.getId(), EodProjectApproval.Status.PENDING);
+            // PM-type PROJECT_GROUPED pieces only (no PLAIN_LOG / REPORTING_MANAGER pieces).
+            // Escalated LEAD pieces where this PM is the designated fallback are added separately.
+            List<EodProjectApproval> pmPieces = pieceRepository.findByApproverIdAndApproverTypeAndStatus(
+                    actor.getId(), EodProjectApproval.ApproverType.PM, EodProjectApproval.Status.PENDING);
             List<EodProjectApproval> escalatedToMe = pieceRepository.findByEscalatedToIdAndStatus(
                     actor.getId(), EodProjectApproval.Status.PENDING);
             java.util.Set<Long> seen = new java.util.HashSet<>();
@@ -80,7 +92,7 @@ public class ApprovalPieceService {
         } else {
             pieces = pieceRepository.findByApproverIdAndStatus(actor.getId(), EodProjectApproval.Status.PENDING);
         }
-        return pieces.stream().map(ApprovalPieceDto::from).toList();
+        return mapPiecesWithLogLines(pieces);
     }
 
     @Transactional(readOnly = true)
@@ -105,7 +117,7 @@ public class ApprovalPieceService {
             }
         }
 
-        return pieces.stream().map(ApprovalPieceDto::from).toList();
+        return mapPiecesWithLogLines(pieces);
     }
 
     @Transactional(readOnly = true)
@@ -114,6 +126,32 @@ public class ApprovalPieceService {
         EodProjectApproval.Status status = EodProjectApproval.Status.valueOf(statusName);
         List<EodEntry> entries = entryRepository.findByApproverPieceStatus(actor.getId(), status);
         return entries.stream().map(EodEntryDto::from).toList();
+    }
+
+    /** PM decided tab: PROJECT_GROUPED pieces (PM-type + escalated-LEAD) in a given status. */
+    @Transactional(readOnly = true)
+    public List<ApprovalPieceDto> getDecidedPmPieces(String actorEmail, String statusName) {
+        AppUser actor = requireUserByEmail(actorEmail);
+        EodProjectApproval.Status status = EodProjectApproval.Status.valueOf(statusName);
+        List<EodProjectApproval> pmPieces = pieceRepository.findByApproverIdAndApproverTypeAndStatus(
+                actor.getId(), EodProjectApproval.ApproverType.PM, status);
+        List<EodProjectApproval> escalatedDecided = pieceRepository.findByEscalatedToIdAndStatus(
+                actor.getId(), status);
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        java.util.List<EodProjectApproval> all = new java.util.ArrayList<>();
+        for (EodProjectApproval p : pmPieces)         { if (seen.add(p.getId())) all.add(p); }
+        for (EodProjectApproval p : escalatedDecided)  { if (seen.add(p.getId())) all.add(p); }
+        return mapPiecesWithLogLines(all);
+    }
+
+    /** Reporting-Manager decided tab: REPORTING_MANAGER pieces in a given status. */
+    @Transactional(readOnly = true)
+    public List<ApprovalPieceDto> getDecidedReportingManagerPieces(String actorEmail, String statusName) {
+        AppUser actor = requireUserByEmail(actorEmail);
+        EodProjectApproval.Status status = EodProjectApproval.Status.valueOf(statusName);
+        List<EodProjectApproval> pieces = pieceRepository.findByApproverIdAndApproverTypeAndStatus(
+                actor.getId(), EodProjectApproval.ApproverType.REPORTING_MANAGER, status);
+        return mapPiecesWithLogLines(pieces);
     }
 
     public ApprovalPieceDto approve(Long pieceId, String actorEmail, String comment) {
@@ -155,7 +193,7 @@ public class ApprovalPieceService {
                     "Entry approved: " + projectName, body, "/eod/history");
         }
 
-        return ApprovalPieceDto.from(piece);
+        return ApprovalPieceDto.from(piece, loadLogLines(piece), loadTaskLines(piece));
     }
 
     public ApprovalPieceDto reject(Long pieceId, String actorEmail, String comment) {
@@ -200,7 +238,7 @@ public class ApprovalPieceService {
                     "Entry rejected: " + projectName, body, "/eod/submit?date=" + entry.getEntryDate());
         }
 
-        return ApprovalPieceDto.from(piece);
+        return ApprovalPieceDto.from(piece, loadLogLines(piece), loadTaskLines(piece));
     }
 
     // ── private helpers ──────────────────────────────────────────────────────
@@ -302,5 +340,69 @@ public class ApprovalPieceService {
         al.setAfterValue(afterValue);
         al.setOccurredAt(OffsetDateTime.now());
         auditLogRepository.save(al);
+    }
+
+    private List<EodLogLineDto> loadLogLines(EodProjectApproval piece) {
+        if (piece.getEodEntry().getEntryForm() != EodEntry.EntryForm.PLAIN_LOG) return List.of();
+        return logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(piece.getEodEntry().getId())
+                .stream().map(EodLogLineDto::from).toList();
+    }
+
+    private List<ApprovalPieceDto.TaskLineDto> loadTaskLines(EodProjectApproval piece) {
+        if (piece.getEodEntry().getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) return List.of();
+        Long projectId = piece.getProject() != null ? piece.getProject().getId() : null;
+        if (projectId == null) return List.of();
+        List<EodTask> tasks = taskRepository.findByEodEntryIdInWithDetails(
+                List.of(piece.getEodEntry().getId()));
+        return ApprovalPieceDto.taskLinesFor(tasks, projectId);
+    }
+
+    private List<ApprovalPieceDto> mapPiecesWithLogLines(List<EodProjectApproval> pieces) {
+        // Batch-load lines for all PLAIN_LOG pieces to avoid N+1.
+        List<Long> plainLogEntryIds = pieces.stream()
+                .filter(p -> p.getEodEntry().getEntryForm() == EodEntry.EntryForm.PLAIN_LOG)
+                .map(p -> p.getEodEntry().getId())
+                .distinct()
+                .toList();
+
+        java.util.Map<Long, List<EodLogLineDto>> linesByEntryId = new java.util.HashMap<>();
+        if (!plainLogEntryIds.isEmpty()) {
+            logLineRepository.findByEntryIdInOrderBySortOrderAscIdAsc(plainLogEntryIds)
+                    .forEach(l -> linesByEntryId
+                            .computeIfAbsent(l.getEntry().getId(), k -> new java.util.ArrayList<>())
+                            .add(EodLogLineDto.from(l)));
+        }
+
+        // Batch-load tasks for all PROJECT_GROUPED pieces to avoid N+1.
+        List<Long> projectGroupedEntryIds = pieces.stream()
+                .filter(p -> p.getEodEntry().getEntryForm() != EodEntry.EntryForm.PLAIN_LOG)
+                .map(p -> p.getEodEntry().getId())
+                .distinct()
+                .toList();
+
+        java.util.Map<Long, List<EodTask>> tasksByEntryId = new java.util.HashMap<>();
+        if (!projectGroupedEntryIds.isEmpty()) {
+            taskRepository.findByEodEntryIdInWithDetails(projectGroupedEntryIds)
+                    .forEach(t -> tasksByEntryId
+                            .computeIfAbsent(t.getEodEntry().getId(), k -> new java.util.ArrayList<>())
+                            .add(t));
+        }
+
+        return pieces.stream()
+                .map(p -> {
+                    EodEntry entry = p.getEodEntry();
+                    boolean isPlainLog = entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG;
+                    List<EodLogLineDto> lines = isPlainLog
+                            ? linesByEntryId.getOrDefault(entry.getId(), List.of())
+                            : List.of();
+                    Long projectId = p.getProject() != null ? p.getProject().getId() : null;
+                    List<ApprovalPieceDto.TaskLineDto> taskLines = isPlainLog || projectId == null
+                            ? List.of()
+                            : ApprovalPieceDto.taskLinesFor(
+                                    tasksByEntryId.getOrDefault(entry.getId(), List.of()),
+                                    projectId);
+                    return ApprovalPieceDto.from(p, lines, taskLines);
+                })
+                .toList();
     }
 }

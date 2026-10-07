@@ -50,6 +50,11 @@ public class MyReportsController {
         return myReportsService.getPendingApprovals(actingEmail());
     }
 
+    @GetMapping("/approvals/decided-entries")
+    public List<ApprovalPieceDto> getDecidedApprovals(@RequestParam String status) {
+        return myReportsService.getDecidedApprovals(actingEmail(), status);
+    }
+
     @PostMapping("/approvals/pieces/{pieceId}/approve")
     public ApprovalPieceDto approve(
             @PathVariable Long pieceId,

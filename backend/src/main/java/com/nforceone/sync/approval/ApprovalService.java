@@ -268,7 +268,11 @@ public class ApprovalService {
 
         boolean escalated;
         Integer tlInactivityHours = null;
-        if (tl == null) {
+        if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+            // Plain-log entries (PM/Admin daily logs) are never routed through the team-lead
+            // chain, so the "no TL → escalate immediately" branch must not fire for them.
+            escalated = false;
+        } else if (tl == null) {
             // No TL assigned — nobody to wait on, so escalate immediately.
             escalated = entry.getStatus() == EodEntry.Status.SUBMITTED;
         } else {

@@ -39,9 +39,9 @@ class EodSubmitNotificationTest {
         // Constructor order: entryRepo, taskRepo, userRepo, projectRepo, categoryRepo,
         // actionRepo, configRepo, shiftRepo, holidayRepo, attachmentService,
         // notificationService, approvalPieceRouter, projectApprovalRepo,
-        // accessPolicy, leadAccess, allocationRepo, auditLogRepo
+        // accessPolicy, leadAccess, allocationRepo, auditLogRepo, logLineRepo
         service = new EodService(null, null, null, null, null, null, null, null, null, null,
-                notificationService, null, null, null, null, null, null);
+                notificationService, null, null, null, null, null, null, null);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

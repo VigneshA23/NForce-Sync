@@ -25,8 +25,13 @@ public class ApprovalPieceRouter {
         AppUser reportingManager = employee.getManager();
 
         if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
-            boolean isLeave = entry.getLogTotalHours() != null
-                    && entry.getLogTotalHours().compareTo(BigDecimal.ZERO) == 0;
+            // Non-work days (LEAVE, HOLIDAY) auto-approve. Half-leave and Weekend still have
+            // content to review, so they route to the reporting manager like WORKING_DAY.
+            // Legacy compatibility: logTotalHours == 0 (old leave marker) still auto-approves.
+            boolean isLeave = (entry.getDayType() == EodEntry.DayType.LEAVE
+                    || entry.getDayType() == EodEntry.DayType.HOLIDAY)
+                    || (entry.getLogTotalHours() != null
+                            && entry.getLogTotalHours().compareTo(BigDecimal.ZERO) == 0);
             return List.of(plainLogPiece(reportingManager, isLeave));
         }
 
