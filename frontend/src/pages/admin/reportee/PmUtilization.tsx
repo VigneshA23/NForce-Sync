@@ -1,5 +1,4 @@
 import ProjectsUtilization from '../../pm/ProjectsUtilization';
-import { ReporteeViewBanner } from '../../../components/ReporteeViewBanner';
 
 /** Super Admin Reportee Views → Project Manager Views → Utilization. Reuses the PM's Projects
  *  Utilization page as-is (same useProjectDashboardSummary/useProjectDashboardFilters hooks,
@@ -8,7 +7,6 @@ import { ReporteeViewBanner } from '../../../components/ReporteeViewBanner';
 export default function ReporteePmUtilization() {
   return (
     <div>
-      <ReporteeViewBanner label="Project Manager Views: Utilization" />
       <ProjectsUtilization />
     </div>
   );

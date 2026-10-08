@@ -1,20 +1,35 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type { ApprovalPieceDto } from './approvalPieces';
-import type { MemberEodStatusDto, TeamLeadSummaryDto, DateRange } from './teamLead';
+import type { EodEntryDto } from './eod';
+import type { MemberEodStatus, MemberEodStatusDto, DateRange } from './teamLead';
+
+/** Why a reportee has no report to show: deadline passed / draft or today-not-yet / leave. */
+export type MemberEodEmptyState = 'MISSING' | 'NOT_SUBMITTED' | 'ON_LEAVE';
+
+export interface MemberEodDetailDto {
+  employeeId: number;
+  fullName: string;
+  employeeCode: string;
+  email: string | null;
+  date: string;
+  status: MemberEodStatus;
+  emptyState: MemberEodEmptyState | null;
+  /** Null unless there is a submitted report — drafts are never returned. */
+  entry: EodEntryDto | null;
+}
 
 const STALE = 15_000;
 
-export function useMyReportsSummary(range: DateRange, enabled = true) {
+export function useMyReportsMemberEod(employeeId: number, date: string, enabled = true) {
   return useQuery({
-    queryKey: ['my-reports', 'summary', range.from, range.to],
+    queryKey: ['my-reports', 'eod', employeeId, date],
     queryFn: () =>
-      api.get<TeamLeadSummaryDto>('/my-reports/summary', { params: { from: range.from, to: range.to } })
-        .then(r => r.data),
+      api.get<MemberEodDetailDto>('/my-reports/eod', { params: { employeeId, date } }).then(r => r.data),
     enabled,
     staleTime: STALE,
-    refetchInterval: STALE,
-    refetchIntervalInBackground: true,
+    // 400/403/404 are answers, not transient faults — retrying only delays the message.
+    retry: false,
   });
 }
 

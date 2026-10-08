@@ -374,6 +374,19 @@ export function getNavSections(role: Role, capabilities: ServerUserCapabilities)
   return sections;
 }
 
+// Detail routes that have no sidebar entry of their own but belong to one that does. The guard,
+// breadcrumb and sidebar highlight all compare against exact nav paths, so a detail URL is mapped
+// back to its parent first: it is then allowed exactly when the parent is (same role/capability
+// gating), and keeps the parent's sidebar item highlighted.
+const NAV_DETAIL_ROUTES: { pattern: RegExp; parent: string }[] = [
+  { pattern: /^\/my-reports\/eod-status\/\d+$/, parent: '/my-reports/eod-status' },
+];
+
+/** The nav path a URL path is governed by — itself, unless it is a registered detail route. */
+export function navPathFor(pathname: string): string {
+  return NAV_DETAIL_ROUTES.find(r => r.pattern.test(pathname))?.parent ?? pathname;
+}
+
 export function getNavPaths(role: Role, capabilities?: ServerUserCapabilities): string[] {
   if (!capabilities) return sectionPaths(NAV[role]);
   return [...new Set(sectionPaths(getNavSections(role, capabilities)))];

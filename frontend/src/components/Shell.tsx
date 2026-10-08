@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Menu, X, Search, Bell, LogOut, UserCircle2, HelpCircle, FolderKanban, ChevronDown, KeyRound, Settings } from 'lucide-react';
 import { BrandMark } from './BrandMark';
-import { ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, getNavSections, navSubItemPath, isNavGroup } from '../lib/nav';
+import { ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, navPathFor, getNavSections, navSubItemPath, isNavGroup } from '../lib/nav';
 import type { NavItem } from '../lib/nav';
 import { useAuth, getHomeRouteForRole } from '../lib/auth';
 import { useAccentColor, ACCENT_BAND_POSITION_X } from '../lib/accentColor';
@@ -739,7 +739,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                 <NavLinkItem
                   key={entry.key}
                   item={entry}
-                  isActive={location.pathname === entry.path}
+                  isActive={navPathFor(location.pathname) === entry.path}
                   badge={badgeFor(entry)}
                   onNavClick={onNavClick}
                 />
@@ -769,7 +769,7 @@ export function Shell() {
   const role         = user!.role;
   const userCaps     = user!.capabilities;
   const allowedPaths = getNavPaths(role, userCaps);
-  const isAllowed    = allowedPaths.includes(location.pathname)
+  const isAllowed    = allowedPaths.includes(navPathFor(location.pathname))
     || location.pathname === '/'
     || location.pathname === '/change-password'
     // Notifications and Profile have no sidebar entry (reachable only via the topbar bell /
@@ -782,7 +782,7 @@ export function Shell() {
     || location.pathname === '/admin/unallocated-resources';
 
   // FIX 4: derive breadcrumb label from nav map
-  const navInfo  = getNavItem(role, location.pathname, userCaps);
+  const navInfo  = getNavItem(role, navPathFor(location.pathname), userCaps);
   const pageLabel = navInfo?.item.label
     ?? (location.pathname === '/notifications' ? 'Notifications'
       : location.pathname === '/profile' ? 'Profile'

@@ -4,30 +4,22 @@ import { useNavigate } from 'react-router-dom';
 import {
   Users, ClipboardList, AlertTriangle, Gauge, TrendingUp, TrendingDown, RefreshCw,
 } from 'lucide-react';
-import {
-  PieChart, Pie, Cell, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Card, KpiCard, ClickableKpi } from '../../components/KpiCard';
+import { KPI_GRID_STYLE } from '../../lib/kpiGrid';
 import { GlobalLoader } from '../../components/GlobalLoader';
-import { DatePicker } from '../../components/DatePicker';
+import { DateRangeFilter } from '../../components/DateRangeFilter';
 import { HeroBanner } from '../../components/dashboard/HeroBanner';
-import { toLocalISODate, todayISO, formatDate } from '../../lib/date';
+import { todayISO } from '../../lib/date';
+import { resolvePreset } from '../../lib/dateRange';
+import type { DateRange } from '../../lib/dateRange';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
 import { toRole } from '../../api/auth';
 import { describeAuditEvent, formatRelative, AUDIT_CATEGORY_ICONS, AUDIT_CATEGORY_LABELS } from '../../lib/auditLog';
+import { Pagination } from '../../components/Pagination';
+import type { AuditLogDto } from '../../api/admin';
 import { getExecutiveDashboard } from '../../api/executive';
 import type { ProjectAttentionDto, EmployeeUtilizationDto, ProjectAllocationDto } from '../../api/executive';
-
-// Theme-aware date-input box — same tokens/shape as the DatePicker's other call sites
-// (e.g. lead/pm MissingEodReport.tsx, EodByEmployeeReport.tsx). DatePicker itself renders a bare
-// <input> with no background/border/color of its own, so every caller supplies this.
-function dateInputStyle(): React.CSSProperties {
-  return {
-    background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 8,
-    color: 'var(--txt)', fontSize: 12.5, padding: '7px 10px', boxSizing: 'border-box',
-  };
-}
 
 // ── Shared primitives (mirrors Admin Dashboard's own local copies) ────────────
 
@@ -43,13 +35,6 @@ function fmtPct(v: number | null | undefined): string {
   return v === null || v === undefined ? '—' : `${v.toFixed(1)}%`;
 }
 
-
-// ── Date filter ────────────────────────────────────────────────────────────────
-
-function firstOfMonthISO(): string {
-  const now = new Date();
-  return toLocalISODate(new Date(now.getFullYear(), now.getMonth(), 1));
-}
 
 // ── Users by Role bar ─────────────────────────────────────────────────────────
 
@@ -110,46 +95,94 @@ function CenterDonut({ segments, centerValue, centerLabel }: {
   );
 }
 
-// ── Trend line ────────────────────────────────────────────────────────────────
-
-function TrendLine<T extends { date: string }>({ data, dataKey, color }: { data: T[]; dataKey: keyof T & string; color: string }) {
-  if (data.length === 0) return <EmptyNote>No trend data for this period.</EmptyNote>;
-  return (
-    <ResponsiveContainer width="100%" height={200}>
-      <LineChart data={data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
-        <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--txt-dim)' }} tickLine={false} axisLine={false}
-               tickFormatter={(d: unknown) => formatDate(String(d)).slice(0, 5)} />
-        <YAxis tick={{ fontSize: 10, fill: 'var(--txt-dim)' }} tickLine={false} axisLine={false} width={36}
-               tickFormatter={(v: unknown) => `${v}%`} domain={[0, 100]} />
-        <Tooltip
-          contentStyle={{ background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 8, fontSize: 12 }}
-          labelFormatter={(d: unknown) => formatDate(String(d))}
-          formatter={(v: unknown) => [`${Number(v).toFixed(1)}%`, '']}
-        />
-        <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} dot={false} />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
 // ── Small employee-utilization list ───────────────────────────────────────────
 
+const UTIL_PAGE_SIZE = 4;
+// Room for 4 rows (name line + project subtitle ≈ 38px, plus the 8px row gap), so both cards keep the same
+// height on every page, including a short last page.
+const UTIL_LIST_HEIGHT = UTIL_PAGE_SIZE * 46;
+
 function UtilList({ title, rows, accent }: { title: string; rows: EmployeeUtilizationDto[]; accent: string }) {
+  const [page, setPage] = useState(0);
+  // Reset to page 1 when the data changes (render-time reset, no effect).
+  const [prevRows, setPrevRows] = useState(rows);
+  if (prevRows !== rows) {
+    setPrevRows(rows);
+    setPage(0);
+  }
+  const pages = Math.ceil(rows.length / UTIL_PAGE_SIZE);
+  const pageSafe = Math.min(page, Math.max(pages - 1, 0));
+  const slice = rows.slice(pageSafe * UTIL_PAGE_SIZE, (pageSafe + 1) * UTIL_PAGE_SIZE);
+
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-mut)', marginBottom: 10 }}>{title}</div>
-      {rows.length === 0 ? <EmptyNote>No data for this period.</EmptyNote> : rows.map(r => (
-        <div key={r.employeeId} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.fullName}</div>
-            {r.primaryProject && <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>{r.primaryProject}</div>}
+      <div style={{ minHeight: UTIL_LIST_HEIGHT }}>
+        {rows.length === 0 ? <EmptyNote>No data for this period.</EmptyNote> : slice.map(r => (
+          <div key={r.employeeId} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.fullName}</div>
+              {r.primaryProject && <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>{r.primaryProject}</div>}
+            </div>
+            <div style={{ fontSize: 12, color: accent, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+              {fmtPct(r.utilizationPct)}
+            </div>
           </div>
-          <div style={{ fontSize: 12, color: accent, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-            {fmtPct(r.utilizationPct)}
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      {rows.length > UTIL_PAGE_SIZE && (
+        <Pagination
+          page={pageSafe + 1} totalPages={pages} totalItems={rows.length} pageSize={UTIL_PAGE_SIZE}
+          onPageChange={p => setPage(p - 1)} itemLabel="resources"
+          style={{ padding: '10px 0 0', borderTop: 'none', marginTop: 2 }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Recent Activity (client-side paged: the API returns a fixed latest 10) ─────
+
+const ACTIVITY_PAGE_SIZE = 5;
+// Room for 5 rows even when a message wraps to two lines (2 × 18px text + 12px gap = 48px per row, minus
+// the last row's gap), so the card is the same height on every page, including a short last page.
+const ACTIVITY_LIST_HEIGHT = ACTIVITY_PAGE_SIZE * 48 - 12;
+
+function RecentActivityList({ events }: { events: AuditLogDto[] }) {
+  const [page, setPage] = useState(0);
+  const pages = Math.ceil(events.length / ACTIVITY_PAGE_SIZE);
+  const slice = events.slice(page * ACTIVITY_PAGE_SIZE, (page + 1) * ACTIVITY_PAGE_SIZE);
+
+  return (
+    <div>
+      <div style={{ height: ACTIVITY_LIST_HEIGHT, overflowY: 'auto', paddingRight: 10 }}>
+        {slice.map((event) => {
+          const { message, category } = describeAuditEvent(event);
+          const Icon = AUDIT_CATEGORY_ICONS[category];
+          return (
+            <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 12, gap: 10 }}>
+              <div
+                title={AUDIT_CATEGORY_LABELS[category]}
+                aria-label={AUDIT_CATEGORY_LABELS[category]}
+                style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, background: 'var(--raised2)', color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}
+              >
+                <Icon size={13} aria-hidden="true" />
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5, flex: 1, minWidth: 0 }}>{message}</div>
+              <div style={{ fontSize: 11, color: 'var(--txt-dim)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                {formatRelative(event.occurredAt)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {pages > 1 && (
+        <Pagination
+          page={page + 1} totalPages={pages} totalItems={events.length} pageSize={ACTIVITY_PAGE_SIZE}
+          onPageChange={p => setPage(p - 1)} itemLabel="events"
+          style={{ padding: '10px 0 0', borderTop: 'none', marginTop: 2 }}
+        />
+      )}
     </div>
   );
 }
@@ -158,28 +191,13 @@ function UtilList({ title, rows, accent }: { title: string; rows: EmployeeUtiliz
 
 export default function ExecutiveDashboard() {
   const navigate = useNavigate();
-  const [from, setFrom] = useState(firstOfMonthISO());
-  const [to, setTo] = useState(todayISO());
-  const [dateError, setDateError] = useState<string | null>(null);
-
-  // Both ends are required by the endpoint, so nothing is requested once either is cleared.
-  const hasRange = from !== '' && to !== '';
-
-  function handleFromChange(iso: string) {
-    if (iso && to && iso > to) { setDateError("'From' date cannot be after 'To' date."); return; }
-    setDateError(null);
-    setFrom(iso);
-  }
-  function handleToChange(iso: string) {
-    if (iso && from && iso < from) { setDateError("'To' date cannot be before 'From' date."); return; }
-    setDateError(null);
-    setTo(iso);
-  }
+  // DateRangeFilter only ever emits a complete, valid range, so there is no empty/error state here.
+  const [range, setRange] = useState<DateRange>(() => resolvePreset('thisMonth'));
+  const { from, to } = range;
 
   const { data, isPending, isError, refetch, isFetching } = useQuery({
     queryKey: ['executive', 'dashboard', from, to],
     queryFn: () => getExecutiveDashboard(from, to),
-    enabled: !dateError && hasRange,
     staleTime: 60 * 1000,
     placeholderData: (prev) => prev,
   });
@@ -216,32 +234,21 @@ export default function ExecutiveDashboard() {
       </div>
 
       {/* Date filter */}
-      <Card style={{ marginBottom: 24, padding: '14px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, color: 'var(--txt-mut)' }}>From</span>
-            <DatePicker value={from} onChange={handleFromChange} max={to || todayISO()} inputStyle={dateInputStyle()} clearable />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, color: 'var(--txt-mut)' }}>To</span>
-            <DatePicker value={to} onChange={handleToChange} min={from} max={todayISO()} inputStyle={dateInputStyle()} clearable />
-          </div>
-          {isFetching && !isPending && <RefreshCw size={14} className="nf-r-spin" style={{ color: 'var(--txt-dim)' }} />}
-          {dateError && <span style={{ fontSize: 12, color: 'var(--risk)' }}>{dateError}</span>}
-        </div>
+      {/* No horizontal padding: DateRangeFilter reuses the KPI row's grid, so its columns only line up
+          with the tiles below if it spans the same width. The spinner is absolutely positioned so it
+          never takes a grid column. */}
+      <Card style={{ marginBottom: 24, padding: '14px 0', position: 'relative' }}>
+        <DateRangeFilter value={range} onChange={setRange} maxDate={todayISO()} defaultPreset="thisMonth" />
+        {isFetching && !isPending && (
+          <RefreshCw size={14} className="nf-r-spin" style={{ color: 'var(--txt-dim)', position: 'absolute', top: 18, right: 10 }} />
+        )}
       </Card>
 
-      {!hasRange && (
-        <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <div style={{ fontSize: 13, color: 'var(--txt-mut)' }}>Choose a From date and a To date to view the dashboard.</div>
-        </Card>
-      )}
-
-      {hasRange && isPending && (
+      {isPending && (
         <GlobalLoader fullScreen={false} compact label="Loading dashboard..." />
       )}
 
-      {hasRange && isError && !isPending && (
+      {isError && !isPending && (
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load Executive Dashboard data.</div>
           <button
@@ -253,14 +260,14 @@ export default function ExecutiveDashboard() {
         </Card>
       )}
 
-      {hasRange && data && (
+      {data && (
         <>
           {/* KPI row — EOD / Utilization. Workforce (Total/Active/Inactive Users) and
               Projects (Total/Active/On Hold) tiles were dropped: those counts are already
               shown in the Workforce and Project Portfolio charts below, and this page is a
               CEO-facing summary that shouldn't repeat the same numbers as both a tile and a
               chart. */}
-          <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16, marginBottom: 16 }}>
+          <div className="nf-r-kpis" style={{ ...KPI_GRID_STYLE, marginBottom: 16 }}>
             <ClickableKpi onClick={() => navigate('/admin/reportee/pm/eod?tab=missing')}>
               <KpiCard icon={<ClipboardList size={18} />} label="EOD Compliance" value={fmtPct(data.eodCompliance.compliancePct)} accent="var(--info)" />
             </ClickableKpi>
@@ -345,31 +352,15 @@ export default function ExecutiveDashboard() {
             </Card>
           </div>
 
-          {/* Trends */}
-          <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 16 }}>
-            <Card>
-              <SectionTitle>Organization Utilization Trend</SectionTitle>
-              <TrendLine data={data.utilization.trend} dataKey="utilizationPct" color="var(--info)" />
-            </Card>
-            <Card>
-              <SectionTitle>EOD Compliance Trend</SectionTitle>
-              <TrendLine data={data.eodCompliance.trend} dataKey="compliancePct" color="var(--ok)" />
-            </Card>
-          </div>
-
           {/* Utilization detail */}
           <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 16 }}>
             <Card>
               <SectionTitle>Highest Utilized Resources</SectionTitle>
-              <div style={{ maxHeight: 180, overflowY: 'auto', paddingRight: 10 }}>
-                <UtilList title="" rows={data.utilization.topUtilized} accent="var(--risk)" />
-              </div>
+              <UtilList title="" rows={data.utilization.topUtilized} accent="var(--risk)" />
             </Card>
             <Card>
               <SectionTitle>Lowest Utilized Resources</SectionTitle>
-              <div style={{ maxHeight: 180, overflowY: 'auto', paddingRight: 10 }}>
-                <UtilList title="" rows={data.utilization.bottomUtilized} accent="var(--warn)" />
-              </div>
+              <UtilList title="" rows={data.utilization.bottomUtilized} accent="var(--warn)" />
             </Card>
           </div>
 
@@ -423,27 +414,8 @@ export default function ExecutiveDashboard() {
             <Card>
               <SectionTitle>Recent Activity</SectionTitle>
               {data.recentActivity.length === 0 ? <EmptyNote>No recent activity</EmptyNote> : (
-                <div style={{ maxHeight: 180, overflowY: 'auto', paddingRight: 10 }}>
-                  {data.recentActivity.map((event) => {
-                    const { message, category } = describeAuditEvent(event);
-                    const Icon = AUDIT_CATEGORY_ICONS[category];
-                    return (
-                      <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 12, gap: 10 }}>
-                        <div
-                          title={AUDIT_CATEGORY_LABELS[category]}
-                          aria-label={AUDIT_CATEGORY_LABELS[category]}
-                          style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, background: 'var(--raised2)', color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}
-                        >
-                          <Icon size={13} aria-hidden="true" />
-                        </div>
-                        <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5, flex: 1, minWidth: 0 }}>{message}</div>
-                        <div style={{ fontSize: 11, color: 'var(--txt-dim)', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                          {formatRelative(event.occurredAt)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                // Keyed on the event ids so fresh data (e.g. after a date-range change) resets to page 1.
+                <RecentActivityList key={data.recentActivity.map(e => e.id).join(',')} events={data.recentActivity} />
               )}
             </Card>
           </div>

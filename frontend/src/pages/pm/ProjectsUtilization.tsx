@@ -480,7 +480,7 @@ function topContributors(resourceRows: ResourceUtilizationRowDto[]): Contributor
 
 const CONTRIBUTOR_PAGE_SIZE = 8;
 
-function TopContributorsPanel({ resourceRows }: { resourceRows: ResourceUtilizationRowDto[] }) {
+function TopContributorsPanel({ resourceRows, style }: { resourceRows: ResourceUtilizationRowDto[]; style?: React.CSSProperties }) {
   const [page, setPage] = useState(0);
   const contributors = topContributors(resourceRows);
   const total = contributors.length;
@@ -490,7 +490,7 @@ function TopContributorsPanel({ resourceRows }: { resourceRows: ResourceUtilizat
   const maxHours = Math.max(1, ...contributors.map(c => c.hours));
 
   return (
-    <Card>
+    <Card style={style}>
       <SectionLabel><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Award size={12} />Top Contributors</span></SectionLabel>
       {contributors.length === 0 ? <EmptyMsg>No approved hours in this range</EmptyMsg> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -607,7 +607,7 @@ function InsightsPanel({ insights }: { insights: Insight[] }) {
 
 // ── alerts panel ─────────────────────────────────────────────────────────────────
 
-function AlertsPanel({ projectRows, resourceRows }: { projectRows: ProjectUtilizationRowDto[]; resourceRows: ResourceUtilizationRowDto[] }) {
+function AlertsPanel({ projectRows, resourceRows, style }: { projectRows: ProjectUtilizationRowDto[]; resourceRows: ResourceUtilizationRowDto[]; style?: React.CSSProperties }) {
   const alerts = [
     { icon: AlertTriangle, count: projectRows.filter(r => utilState(r.utilizationPct) === 'over').length, label: `project(s) over ${RULES.util.over}% utilization`, color: 'var(--risk)' },
     { icon: TrendingDown, count: projectRows.filter(r => utilState(r.utilizationPct) === 'under').length, label: `project(s) under ${RULES.util.under}% utilization`, color: 'var(--warn)' },
@@ -615,7 +615,7 @@ function AlertsPanel({ projectRows, resourceRows }: { projectRows: ProjectUtiliz
   ].filter(a => a.count > 0);
 
   return (
-    <Card>
+    <Card style={style}>
       <SectionLabel>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={12} />Utilization Alerts</span>
       </SectionLabel>
@@ -1082,18 +1082,17 @@ export default function ProjectsUtilization() {
         <InsightsPanel insights={insights} />
       </div>
 
-      {/* Project Utilization Overview + Top Contributors/Alerts stacked — one row on desktop,
-          table given the wider column since it holds the paginated grid. */}
-      <div className="pm-util-table-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginBottom: 16, alignItems: 'start' }}>
-        <Card>
+      {/* Project Utilization Overview + Alerts (left, wider column) beside Top Contributors (right).
+          Grid areas, not a wrapper, so the single-column mobile order is overview → top → alerts.
+          Row 2 is 1fr so the Alerts card absorbs any extra height; both columns end on the same edge. */}
+      <div className="pm-util-table-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gridTemplateRows: 'auto 1fr', gap: 16, marginBottom: 16, alignItems: 'stretch' }}>
+        <Card style={{ gridArea: 'overview' }}>
           <SectionLabel><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Layers size={12} />Project Utilization Overview</span></SectionLabel>
           <ProjectTable rows={projectTableRows} />
         </Card>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <TopContributorsPanel resourceRows={resourceUtilization} />
-          <AlertsPanel projectRows={projectUtilization} resourceRows={resourceUtilization} />
-        </div>
+        <TopContributorsPanel resourceRows={resourceUtilization} style={{ gridArea: 'top' }} />
+        <AlertsPanel projectRows={projectUtilization} resourceRows={resourceUtilization} style={{ gridArea: 'alerts' }} />
       </div>
 
       {/* Employee Utilization */}
@@ -1130,11 +1129,6 @@ export default function ProjectsUtilization() {
         <FormulaPanel />
       </div>
 
-      {/* Footer note */}
-      <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--txt-dim)', padding: '4px 0 12px' }}>
-        All hours are in decimal (h) · Utilization = Approved productive hours / Available hours × 100
-      </div>
-
       <style>{`
         .pm-util-spin { animation: pm-util-spin 900ms linear infinite; }
         @keyframes pm-util-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -1142,10 +1136,16 @@ export default function ProjectsUtilization() {
         .pm-util-card:hover { border-color: var(--line2); box-shadow: 0 4px 16px color-mix(in srgb, #000 10%, transparent); }
         .pm-util-kpi:hover { transform: translateY(-1px); transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease; }
         .pm-util-res-row:hover { background: var(--raised2); }
+        .pm-util-table-row { grid-template-areas: "overview top" "alerts top"; }
 
         @media (max-width: 900px) {
           .pm-util-trend-row { grid-template-columns: 1fr !important; }
-          .pm-util-table-row { grid-template-columns: 1fr !important; }
+          .pm-util-table-row {
+            grid-template-columns: 1fr !important;
+            grid-template-rows: none !important;
+            grid-template-areas: "overview" "top" "alerts" !important;
+            align-items: start !important;
+          }
           .pm-util-cat-row { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 560px) {

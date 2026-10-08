@@ -626,6 +626,15 @@ public class EodService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Access denied to this EOD entry");
         }
+        return toDetailDto(entry);
+    }
+
+    /**
+     * Full DTO for an entry the caller has ALREADY been authorised to read. No access check here —
+     * callers outside this package (My Reports' reporting-scope check) must do their own.
+     */
+    @Transactional(readOnly = true)
+    public EodEntryDto toDetailDto(EodEntry entry) {
         EodAttachmentService.AttachmentsByScope attachments =
                 attachmentService.loadForEntries(List.of(entry.getId()));
         List<com.nforceone.sync.eod.dto.EodLogLineDto> logLines = entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG

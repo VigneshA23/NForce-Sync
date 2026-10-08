@@ -56,6 +56,7 @@ const PmEodInbox          = lazy(() => import('./pages/pm/EodInbox'));
 // My Reports (Reporting Manager)
 const MyReportsOverview    = lazy(() => import('./pages/my-reports/Overview'));
 const MyReportsEodStatus   = lazy(() => import('./pages/my-reports/EodStatus'));
+const MyReportsEodStatusDetail = lazy(() => import('./pages/my-reports/EodStatusDetail'));
 const MyReportsUtilization = lazy(() => import('./pages/my-reports/Utilization'));
 const MyReportsApprovals   = lazy(() => import('./pages/my-reports/Approvals'));
 
@@ -255,6 +256,7 @@ function AppRoutes() {
             {/* ── My Reports (Reporting Manager) ─────── */}
             <Route path="/my-reports/overview"    element={<MyReportsOverview />} />
             <Route path="/my-reports/eod-status"  element={<MyReportsEodStatus />} />
+            <Route path="/my-reports/eod-status/:employeeId" element={<MyReportsEodStatusDetail />} />
             <Route path="/my-reports/utilization" element={<MyReportsUtilization />} />
             <Route path="/my-reports/approvals"   element={<MyReportsApprovals />} />
 

@@ -47,6 +47,7 @@ export interface MemberEodStatusDto {
   id: number;
   fullName: string;
   employeeCode: string;
+  email: string | null;
   status: MemberEodStatus;
   eodEntryId: number | null;
   projectNames: string[];

@@ -1134,6 +1134,11 @@ function LocationsTab() {
 
 // ── Task Categories tab ────────────────────────────────────────────────────────
 
+// Daily Log Categories pages at 11 (the other masters sections use ORG_TABLE_PAGE_SIZE = 10 on purpose).
+const CATEGORY_PAGE_SIZE = 11;
+// Fixed row height so, while the pager is visible, a short last page can be padded to exactly 11 rows.
+const CATEGORY_ROW_HEIGHT = 53;
+
 function TaskCategoriesTab() {
   const qc = useQueryClient();
   const { show: toast } = useToast();
@@ -1146,6 +1151,7 @@ function TaskCategoriesTab() {
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameText, setRenameText] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const { data: categories = [], isLoading } = useQuery<TaskCategoryAdminDto[]>({
     queryKey: ['org', 'task-categories', 'all'],
@@ -1189,6 +1195,13 @@ function TaskCategoriesTab() {
   });
 
   const filtered = scopeFilter === 'ALL' ? categories : categories.filter(c => c.scope === scopeFilter);
+  // Page is clamped (not reset) when the list changes, so Add/Rename/Toggle keep the user on their current page.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / CATEGORY_PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  const paged = filtered.slice((pageSafe - 1) * CATEGORY_PAGE_SIZE, pageSafe * CATEGORY_PAGE_SIZE);
+  const showPager = filtered.length > CATEGORY_PAGE_SIZE;
+  // Only pad when the pager is showing, so a short list (e.g. 4 Employee categories) gets no blank block.
+  const fillerRows = showPager ? CATEGORY_PAGE_SIZE - paged.length : 0;
 
   if (isLoading) return <GlobalLoader fullScreen={false} />;
 
@@ -1198,7 +1211,7 @@ function TaskCategoriesTab() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 4 }}>
           {(['ALL', 'EMPLOYEE', 'MANAGEMENT'] as const).map(s => (
-            <button key={s} onClick={() => setScopeFilter(s)} style={{
+            <button key={s} onClick={() => { setScopeFilter(s); setPage(1); }} style={{
               padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
               border: '1px solid var(--line)',
               background: scopeFilter === s ? 'var(--brand)' : 'var(--raised2)',
@@ -1234,8 +1247,8 @@ function TaskCategoriesTab() {
             {filtered.length === 0 && (
               <tr><td colSpan={5} style={{ ...tdStyle, color: 'var(--txt-dim)', textAlign: 'center' }}>No categories found.</td></tr>
             )}
-            {filtered.map(cat => (
-              <tr key={cat.id}
+            {paged.map(cat => (
+              <tr key={cat.id} style={showPager ? { height: CATEGORY_ROW_HEIGHT } : undefined}
                 onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--raised)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = ''; }}
               >
@@ -1300,8 +1313,19 @@ function TaskCategoriesTab() {
                 </td>
               </tr>
             ))}
+            {Array.from({ length: fillerRows }, (_, i) => (
+              <tr key={`filler-${i}`} aria-hidden="true" style={{ height: CATEGORY_ROW_HEIGHT }}>
+                <td colSpan={5} style={{ padding: 0, borderBottom: i === fillerRows - 1 ? 'none' : '1px solid var(--line)' }} />
+              </tr>
+            ))}
           </tbody>
         </table>
+        {showPager && (
+          <Pagination
+            page={pageSafe} totalPages={totalPages} totalItems={filtered.length} pageSize={CATEGORY_PAGE_SIZE}
+            onPageChange={setPage} itemLabel="categories"
+          />
+        )}
       </div>
 
       {/* Add category modal */}

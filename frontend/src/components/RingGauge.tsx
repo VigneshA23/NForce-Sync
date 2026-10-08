@@ -4,13 +4,15 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
  * multi-bucket donuts on the Team Dashboard (which split a whole team across buckets);
  * this always renders exactly one filled arc plus its remainder. */
 export function RingGauge({
-  pct, color, label, size = 130, thickness = 18,
+  pct, color, label, size = 130, thickness = 18, animate = false,
 }: {
   pct: number;
   color: string;
   label: string;
   size?: number;
   thickness?: number;
+  /** Sweep the arc in once. Off by default so every existing ring stays static. */
+  animate?: boolean;
 }) {
   const clamped = Math.max(0, Math.min(100, pct));
   const data = [
@@ -28,7 +30,7 @@ export function RingGauge({
             data={data} cx="50%" cy="50%"
             innerRadius={innerRadius} outerRadius={outerRadius}
             startAngle={90} endAngle={-270}
-            dataKey="value" strokeWidth={0} isAnimationActive={false}
+            dataKey="value" strokeWidth={0} isAnimationActive={animate} animationDuration={700}
           >
             <Cell fill={color} />
             <Cell fill="var(--line)" />

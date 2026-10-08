@@ -49,6 +49,7 @@ export function Pagination({
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={page <= 1}
           aria-label="Previous page"
+          className="nf-pager-btn"
           style={{
             display: 'flex', padding: 5, borderRadius: 6,
             background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
@@ -57,9 +58,10 @@ export function Pagination({
         >
           <ChevronLeft size={14} aria-hidden="true" />
         </button>
-        <span style={{
+        {/* var(--brand), not --risk: --brand is what accentColor.tsx overrides, so the badge follows the user's accent. */}
+        <span aria-current="page" style={{
           minWidth: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          borderRadius: 6, background: 'var(--risk)', color: '#fff', fontSize: 12, fontWeight: 700,
+          borderRadius: 6, background: 'var(--brand)', color: '#fff', fontSize: 12, fontWeight: 700,
         }}>
           {page}
         </span>
@@ -68,6 +70,7 @@ export function Pagination({
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           disabled={page >= totalPages}
           aria-label="Next page"
+          className="nf-pager-btn"
           style={{
             display: 'flex', padding: 5, borderRadius: 6,
             background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',

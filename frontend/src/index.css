@@ -552,6 +552,53 @@ textarea:-webkit-autofill:focus {
   .nf-r-kpis { grid-template-columns: 1fr !important; }
 }
 
+/* Shared Pagination prev/next: subtle hover on enabled buttons only (inline styles set the base border,
+   hence !important). Focus ring comes from the global *:focus-visible rule, so mouse clicks show none. */
+.nf-pager-btn:not(:disabled):hover { background: var(--raised) !important; border-color: var(--brand) !important; }
+
+/* Shared filter row (components/FilterField.tsx): a full-width grid, search column wider than the dropdowns.
+   Reflows at the app's existing 1024 / 768 / 480 breakpoints; the last control spans the row when it would
+   otherwise sit alone in a 2-column layout. */
+.nf-filter-grid { display: grid; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+.nf-filter-grid--n2 { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+.nf-filter-grid--n3 { grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)); }
+.nf-filter-grid--n4 { grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1024px) {
+  .nf-filter-grid--n4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 768px) {
+  .nf-filter-grid--n3, .nf-filter-grid--n4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nf-filter-grid--n3 > :last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 480px) {
+  .nf-filter-grid { grid-template-columns: 1fr !important; padding: 12px 16px; }
+  .nf-filter-grid > :last-child { grid-column: auto; }
+}
+.nf-filter-field { position: relative; display: flex; align-items: center; min-width: 0; }
+.nf-filter-control:focus { outline: none; }
+.nf-filter-control:focus-visible { border-color: var(--brand); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 35%, transparent); }
+.nf-filter-control::-webkit-search-cancel-button { display: none; }
+.nf-filter-select option { background: var(--panel); color: var(--txt); }
+.nf-filter-chevron { position: absolute; right: 10px; color: var(--txt-dim); pointer-events: none; }
+.nf-filter-search-icon { position: absolute; left: 10px; color: var(--txt-dim); pointer-events: none; }
+.nf-filter-clear {
+  position: absolute; display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; border: none; border-radius: 5px;
+  background: transparent; color: var(--txt-dim); cursor: pointer;
+}
+.nf-filter-clear:hover { background: var(--raised2); color: var(--txt); }
+.nf-filter-clear:focus:not(:focus-visible) { outline: none; }
+
+/* Executive Dashboard date-range filter: chips sit in the KPI row's grid columns (see lib/kpiGrid.ts).
+   At the KPI row's own <=1024px breakpoint it falls back to a wrapping flex row, label right-aligned. */
+.nf-range-chip:focus { outline: none; }
+.nf-range-chip:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 2px; }
+@media (max-width: 1024px) {
+  .nf-range-grid { display: flex !important; flex-wrap: wrap; gap: 8px 12px !important; padding: 0 20px; margin: 0 !important; }
+  .nf-range-label { margin-left: auto; }
+  .nf-range-custom { flex: 1 1 100%; padding: 0 !important; }
+}
+
 /* ─── Calendar heatmap ──────────────────────────────────────────── */
 /* --nf-cal-cell is set inline as a clamp() on the calendar itself (see
    CalendarHeatmap in Dashboard.tsx), so it scales continuously with viewport

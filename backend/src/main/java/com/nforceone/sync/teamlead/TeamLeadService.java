@@ -261,7 +261,7 @@ public class TeamLeadService {
 
             AppUser mgr = member.getManager();
             return new MemberEodStatusDto(
-                    member.getId(), member.getFullName(), member.getEmployeeCode(),
+                    member.getId(), member.getFullName(), member.getEmployeeCode(), member.getEmail(),
                     status, entry.map(EodEntry::getId).orElse(null), projectNames,
                     pct, underutilized, overloaded, hasOpenBlocker,
                     mgr != null ? mgr.getId() : null,
@@ -572,6 +572,21 @@ public class TeamLeadService {
     private boolean isInLeadTeam(Long employeeId, Long leadId) {
         return allocationRepository.findActiveMembersByProjectLead(leadId, LocalDate.now())
                 .stream().anyMatch(u -> u.getId().equals(employeeId));
+    }
+
+    /** A member's status for one date, resolved by exactly the rule the member-statuses list uses. */
+    public record MemberEodLookup(String status, EodEntry entry) {}
+
+    /**
+     * Single-member counterpart of {@link #computeMemberStatuses}: same holiday check, same
+     * entry lookup, same {@link #resolveStatus} — so a detail view built on it can never
+     * disagree with the row the user clicked.
+     */
+    @Transactional(readOnly = true)
+    public MemberEodLookup lookupMemberEod(Long employeeId, LocalDate date) {
+        boolean holiday = holidayRepository.existsByHolidayDate(date);
+        EodEntry entry = entriesForMembersOnDate(List.of(employeeId), date).get(employeeId);
+        return new MemberEodLookup(resolveStatus(Optional.ofNullable(entry), holiday), entry);
     }
 
     private String resolveStatus(Optional<EodEntry> entryOpt, boolean holidayToday) {

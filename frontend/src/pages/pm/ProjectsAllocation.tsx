@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  FolderKanban, Users, Plus, RefreshCw, AlertTriangle, Trash2, Pencil, Search, X,
+  FolderKanban, Users, Plus, RefreshCw, AlertTriangle, Trash2, Pencil,
   ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { Pagination } from '../../components/Pagination';
+import { FilterGrid, FilterSearch, FilterSelect } from '../../components/FilterField';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { StrictDateInput } from '../../components/StrictDateInput';
 import { useToast } from '../../lib/toast';
-import { todayISO } from '../../lib/date';
+import { todayISO, formatDateShort } from '../../lib/date';
 import { useQuery } from '@tanstack/react-query';
 import { extractApiError, listProjectTypes } from '../../api/admin';
 import {
@@ -162,43 +163,42 @@ function IconButton({ icon, label, danger, onClick, disabled }: {
 function Toolbar({ count, noun, onAdd, addLabel, filters, hideAdd }: {
   count: number | undefined; noun: string;
   onAdd: () => void; addLabel: string;
-  /** Optional filter controls, rendered in the left group after the count. */
+  /** Optional filter row (a <FilterGrid>), rendered full-width under the header row. */
   filters?: React.ReactNode;
   /** Super Admin Reportee Views are read-only — hides the "New X" affordance without touching
    *  the PM's own page, which never sets this. */
   hideAdd?: boolean;
 }) {
   return (
-    <div style={{
-      padding: '14px 20px', borderBottom: '1px solid var(--line)',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-    }}>
-      <div className="nf-r-toolbar" style={{
-        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-        fontSize: 13, fontWeight: 600, color: 'var(--txt)',
+    <>
+      <div style={{
+        padding: '10px 20px', borderBottom: '1px solid var(--line)', minHeight: 34,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
       }}>
-        {count != null && (
-          <span style={{ color: 'var(--txt-dim)', fontWeight: 400, whiteSpace: 'nowrap' }}>
-            {count} {count === 1 ? noun : `${noun}s`}
-          </span>
-        )}
-        {filters}
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
+          {count != null && (
+            <span style={{ color: 'var(--txt-dim)', fontWeight: 400, whiteSpace: 'nowrap' }}>
+              {count} {count === 1 ? noun : `${noun}s`}
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {!hideAdd && (
+            <button
+              onClick={onAdd}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '7px 14px', background: 'var(--brand)', border: 'none',
+                borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              <Plus size={14} aria-hidden="true" /> {addLabel}
+            </button>
+          )}
+        </div>
       </div>
-      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-        {!hideAdd && (
-          <button
-            onClick={onAdd}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '7px 14px', background: 'var(--brand)', border: 'none',
-              borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            <Plus size={14} aria-hidden="true" /> {addLabel}
-          </button>
-        )}
-      </div>
-    </div>
+      {filters}
+    </>
   );
 }
 
@@ -853,15 +853,6 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
 
   // Drives the empty-state wording, so it tracks the debounced term the list was actually filtered by.
   const filtersActive = debouncedSearch.trim() !== '' || statusFilter !== '' || leadFilter !== '' || pmFilter !== '';
-  // Drives the Clear button, which must appear the moment you type rather than 300ms later.
-  const anyFilterSet = search !== '' || statusFilter !== '' || leadFilter !== '' || pmFilter !== '';
-
-  function clearFilters() {
-    setSearch('');
-    setStatusFilter('');
-    setLeadFilter('');
-    setPmFilter('');
-  }
 
   function openCreate() { setEditing(null); setModalOpen(true); }
   function openEdit(p: ProjectFullDto) { setEditing(p); setModalOpen(true); }
@@ -869,75 +860,29 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
   // Status options come from STATUS_CFG — the same map StatusBadge reads, so the labels and
   // colours stay in one place rather than being restated here.
   const projectFilters = (
-    <>
-      <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-        <Search
-          size={13} aria-hidden="true"
-          style={{ position: 'absolute', left: 10, color: 'var(--txt-dim)', pointerEvents: 'none' }}
-        />
-        <input
-          type="search"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search project"
-          aria-label="Search project by name"
-          style={{ ...inputStyle, width: 220, paddingLeft: 30, fontWeight: 400 }}
-        />
-      </div>
-      <select
-        value={statusFilter}
-        onChange={e => setStatusFilter(e.target.value)}
-        aria-label="Filter by status"
-        style={{ ...inputStyle, width: 170, fontWeight: 400 }}
-      >
-        <option value="">Filter by status</option>
+    <FilterGrid count={showPmFilter ? 4 : 3}>
+      <FilterSearch value={search} onChange={setSearch} label="project by name" placeholder="Search project" />
+      <FilterSelect value={statusFilter} onChange={setStatusFilter} onClear={() => setStatusFilter('')}
+        label="status" placeholder="Filter by status">
         {Object.entries(STATUS_CFG).map(([value, cfg]) => (
           <option key={value} value={value}>{cfg.label}</option>
         ))}
-      </select>
-      <select
-        value={leadFilter}
-        onChange={e => setLeadFilter(e.target.value)}
-        aria-label="Filter by Team Lead"
-        style={{ ...inputStyle, width: 190, fontWeight: 400 }}
-      >
-        <option value="">Filter by Team Lead</option>
+      </FilterSelect>
+      <FilterSelect value={leadFilter} onChange={setLeadFilter} onClear={() => setLeadFilter('')}
+        label="Team Lead" placeholder="Filter by Team Lead">
         {leadOptions.map(l => (
           <option key={l.id} value={String(l.id)}>{l.name}</option>
         ))}
-      </select>
+      </FilterSelect>
       {showPmFilter && (
-        <select
-          value={pmFilter}
-          onChange={e => setPmFilter(e.target.value)}
-          aria-label="Filter by Project Manager"
-          style={{ ...inputStyle, width: 190, fontWeight: 400 }}
-        >
-          <option value="">Filter by Project Manager</option>
+        <FilterSelect value={pmFilter} onChange={setPmFilter} onClear={() => setPmFilter('')}
+          label="Project Manager" placeholder="Filter by Project Manager">
           {pmOptions.map(p => (
             <option key={p.id} value={String(p.id)}>{p.name}</option>
           ))}
-        </select>
+        </FilterSelect>
       )}
-      {/* Resets all filters at once — clearing them one by one is several interactions. Only
-          rendered while something is actually filtered. */}
-      {anyFilterSet && (
-        <button
-          type="button"
-          onClick={clearFilters}
-          aria-label="Clear all filters"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 12px',
-            background: 'transparent', border: '1px solid var(--line2)', borderRadius: 7,
-            color: 'var(--txt-mut)', fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.color = 'var(--txt)'; }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'var(--txt-mut)'; }}
-        >
-          <X size={13} aria-hidden="true" /> Clear
-        </button>
-      )}
-    </>
+    </FilterGrid>
   );
 
   return (
@@ -975,17 +920,17 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
               <th style={thStyle}>Project Name</th>
               <th style={thStyle}>Project Type</th>
               <th style={thStyle}>Client</th>
-              <th style={thStyle}>Timeline</th>
+              <th style={{ ...thStyle, minWidth: 196 }}>Timeline</th>
               <th style={thStyle}>Team Lead</th>
-              <th style={thStyle}>Headcount</th>
+              <th style={{ ...thStyle, textAlign: 'center' }}>Headcount</th>
               <th style={thStyle}>Status</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+              {!readOnly && <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                <td colSpan={readOnly ? 8 : 9} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
                   {filtersActive
                     ? 'No projects match your search or filter.'
                     : 'No projects yet. Create one above.'}
@@ -1000,26 +945,28 @@ function ProjectsTab({ readOnly = false, showPmFilter = false }: { readOnly?: bo
                   <td style={tdStyle}>{p.projectType ?? '-'}</td>
                   {/* A type without requiresClient has no client by design — the server forces it null. */}
                   <td style={tdStyle}>{p.client ?? '-'}</td>
-                  {/* Derived, never stored: a recorded end date always wins; with none, the status
-                      supplies the word. Labels come straight from STATUS_CFG, so this reads
-                      "On Hold" rather than ON_HOLD and a new status needs no change here. */}
+                  {/* Derived, never stored: a recorded end date always wins; with none, the status supplies the
+                      word (labels from STATUS_CFG, so "Active" / "On Hold"). A muted "-" when there is no
+                      start date. Short local-date format via formatDateShort (yyyy-MM-dd parsed as local). */}
                   <td style={{ ...tdStyle, whiteSpace: 'nowrap', fontSize: 12 }}>
-                    {fmtDateDMY(p.startDate)}
-                    <span style={{ color: 'var(--txt-dim)' }}> → </span>
-                    {p.endDate ? fmtDateDMY(p.endDate) : (
-                      <span style={{ color: 'var(--txt-mut)' }}>
-                        {STATUS_CFG[p.status]?.label ?? p.status}
-                      </span>
+                    {p.startDate ? (
+                      <>
+                        {formatDateShort(p.startDate)}
+                        <span aria-hidden="true" style={{ color: 'var(--txt-dim)', margin: '0 6px' }}>–</span>
+                        {p.endDate ? formatDateShort(p.endDate) : <span style={{ color: 'var(--txt-mut)' }}>{STATUS_CFG[p.status]?.label ?? p.status}</span>}
+                      </>
+                    ) : (
+                      <span style={{ color: 'var(--txt-mut)' }}>-</span>
                     )}
                   </td>
                   <td style={tdStyle}>{p.leadName ?? '-'}</td>
-                  <td style={tdStyle}>{p.allocatedHeadcount}</td>
+                  <td style={{ ...tdStyle, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{p.allocatedHeadcount}</td>
                   <td style={tdStyle}><StatusBadge status={p.status} /></td>
-                  <td style={{ ...tdStyle, textAlign: 'right' }}>
-                    {!readOnly && (
+                  {!readOnly && (
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>
                       <IconButton icon={<Pencil size={13} aria-hidden="true" />} label="Edit" onClick={() => openEdit(p)} />
-                    )}
-                  </td>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
@@ -1641,47 +1588,12 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
       <div style={{
-        padding: '14px 20px', borderBottom: '1px solid var(--line)',
+        padding: '10px 20px', borderBottom: '1px solid var(--line)', minHeight: 34,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, color: 'var(--txt-dim)', whiteSpace: 'nowrap' }}>
-            {filtered.length} allocation{filtered.length === 1 ? '' : 's'}
-          </span>
-          <select
-            style={{ ...inputStyle, width: 220 }}
-            value={projectFilter}
-            onChange={e => setProjectFilter(e.target.value)}
-          >
-            <option value="">All projects</option>
-            {projects?.map(p => (
-              <option key={p.id} value={p.id}>{p.code}: {p.name}</option>
-            ))}
-          </select>
-          <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-            <Search size={13} aria-hidden="true"
-              style={{ position: 'absolute', left: 10, color: 'var(--txt-dim)', pointerEvents: 'none' }} />
-            <input
-              value={employeeSearch}
-              onChange={e => setEmployeeSearch(e.target.value)}
-              placeholder="Search employee"
-              aria-label="Search employee by name or ID"
-              style={{ ...inputStyle, width: 220, paddingLeft: 30, paddingRight: 30, fontWeight: 400 }}
-            />
-            {employeeSearch !== '' && (
-              <button type="button" onClick={() => setEmployeeSearch('')} aria-label="Clear employee search"
-                style={{
-                  position: 'absolute', right: 8, background: 'transparent', border: 'none',
-                  cursor: 'pointer', color: 'var(--txt-dim)', padding: 4, display: 'flex',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.color = 'var(--txt)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = 'var(--txt-dim)'; }}
-              >
-                <X size={14} aria-hidden="true" />
-              </button>
-            )}
-          </div>
-        </div>
+        <span style={{ fontSize: 13, color: 'var(--txt-dim)', whiteSpace: 'nowrap' }}>
+          {filtered.length} allocation{filtered.length === 1 ? '' : 's'}
+        </span>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           {!readOnly && (
             <button
@@ -1697,6 +1609,16 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
           )}
         </div>
       </div>
+      <FilterGrid count={2}>
+        <FilterSearch value={employeeSearch} onChange={setEmployeeSearch}
+          label="employee by name or ID" placeholder="Search employee" />
+        <FilterSelect value={projectFilter} onChange={setProjectFilter} onClear={() => setProjectFilter('')}
+          label="project" placeholder="All projects">
+          {projects?.map(p => (
+            <option key={p.id} value={p.id}>{p.code}: {p.name}</option>
+          ))}
+        </FilterSelect>
+      </FilterGrid>
 
       {isPending && (
         <GlobalLoader fullScreen={false} compact label="Loading allocations..." />
@@ -1727,13 +1649,13 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
               <th style={thStyle}>Allocation %</th>
               <th style={thStyle}>Effective From</th>
               <th style={thStyle}>Effective To</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+              {!readOnly && <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
+                <td colSpan={readOnly ? 5 : 6} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
                   {filtersActive
                     ? 'No allocations match that employee.'
                     : 'No allocations yet. Create one above.'}
@@ -1747,14 +1669,14 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
                   <td style={tdStyle}>{a.allocationPct}%</td>
                   <td style={tdStyle}>{fmtDateDMY(a.effectiveFrom)}</td>
                   <td style={tdStyle}>{fmtDateDMY(a.effectiveTo)}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right' }}>
-                    {!readOnly && (
+                  {!readOnly && (
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                         <IconButton icon={<Pencil size={13} aria-hidden="true" />} label="Edit" onClick={() => setToEdit(a)} />
                         <IconButton icon={<Trash2 size={13} aria-hidden="true" />} label="Remove" danger onClick={() => setToDelete(a)} />
                       </div>
-                    )}
-                  </td>
+                    </td>
+                  )}
                 </tr>
               ))
             )}

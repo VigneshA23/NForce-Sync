@@ -45,6 +45,13 @@ public class MyReportsController {
         return myReportsService.getMemberStatuses(from, to, actingEmail());
     }
 
+    @GetMapping("/eod")
+    public MemberEodDetailDto getMemberEod(
+            @RequestParam Long employeeId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return myReportsService.getMemberEod(employeeId, date, actingEmail());
+    }
+
     @GetMapping("/approvals/pending")
     public List<ApprovalPieceDto> getPendingApprovals() {
         return myReportsService.getPendingApprovals(actingEmail());

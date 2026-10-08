@@ -60,7 +60,7 @@ import java.util.stream.Collectors;
 public class ExecutiveDashboardService {
 
     private static final long CONFIG_ID = 1L;
-    private static final int TOP_BOTTOM_LIMIT = 5;
+    private static final int TOP_BOTTOM_LIMIT = 10;
     private static final int ATTENTION_LIMIT = 20;
     private static final int ALLOCATION_BY_PROJECT_LIMIT = 25;
 
