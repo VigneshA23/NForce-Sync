@@ -1,5 +1,5 @@
 import {
-  Activity, Ban, Bot, Building2, ClipboardList, FolderKanban, Lock, Settings, Users,
+  Activity, Ban, Bot, Building2, ClipboardList, Lock, Settings, Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Role } from '../../lib/types';
@@ -44,7 +44,6 @@ export const ASSISTANT_ROLE_CONTENT: Partial<Record<Role, AssistantRoleContent>>
   },
   pm: {
     quickActions: [
-      { label: 'Projects & Allocation', route: '/projects', icon: FolderKanban },
       { label: 'Projects Utilization', route: '/projects/utilization', icon: Activity },
       { label: 'Blockers', route: '/projects/blockers', icon: Ban },
     ],

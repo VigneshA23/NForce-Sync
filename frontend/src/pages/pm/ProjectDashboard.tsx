@@ -1011,18 +1011,11 @@ export default function ProjectDashboard() {
         <>
       {/* Summary cards — full-width row */}
       <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 20 }}>
-        <ClickableKpi onClick={() => navigate('/projects')}>
-          <KpiCard icon={<FolderKanban size={17} aria-hidden="true" />} label="Total Projects" value={cards.totalAssignedProjects} />
-        </ClickableKpi>
-        <ClickableKpi onClick={() => navigate('/projects?status=ACTIVE')}>
-          <KpiCard icon={<CheckCircle2 size={17} aria-hidden="true" />} label="Active" value={cards.activeProjects} accent="var(--ok)" />
-        </ClickableKpi>
-        <ClickableKpi onClick={() => navigate('/projects?status=ON_HOLD')}>
-          <KpiCard icon={<PauseCircle size={17} aria-hidden="true" />} label="On Hold" value={cards.onHoldProjects} accent="var(--warn)" />
-        </ClickableKpi>
-        <ClickableKpi onClick={() => navigate('/projects?status=COMPLETED')}>
-          <KpiCard icon={<Archive size={17} aria-hidden="true" />} label="Completed" value={cards.completedProjects} accent="var(--info)" />
-        </ClickableKpi>
+        {/* Project counts are informational only — Projects & Allocation is Admin-owned. */}
+        <KpiCard icon={<FolderKanban size={17} aria-hidden="true" />} label="Total Projects" value={cards.totalAssignedProjects} />
+        <KpiCard icon={<CheckCircle2 size={17} aria-hidden="true" />} label="Active" value={cards.activeProjects} accent="var(--ok)" />
+        <KpiCard icon={<PauseCircle size={17} aria-hidden="true" />} label="On Hold" value={cards.onHoldProjects} accent="var(--warn)" />
+        <KpiCard icon={<Archive size={17} aria-hidden="true" />} label="Completed" value={cards.completedProjects} accent="var(--info)" />
         <ClickableKpi onClick={() => navigate('/projects/reports?tab=missing')}>
           <KpiCard icon={<AlertTriangle size={17} aria-hidden="true" />} label="Missing EOD" value={cards.missingEodCount} accent={cards.missingEodCount > 0 ? 'var(--risk)' : 'var(--txt)'} />
         </ClickableKpi>

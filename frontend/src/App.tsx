@@ -222,8 +222,9 @@ function AppRoutes() {
 
             {/* ── Project Manager ────────────────────── */}
             <Route path="/projects/dashboard"      element={<ProjectDashboard />} />
-            <Route path="/projects"                element={<ProjectsAllocation readOnly={true} />} />
-            <Route path="/projects/allocation"     element={<Navigate to="/projects" replace />} />
+            {/* Projects & Allocation is Admin-only (/admin/projects); old PM URLs go to the PM dashboard. */}
+            <Route path="/projects"                element={<Navigate to="/projects/dashboard" replace />} />
+            <Route path="/projects/allocation"     element={<Navigate to="/projects/dashboard" replace />} />
             <Route path="/projects/utilization"     element={<ProjectsUtilization />} />
             <Route path="/projects/blockers"       element={<PmBlockers />} />
             <Route path="/projects/eod-inbox"      element={<PmEodInbox />} />

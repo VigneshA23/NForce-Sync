@@ -1,7 +1,6 @@
 package com.nforceone.sync.ai.knowledge;
 
 import com.nforceone.sync.ai.contract.KnowledgeDocument;
-import com.nforceone.sync.ai.exception.KnowledgeValidationException;
 import com.nforceone.sync.ai.navigation.PageRegistry;
 import org.junit.jupiter.api.Test;
 

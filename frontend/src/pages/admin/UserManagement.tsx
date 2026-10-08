@@ -120,8 +120,8 @@ const inputFocusStyle: React.CSSProperties = {
 // its resting and focused state — using plain inputStyle/inputFocusStyle on focus/blur (as
 // every other field does) would reset padding-left back to 12px on blur, sliding typed
 // digits underneath the "NF-" label.
-const employeeIdInputStyle: React.CSSProperties = { ...inputStyle, paddingLeft: 34 };
-const employeeIdInputFocusStyle: React.CSSProperties = { ...inputFocusStyle, paddingLeft: 34 };
+const employeeIdInputStyle: React.CSSProperties = { ...inputStyle, padding: '9px 12px 9px 44px' };
+const employeeIdInputFocusStyle: React.CSSProperties = { ...inputFocusStyle, padding: '9px 12px 9px 44px' };
 // The closed <select> box renders using the <select> element's OWN color (confirmed via
 // computed styles — it does not pick up the currently-selected <option>'s style), so the
 // muted placeholder look requires dimming the <select> itself while unselected. That color
@@ -688,6 +688,7 @@ function AddModal({
     if (!form.joiningDate) e.joiningDate = 'Joining date is required.';
     if (!form.employmentType) e.employmentType = 'Employment type is required.';
     if (!form.workMode) e.workMode = 'Work mode is required.';
+    if (!form.gender) e.gender = 'Gender is required.';
 
     // Client-side pre-check only — fast feedback against the already-loaded user
     // list. The server re-validates format and uniqueness authoritatively on submit
@@ -890,11 +891,11 @@ function AddModal({
             <FieldError msg={errors.workMode} />
           </Field>
 
-          {/* Gender — optional, same 4-option list as Profile's own "Select Gender" control
+          {/* Gender — required, same 4-option list as Profile's own "Select Gender" control
               (see lib/illustration.ts). Feeds the same hero-banner illustration this user will
               see once logged in — set here so it's already correct from their first login
               instead of defaulting to the neutral illustration until they visit Profile. */}
-          <Field label="Gender">
+          <Field label="Gender *">
             <select
               style={selectStyle(!!form.gender)}
               value={form.gender ?? ''}
@@ -903,6 +904,7 @@ function AddModal({
               <option value="" style={placeholderOptionStyle}>Select gender</option>
               {GENDER_OPTIONS.map(g => <option key={g} value={g} style={realOptionStyle}>{g}</option>)}
             </select>
+            <FieldError msg={errors.gender} />
           </Field>
 
           {/* Department — plain fixed dropdown (no free-text entry). Optional:

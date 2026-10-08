@@ -39,7 +39,7 @@ const PAGE_TARGETS: Partial<Record<string, Partial<Record<Role, { route: string;
     employee: { route: "/my-projects", label: "My Projects" },
   },
   "projects-allocation": {
-    pm: { route: "/projects", label: "Projects & Allocation" },
+    admin: { route: "/admin/projects", label: "Projects & Allocation" },
   },
   utilization: {
     employee: { route: "/utilization", label: "My Utilization" },

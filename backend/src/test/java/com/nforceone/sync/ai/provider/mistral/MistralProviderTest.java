@@ -1,7 +1,6 @@
 package com.nforceone.sync.ai.provider.mistral;
 
 import com.nforceone.sync.ai.config.AiProperties;
-import com.nforceone.sync.ai.contract.EmbeddingProvider;
 import com.nforceone.sync.ai.contract.LlmCompletion;
 import com.nforceone.sync.ai.contract.LlmRequest;
 import com.nforceone.sync.ai.exception.AiProviderException;

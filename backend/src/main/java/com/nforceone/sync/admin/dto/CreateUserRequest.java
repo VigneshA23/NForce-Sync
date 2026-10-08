@@ -44,7 +44,8 @@ public record CreateUserRequest(
         LocalDate joiningDate,
         // Free-text, same field/values as Profile's own "Select Gender" (see
         // frontend lib/illustration.ts's GENDER_OPTIONS) — feeds that same illustration
-        // resolution once this user logs in. Optional; null is a valid "not set" state.
+        // resolution once this user logs in. Required when creating a user.
+        @NotBlank(message = "Gender is required")
         @Size(max = 50)
         String gender,
 

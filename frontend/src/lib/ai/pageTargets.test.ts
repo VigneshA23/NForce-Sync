@@ -14,7 +14,7 @@ const REACHABLE: Array<[string, (typeof ALL_ROLES)[number]]> = [
   ['eod-inbox', 'employee'],
   ['eod-inbox', 'pm'],
   ['my-projects', 'employee'],
-  ['projects-allocation', 'pm'],
+  ['projects-allocation', 'admin'],
   ['utilization', 'employee'],
   ['utilization', 'pm'],
   ['blockers', 'employee'],

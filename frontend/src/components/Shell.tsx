@@ -183,10 +183,11 @@ function WorkspaceSearch() {
   }, [open]);
 
   function projectRoute(): string {
-    if (role === 'pm') return '/projects';
+    if (role === 'pm') return '/projects/dashboard';
     if ((user!.capabilities?.leadsProjectIds?.length ?? 0) > 0) return '/team/projects';
     if (role === 'employee') return '/my-projects';
-    return '/projects';
+    if (role === 'admin') return '/admin/projects';
+    return '/projects/dashboard';
   }
 
   function handleSelect(result: ResultItem) {
@@ -541,6 +542,36 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
     setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
+  // Minimise / maximise for whole sidebar sections (My Work, Team Lead, Projects…). Sections with
+  // no label (plain Employee, single section) have no header and so nothing to collapse. A section
+  // holding the active route is re-opened on navigation so the current page is never hidden.
+  // Persisted per user in localStorage so it survives reloads and re-login; storage can be
+  // unavailable or hold junk, in which case everything simply starts expanded.
+  const collapsedKey = `nf.sidebar.collapsed.${user!.id}`;
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(collapsedKey);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(collapsedKey, JSON.stringify(collapsedSections));
+    } catch { /* storage unavailable — state just won't persist */ }
+  }, [collapsedKey, collapsedSections]);
+  useEffect(() => {
+    const active = navSections.find(s => s.section && s.items.some(entry =>
+      isNavGroup(entry) ? entry.children.some(c => c.path === location.pathname) : entry.path === location.pathname));
+    if (active) {
+      setCollapsedSections(prev => (prev[active.section] ? { ...prev, [active.section]: false } : prev));
+    }
+  }, [location.pathname, navSections]);
+  function toggleSection(name: string) {
+    setCollapsedSections(prev => ({ ...prev, [name]: !prev[name] }));
+  }
   const isLead = caps.leadsProjectIds.length > 0;
   const isPm   = role === 'pm'   || caps.managesProjectIds.length > 0;
 
@@ -636,19 +667,38 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                 A blank section name (single-section roles with nothing left to distinguish, e.g.
                 Employee) skips the heading entirely rather than rendering an empty label row. */}
             {section.section && (
-              <div style={{
-                padding: '12px 10px 5px',
-                fontSize: 10,
-                letterSpacing: '0.16em',
-                textTransform: 'uppercase',
-                color: '#6B7280',
-                fontWeight: 500,
-              }}>
-                {section.section}
-              </div>
+              <button
+                type="button"
+                onClick={() => toggleSection(section.section)}
+                aria-expanded={!collapsedSections[section.section]}
+                aria-label={`${collapsedSections[section.section] ? 'Expand' : 'Collapse'} ${section.section}`}
+                style={{
+                  width: '100%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '12px 10px 5px',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: 10,
+                  letterSpacing: '0.16em',
+                  textTransform: 'uppercase',
+                  color: '#6B7280',
+                  fontWeight: 500,
+                  textAlign: 'left',
+                }}
+              >
+                <span>{section.section}</span>
+                <ChevronDown
+                  size={14}
+                  aria-hidden
+                  style={{
+                    transition: 'transform 150ms ease',
+                    transform: collapsedSections[section.section] ? 'rotate(0deg)' : 'rotate(180deg)',
+                  }}
+                />
+              </button>
             )}
 
-            {section.items.map((entry) => {
+            {!(section.section && collapsedSections[section.section]) && section.items.map((entry) => {
               function badgeFor(item: NavItem): number | undefined {
                 if (item.key === 'approvals' && item.path === '/team/approvals') return pendingApprovalsCount;
                 if (item.key === 'approvals' && item.path === '/projects/approvals') return pmPendingCount;

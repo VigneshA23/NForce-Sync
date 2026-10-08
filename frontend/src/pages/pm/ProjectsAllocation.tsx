@@ -1100,21 +1100,9 @@ function AllocationModal({ open, onClose, projects }: {
     [employees, employeeId],
   );
 
-  /**
-   * Narrowed again to the projects the employee's own reporting manager leads.
-   *
-   * Their EOD project list comes from these allocations, so staffing them across teams lets them
-   * log tasks against a project their Team Lead does not lead — that Lead then cannot responsibly
-   * act on it in Approvals. `pmId` IS the Team Lead despite the name (see ProjectFullDto); the
-   * Projects tab's own lead filter keys off it too.
-   *
-   * The server repeats this check and is the authority — see AllocationService
-   * .requireAllocatableToEmployee. Filtering here just keeps unusable options out of the list.
-   */
-  const allocatableProjects = useMemo(() => {
-    if (!selectedEmployee?.managerId) return [];
-    return activeProjects.filter(p => p.leadId === selectedEmployee.managerId);
-  }, [activeProjects, selectedEmployee]);
+  // Any employee can be allocated to any ACTIVE project — the server no longer ties allocation to
+  // the employee's reporting manager (AllocationService has no such rule).
+  const allocatableProjects = activeProjects;
 
   const selectedProject = useMemo(
     () => projects.find(p => p.id === Number(projectId)) ?? null,
@@ -1137,14 +1125,9 @@ function AllocationModal({ open, onClose, projects }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectStartDate]);
 
-  // Says which of the three empty cases applies, rather than a bare "no projects" that leaves the
-  // PM guessing whether it is their pick, the employee's record, or the project data at fault.
   const projectPlaceholder =
-    selectedEmployee == null      ? 'Select an employee first'
-    : selectedEmployee.managerId == null
-      ? `${selectedEmployee.fullName} has no reporting manager`
-    : allocatableProjects.length === 0
-      ? `No active projects led by ${selectedEmployee.managerName ?? 'their manager'}`
+    selectedEmployee == null            ? 'Select an employee first'
+    : allocatableProjects.length === 0  ? 'No active projects available'
     : 'Select project…';
 
   function handleClose() {
@@ -1202,7 +1185,7 @@ function AllocationModal({ open, onClose, projects }: {
             style={inputStyle}
             value={projectId}
             onChange={e => setProjectId(e.target.value)}
-            disabled={allocatableProjects.length === 0}
+            disabled={selectedEmployee == null || allocatableProjects.length === 0}
           >
             <option value="">{projectPlaceholder}</option>
             {allocatableProjects.map(p => (
@@ -1210,7 +1193,7 @@ function AllocationModal({ open, onClose, projects }: {
             ))}
           </select>
           <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 5 }}>
-            Only projects led by this employee&apos;s reporting manager can be allocated.
+            All active projects are available to allocate.
           </div>
         </div>
         <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>

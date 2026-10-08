@@ -8,7 +8,6 @@ import com.nforceone.sync.eod.EodClarificationReplyAttachment;
 import com.nforceone.sync.eod.EodClarificationService;
 import com.nforceone.sync.eod.dto.BlockerReplyDto;
 import com.nforceone.sync.eod.dto.EditReplyRequest;
-import com.nforceone.sync.eod.dto.EodClarificationMessageRequest;
 import com.nforceone.sync.eod.dto.EodClarificationReplyDto;
 import com.nforceone.sync.eod.dto.EodClarificationStatusDto;
 import com.nforceone.sync.eod.dto.EodInboxItemDto;

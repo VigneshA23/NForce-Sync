@@ -138,8 +138,7 @@ export const NAV: Record<Role, RoleNav> = {
       section: 'Projects',
       items: [
         { key: 'pm-dash',        label: 'Project Dashboard',    path: '/projects/dashboard',    icon: LayoutDashboard },
-        { key: 'projects',       label: 'Projects & Allocation', path: '/projects',              icon: FolderKanban },
-        { key: 'pm-util',        label: 'Projects Utilization', path: '/projects/utilization',  icon: Activity },
+        { key: 'pm-util',       label: 'Projects Utilization', path: '/projects/utilization',  icon: Activity },
         { key: 'blockers',       label: 'Blockers',             path: '/projects/blockers',      icon: AlertOctagon },
         { key: 'eod-inbox',      label: 'EOD Inbox',            path: '/projects/eod-inbox',     icon: Inbox },
         { key: 'approvals',      label: 'Approvals',            path: '/projects/approvals',     icon: ClipboardCheck },
@@ -205,18 +204,12 @@ export const NAV: Record<Role, RoleNav> = {
       // Team Lead's operational pages; Team Lead's own navigation/permissions are unaffected.
       section: 'Reportee Views',
       items: [
-        {
-          key: 'ro-pm-group', label: 'Project Manager Views', icon: FolderKanban,
-          children: [
-            // Projects and Resource Allocation were separate sidebar entries but opened the
-            // same page (ProjectsAllocation, which already has its own internal Projects/
-            // Allocation tabs) — consolidated into one entry, matching PM's own single
-            // "Projects & Allocation" nav item.
-            { key: 'ro-pm-projects', label: 'Projects & Allocation', path: '/admin/reportee/pm/projects',    icon: FolderKanban },
-            { key: 'ro-pm-eod',      label: 'EOD',                  path: '/admin/reportee/pm/eod',         icon: ClipboardList },
-            { key: 'ro-pm-util',     label: 'Utilization',          path: '/admin/reportee/pm/utilization', icon: Activity },
-          ],
-        },
+        // Shown directly (no "Project Manager Views" expand/collapse group) so they are always
+        // visible. Projects and Resource Allocation share one page (ProjectsAllocation, which has
+        // its own internal Projects/Allocation tabs), matching PM's single nav item.
+        { key: 'ro-pm-projects', label: 'Projects & Allocation', path: '/admin/reportee/pm/projects',    icon: FolderKanban },
+        { key: 'ro-pm-eod',      label: 'EOD',                  path: '/admin/reportee/pm/eod',         icon: ClipboardList },
+        { key: 'ro-pm-util',     label: 'Utilization',          path: '/admin/reportee/pm/utilization', icon: Activity },
         { key: 'ro-unallocated', label: 'Unallocated Resources', path: '/admin/unallocated-resources', icon: Users },
       ],
     },
