@@ -139,7 +139,7 @@ export default function MyReportsUtilization() {
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontFamily: 'Inter, "Segoe UI", sans-serif', fontSize: 26, fontWeight: 650, letterSpacing: '-0.4px', color: 'var(--txt)', margin: 0 }}>
-            Team utilization
+            Team Utilization
           </h1>
           <p style={{ margin: '4px 0 0', color: 'var(--txt-mut)', fontSize: 14 }}>
             See who has capacity, who is stretched, and who still needs to log hours.

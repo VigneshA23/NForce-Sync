@@ -5,6 +5,8 @@ import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.auth.AuditLog;
 import com.nforceone.sync.auth.AuditLogRepository;
+import com.nforceone.sync.eod.EodClarification;
+import com.nforceone.sync.eod.EodClarificationRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodLogLine;
@@ -39,6 +41,7 @@ public class ApprovalPieceService {
     private final PmScopeService pmScopeService;
     private final EodLogLineRepository logLineRepository;
     private final EodTaskRepository taskRepository;
+    private final EodClarificationRepository clarificationRepository;
 
     public ApprovalPieceService(EodProjectApprovalRepository pieceRepository,
                                  EodProjectApprovalActionRepository actionRepository,
@@ -49,7 +52,8 @@ public class ApprovalPieceService {
                                  AuditLogRepository auditLogRepository,
                                  PmScopeService pmScopeService,
                                  EodLogLineRepository logLineRepository,
-                                 EodTaskRepository taskRepository) {
+                                 EodTaskRepository taskRepository,
+                                 EodClarificationRepository clarificationRepository) {
         this.pieceRepository = pieceRepository;
         this.actionRepository = actionRepository;
         this.entryRepository = entryRepository;
@@ -60,6 +64,7 @@ public class ApprovalPieceService {
         this.pmScopeService = pmScopeService;
         this.logLineRepository = logLineRepository;
         this.taskRepository = taskRepository;
+        this.clarificationRepository = clarificationRepository;
     }
 
     @Transactional(readOnly = true)
@@ -160,6 +165,7 @@ public class ApprovalPieceService {
 
         checkNotSelfApproval(actor, piece);
         checkApproverAuthorization(actor, piece);
+        requireNoOpenClarification(piece);
         requirePieceStatus(piece, EodProjectApproval.Status.PENDING);
 
         OffsetDateTime now = OffsetDateTime.now();
@@ -202,6 +208,7 @@ public class ApprovalPieceService {
 
         checkNotSelfApproval(actor, piece);
         checkApproverAuthorization(actor, piece);
+        requireNoOpenClarification(piece);
         requirePieceStatus(piece, EodProjectApproval.Status.PENDING);
 
         if (comment == null || comment.isBlank()) {
@@ -242,6 +249,18 @@ public class ApprovalPieceService {
     }
 
     // ── private helpers ──────────────────────────────────────────────────────
+
+    // An open clarification round blocks approve AND reject of EVERY piece on the entry, not just
+    // the piece it was raised from: rounds are per entry (per-piece scoping is deferred — see
+    // docs/role-restructure-plan.md decision 4), so the gate is entry-wide to match. Mirrors the
+    // legacy ApprovalService.requireNoOpenClarification, which the v2 piece path used to bypass.
+    private void requireNoOpenClarification(EodProjectApproval piece) {
+        Long entryId = piece.getEodEntry().getId();
+        if (clarificationRepository.existsByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This entry has an open clarification and cannot be approved or rejected until it is resolved");
+        }
+    }
 
     private void checkNotSelfApproval(AppUser actor, EodProjectApproval piece) {
         if (piece.getEodEntry().getEmployee().getId().equals(actor.getId())) {

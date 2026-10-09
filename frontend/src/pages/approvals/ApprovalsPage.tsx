@@ -1,17 +1,27 @@
 /**
  * Shared approvals UI used by both PM Approvals (/projects/approvals)
- * and Reporting Approvals (/my-reports/approvals). Parameterised by data
+ * and Pending Approvals (/my-reports/approvals). Parameterised by data
  * source (hooks passed in as data props) and tab list (which tabs to show).
  *
  * PM Approvals:       tabs = ['escalated','approved','rejected']
- * Reporting Approvals: tabs = ['pending','approved','rejected']
+ * Pending Approvals:   tabs = ['pending','approved','rejected']
  */
 import { useMemo, useState } from 'react';
 import {
-  AlertTriangle, CheckCheck, ChevronDown, ChevronRight,
-  RefreshCw, Search, X,
+  AlertTriangle, Check, CheckCheck, ChevronDown, ChevronRight,
+  MessageCircleQuestion, RefreshCw, Search, X,
 } from 'lucide-react';
 import type { ApprovalPieceDto } from '../../api/approvalPieces';
+import {
+  useClarificationStatusForApprovals, useEodInbox, useRefreshClarification,
+} from '../../api/eodClarification';
+import { ClarificationChatPopup } from '../../components/ClarificationChatPopup';
+import { DropdownMenu, type DropdownMenuItem } from '../../components/DropdownMenu';
+import { useAuth } from '../../lib/auth';
+import { isReadOnlyPm } from '../../lib/pmReadOnly';
+import {
+  CLARIFICATION_BLOCKS_DECISION_REASON, clarificationMenuState, decisionBlockedReason, isBlockingStatus,
+} from '../../lib/clarificationGate';
 import { splitPendingPieces } from './approvalsTabSplit';
 export { splitPendingPieces };
 import { FilterDropdown, toggleFilterVal } from '../../components/FilterDropdown';
@@ -153,7 +163,7 @@ function LogLinesTable({ piece, compact }: {
 // ── PieceReviewModal ──────────────────────────────────────────────────────────
 
 function PieceReviewModal({
-  piece, onClose, onApprove, onReject, approveBusy, rejectBusy,
+  piece, onClose, onApprove, onReject, approveBusy, rejectBusy, clarificationOpen, initialMode, onOpenChat, clarificationReadOnly,
 }: {
   piece: ApprovalPieceDto | null;
   onClose: () => void;
@@ -161,11 +171,36 @@ function PieceReviewModal({
   onReject: (pieceId: number, comment: string) => Promise<unknown>;
   approveBusy: boolean;
   rejectBusy: boolean;
+  /** From the page's batched useEodInbox('lead') list; the modal's own polled status overrides it. */
+  clarificationOpen: boolean;
+  /** Which view the modal opens in - the row's kebab Reject opens it straight on the reason box. */
+  initialMode: 'view' | 'reject';
+  /** Opens the host page's chat popup for this piece's entry. */
+  onOpenChat: (piece: ApprovalPieceDto) => void;
+  /** View-only clarifications (the PM Approvals page) — see ApprovalsPageProps. */
+  clarificationReadOnly: boolean;
 }) {
   const [rejectComment, setRejectComment] = useState('');
-  const [mode, setMode] = useState<'view' | 'reject'>('view');
+  const [mode, setMode] = useState<'view' | 'reject'>(initialMode);
+  const { user } = useAuth();
+
+  // The modal's own 15s-polled status is authoritative while it is open (so a round opened or
+  // resolved elsewhere flips Approve/Reject without a reload); the batched list is the fallback.
+  // An open round blocks EVERY project piece on the entry — rounds are per entry.
+  const live = useClarificationStatusForApprovals(piece?.eodEntryId, piece != null, true);
+  const blocked = live.data ? isBlockingStatus(live.data.status) : clarificationOpen;
+  const blockedReason = decisionBlockedReason(blocked);
 
   if (!piece) return null;
+
+  // Never offer reviewer actions on your own EOD — the server rejects it too (403).
+  const isOwn = user != null && piece.employeeId === user.id;
+  // Same rules as the row's kebab menu, from the server's flags (see clarificationMenuState).
+  const menu = clarificationMenuState({
+    isOwn, blockedByList: clarificationOpen, status: live.data, busy: approveBusy || rejectBusy,
+    readOnlyReviewer: clarificationReadOnly || isReadOnlyPm(user?.role),
+  });
+  const clarificationItem = menu.clarification.find(c => c.kind !== 'loading');
 
   const isPlainLog = piece.entryForm === 'PLAIN_LOG';
   const isDecided  = piece.status === 'APPROVED' || piece.status === 'REJECTED';
@@ -277,31 +312,51 @@ function PieceReviewModal({
         {!isDecided && (
           <div style={{ padding: '12px 20px 16px', borderTop: '1px solid var(--line)' }}>
             {mode === 'view' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button
                   onClick={() => onApprove(piece.id).catch(() => {})}
-                  disabled={approveBusy || rejectBusy}
+                  disabled={approveBusy || rejectBusy || blocked}
+                  title={blockedReason}
                   style={{
                     flex: 1, padding: '9px', borderRadius: 7, fontSize: 13, fontWeight: 600,
                     border: '1px solid rgba(47,182,124,.4)', background: 'rgba(47,182,124,.1)',
-                    color: 'var(--ok)', cursor: (approveBusy || rejectBusy) ? 'not-allowed' : 'pointer',
-                    opacity: (approveBusy || rejectBusy) ? 0.6 : 1, outline: 'none',
+                    color: 'var(--ok)', cursor: (approveBusy || rejectBusy || blocked) ? 'not-allowed' : 'pointer',
+                    opacity: (approveBusy || rejectBusy || blocked) ? 0.5 : 1, outline: 'none',
                   }}
                 >
                   {approveBusy ? 'Approving…' : 'Approve'}
                 </button>
                 <button
                   onClick={() => setMode('reject')}
-                  disabled={approveBusy || rejectBusy}
+                  disabled={approveBusy || rejectBusy || blocked}
+                  title={blockedReason}
                   style={{
                     flex: 1, padding: '9px', borderRadius: 7, fontSize: 13, fontWeight: 600,
                     border: '1px solid rgba(228,55,61,.3)', background: 'rgba(228,55,61,.07)',
-                    color: 'var(--risk)', cursor: (approveBusy || rejectBusy) ? 'not-allowed' : 'pointer',
-                    opacity: (approveBusy || rejectBusy) ? 0.6 : 1, outline: 'none',
+                    color: 'var(--risk)', cursor: (approveBusy || rejectBusy || blocked) ? 'not-allowed' : 'pointer',
+                    opacity: (approveBusy || rejectBusy || blocked) ? 0.5 : 1, outline: 'none',
                   }}
                 >
                   Reject
                 </button>
+              </div>
+              {/* From the server's flags only: absent on your own EOD and when there is nothing you may
+                  open or view. Opens the chat popup (the first message there starts the round). */}
+              {clarificationItem && (
+                <button
+                  onClick={() => onOpenChat(piece)}
+                  style={{
+                    alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 500,
+                    border: '1px solid rgba(224,169,59,.4)', background: 'var(--raised2)',
+                    color: 'var(--warn)', cursor: 'pointer', outline: 'none',
+                  }}
+                >
+                  <MessageCircleQuestion size={12} aria-hidden="true" />
+                  {clarificationItem.label}
+                </button>
+              )}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -336,13 +391,14 @@ function PieceReviewModal({
                           .catch(() => {});
                       }
                     }}
-                    disabled={!rejectComment.trim() || rejectBusy}
+                    disabled={!rejectComment.trim() || rejectBusy || blocked}
+                    title={blockedReason}
                     style={{
                       padding: '7px 14px', borderRadius: 6, fontSize: 12.5, fontWeight: 600,
                       border: '1px solid rgba(228,55,61,.4)', background: 'rgba(228,55,61,.1)',
                       color: 'var(--risk)',
-                      cursor: (!rejectComment.trim() || rejectBusy) ? 'not-allowed' : 'pointer',
-                      opacity: (!rejectComment.trim() || rejectBusy) ? 0.5 : 1, outline: 'none',
+                      cursor: (!rejectComment.trim() || rejectBusy || blocked) ? 'not-allowed' : 'pointer',
+                      opacity: (!rejectComment.trim() || rejectBusy || blocked) ? 0.5 : 1, outline: 'none',
                     }}
                   >
                     {rejectBusy ? 'Rejecting…' : 'Confirm Reject'}
@@ -360,13 +416,41 @@ function PieceReviewModal({
 // ── PieceCard ─────────────────────────────────────────────────────────────────
 
 function PieceCard({
-  piece, onOpenModal, tab,
+  piece, onOpenModal, tab, clarificationOpen, onOpenChat, clarificationReadOnly,
 }: {
   piece: ApprovalPieceDto;
-  onOpenModal: () => void;
+  /** Opens the existing review modal - on its reason box when `mode` is 'reject'. */
+  onOpenModal: (mode?: 'view' | 'reject') => void;
+  onOpenChat: (piece: ApprovalPieceDto) => void;
   tab: ApprovalsTab;
+  /** An open round exists on this piece's entry (and so blocks every piece of it). */
+  clarificationOpen: boolean;
+  /** View-only clarifications (the PM Approvals page) — see ApprovalsPageProps. */
+  clarificationReadOnly: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { user } = useAuth();
+
+  // The row's own status is fetched only while its menu is open (no poll per card); the batched
+  // list covers blocking until then.
+  const live = useClarificationStatusForApprovals(piece.eodEntryId, menuOpen);
+  const isOwn = user != null && piece.employeeId === user.id;
+  const menu = clarificationMenuState({
+    isOwn, blockedByList: clarificationOpen, status: menuOpen && !live.isFetching ? live.data : undefined,
+    readOnlyReviewer: clarificationReadOnly || isReadOnlyPm(user?.role),
+  });
+  // Approve / Reject only exist for pieces still awaiting a decision.
+  const actionable = piece.status === 'PENDING' && (tab === 'pending' || tab === 'escalated');
+  // Approve and Reject open the existing review modal (no second confirmation layer here).
+  const menuItems: DropdownMenuItem[] = [
+    { key: 'approve', label: 'Approve', icon: Check, color: 'var(--ok)', disabled: menu.approve.disabled, title: menu.approve.title, onSelect: () => onOpenModal('view') },
+    { key: 'reject', label: 'Reject', icon: X, color: 'var(--risk)', disabled: menu.reject.disabled, title: menu.reject.title, onSelect: () => onOpenModal('reject') },
+    ...menu.clarification.map((c, i) => ({
+      key: `clarification-${c.kind}`, label: c.label, icon: MessageCircleQuestion, color: 'var(--warn)',
+      disabled: c.disabled, dividerBefore: i === 0, onSelect: () => onOpenChat(piece),
+    })),
+  ];
 
   const isPlainLog   = piece.entryForm === 'PLAIN_LOG';
   const isEscalated  = !!piece.escalatedAt && piece.approverType === 'LEAD';
@@ -413,6 +497,11 @@ function PieceCard({
             )}
             {isPmNoLead && (
               <Chip tone="neutral" dashed>No team lead assigned</Chip>
+            )}
+            {clarificationOpen && piece.status === 'PENDING' && (
+              <span title={CLARIFICATION_BLOCKS_DECISION_REASON}>
+                <Chip tone="warn"><MessageCircleQuestion size={11} aria-hidden="true" /> Clarification requested</Chip>
+              </span>
             )}
           </div>
 
@@ -466,8 +555,9 @@ function PieceCard({
 
         {/* Right side */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <button
-            onClick={onOpenModal}
+            onClick={() => onOpenModal('view')}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
               padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
@@ -479,6 +569,15 @@ function PieceCard({
           >
             Review
           </button>
+          {actionable && (
+            <DropdownMenu
+              items={menuItems}
+              ariaLabel={`Actions for ${piece.employeeName}`}
+              open={menuOpen}
+              onOpenChange={setMenuOpen}
+            />
+          )}
+          </div>
           {hasExpandable && (
             <button
               onClick={() => setExpanded(v => !v)}
@@ -532,6 +631,13 @@ export interface ApprovalsPageProps {
   showTlFilter?: boolean;
   /** Show Project and Category filter dropdowns (PM Approvals). */
   showProjectFilter?: boolean;
+  /**
+   * Clarifications are VIEW-ONLY on this page: no "Request Clarification" (not even a placeholder) and a
+   * chat with no composer or status control. Set by the PM Approvals page — Project Managers approve and
+   * reject, but never raise or join a clarification. A page-level switch rather than a role check,
+   * because anyone can be a project's PM by assignment.
+   */
+  clarificationReadOnly?: boolean;
 }
 
 export default function ApprovalsPage({
@@ -540,9 +646,18 @@ export default function ApprovalsPage({
   pendingLoading, approvedLoading, rejectedLoading,
   pendingError, onRefetch,
   onApprove, onReject, approveBusy, rejectBusy,
-  tabs, showTlFilter, showProjectFilter,
+  tabs, showTlFilter, showProjectFilter, clarificationReadOnly = false,
 }: ApprovalsPageProps) {
   const { show } = useToast();
+  const refreshClarification = useRefreshClarification();
+
+  // Which entries have an open round — one batched request for every card, not a poll per card.
+  // The server excludes the viewer's own EOD from this list.
+  const { data: openClarifications } = useEodInbox('lead', true);
+  const clarifiedEntryIds = useMemo(
+    () => new Set((openClarifications ?? []).map(c => c.eodEntryId)),
+    [openClarifications],
+  );
 
   const [tab, setTab]                   = useState<ApprovalsTab>(tabs[0]);
   const [search, setSearch]             = useState('');
@@ -551,6 +666,12 @@ export default function ApprovalsPage({
   const [employeeFilter, setEmployeeFilter] = useState<Set<string>>(new Set());
   const [projectFilter, setProjectFilter]   = useState<Set<string>>(new Set());
   const [modalPieceId, setModalPieceId] = useState<number | null>(null);
+  const [modalMode, setModalMode] = useState<'view' | 'reject'>('view');
+  // The one chat popup for this page (closable, re-openable; closing resolves nothing).
+  const [chat, setChat] = useState<{ entryId: number; employeeId: number; employeeName: string; entryDate: string } | null>(null);
+  function openChat(p: ApprovalPieceDto) {
+    setChat({ entryId: p.eodEntryId, employeeId: p.employeeId, employeeName: p.employeeName, entryDate: p.entryDate });
+  }
   const [page, setPage]                 = useState(1);
 
   // When 'pending' is not in the tab list (PM Approvals), all pending pieces go to the
@@ -626,6 +747,8 @@ export default function ApprovalsPage({
       setModalPieceId(null);
     } catch (err) {
       show(extractError(err), 'error');
+      // A 409 means a round was opened meanwhile: refresh the status so the buttons update now.
+      refreshClarification(err, modalPiece?.eodEntryId);
       throw err;
     }
   }
@@ -637,6 +760,7 @@ export default function ApprovalsPage({
       setModalPieceId(null);
     } catch (err) {
       show(extractError(err), 'error');
+      refreshClarification(err, modalPiece?.eodEntryId);
       throw err;
     }
   }
@@ -791,7 +915,10 @@ export default function ApprovalsPage({
               key={piece.id}
               piece={piece}
               tab={tab}
-              onOpenModal={() => setModalPieceId(piece.id)}
+              onOpenModal={(mode = 'view') => { setModalMode(mode); setModalPieceId(piece.id); }}
+              clarificationOpen={clarifiedEntryIds.has(piece.eodEntryId)}
+              onOpenChat={openChat}
+              clarificationReadOnly={clarificationReadOnly}
             />
           ))}
           <Pagination
@@ -802,13 +929,29 @@ export default function ApprovalsPage({
       )}
 
       <PieceReviewModal
+        key={`${modalPieceId}-${modalMode}`}
         piece={modalPiece}
+        initialMode={modalMode}
+        onOpenChat={openChat}
+              clarificationReadOnly={clarificationReadOnly}
         onClose={() => setModalPieceId(null)}
         onApprove={handleApprove}
         onReject={handleReject}
         approveBusy={approveBusy}
         rejectBusy={rejectBusy}
+        clarificationOpen={modalPiece != null && clarifiedEntryIds.has(modalPiece.eodEntryId)}
       />
+
+      {chat && (
+        <ClarificationChatPopup
+          entryId={chat.entryId}
+          employeeId={chat.employeeId}
+          employeeName={chat.employeeName}
+          entryDate={chat.entryDate}
+          readOnly={clarificationReadOnly}
+          onClose={() => setChat(null)}
+        />
+      )}
     </div>
   );
 }

@@ -80,10 +80,10 @@ const PAGE_TARGETS: Partial<Record<string, Partial<Record<Role, { route: string;
     superadmin: { route: "/admin/reportee/pm/projects", label: "Projects & Allocation" },
   },
   "reportee-pm-eod": {
-    superadmin: { route: "/admin/reportee/pm/eod", label: "EOD" },
+    superadmin: { route: "/admin/reportee/pm/eod", label: "EOD Reports" },
   },
   "reportee-pm-utilization": {
-    superadmin: { route: "/admin/reportee/pm/utilization", label: "Utilization" },
+    superadmin: { route: "/admin/reportee/pm/utilization", label: "Project Utilization" },
   },
   "ai-assistant-admin": {
     superadmin: { route: "/admin/ai", label: "AI & Automation" },

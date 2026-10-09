@@ -3,6 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, AlertTriangle, CheckCircle, Clock, XCircle, Paperclip, X, Loader2, MessageCircleQuestion } from 'lucide-react';
 import { useClarificationStatus } from '../../api/eodClarification';
+import { ClarificationChatPopup } from '../../components/ClarificationChatPopup';
 import { useToast } from '../../lib/toast';
 import { useAuth } from '../../lib/auth';
 import { todayISO, formatDate, formatTime12h } from '../../lib/date';
@@ -678,6 +679,7 @@ export default function SubmitEOD() {
     entryId ?? undefined, 'employee', entryStatus === 'SUBMITTED',
   );
   const hasOpenClarification = clarificationStatus?.open === true;
+  const [chatOpen, setChatOpen] = useState(false);
   const totalHours   = tasks.reduce((sum, t) => sum + (parseFloat(t.hours) || 0), 0);
   const catMap       = new Map(categories.map(c => [c.id, c]));
 
@@ -1230,20 +1232,38 @@ export default function SubmitEOD() {
               : entryStatus === 'PARTIALLY_APPROVED'
                 ? 'Some projects have been approved. Awaiting review for the remaining projects.'
                 : hasOpenClarification
-                  ? `Your Team Lead requested clarification on this report — it can't be edited until resolved.`
+                  ? `A reviewer requested clarification on this report — it can't be edited until resolved.`
                   : 'This report has been submitted and is awaiting review.'}
           </span>
           {hasOpenClarification && entryId != null && (
-            <Link
-              className="nf-link"
-              to={`/employee/eod-inbox?highlight=${entryId}`}
-              style={{
-                marginLeft: 'auto', flexShrink: 0, fontSize: 12.5, fontWeight: 600,
-                color: '#E0A93B', textDecoration: 'none', whiteSpace: 'nowrap',
-              }}
-            >
-              Reply in EOD Inbox →
-            </Link>
+            <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button
+                type="button"
+                onClick={() => setChatOpen(true)}
+                style={{
+                  fontSize: 12.5, fontWeight: 600, color: '#E0A93B', whiteSpace: 'nowrap', cursor: 'pointer',
+                  background: 'none', border: '1px solid rgba(224,169,59,.4)', borderRadius: 6, padding: '4px 10px',
+                }}
+              >
+                Open clarification chat
+              </button>
+              <Link
+                className="nf-link"
+                to={`/employee/eod-inbox?highlight=${entryId}`}
+                style={{ fontSize: 12, color: 'var(--txt-dim)', textDecoration: 'none', whiteSpace: 'nowrap' }}
+              >
+                EOD Inbox
+              </Link>
+            </div>
+          )}
+          {chatOpen && entryId != null && currentUser && (
+            <ClarificationChatPopup
+              entryId={entryId}
+              employeeId={currentUser.id}
+              employeeName={currentUser.name}
+              entryDate={selectedDate}
+              onClose={() => setChatOpen(false)}
+            />
           )}
         </div>
       )}

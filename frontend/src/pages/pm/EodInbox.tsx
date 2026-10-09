@@ -22,6 +22,9 @@ function Skel({ h = 14, w = '100%' }: { h?: number; w?: number | string }) {
 }
 
 function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onClose: () => void; onViewEod: () => void }) {
+  // Project Managers have a READ-ONLY view of clarification threads: no reply box, no Resolve, no
+  // status change — whatever the server's flags say. The write endpoints reject a PM with 403 too
+  // (PmReadOnlyPolicy), so this is not only a hidden control.
   return (
     <Card style={{ padding: 0, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 88px)', overflow: 'hidden' }}>
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
@@ -75,6 +78,9 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
             visibilityNote=""
             readOnly
           />
+          <div style={{ fontSize: 12, color: 'var(--txt-dim)', paddingTop: 10, flexShrink: 0 }}>
+            View only. Replies are handled by Team Leads.
+          </div>
         </div>
       </div>
     </Card>

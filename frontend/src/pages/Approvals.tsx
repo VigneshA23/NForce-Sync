@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown, ChevronRight, X, CheckCheck, RefreshCw,
-  Search, AlertTriangle, MessageCircleQuestion,
+  Search, AlertTriangle, MessageCircleQuestion, Check,
 } from 'lucide-react';
 import {
   usePendingApprovals,
@@ -11,7 +11,17 @@ import {
   usePendingPieces, useApprovePiece, useRejectPiece, useDecidedEntriesV2,
   type ApprovalPieceDto,
 } from '../api/approvalPieces';
-import { useOpenClarification, useEodInbox } from '../api/eodClarification';
+import {
+  useEodInbox, useClarificationStatusForApprovals, useRefreshClarification,
+} from '../api/eodClarification';
+import { ClarificationChatPopup } from '../components/ClarificationChatPopup';
+import { DropdownMenu, type DropdownMenuItem } from '../components/DropdownMenu';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { useAuth } from '../lib/auth';
+import { isReadOnlyPm } from '../lib/pmReadOnly';
+import {
+  CLARIFICATION_BLOCKS_DECISION_REASON, clarificationMenuState, decisionBlockedReason, isBlockingStatus,
+} from '../lib/clarificationGate';
 import { FilterDropdown } from '../components/FilterDropdown';
 import { useToast } from '../lib/toast';
 import {
@@ -19,7 +29,7 @@ import {
   formatDateShort, formatDateRange,
 } from '../lib/date';
 import { useEodEntry, type EodEntryDto } from '../api/eod';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   sumHours, hrs, entryProjects, entryCategories,
   daySummary, timeAdjustmentLabel, formatRelative, extractError, initials,
@@ -209,11 +219,21 @@ const PIECES_PAGE_SIZE = 10;
 
 // ── PieceCard — pending piece row, identical structure to EntryRow ─────────────
 
-function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
+function PieceCard({ piece, clarificationOpen, onOpenChat }: {
+  piece: ApprovalPieceDto;
+  /** Opens the host page's chat popup for this piece's entry. */
+  onOpenChat: (piece: ApprovalPieceDto) => void;
+  /** From the one batched useEodInbox('lead') list — cheap, so no per-card status poll. */
+  clarificationOpen: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [comment, setComment] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmApprove, setConfirmApprove] = useState(false);
   const { show } = useToast();
+  const { user } = useAuth();
+  const refreshClarification = useRefreshClarification();
 
   const approvePiece = useApprovePiece();
   const rejectPiece = useRejectPiece();
@@ -222,8 +242,40 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
   const projectTasks = (entry?.tasks ?? []).filter(t => t.projectId === piece.projectId);
   const totalHours = projectTasks.reduce((s, t) => s + Number(t.hours ?? 0), 0);
 
+  // The row's own status is fetched only while its menu is open (no poll per card) and wins over
+  // the batched list once fresh; otherwise the batched list decides. An open round blocks EVERY
+  // piece on the entry (rounds are per entry).
+  const live = useClarificationStatusForApprovals(piece.eodEntryId, menuOpen);
+  const liveStatus = menuOpen && !live.isFetching ? live.data : undefined;
+  const blocked = liveStatus ? isBlockingStatus(liveStatus.status) : clarificationOpen;
+  const blockedReason = decisionBlockedReason(blocked);
+
+  // Never offer reviewer actions on your own EOD — the server rejects it too (403).
+  const isOwn = user != null && piece.employeeId === user.id;
+
   const busy = approvePiece.isPending || rejectPiece.isPending;
   const padding = '9px 16px';
+  const menu = clarificationMenuState({
+    isOwn, blockedByList: clarificationOpen, status: liveStatus, busy,
+    readOnlyReviewer: isReadOnlyPm(user?.role),
+  });
+  const menuItems: DropdownMenuItem[] = [
+    {
+      key: 'approve', label: 'Approve', icon: Check, color: 'var(--ok)',
+      disabled: menu.approve.disabled, title: menu.approve.title,
+      onSelect: () => setConfirmApprove(true),
+    },
+    {
+      key: 'reject', label: 'Reject', icon: X, color: 'var(--risk)',
+      disabled: menu.reject.disabled, title: menu.reject.title,
+      onSelect: () => { setRejecting(true); setExpanded(true); },
+    },
+    ...menu.clarification.map((c, i) => ({
+      key: `clarification-${c.kind}`, label: c.label, icon: MessageCircleQuestion, color: 'var(--warn)',
+      disabled: c.disabled, dividerBefore: i === 0,
+      onSelect: () => onOpenChat(piece),
+    })),
+  ];
 
   async function handleApprove() {
     try {
@@ -231,6 +283,7 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
       show('Approved.', 'success');
     } catch (err) {
       show(extractError(err), 'error');
+      refreshClarification(err, piece.eodEntryId);   // a 409 means a round opened: update the buttons now
     }
   }
 
@@ -243,6 +296,7 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
       setComment('');
     } catch (err) {
       show(extractError(err), 'error');
+      refreshClarification(err, piece.eodEntryId);
     }
   }
 
@@ -359,38 +413,23 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
             <Chip tone="neutral">
               {hrs(piece.entryForm === 'PLAIN_LOG' ? (piece.logTotalHours ?? 0) : totalHours)}h logged
             </Chip>
+            {blocked && (
+              <span title={CLARIFICATION_BLOCKS_DECISION_REASON}>
+                <Chip tone="warn"><MessageCircleQuestion size={11} aria-hidden="true" /> Clarification requested</Chip>
+              </span>
+            )}
           </div>
         </div>
 
         {/* Right column — Approve/Reject instead of EntryRow's Review button */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
           {!rejecting && (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                onClick={() => handleApprove()}
-                disabled={busy}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
-                  padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                  border: '1px solid rgba(47,182,124,.4)', background: 'rgba(47,182,124,.08)',
-                  color: 'var(--ok)', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
-                }}
-              >
-                Approve
-              </button>
-              <button
-                onClick={() => { setRejecting(true); setExpanded(true); }}
-                disabled={busy}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
-                  padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                  border: '1px solid rgba(228,55,61,.3)', background: 'rgba(228,55,61,.06)',
-                  color: 'var(--risk)', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
-                }}
-              >
-                Reject
-              </button>
-            </div>
+            <DropdownMenu
+              items={menuItems}
+              ariaLabel={`Actions for ${piece.employeeName}`}
+              open={menuOpen}
+              onOpenChange={setMenuOpen}
+            />
           )}
           <button
             onClick={() => setExpanded(e => !e)}
@@ -401,6 +440,17 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
           </button>
         </div>
       </div>
+
+      {/* Approve is easy to mis-click from a menu and hard to undo, so it asks first */}
+      <ConfirmModal
+        open={confirmApprove}
+        onClose={() => setConfirmApprove(false)}
+        onConfirm={() => { setConfirmApprove(false); void handleApprove(); }}
+        title="Approve this entry?"
+        message={`${piece.employeeName} · ${fmtDate(piece.entryDate)}${piece.projectName ? ` · ${piece.projectName}` : ''}`}
+        confirmLabel="Approve"
+        isPending={approvePiece.isPending}
+      />
 
       {/* Expanded area — rejection form in same zone as EntryRow's AuditTrail */}
       {expanded && rejecting && (
@@ -432,13 +482,14 @@ function PieceCard({ piece }: { piece: ApprovalPieceDto }) {
             </button>
             <button
               onClick={handleReject}
-              disabled={!comment.trim() || busy}
+              disabled={!comment.trim() || busy || blocked}
+              title={blockedReason}
               style={{
                 padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
                 border: '1px solid rgba(228,55,61,.4)', background: 'rgba(228,55,61,.1)',
                 color: 'var(--risk)',
-                cursor: (!comment.trim() || busy) ? 'not-allowed' : 'pointer',
-                opacity: (!comment.trim() || busy) ? 0.5 : 1,
+                cursor: (!comment.trim() || busy || blocked) ? 'not-allowed' : 'pointer',
+                opacity: (!comment.trim() || busy || blocked) ? 0.5 : 1,
               }}
             >
               Confirm Reject
@@ -457,7 +508,6 @@ export default function Approvals() {
   // With no params (direct nav via sidebar), the Pending tab shows every pending entry
   // regardless of any dashboard date filter.
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const fromParam = searchParams.get('from');
   const toParam = searchParams.get('to');
   const range: PendingApprovalsRange | undefined = fromParam && toParam ? { from: fromParam, to: toParam } : undefined;
@@ -503,12 +553,13 @@ export default function Approvals() {
   const { data: rejected, isPending: rejectedLoading } = useDecidedEntriesV2('REJECTED');
   const { data: pendingPieces = [], isPending: piecesLoading } = usePendingPieces();
   const reject = useReject();
-  const requestClarification = useOpenClarification();
+  const refreshClarification = useRefreshClarification();
   const { show } = useToast();
 
   // Entries with an open clarification stay in this list (see EodEntryRepository — no longer
-  // excluded) — this just flags which rows to badge. Cheap: a Team Lead has at most a handful
-  // open at once.
+  // excluded) — this flags which rows to badge and which pieces have Approve/Reject disabled.
+  // One batched request for every card (not a poll per card). The server excludes the viewer's
+  // own EOD from this list, so a dual-role user's own entry can never appear here.
   const { data: openClarifications } = useEodInbox('lead', true);
   const clarifiedEntryIds = useMemo(
     () => new Set((openClarifications ?? []).map(c => c.eodEntryId)),
@@ -523,6 +574,8 @@ export default function Approvals() {
   const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [detailsEntryId, setDetailsEntryId] = useState<number | null>(null);
+  // The one chat popup for this page (closable, re-openable; closing resolves nothing).
+  const [chat, setChat] = useState<{ entryId: number; employeeId: number; employeeName: string; entryDate: string } | null>(null);
   const [page, setPage] = useState(1);
 
   // A `?highlight=` link — the Team Status table's "Pending" click, or an "EOD submitted"
@@ -604,6 +657,7 @@ export default function Approvals() {
       setDetailsEntryId(null);
     } catch (err) {
       show(extractError(err), 'error');
+      refreshClarification(err, entryId);
     }
   }
 
@@ -617,19 +671,7 @@ export default function Approvals() {
       setDetailsEntryId(null);
     } catch (err) {
       show(extractError(err), 'error');
-    }
-  }
-
-  // Opens an empty clarification round with no reason prompt — same open-then-navigate pattern
-  // as jumping to a Blocker's conversation — then sends the TL straight to EOD Inbox with this
-  // entry's thread open, where they type the actual question as the first message.
-  async function handleRequestClarification(entryId: number) {
-    try {
-      await requestClarification.mutateAsync({ entryId });
-      setDetailsEntryId(null);
-      navigate(`/team/eod-inbox?highlight=${entryId}`);
-    } catch (err) {
-      show(extractError(err), 'error');
+      refreshClarification(err, entryId);
     }
   }
 
@@ -795,7 +837,14 @@ export default function Approvals() {
           </Card>
         ) : (
           <Card style={{ padding: 0, overflow: 'hidden' }}>
-            {piecesPaged.map(piece => <PieceCard key={piece.id} piece={piece} />)}
+            {piecesPaged.map(piece => (
+              <PieceCard
+                key={piece.id}
+                piece={piece}
+                clarificationOpen={clarifiedEntryIds.has(piece.eodEntryId)}
+                onOpenChat={p => setChat({ entryId: p.eodEntryId, employeeId: p.employeeId, employeeName: p.employeeName, entryDate: p.entryDate })}
+              />
+            ))}
             {totalPiecePages > 1 && (
               <Pagination
                 page={piecesPageSafe} totalPages={totalPiecePages} totalItems={filteredPieces.length}
@@ -847,9 +896,18 @@ export default function Approvals() {
         onReject={handleDetailReject}
         approveBusy={modalApprove.isPending}
         rejectBusy={reject.isPending}
-        onRequestClarification={handleRequestClarification}
-        clarifyBusy={requestClarification.isPending}
+        onOpenChat={e => setChat({ entryId: e.id, employeeId: e.employeeId, employeeName: e.employeeName, entryDate: e.entryDate })}
       />
+
+      {chat && (
+        <ClarificationChatPopup
+          entryId={chat.entryId}
+          employeeId={chat.employeeId}
+          employeeName={chat.employeeName}
+          entryDate={chat.entryDate}
+          onClose={() => setChat(null)}
+        />
+      )}
     </div>
   );
 }

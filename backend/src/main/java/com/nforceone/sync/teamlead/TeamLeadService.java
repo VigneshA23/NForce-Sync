@@ -3,6 +3,7 @@ package com.nforceone.sync.teamlead;
 import com.nforceone.sync.approval.ApprovalAction;
 import com.nforceone.sync.approval.ApprovalActionRepository;
 import com.nforceone.sync.auth.AppUser;
+import com.nforceone.sync.auth.PmReadOnlyPolicy;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.businessrules.BusinessRuleConfig;
 import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
@@ -317,6 +318,7 @@ public class TeamLeadService {
     @Transactional
     public TeamBlockerDto acknowledgeBlocker(Long taskId, String actingEmail) {
         AppUser lead = requireLead(actingEmail);
+        PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
 
@@ -337,6 +339,7 @@ public class TeamLeadService {
     @Transactional
     public TeamBlockerDto setBlockerStatus(Long taskId, String actingEmail, BlockerStatusRequest body) {
         AppUser lead = requireLead(actingEmail);
+        PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
 

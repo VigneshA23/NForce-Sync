@@ -31,6 +31,12 @@ public class EodClarification {
     @JoinColumn(name = "opened_by_id", nullable = false)
     private AppUser openedBy;
 
+    // Point-in-time snapshot (V111): set only when the opener was a current piece approver /
+    // escalatee at open time. Audit + fallback notification target — never used for access.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "opened_by_approver_id")
+    private AppUser openedByApprover;
+
     @Column(name = "opened_at", nullable = false)
     private OffsetDateTime openedAt;
 

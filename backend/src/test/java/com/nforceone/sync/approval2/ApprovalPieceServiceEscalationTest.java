@@ -4,6 +4,7 @@ import com.nforceone.sync.approval2.dto.ApprovalPieceDto;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.auth.AuditLogRepository;
+import com.nforceone.sync.eod.EodClarificationRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodLogLineRepository;
@@ -48,6 +49,7 @@ class ApprovalPieceServiceEscalationTest {
     @Mock NotificationService notificationService;
     @Mock AuditLogRepository auditLogRepository;
     @Mock EodLogLineRepository logLineRepository;
+    @Mock EodClarificationRepository clarificationRepository;
 
     @InjectMocks ApprovalPieceService service;
 

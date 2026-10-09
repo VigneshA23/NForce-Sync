@@ -4,6 +4,7 @@ import com.nforceone.sync.approval2.dto.ApprovalPieceDto;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.auth.AuditLogRepository;
+import com.nforceone.sync.eod.EodClarificationRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodLogLineRepository;
@@ -47,6 +48,7 @@ class ApprovalPieceScopeConstraintTest {
     @Mock PmScopeService pmScopeService;
     @Mock EodLogLineRepository logLineRepository;
     @Mock EodTaskRepository taskRepository;
+    @Mock EodClarificationRepository clarificationRepository;
 
     private ApprovalPieceService service;
 
@@ -62,7 +64,8 @@ class ApprovalPieceScopeConstraintTest {
         service = new ApprovalPieceService(
                 pieceRepository, actionRepository, entryRepository,
                 userRepository, utilizationService, notificationService,
-                auditLogRepository, pmScopeService, logLineRepository, taskRepository);
+                auditLogRepository, pmScopeService, logLineRepository, taskRepository,
+                clarificationRepository);
 
         pm = user(10L, AppUser.Role.PM, "Suhita PM", PM_EMAIL);
         rm = user(11L, AppUser.Role.PM, "Suhita RM", RM_EMAIL);

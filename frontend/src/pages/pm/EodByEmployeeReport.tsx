@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, ChevronUp, Download, RefreshCw, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
+import { CurrentMonthNote } from '../../components/CurrentMonthNote';
+import { ReportRangePresets, RangeDayCount } from '../../components/ReportRangePresets';
+import { resolveReportPreset, type ReportRangePreset } from '../../lib/dateRange';
+import { EodReportKpis } from '../../components/EodReportKpis';
+import { initialReportRange, showsCurrentMonthNote } from '../../lib/reportDefaultRange';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { FilterSelect } from '../../components/FilterSelect';
 import { TimeAdjustmentBadge } from '../../components/TimeAdjustmentBadge';
@@ -138,10 +143,13 @@ function filterId(v: string): number | undefined {
 
 // Dates start blank on purpose: the report covers whatever range the user asks for, and
 // pre-filling month-to-date silently decided that for them. The report simply waits until both
-// ends are chosen.
-function defaultFilters(): Filters {
+// ends are chosen. The Super Admin EOD Reports page opts in (`defaultToCurrentMonth`) to start on
+// the current month up to today instead — see lib/reportDefaultRange.ts. Pages that do not opt in
+// (the PM's own Reports) keep the blank start.
+function defaultFilters(defaultToCurrentMonth = false): Filters {
+  const { from, to } = initialReportRange(defaultToCurrentMonth);
   return {
-    from: '', to: '',
+    from, to,
     projectId: '', client: '', teamManagerId: '',
     employeeQuery: '',
   };
@@ -247,8 +255,13 @@ function EmployeeSearch({ query, onQueryChange, matches, onPick }: {
 
 function FilterBar({
   filters, onChange, onReset, summary, format, onFormatChange, onDownloadAll, downloadingAll,
-  employeeMatches, onPickEmployee,
+  employeeMatches, onPickEmployee, defaultToCurrentMonth, preset, onPresetSelect,
 }: {
+  /** Opted in (Super Admin EOD Reports): enables the helper note, the preset buttons, the day count
+   *  and the KPI cards (rendered by the page) in place of the one-line summary. */
+  defaultToCurrentMonth: boolean;
+  preset: ReportRangePreset;
+  onPresetSelect: (preset: ReportRangePreset) => void;
   filters: Filters;
   onChange: (next: Filters) => void;
   onReset: () => void;
@@ -295,6 +308,7 @@ function FilterBar({
 
   return (
     <Card style={{ padding: '14px 16px', marginBottom: 16 }}>
+      {defaultToCurrentMonth && <ReportRangePresets active={preset} onSelect={onPresetSelect} />}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>From *</FieldLabel>
@@ -303,7 +317,10 @@ function FilterBar({
           <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} quickNav clearable />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>To *</FieldLabel>
+          <span style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+            <FieldLabel>To *</FieldLabel>
+            {defaultToCurrentMonth && <RangeDayCount from={filters.from} to={filters.to} />}
+          </span>
           {/* Capped at today for the same reason as From — there are no EODs for days
               that have not happened yet. */}
           <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} quickNav clearable />
@@ -357,12 +374,15 @@ function FilterBar({
           />
         </label>
       </div>
+      {showsCurrentMonthNote(defaultToCurrentMonth, { from: filters.from, to: filters.to }) && <CurrentMonthNote />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+        {!defaultToCurrentMonth && (
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-mut)' }}>
           <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{summary?.employeeCount ?? 0}</span> employees ·{' '}
           <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{summary?.entryCount ?? 0}</span> EOD entries ·{' '}
           <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{hrs(summary?.totalHours ?? 0)}</span> hrs in range
         </div>
+        )}
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', border: '1px solid var(--line2)', borderRadius: 8, overflow: 'hidden' }}>
           {EXPORT_FORMATS.map(f => (
@@ -818,8 +838,29 @@ function TeamFlow({
 
 // ── main ───────────────────────────────────────────────────────────────────────
 
-export default function EodByEmployeeReport() {
-  const [filters, setFilters] = useState<Filters>(defaultFilters());
+export default function EodByEmployeeReport({ defaultToCurrentMonth = false }: { defaultToCurrentMonth?: boolean } = {}) {
+  // Lazy initialiser: the default range is computed from the local clock when the page mounts.
+  const [filters, setFilters] = useState<Filters>(() => defaultFilters(defaultToCurrentMonth));
+  // Preset buttons (Super Admin EOD Reports only, via the same opt-in prop). The active preset is
+  // explicit state: clicking a preset sets From/To; editing either date by hand — or clicking Custom —
+  // makes Custom active and leaves the dates alone; Reset goes back to This month. Changing any other
+  // filter leaves the preset as it was.
+  const [preset, setPreset] = useState<ReportRangePreset>('thisMonth');
+  function handleFilterChange(next: Filters) {
+    if (next.from !== filters.from || next.to !== filters.to) setPreset('custom');
+    setFilters(next);
+  }
+  function handlePresetSelect(p: ReportRangePreset) {
+    setPreset(p);
+    if (p === 'custom') return;
+    const { from, to } = resolveReportPreset(p);
+    setFilters(f => ({ ...f, from, to }));
+  }
+  function handleReset() {
+    setPreset('thisMonth');
+    setFilters(defaultFilters(defaultToCurrentMonth));
+  }
+
   const [flow, setFlow] = useState<'roster' | 'team'>('roster');
   const [format, setFormat] = useState<ExportFormat>('EXCEL');
   const [exportingKey, setExportingKey] = useState<string | null>(null);
@@ -903,11 +944,16 @@ export default function EodByEmployeeReport() {
       </div>
 
       <FilterBar
-        filters={filters} onChange={setFilters} onReset={() => setFilters(defaultFilters())} summary={data}
+        filters={filters} onChange={handleFilterChange} onReset={handleReset} summary={data}
+        defaultToCurrentMonth={defaultToCurrentMonth}
+        preset={preset} onPresetSelect={handlePresetSelect}
         format={format} onFormatChange={setFormat}
         onDownloadAll={() => runExport('all')} downloadingAll={exportingKey === 'all'}
         employeeMatches={employeeMatches} onPickEmployee={pickEmployee}
       />
+
+      {/* Opt-in only. "—" until a full range has produced a response, so a cleared date never reads as zero. */}
+      {defaultToCurrentMonth && <EodReportKpis summary={hasRange ? data : undefined} />}
 
       {!hasRange ? (
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>

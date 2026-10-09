@@ -41,6 +41,7 @@ const BASE_PRIORITY_BY_TYPE: Record<string, NotificationPriority> = {
   EOD_REJECTED: 'High',            // emitted today (ApprovalService.reject)
   EOD_CHANGES_REQUESTED: 'High',   // emitted today — "pending corrections from manager"
   PENDING_CORRECTION: 'High',      // not yet emitted
+  EOD_CLARIFICATION_REQUESTED: 'High',  // emitted today (EodClarificationService.open) — employee must respond
   BLOCKER_REPLY: 'High',           // emitted today (BlockerConversationService.postReplyAsLead)
   EOD_MISSED: 'High',              // not yet emitted
   EOD_OVERDUE: 'High',             // not yet emitted
@@ -56,12 +57,14 @@ const BASE_PRIORITY_BY_TYPE: Record<string, NotificationPriority> = {
   EOD_REMINDER: 'Medium',          // not yet emitted — escalates to High if overdue, see below
   PROJECT_ASSIGNMENT: 'Medium',    // not yet emitted
   PROJECT_MILESTONE: 'Medium',     // not yet emitted — escalates near/at due date, see below
+  EOD_CLARIFICATION_REPLY: 'Medium',   // emitted today (EodClarificationService.reply)
   MANAGER_COMMENT: 'Medium',       // not yet emitted
   RESOURCE_ALLOCATION: 'Medium',   // not yet emitted — escalates if flagged urgent, see below
   LEAVE_APPROVED: 'Medium',        // not yet emitted
   UTILIZATION_REMINDER: 'Medium',  // not yet emitted — escalates below threshold, see below
 
   // ── Low — informational ─────────────────────────────────────────────────
+  EOD_CLARIFICATION_RESOLVED: 'Low',    // emitted today (EodClarificationService.setStatus)
   EOD_APPROVED: 'Low',             // emitted today (ApprovalService.approveEntry)
   EOD_SUBMITTED: 'Low',            // emitted today (EodService.submit, to the employee's manager)
   HOLIDAY_ANNOUNCEMENT: 'Low',     // not yet emitted

@@ -33,6 +33,7 @@ export default function ApprovalsPM() {
       tabs={['escalated', 'approved', 'rejected']}
       showTlFilter
       showProjectFilter
+      clarificationReadOnly
     />
   );
 }

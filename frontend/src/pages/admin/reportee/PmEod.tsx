@@ -7,8 +7,13 @@ import { ReporteeViewBanner } from '../../../components/ReporteeViewBanner';
 export default function ReporteePmEod() {
   return (
     <div>
-      <ReporteeViewBanner label="Project Manager Views: EOD" />
-      <ReportsDashboard initialTab="eod" />
+      <ReporteeViewBanner label="Project Manager Views: EOD Reports" />
+      <ReportsDashboard
+        initialTab="eod"
+        defaultToCurrentMonth
+        title="EOD Reports"
+        subtitle="Employee-wise EOD exports and compliance across all projects"
+      />
     </div>
   );
 }

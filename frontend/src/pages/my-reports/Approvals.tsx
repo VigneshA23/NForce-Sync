@@ -17,7 +17,7 @@ export default function MyReportsApprovals() {
 
   return (
     <ApprovalsPage
-      title="Reporting Approvals"
+      title="Pending Approvals"
       subtitle="EOD submissions from your direct reports awaiting your action as Reporting Manager"
       pendingPieces={pending}
       decidedApproved={approved}

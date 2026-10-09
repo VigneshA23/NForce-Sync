@@ -9,7 +9,14 @@ function isTab(v: string | null): v is Tab {
   return v === 'eod' || v === 'missing';
 }
 
-export default function ReportsDashboard({ initialTab }: { initialTab?: Tab } = {}) {
+export default function ReportsDashboard({ initialTab, title = 'Reports', subtitle = 'Employee-wise EOD exports and compliance, scoped to your projects', defaultToCurrentMonth = false }: {
+  initialTab?: Tab;
+  /** Opt-in: both tabs start on the current month up to today (Super Admin EOD Reports only). */
+  defaultToCurrentMonth?: boolean;
+  /** Page heading. The Super Admin route passes "EOD Reports"; the PM page keeps "Reports". */
+  title?: string;
+  subtitle?: string;
+} = {}) {
   // `?tab=` lets a KPI tile elsewhere (e.g. Executive Dashboard's EOD Compliance/Missing EODs)
   // deep-link straight to a tab — falls back to the explicit prop, then 'eod'.
   const [searchParams] = useSearchParams();
@@ -19,9 +26,9 @@ export default function ReportsDashboard({ initialTab }: { initialTab?: Tab } = 
     <div>
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-          Reports
+          {title}
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>Employee-wise EOD exports and compliance, scoped to your projects</p>
+        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>{subtitle}</p>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -39,8 +46,8 @@ export default function ReportsDashboard({ initialTab }: { initialTab?: Tab } = 
         ))}
       </div>
 
-      {tab === 'eod' && <EodByEmployeeReport />}
-      {tab === 'missing' && <MissingEodReport />}
+      {tab === 'eod' && <EodByEmployeeReport defaultToCurrentMonth={defaultToCurrentMonth} />}
+      {tab === 'missing' && <MissingEodReport defaultToCurrentMonth={defaultToCurrentMonth} />}
     </div>
   );
 }

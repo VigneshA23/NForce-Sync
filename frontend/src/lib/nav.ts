@@ -208,8 +208,8 @@ export const NAV: Record<Role, RoleNav> = {
         // visible. Projects and Resource Allocation share one page (ProjectsAllocation, which has
         // its own internal Projects/Allocation tabs), matching PM's single nav item.
         { key: 'ro-pm-projects', label: 'Projects & Allocation', path: '/admin/reportee/pm/projects',    icon: FolderKanban },
-        { key: 'ro-pm-eod',      label: 'EOD',                  path: '/admin/reportee/pm/eod',         icon: ClipboardList },
-        { key: 'ro-pm-util',     label: 'Utilization',          path: '/admin/reportee/pm/utilization', icon: Activity },
+        { key: 'ro-pm-eod',      label: 'EOD Reports',          path: '/admin/reportee/pm/eod',         icon: ClipboardList },
+        { key: 'ro-pm-util',     label: 'Project Utilization',  path: '/admin/reportee/pm/utilization', icon: Activity },
         { key: 'ro-unallocated', label: 'Unallocated Resources', path: '/admin/unallocated-resources', icon: Users },
       ],
     },
@@ -220,10 +220,10 @@ const MY_REPORTS_SECTIONS: RoleNav = [
   {
     section: 'My Reporting Team',
     items: [
-      { key: 'rm-overview',    label: 'Overview',              path: '/my-reports/overview',    icon: LayoutDashboard },
-      { key: 'rm-eod-status',  label: 'EOD Status',            path: '/my-reports/eod-status',  icon: ClipboardList },
-      { key: 'rm-utilization', label: 'Utilization',           path: '/my-reports/utilization', icon: Activity },
-      { key: 'rm-approvals',   label: 'Reporting Approvals',   path: '/my-reports/approvals',   icon: ClipboardCheck },
+      { key: 'rm-overview',    label: 'Team Overview',         path: '/my-reports/overview',    icon: LayoutDashboard },
+      { key: 'rm-eod-status',  label: 'Team EOD Status',       path: '/my-reports/eod-status',  icon: ClipboardList },
+      { key: 'rm-utilization', label: 'Team Utilization',      path: '/my-reports/utilization', icon: Activity },
+      { key: 'rm-approvals',   label: 'Pending Approvals',     path: '/my-reports/approvals',   icon: ClipboardCheck },
     ],
   },
 ];

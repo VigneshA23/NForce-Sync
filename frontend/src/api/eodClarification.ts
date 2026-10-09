@@ -1,5 +1,6 @@
-import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
+import { useQueryClient, useQuery, useMutation, type QueryClient } from '@tanstack/react-query';
 import { api } from './client';
+import { isStaleStateError } from '../lib/clarificationGate';
 
 // EOD Clarification — a two-way conversation a Team Lead opens against an employee's SUBMITTED
 // EOD entry from the Approvals detail popup. Structurally mirrors blockerConversation.ts, but
@@ -19,6 +20,15 @@ export interface EodClarificationStatusDto {
   openedByName: string | null;
   resolvedAt: string | null;
   resolvedByName: string | null;
+  /** The VIEWER's own capabilities, computed server-side (EodClarificationAccessPolicy). All
+   *  show/hide of the Request Clarification button and the reply composer is driven from these —
+   *  the UI never re-derives approver rules. canOpen = may start a new round; canReply = may post
+   *  into the current round (owner as employee, or a reviewer). A read-only RM / PM gets both false. */
+  canOpen: boolean;
+  canReply: boolean;
+  /** May resolve the open round — a reviewer only, never the entry's owner. Drives the popup's
+   *  Resolve button and the inbox status dropdown; the UI never infers it from role. */
+  canResolve: boolean;
 }
 
 export interface EodClarificationAttachmentDto {
@@ -72,6 +82,14 @@ function statusKey(scope: ClarificationScope, entryId: number | undefined) {
   return ['eod-clarification-status', scope, entryId] as const;
 }
 
+/** Refetch every cached clarification status and inbox list — used when a 403/409 shows the
+ *  round or the viewer's access changed under us, so flags and buttons catch up immediately. */
+function invalidateClarificationState(qc: QueryClient, entryId?: number) {
+  qc.invalidateQueries({ queryKey: ['eod-clarification-status'] });
+  qc.invalidateQueries({ queryKey: ['eod-inbox'] });
+  if (entryId != null) qc.invalidateQueries({ queryKey: ['eod-clarification-thread'] });
+}
+
 function threadKey(scope: ClarificationScope, entryId: number | undefined) {
   return ['eod-clarification-thread', scope, entryId] as const;
 }
@@ -112,6 +130,7 @@ export function useSendClarificationReply(entryId: number, scope: ClarificationS
       qc.invalidateQueries({ queryKey: statusKey(scope, entryId) });
       if (scope === 'lead') qc.invalidateQueries({ queryKey: ['eod-inbox'] });
     },
+    onError: err => { if (isStaleStateError(err)) invalidateClarificationState(qc, entryId); },
   });
 }
 
@@ -170,7 +189,33 @@ export function useOpenClarification() {
       qc.invalidateQueries({ queryKey: ['approvals'] });
       qc.invalidateQueries({ queryKey: ['eod-inbox'] });
       qc.invalidateQueries({ queryKey: statusKey('lead', entryId) });
+      qc.invalidateQueries({ queryKey: ['eod-clarification-status', 'approvals', entryId] });
+      qc.invalidateQueries({ queryKey: threadKey('lead', entryId) });
     },
+    onError: (err, { entryId }) => { if (isStaleStateError(err)) invalidateClarificationState(qc, entryId); },
+  });
+}
+
+/** Opens a round WITH its first message (and optional attachments) in one call — the chat popup's
+ *  "first message creates the round". Multipart, like a reply. The server validates before it
+ *  creates anything, so a rejected attachment leaves no empty round, and the employee gets a single
+ *  "clarification requested" notification. */
+export function useOpenClarificationWithMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entryId, message, files }: { entryId: number; message: string; files: File[] }) => {
+      const form = new FormData();
+      form.append('message', message);
+      files.forEach(f => form.append('files', f));
+      return api.post<EodClarificationStatusDto>(`/team-lead/eod/${entryId}/clarification`, form).then(r => r.data);
+    },
+    onSuccess: (_data, { entryId }) => {
+      qc.invalidateQueries({ queryKey: ['approvals'] });
+      qc.invalidateQueries({ queryKey: ['eod-inbox'] });
+      qc.invalidateQueries({ queryKey: ['eod-clarification-status'] });
+      qc.invalidateQueries({ queryKey: threadKey('lead', entryId) });
+    },
+    onError: (err, { entryId }) => { if (isStaleStateError(err)) invalidateClarificationState(qc, entryId); },
   });
 }
 
@@ -183,24 +228,40 @@ export function useSetClarificationStatus() {
     mutationFn: ({ entryId, status }: { entryId: number; status: ClarificationStatusValue }) =>
       api.patch<EodClarificationStatusDto>(`/team-lead/eod/${entryId}/clarification/status`, { status }).then(r => r.data),
     onSuccess: (_data, { entryId }) => {
+      // Resolving must re-enable Approve/Reject at once: refresh every cached status (reviewer and
+      // employee scopes, per-row and popup) and the batched inbox lists the menus read.
+      qc.invalidateQueries({ queryKey: ['eod-clarification-status'] });
       qc.invalidateQueries({ queryKey: ['approvals'] });
       qc.invalidateQueries({ queryKey: ['eod-inbox'] });
       qc.invalidateQueries({ queryKey: threadKey('lead', entryId) });
       qc.invalidateQueries({ queryKey: statusKey('lead', entryId) });
       qc.invalidateQueries({ queryKey: ['eod-clarification-status', 'approvals', entryId] });
     },
+    onError: (err, { entryId }) => { if (isStaleStateError(err)) invalidateClarificationState(qc, entryId); },
   });
 }
 
 /** Backs the Approve/Reject disabled state in the Approvals detail modal — role-agnostic (works
  *  for both a Team Lead and a scoped PM viewing the same entry), since /team-lead/... routes are
  *  role-locked and a PM would 403 calling useClarificationStatus(scope: 'lead') directly. */
-export function useClarificationStatusForApprovals(entryId: number | undefined, enabled = true) {
+export function useClarificationStatusForApprovals(entryId: number | undefined, enabled = true, poll = false) {
   return useQuery({
     queryKey: ['eod-clarification-status', 'approvals', entryId],
     queryFn: () => api.get<EodClarificationStatusDto>(`/approvals/${entryId}/clarification-status`).then(r => r.data),
     enabled: enabled && entryId != null,
+    // Opt-in 15s poll for surfaces that stay open (the inline panel, the review modals), so a
+    // round opened or resolved elsewhere flips Approve/Reject without a reload.
+    refetchInterval: poll && enabled && entryId != null ? THREAD_POLL_MS : false,
   });
+}
+
+/** For a caller whose own approve / reject just failed: on a 403/409 the cached round status is
+ *  stale, so refetch it now (the caller shows the server's message via extractError). */
+export function useRefreshClarification() {
+  const qc = useQueryClient();
+  return (err: unknown, entryId?: number) => {
+    if (isStaleStateError(err)) invalidateClarificationState(qc, entryId);
+  };
 }
 
 // ── EOD Inbox lists (Team Lead full, PM read-only) ──────────────────────────

@@ -75,7 +75,7 @@ export default function MyReportsOverview() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 14, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontFamily: 'Inter, "Segoe UI", sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0, letterSpacing: '-0.01em' }}>
-            Team overview
+            Team Overview
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: '4px 0 0' }}>{subtitle}</p>
         </div>

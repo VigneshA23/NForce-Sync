@@ -3,11 +3,10 @@ import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle, Clock, Search, RefreshCw,
   X, Folder, Users, UserX, CheckCircle2, ListChecks, CalendarDays, Info,
-  Download,
 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
-import { Avatar, avatarColor } from '../../components/BlockerThread';
+import { Avatar, avatarColor, BlockerThreadView } from '../../components/BlockerThread';
 import { FilterDropdown, SortDropdown, toggleFilterVal } from '../../components/FilterDropdown';
 import { Pagination } from '../../components/Pagination';
 import { DateFilterButton, fmtShortDate, type DateFilterMode as DateMode } from '../../components/BlockerDateFilterButton';
@@ -269,6 +268,16 @@ function DetailPanel({ b, onClose }: { b: PmBlockerDto; onClose: () => void }) {
           {b.blockerReason ?? 'No detail provided.'}
         </div>
 
+        {/* READ-ONLY conversation: the PM can read what was said, but there is no reply box, no
+            Edit / Delete, no status control, and no way to start or join the thread. The write
+            endpoints reject a PM with 403 as well (PmReadOnlyPolicy). */}
+        <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+          Messages (view only)
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 320, minHeight: 60, marginBottom: 20 }}>
+          <BlockerThreadView taskId={b.taskId} scope="lead" readOnly replyToLabel="" visibilityNote="" />
+        </div>
+
         <div style={{
           display: 'flex', gap: 10, padding: '12px 14px', borderRadius: 8,
           background: 'color-mix(in srgb, var(--info) 10%, transparent)',
@@ -452,18 +461,6 @@ export default function PmBlockers() {
                 writeStoredDateFilter(m === 'range' ? { mode: m, from: r.from, to: r.to } : { mode: m });
               }}
             />
-            {/* TODO(backend): no export endpoint exists yet — disabled until one does, same as
-                the Team Lead Blockers page's Export Report control. */}
-            <button
-              disabled
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', fontSize: 12.5, fontWeight: 600,
-                borderRadius: 8, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt-dim)',
-                cursor: 'not-allowed', whiteSpace: 'nowrap',
-              }}
-            >
-              <Download size={14} aria-hidden="true" /> Export
-            </button>
           </div>
         </div>
 

@@ -63,7 +63,7 @@ export default function AiAssistantAdmin() {
   const health = healthQuery.data;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 1100 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
           <Bot size={24} /> AI & Automation

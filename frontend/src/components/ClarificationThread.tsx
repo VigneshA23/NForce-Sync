@@ -6,6 +6,10 @@ import {
 import { useAuth } from '../lib/auth';
 import { ThreadView } from './BlockerThread';
 
+/** The reviewing side is "Reviewer" whoever it is (TL-assigned employee, escalated PM, Super Admin);
+ *  the employee side stays "Employee". Blockers keeps its own "Team Lead" wording. */
+const CLARIFICATION_ROLE_LABELS = { EMPLOYEE: 'Employee', TEAM_LEAD: 'Reviewer' } as const;
+
 /**
  * Shared conversation UI for an EOD Clarification round — used by the Team Lead's EOD Inbox
  * detail panel, the employee's EOD entry view, and the PM's read-only EOD Inbox. Thin adapter
@@ -15,8 +19,18 @@ import { ThreadView } from './BlockerThread';
  * the PM's view-only surface (no reply box rendered at all, no mutation wired — matches how PM
  * Blockers omits reply entirely rather than disabling a control).
  */
-export function ClarificationThreadView({ entryId, scope, replyToLabel, visibilityNote, isLocked, readOnly }: {
+export function ClarificationThreadView({
+  entryId, scope, replyToLabel, visibilityNote, isLocked, readOnly, canReply, onSendOverride, emptyMessage,
+}: {
   entryId: number;
+  /** Replaces the default "post a reply into the open round" send — used by the chat popup when
+   *  no round is open yet, so the FIRST message opens the round. */
+  onSendOverride?: (message: string, files: File[]) => Promise<unknown>;
+  emptyMessage?: string;
+  /** The viewer's server-computed reply capability (EodClarificationStatusDto.canReply). Pass
+   *  `false` to show the thread without the composer or Edit/Delete — the read-only RM / PM
+   *  state. Omitted = no restriction from this prop (the legacy callers). */
+  canReply?: boolean;
   /** Required unless `readOnly` — the PM's read-only view fetches via its own route
    *  (usePmClarificationThread) and never needs an access-controlled scope. */
   scope?: ClarificationScope;
@@ -35,6 +49,7 @@ export function ClarificationThreadView({ entryId, scope, replyToLabel, visibili
   const editReply = useEditClarificationReply(entryId, scope ?? 'lead');
   const deleteReply = useDeleteClarificationReply(entryId, scope ?? 'lead');
   const attachmentScope = readOnly ? 'pm' : (scope ?? 'lead');
+  const noComposer = !!readOnly || canReply === false;
 
   return (
     <ThreadView
@@ -44,14 +59,16 @@ export function ClarificationThreadView({ entryId, scope, replyToLabel, visibili
       visibilityNote={visibilityNote}
       isLocked={isLocked}
       lockedMessage="This clarification has been marked resolved. Reply is disabled."
-      onSend={(message, files) => sendReply.mutateAsync({ message, files })}
+      onSend={(message, files) => (onSendOverride ? onSendOverride(message, files) : sendReply.mutateAsync({ message, files }))}
       isSending={sendReply.isPending}
       fetchAttachmentUrl={id => fetchClarificationAttachmentUrl(attachmentScope, id)}
       attachmentUrlQueryKey={id => ['eod-clarification-attachment-blob', attachmentScope, id]}
-      hideComposer={readOnly}
-      currentUserId={readOnly ? undefined : user?.id}
-      onEditMessage={readOnly ? undefined : (replyId, message) => editReply.mutateAsync({ replyId, message })}
-      onDeleteMessage={readOnly ? undefined : replyId => deleteReply.mutateAsync(replyId)}
+      hideComposer={noComposer}
+      currentUserId={noComposer ? undefined : user?.id}
+      emptyMessage={emptyMessage}
+      roleLabels={CLARIFICATION_ROLE_LABELS}
+      onEditMessage={noComposer ? undefined : (replyId, message) => editReply.mutateAsync({ replyId, message })}
+      onDeleteMessage={noComposer ? undefined : replyId => deleteReply.mutateAsync(replyId)}
     />
   );
 }

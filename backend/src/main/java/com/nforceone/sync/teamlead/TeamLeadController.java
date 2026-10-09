@@ -184,6 +184,18 @@ public class TeamLeadController {
         return clarificationService.open(entryId, actingEmail(), body != null ? body.message() : null);
     }
 
+    // Opens a round WITH its first message (and optional attachments) in one transaction — the
+    // chat popup's "first message creates the round". Multipart like the reply endpoint; the
+    // message and files are validated before the round exists, so a rejected attachment leaves no
+    // empty round behind. The JSON variant above stays for callers that open an empty round.
+    @PostMapping(value = "/eod/{entryId}/clarification", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public EodClarificationStatusDto openClarificationWithMessage(
+            @PathVariable Long entryId,
+            @RequestParam(required = false) String message,
+            @RequestParam(required = false) List<MultipartFile> files) {
+        return clarificationService.open(entryId, actingEmail(), message, files);
+    }
+
     // Multipart, not JSON — matches Blockers' postBlockerReply exactly (message + files together),
     // now that clarification replies support attachments too (see EodClarificationService.reply).
     @PostMapping(value = "/eod/{entryId}/clarification/replies", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

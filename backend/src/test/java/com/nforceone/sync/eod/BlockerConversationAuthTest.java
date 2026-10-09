@@ -125,14 +125,36 @@ class BlockerConversationAuthTest {
                 service.postReplyAsLead(task.getId(), lead.getEmail(), "lead reply", List.of()));
     }
 
-    // ── project PM ─────────────────────────────────────────────────────────────
+    // ── project PM (by assignment): reads, but is read-only ────────────────────────
 
     @Test
-    void projectPm_canReplyAsLead() {
-        stubUserAndTask(pm);
+    void projectPm_assignedByCapacity_cannotReplyAsLead_403() {
+        // `pm` has role EMPLOYEE but is the project's PM: acting in the PM capacity, so read-only.
+        when(userRepository.findByEmailAndDeletedAtIsNull(pm.getEmail())).thenReturn(Optional.of(pm));
+        when(taskRepository.findById(task.getId())).thenReturn(Optional.of(task));
 
-        assertDoesNotThrow(() ->
-                service.postReplyAsLead(task.getId(), pm.getEmail(), "PM reply", List.of()));
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> service.postReplyAsLead(task.getId(), pm.getEmail(), "PM reply", List.of()));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        assertTrue(ex.getReason().contains("read-only view of blockers"), ex.getReason());
+        verify(replyRepository, never()).save(any());
+    }
+
+    @Test
+    void projectPm_assignedByCapacity_canStillReadTheThread() {
+        when(userRepository.findByEmailAndDeletedAtIsNull(pm.getEmail())).thenReturn(Optional.of(pm));
+        when(taskRepository.findById(task.getId())).thenReturn(Optional.of(task));
+
+        assertDoesNotThrow(() -> service.getThreadForLead(task.getId(), pm.getEmail()));
+    }
+
+    @Test
+    void someoneWhoIsBothTheLeadAndTheProjectPm_keepsWriteAccessAsTheLead() {
+        project.setPm(lead);   // the same user holds both capacities: the Team Lead one still allows replies
+        stubUserAndTask(lead);
+
+        assertDoesNotThrow(() -> service.postReplyAsLead(task.getId(), lead.getEmail(), "as lead", List.of()));
     }
 
     // ── stranger ───────────────────────────────────────────────────────────────
@@ -192,5 +214,62 @@ class BlockerConversationAuthTest {
 
         verify(notificationService).send(eq(employee.getId()), eq("BLOCKER_REPLY"), anyString(), anyString(), anyString());
         verify(notificationService, never()).send(eq(lead.getId()), any(), any(), any(), any());
+    }
+
+    // ── Project Managers (role PM) are read-only on blockers ─────────────────────
+
+    /** A PM-role user who is also the project's PM — the exact case that used to be allowed to reply. */
+    private AppUser pmRoleOnTheProject() {
+        AppUser pmRole = user(6L, "Surya T", "surya@example.com");
+        pmRole.setRole(AppUser.Role.PM);
+        project.setPm(pmRole);
+        return pmRole;
+    }
+
+    @Test
+    void pmRole_cannotPostAReply_403() {
+        AppUser pmRole = pmRoleOnTheProject();
+        when(userRepository.findByEmailAndDeletedAtIsNull(pmRole.getEmail())).thenReturn(Optional.of(pmRole));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> service.postReplyAsLead(task.getId(), pmRole.getEmail(), "hello", List.of()));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        assertTrue(ex.getReason().contains("read-only view of blockers"), ex.getReason());
+        verify(replyRepository, never()).save(any());
+        verify(notificationService, never()).send(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void pmRole_cannotEditOrDeleteAReply_403() {
+        AppUser pmRole = pmRoleOnTheProject();
+        when(userRepository.findByEmailAndDeletedAtIsNull(pmRole.getEmail())).thenReturn(Optional.of(pmRole));
+
+        assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
+                () -> service.editReplyAsLead(1L, pmRole.getEmail(), "edited")).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
+                () -> service.deleteReplyAsLead(1L, pmRole.getEmail())).getStatusCode());
+        verify(replyRepository, never()).save(any());
+        verify(replyRepository, never()).delete(any());
+    }
+
+    @Test
+    void pmRole_canStillReadTheThread() {
+        AppUser pmRole = pmRoleOnTheProject();
+        when(userRepository.findByEmailAndDeletedAtIsNull(pmRole.getEmail())).thenReturn(Optional.of(pmRole));
+        when(taskRepository.findById(task.getId())).thenReturn(Optional.of(task));
+
+        assertDoesNotThrow(() -> service.getThreadForLead(task.getId(), pmRole.getEmail()));
+    }
+
+    @Test
+    void aNonPmRoleUserWhoIsOnlyTheProjectPm_isReadOnlyToo_403() {
+        // Anyone can be a project's PM by assignment, not only a user with role PM — same rule for both.
+        when(userRepository.findByEmailAndDeletedAtIsNull(pm.getEmail())).thenReturn(Optional.of(pm));
+        when(taskRepository.findById(task.getId())).thenReturn(Optional.of(task));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> service.postReplyAsLead(task.getId(), pm.getEmail(), "assigned PM", List.of()));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
     }
 }

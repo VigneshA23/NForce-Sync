@@ -1,6 +1,7 @@
 package com.nforceone.sync.eod;
 
 import com.nforceone.sync.auth.AppUser;
+import com.nforceone.sync.auth.PmReadOnlyPolicy;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.eod.dto.BlockerAttachmentDto;
 import com.nforceone.sync.eod.dto.BlockerReplyDto;
@@ -72,8 +73,9 @@ public class BlockerConversationService {
 
     public BlockerReplyDto postReplyAsLead(Long taskId, String actingEmail, String message, List<MultipartFile> files) {
         AppUser lead = requireUser(actingEmail);
+        PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         EodTask task = requireTask(taskId);
-        requireLeadOwnsTask(task, lead);
+        requireCanWriteAsLead(task, lead);
         requireNotResolved(task);
 
         BlockerReply saved = saveReply(task, lead, message, files);
@@ -127,8 +129,9 @@ public class BlockerConversationService {
 
     public void editReplyAsLead(Long replyId, String actingEmail, String message) {
         AppUser lead = requireUser(actingEmail);
+        PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         BlockerReply reply = requireReply(replyId);
-        requireLeadOwnsTask(reply.getTask(), lead);
+        requireCanWriteAsLead(reply.getTask(), lead);
         requireOwnReply(reply, lead);
         requireNotResolved(reply.getTask());
         updateMessage(reply, message);
@@ -136,8 +139,9 @@ public class BlockerConversationService {
 
     public void deleteReplyAsLead(Long replyId, String actingEmail) {
         AppUser lead = requireUser(actingEmail);
+        PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         BlockerReply reply = requireReply(replyId);
-        requireLeadOwnsTask(reply.getTask(), lead);
+        requireCanWriteAsLead(reply.getTask(), lead);
         requireOwnReply(reply, lead);
         requireNotResolved(reply.getTask());
         deleteReplyInternal(reply);
@@ -306,6 +310,25 @@ public class BlockerConversationService {
             if (project.getPm() != null && actorId.equals(project.getPm().getId())) return;
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+    }
+
+    /**
+     * Posting, editing or deleting as the "lead" side. Reading stays as requireLeadOwnsTask allows
+     * (RM, lead, project PM), but WRITING is for the Team Lead and the reporting manager only: a user
+     * who reaches the task solely as the project's PM acts in the PM capacity, which is read-only —
+     * whatever their role (anyone can be a project's PM by assignment). A role-PM user is rejected first.
+     */
+    private void requireCanWriteAsLead(EodTask task, AppUser actor) {
+        PmReadOnlyPolicy.requireNotReadOnlyPm(actor, "blockers");
+        requireLeadOwnsTask(task, actor);
+        Long actorId = actor.getId();
+        boolean isRm = actorId.equals(task.getEodEntry().getManagerId());
+        com.nforceone.sync.project.Project project = task.getProject();
+        boolean isLead = project != null && project.getLead() != null && actorId.equals(project.getLead().getId());
+        if (!isRm && !isLead) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Project Managers have a read-only view of blockers. Replies and changes are handled by Team Leads.");
+        }
     }
 
     private void requireEmployeeOwnsTask(EodTask task, AppUser employee) {

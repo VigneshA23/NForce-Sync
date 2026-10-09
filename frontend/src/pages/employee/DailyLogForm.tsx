@@ -443,7 +443,7 @@ export default function DailyLogForm() {
           <Clock size={15} style={{ color:'#E0A93B', flexShrink:0, marginTop:1 }} aria-hidden />
           <div>
             {isToday && cutoffPassed && cutoff?.cutoffTime
-              ? <><div style={{ fontSize:13, color:'var(--txt)', fontWeight:500 }}>Submission window closed at {formatTime12h(cutoff.cutoffTime)} IST.</div><div style={{ fontSize:12, color:'var(--txt-mut)', marginTop:2 }}>Entries submitted after the cutoff are accepted and marked late.</div></>
+              ? <><div style={{ fontSize:13, color:'var(--txt)', fontWeight:500 }}>Submission window closed at {formatTime12h(cutoff.cutoffTime)}.</div><div style={{ fontSize:12, color:'var(--txt-mut)', marginTop:2 }}>Entries submitted after the cutoff are accepted and marked late.</div></>
               : <><div style={{ fontSize:13, color:'var(--txt)', fontWeight:500 }}>Submitting for a past date.</div><div style={{ fontSize:12, color:'var(--txt-mut)', marginTop:2 }}>This entry will be marked late.</div></>}
           </div>
         </div>

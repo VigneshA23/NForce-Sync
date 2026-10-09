@@ -12,6 +12,10 @@ import { getEodAttachmentDataUrl } from '../../api/eod';
 import type { EodEntryDto, EodTaskDto, EodAttachmentDto } from '../../api/eod';
 import { previewEodAttachment } from '../../lib/eodAttachments';
 import { useClarificationStatusForApprovals } from '../../api/eodClarification';
+import { useAuth } from '../../lib/auth';
+import { isReadOnlyPm } from '../../lib/pmReadOnly';
+import { clarificationMenuState } from '../../lib/clarificationGate';
+import { extractError } from '../../lib/extractError';
 
 // Shared between the Team Lead's and the Project Manager's Approvals pages — the submission
 // detail modal is correctness-sensitive and must not fork between the two roles, so both pages
@@ -118,10 +122,7 @@ export function formatRelative(iso: string | null): string {
   return `${d}d ago`;
 }
 
-export function extractError(err: unknown): string {
-  const e = err as { response?: { data?: { error?: string; message?: string } } };
-  return e?.response?.data?.error ?? e?.response?.data?.message ?? 'Something went wrong';
-}
+export { extractError };
 
 export function initials(name: string): string {
   return name.split(' ').map(p => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
@@ -402,8 +403,7 @@ export function EodEntryBody({ entry }: { entry: EodEntryDto }) {
 // ── submission detail modal ─────────────────────────────────────────────────────
 
 export function SubmissionDetailModal({
-  entry, onClose, onApprove, onReject, approveBusy, rejectBusy = false,
-  onRequestClarification, clarifyBusy = false,
+  entry, onClose, onApprove, onReject, approveBusy, rejectBusy = false, onOpenChat,
 }: {
   entry: EodEntryDto | null;
   onClose: () => void;
@@ -412,18 +412,14 @@ export function SubmissionDetailModal({
   onReject: (entryId: number, reason: string) => void;
   approveBusy: boolean;
   rejectBusy?: boolean;
-  /** Team Lead only — omitted entirely by the PM's Approvals page, which hides the button rather
-   *  than disabling it (same wiring-omission pattern PM Blockers uses for its read-only view).
-   *  Fires immediately on click — no reason prompt, same as opening a Blocker conversation. The
-   *  caller opens the (empty) clarification round and navigates to EOD Inbox; the TL types the
-   *  actual question there as the thread's first message. */
-  onRequestClarification?: (entryId: number) => void;
-  clarifyBusy?: boolean;
+  /** Opens the host page's chat popup for this entry. Omit to hide the clarification button. */
+  onOpenChat?: (entry: EodEntryDto) => void;
 }) {
   // Rejecting happens in place: the first Reject click reveals the reason box below Remarks, the
   // second submits it. A separate confirm dialog used to hide the work being judged.
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
+  const { user } = useAuth();
 
   // Reset when a different entry is opened, so a half-typed reason never follows you to the next one.
   useEffect(() => {
@@ -434,14 +430,19 @@ export function SubmissionDetailModal({
   const editable = entry?.status === 'SUBMITTED';
   const reasonEmpty = reason.trim() === '';
 
-  // Approve/Reject stay disabled whenever an open clarification exists (status NEEDS_RESPONSE or
-  // ACKNOWLEDGED — EodClarificationStatusDto.open covers both) — same gate
-  // ApprovalService.requireNoOpenClarification enforces server-side; they re-enable once status
-  // is RESOLVED. In practice an entry with one open never appears in this list at all (see
-  // EodEntryRepository's pending queries), so this mostly guards a stale-tab/notification-link
-  // race rather than the everyday path.
-  const { data: clarificationStatus } = useClarificationStatusForApprovals(entry?.id, entry != null);
-  const clarificationOpen = clarificationStatus?.open === true;
+  // Approve/Reject stay disabled while a round is NEEDS_RESPONSE or ACKNOWLEDGED — the same
+  // entry-wide gate the server enforces (rounds are per entry, so it blocks every project piece).
+  // Polled every 15s while the modal is open so a round opened or resolved elsewhere flips the
+  // buttons without a reload; Request Clarification is driven purely by the server's canOpen flag.
+  const { data: clarificationStatus } = useClarificationStatusForApprovals(entry?.id, entry != null, true);
+  // Never offer reviewer actions on your own EOD — the server rejects it too (403).
+  const isOwn = user != null && entry != null && entry.employeeId === user.id;
+  // Same rules as the row's kebab menu, from the server's flags (see clarificationMenuState).
+  const menu = clarificationMenuState({
+    isOwn, blockedByList: false, status: clarificationStatus, busy: approveBusy || rejectBusy,
+    readOnlyReviewer: isReadOnlyPm(user?.role),
+  });
+  const clarificationItem = menu.clarification.find(c => c.kind !== 'loading');
 
   return (
     <Modal
@@ -475,28 +476,26 @@ export function SubmissionDetailModal({
               <Btn
                 variant="danger"
                 onClick={() => setRejecting(true)}
-                disabled={clarificationOpen}
-                title={clarificationOpen ? 'Resolve the open clarification before deciding this entry.' : undefined}
+                disabled={menu.reject.disabled}
+                title={menu.reject.title}
               >
                 <X size={12} aria-hidden="true" /> Reject
               </Btn>
               <Btn
                 variant="success"
                 onClick={() => onApprove(entry.id)}
-                disabled={approveBusy || clarificationOpen}
-                title={clarificationOpen ? 'Resolve the open clarification before deciding this entry.' : undefined}
+                disabled={menu.approve.disabled}
+                title={menu.approve.title}
               >
                 {approveBusy ? 'Approving…' : <><Check size={12} aria-hidden="true" /> Approve</>}
               </Btn>
             </div>
-            {onRequestClarification && (
-              <Btn
-                variant="warn"
-                onClick={() => onRequestClarification(entry.id)}
-                disabled={clarificationOpen || clarifyBusy}
-                title={clarificationOpen ? 'A clarification is already open on this entry.' : undefined}
-              >
-                {clarifyBusy ? 'Opening…' : <><MessageCircleQuestion size={12} aria-hidden="true" /> Request Clarification</>}
+            {/* From the server's flags only (clarificationMenuState): absent on the viewer's own EOD and
+                for a viewer who can neither open nor view a thread. Opens the chat popup; the first
+                message there creates the round. */}
+            {onOpenChat && clarificationItem && (
+              <Btn variant="warn" onClick={() => onOpenChat(entry)}>
+                <MessageCircleQuestion size={12} aria-hidden="true" /> {clarificationItem.label}
               </Btn>
             )}
           </div>

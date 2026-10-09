@@ -3,12 +3,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle, Clock, XCircle, ChevronRight, AlertTriangle,
-  Search, ArrowUp, ArrowDown, Calendar as CalendarIcon,
+  Search, ArrowUp, ArrowDown, Calendar as CalendarIcon, MessageCircleQuestion,
 } from 'lucide-react';
 import { listEntries, getDayDefaults } from '../../api/eod';
 import { useEntryPieces } from '../../api/approvalPieces';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { Pagination } from '../../components/Pagination';
+import { ClarificationChatPopup } from '../../components/ClarificationChatPopup';
+import { useEodInbox } from '../../api/eodClarification';
+import { useAuth } from '../../lib/auth';
 import type { EodHistoryEntryDto } from '../../api/eod';
 import { formatDate as formatDateDDMMYYYY, formatDateTime } from '../../lib/date';
 import { timeAdjustmentLabel } from '../approvals/shared';
@@ -162,6 +165,29 @@ function StatusDropdown({ value, onChange }: { value: string; onChange: (v: stri
 export default function EodHistory() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
+
+  // This is the employee's own view of their EODs' approval status, so it is where THEIR side of a
+  // clarification lives. Own entries only: the reviewer-side lists never contain them, and the panel
+  // below is always opened in the employee scope. One batched request flags every row.
+  const { data: openRounds } = useEodInbox('employee', true);
+  const clarifiedEntryIds = useMemo(
+    () => new Set((openRounds ?? []).map(r => r.eodEntryId)),
+    [openRounds],
+  );
+  // A ?highlight=<entryId> link (the clarification notifications) opens that entry's thread directly.
+  const highlightParam = searchParams.get('highlight');
+  const highlightId = highlightParam && Number.isFinite(Number(highlightParam)) ? Number(highlightParam) : null;
+  // Derived rather than synced in an effect: a row click sets openedEntryId; a ?highlight= id opens
+  // its thread until that same id is dismissed, and a different id in the URL opens again.
+  const [openedEntryId, setOpenedEntryId] = useState<number | null>(null);
+  const [dismissedHighlightId, setDismissedHighlightId] = useState<number | null>(null);
+  const clarificationEntryId = openedEntryId
+    ?? (highlightId != null && highlightId !== dismissedHighlightId ? highlightId : null);
+  function closeClarification() {
+    setOpenedEntryId(null);
+    setDismissedHighlightId(highlightId);
+  }
 
   // Deep link support: the "Missing EOD reminder" notification points here with ?from=/?to=/?dates=
   // and no status, since the days it chases can be Rejected or Draft as well as Missing. A status is
@@ -727,6 +753,20 @@ export default function EodHistory() {
                 {entry.id != null
                   ? <EntryPieceChipsWithFallback entryId={entry.id} status={entry.status} />
                   : <StatusBadge status={entry.status} />}
+                {entry.id != null && clarifiedEntryIds.has(entry.id) && (
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); setOpenedEntryId(entry.id!); }}
+                    onKeyDown={e => e.stopPropagation()}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, padding: '3px 8px',
+                      borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                      border: '1px solid rgba(224,169,59,.4)', background: 'var(--raised2)', color: 'var(--warn)',
+                    }}
+                  >
+                    <MessageCircleQuestion size={11} aria-hidden="true" /> Clarification requested
+                  </button>
+                )}
               </div>
               <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
                 {entry.submittedAt ? formatDateTime(entry.submittedAt) : '-'}
@@ -749,6 +789,21 @@ export default function EodHistory() {
           )}
         </div>
       )}
+
+      {/* The employee's side of the clarification chat — same popup the reviewer uses, composer
+          enabled by the server's canReply, never a Resolve button (canResolve is reviewer-only). */}
+      {(() => {
+        const chatEntry = clarificationEntryId != null ? entries.find(e => e.id === clarificationEntryId) : undefined;
+        return chatEntry && user ? (
+          <ClarificationChatPopup
+            entryId={chatEntry.id!}
+            employeeId={user.id}
+            employeeName={user.name}
+            entryDate={chatEntry.entryDate}
+            onClose={closeClarification}
+          />
+        ) : null;
+      })()}
     </div>
   );
 }

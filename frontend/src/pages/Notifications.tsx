@@ -5,7 +5,7 @@ import {
   Bell, CheckCheck, Loader2, AlertCircle, Check,
   UserPlus, KeyRound, ClipboardCheck, XCircle, RefreshCcw, Info, Clock,
   AlertTriangle, FolderKanban, CalendarDays, MessageSquare, Users, Megaphone,
-  Search, RefreshCw, Inbox, ArrowUpRight,
+  Search, RefreshCw, Inbox, ArrowUpRight, MessageCircleQuestion,
 } from 'lucide-react';
 import { Pagination } from '../components/Pagination';
 import { useAuth } from '../lib/auth';
@@ -18,6 +18,7 @@ import {
 } from '../api/notifications';
 import { formatDate, formatDateTime, formatTime12h, toLocalISODate, todayISO, yesterdayISO } from '../lib/date';
 import { resolveNotificationPriority, type NotificationPriority } from '../lib/notificationPriority';
+import { canOpenNotificationLink } from '../lib/notificationLinks';
 import { GlobalLoader } from '../components/GlobalLoader';
 
 // ── Notification metadata ───────────────────────────────────────────────────
@@ -99,6 +100,20 @@ const NOTIFICATION_META: Record<string, NotificationMeta> = {
   BLOCKER_REPLY: {
     icon: <MessageSquare size={15} />, color: 'var(--risk)', bg: 'rgba(228,55,61,.12)',
     category: 'Blocker', generatedBy: 'Blocker Thread',
+  },
+  // EOD Clarification — emitted by EodClarificationService. The link is chosen server-side per
+  // recipient (employee: /eod/history, reviewer: /team/eod-inbox, PM: /projects/eod-inbox).
+  EOD_CLARIFICATION_REQUESTED: {
+    icon: <MessageCircleQuestion size={15} />, color: 'var(--warn)', bg: 'rgba(224,169,59,.12)',
+    category: 'Clarification', generatedBy: 'Reviewer',
+  },
+  EOD_CLARIFICATION_REPLY: {
+    icon: <MessageSquare size={15} />, color: 'var(--info)', bg: 'rgba(76,141,214,.12)',
+    category: 'Clarification', generatedBy: 'Clarification Thread',
+  },
+  EOD_CLARIFICATION_RESOLVED: {
+    icon: <ClipboardCheck size={15} />, color: 'var(--ok)', bg: 'rgba(47,182,124,.12)',
+    category: 'Clarification', generatedBy: 'Reviewer',
   },
   RESOURCE_ALLOCATION: {
     icon: <Users size={15} />, color: 'var(--info)', bg: 'rgba(76,141,214,.12)',
@@ -310,9 +325,9 @@ function NotificationListItem({
 
 function NotificationDetailPane({ n }: { n: NotificationDto | null }) {
   // PM: notifications are informational only here — no "open related page" action, per
-  // role-specific request. Every other role keeps the link to the approval/blocker/EOD entry.
+  // role-specific request — except the EOD Clarification types (see lib/notificationLinks.ts),
+  // because an escalated PM must be able to reach the thread. Every other role keeps the link.
   const { user } = useAuth();
-  const canNavigate = user?.role !== 'pm';
 
   if (!n) {
     return (
@@ -378,7 +393,7 @@ function NotificationDetailPane({ n }: { n: NotificationDto | null }) {
         {n.message || 'No additional details were provided for this notification.'}
       </p>
 
-      {n.link && canNavigate && (
+      {n.link && canOpenNotificationLink(user?.role, n.type) && (
         <Link
           to={n.link}
           style={{

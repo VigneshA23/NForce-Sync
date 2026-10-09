@@ -178,7 +178,7 @@ pages:
     module: admin
     variants:
       - roles: [SUPERADMIN]
-        label: "EOD"
+        label: "EOD Reports"
         route: /admin/reportee/pm/eod
         description: "Super Admin read-only view into a Project Manager's team's EOD activity."
 
@@ -186,7 +186,7 @@ pages:
     module: admin
     variants:
       - roles: [SUPERADMIN]
-        label: "Utilization"
+        label: "Project Utilization"
         route: /admin/reportee/pm/utilization
         description: "Super Admin read-only view into a Project Manager's team's utilization."
 

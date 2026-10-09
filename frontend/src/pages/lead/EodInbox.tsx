@@ -15,8 +15,11 @@ import {
 } from '../../lib/eodInboxFilter';
 import { CLARIFICATION_STATUS_META, CLARIFICATION_STATUS_OPTIONS } from '../../lib/clarificationStatus';
 import {
-  useEodInbox, useSetClarificationStatus, useMarkClarificationRead, type EodInboxItemDto, type ClarificationStatusValue,
+  useEodInbox, useSetClarificationStatus, useMarkClarificationRead, useClarificationStatus,
+  type EodInboxItemDto, type ClarificationStatusValue,
 } from '../../api/eodClarification';
+import { useToast } from '../../lib/toast';
+import { extractError } from '../../lib/extractError';
 import { formatDate as fmtDate } from '../../lib/date';
 import { DateFilterButton, type DateFilterMode } from '../../components/BlockerDateFilterButton';
 import type { DateRange } from '../../api/teamLead';
@@ -36,6 +39,14 @@ function fmtDateTimeParts(iso: string): { date: string; time: string } {
 function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onClose: () => void; onViewEod: () => void }) {
   const setStatus = useSetClarificationStatus();
   const [confirmResolve, setConfirmResolve] = useState(false);
+  const { show } = useToast();
+  // This inbox also lists rounds the viewer can only READ (e.g. as the entry's reporting manager).
+  // The server's canReply flag decides whether the composer and the status dropdown appear; while
+  // it is still loading we assume read-only rather than flash controls that would 403.
+  const { data: viewerStatus } = useClarificationStatus(item.eodEntryId, 'lead');
+  const canReply = viewerStatus?.canReply === true;
+  // Resolving / changing the round's status is reviewer-only (the owner can reply but never resolve).
+  const canResolve = viewerStatus?.canResolve === true;
 
   return (
     <Card style={{ padding: 0, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 88px)', overflow: 'hidden' }}>
@@ -52,7 +63,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {!item.open ? (
+            {!item.open || !canResolve ? (
               <StatusBadge status={item.status} meta={CLARIFICATION_STATUS_META} />
             ) : (
               <StatusDropdown
@@ -62,7 +73,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
                 disabled={setStatus.isPending}
                 onChange={(status: ClarificationStatusValue) => {
                   if (status === 'RESOLVED') setConfirmResolve(true);
-                  else setStatus.mutate({ entryId: item.eodEntryId, status });
+                  else setStatus.mutate({ entryId: item.eodEntryId, status }, { onError: err => show(extractError(err), 'error') });
                 }}
               />
             )}
@@ -114,7 +125,13 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
             replyToLabel={`Reply to ${item.employeeName}`}
             visibilityNote={`Replies are visible to ${item.employeeName}`}
             isLocked={!item.open}
+            canReply={canReply}
           />
+          {item.open && viewerStatus && !canReply && (
+            <div style={{ fontSize: 12, color: 'var(--txt-dim)', marginTop: 8 }}>
+              View only — you can read this conversation but not reply to it.
+            </div>
+          )}
         </div>
       </div>
 
@@ -124,6 +141,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
         onConfirm={() => {
           setStatus.mutate({ entryId: item.eodEntryId, status: 'RESOLVED' }, {
             onSuccess: () => setConfirmResolve(false),
+            onError: err => { setConfirmResolve(false); show(extractError(err), 'error'); },
           });
         }}
         title="Resolve this clarification?"

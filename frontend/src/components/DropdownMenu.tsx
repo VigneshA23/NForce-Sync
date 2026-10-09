@@ -11,6 +11,8 @@ export interface DropdownMenuItem {
   color?: string;
   onSelect: () => void;
   disabled?: boolean;
+  /** Optional native tooltip — e.g. why an item is disabled. */
+  title?: string;
   /** Optional: draws a divider line above this item. */
   dividerBefore?: boolean;
 }
@@ -171,7 +173,9 @@ export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', op
             top: position?.top ?? -9999,
             left: position?.left ?? -9999,
             visibility: position ? 'visible' : 'hidden',
-            minWidth: 176, zIndex: 1000, background: 'var(--panel)',
+            // Above the chat popup (1300) and PieceReviewModal (1200), which this portal-rendered
+            // menu must open over — at 1000 it opened underneath them and looked dead.
+            minWidth: 176, zIndex: 1400, background: 'var(--panel)',
             border: '1px solid var(--line)', borderRadius: 8,
             boxShadow: '0 8px 24px rgba(0,0,0,0.35)', overflow: 'hidden', padding: 4,
           }}
@@ -185,6 +189,7 @@ export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', op
                 role="menuitem"
                 type="button"
                 disabled={item.disabled}
+                title={item.title}
                 onClick={() => { setOpen(false); item.onSelect(); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, width: '100%',

@@ -1,5 +1,7 @@
 package com.nforceone.sync.eod;
 
+import com.nforceone.sync.approval2.EodProjectApproval;
+import com.nforceone.sync.approval2.EodProjectApprovalRepository;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.eod.dto.EodClarificationAttachmentDto;
@@ -62,6 +64,7 @@ public class EodClarificationService {
     private final AppUserRepository userRepository;
     private final NotificationService notificationService;
     private final PmScopeService pmScopeService;
+    private final EodProjectApprovalRepository pieceRepository;
 
     public EodClarificationService(@Value("${app.eod-attachment.max-file-size-bytes}") long maxFileSizeBytes,
                                     @Value("${app.eod-attachment.max-total-storage-bytes}") long maxTotalStorageBytes,
@@ -73,7 +76,8 @@ public class EodClarificationService {
                                     EodTaskRepository taskRepository,
                                     AppUserRepository userRepository,
                                     NotificationService notificationService,
-                                    PmScopeService pmScopeService) {
+                                    PmScopeService pmScopeService,
+                                    EodProjectApprovalRepository pieceRepository) {
         this.maxFileSizeBytes = maxFileSizeBytes;
         this.maxTotalStorageBytes = maxTotalStorageBytes;
         this.entryRepository = entryRepository;
@@ -85,23 +89,28 @@ public class EodClarificationService {
         this.userRepository = userRepository;
         this.notificationService = notificationService;
         this.pmScopeService = pmScopeService;
+        this.pieceRepository = pieceRepository;
     }
 
     @Transactional(readOnly = true)
     public EodClarificationStatusDto getStatus(Long entryId, String actingEmail) {
         AppUser actor = requireUser(actingEmail);
         EodEntry entry = requireEntry(entryId);
-        EodClarificationAccessPolicy.requireCanRead(actor, entry);
-        return clarificationRepository.findByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)
-                .map(EodClarificationStatusDto::from)
-                .orElseGet(EodClarificationStatusDto::none);
+        List<EodProjectApproval> pieces = currentPieces(entryId);
+        EodClarificationAccessPolicy.requireCanRead(actor, entry, pieces);
+        // The LATEST round — open, or the most recent RESOLVED one — so a resolved thread stays
+        // readable. A resolved round reports open=false / status=RESOLVED, so every gate that keys
+        // off open or isBlockingStatus treats it as "no round blocking".
+        return clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(entryId)
+                .map(c -> statusDto(c, actor, entry, pieces))
+                .orElseGet(() -> EodClarificationStatusDto.none(canOpenNewRound(actor, entry, pieces)));
     }
 
     @Transactional(readOnly = true)
     public List<EodClarificationReplyDto> getThread(Long entryId, String actingEmail) {
         AppUser actor = requireUser(actingEmail);
         EodEntry entry = requireEntry(entryId);
-        EodClarificationAccessPolicy.requireCanRead(actor, entry);
+        EodClarificationAccessPolicy.requireCanRead(actor, entry, currentPieces(entryId));
         // Only the latest round's thread is shown — see EodClarificationRepository's javadoc.
         return clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(entryId)
                 .map(c -> {
@@ -120,29 +129,56 @@ public class EodClarificationService {
      *  either. A non-blank message is still accepted and saved as the opening reply for any other
      *  caller that wants to open-with-a-message in one call. */
     public EodClarificationStatusDto open(Long entryId, String actingEmail, String message) {
+        return open(entryId, actingEmail, message, List.of());
+    }
+
+    /** Opens a round and, when a first message and/or attachments are supplied, saves it as the
+     *  opening reply in the same transaction — the chat popup's "first message creates the round".
+     *  The message and files are validated BEFORE the round is created, so a rejected attachment
+     *  never leaves an empty round behind. The employee gets exactly one notification
+     *  (EOD_CLARIFICATION_REQUESTED), not a second "reply" one. */
+    public EodClarificationStatusDto open(Long entryId, String actingEmail, String message,
+                                           List<MultipartFile> files) {
         AppUser lead = requireUser(actingEmail);
         EodEntry entry = requireEntry(entryId);
-        EodClarificationAccessPolicy.requireCanOpenOrResolve(lead, entry);
+        List<EodProjectApproval> pieces = currentPieces(entryId);
+        EodClarificationAccessPolicy.requireCanOpenOrResolve(lead, entry, pieces);
 
-        if (entry.getStatus() != EodEntry.Status.SUBMITTED) {
+        // PARTIALLY_APPROVED is allowed: the still-PENDING pieces are exactly where a clarification
+        // is needed. The policy above already requires the opener to hold a PENDING piece (or be a
+        // Super Admin), so an approver whose own piece is already approved/rejected cannot open.
+        if (!isOpenableStatus(entry)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Clarification can only be requested on a submitted entry; current status: " + entry.getStatus());
+                    "Clarification can only be requested on a submitted or partially approved entry; current status: "
+                            + entry.getStatus());
+        }
+        if (pieces.stream().noneMatch(p -> p.getStatus() == EodProjectApproval.Status.PENDING)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Clarification can only be requested while at least one piece of this entry is pending");
         }
         if (clarificationRepository.existsByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A clarification is already open on this entry");
         }
 
+        boolean hasContent = (message != null && !message.isBlank()) || (files != null && files.stream().anyMatch(f -> !f.isEmpty()));
+        if (hasContent) validatedAttachments(message, files);   // fail before creating the round
+
         OffsetDateTime now = OffsetDateTime.now();
         EodClarification clarification = new EodClarification();
         clarification.setEodEntry(entry);
         clarification.setOpenedBy(lead);
+        // Snapshot only when the opener really was an approver / escalatee at this moment — a
+        // Super Admin opening on someone else's behalf leaves it null. Audit/fallback only.
+        if (EodClarificationAccessPolicy.isCurrentApprover(lead, pieces)) {
+            clarification.setOpenedByApprover(lead);
+        }
         clarification.setOpenedAt(now);
         clarification.setStatus(EodClarification.Status.NEEDS_RESPONSE);
         clarification = clarificationRepository.save(clarification);
 
-        if (message != null && !message.isBlank()) {
-            saveReply(clarification, lead, message);
+        if (hasContent) {
+            saveReply(clarification, lead, message, files);
         }
 
         notificationService.send(entry.getEmployee().getId(), "EOD_CLARIFICATION_REQUESTED",
@@ -151,7 +187,7 @@ public class EodClarificationService {
                         + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + ".",
                 "/eod/history?highlight=" + entry.getId());
 
-        return EodClarificationStatusDto.from(clarification);
+        return statusDto(clarification, lead, entry, pieces);
     }
 
     /** Marks every clarification round against this entry as read by the caller (opening the EOD
@@ -162,7 +198,7 @@ public class EodClarificationService {
     public void markRead(Long entryId, String actingEmail) {
         AppUser actor = requireUser(actingEmail);
         EodEntry entry = requireEntry(entryId);
-        EodClarificationAccessPolicy.requireCanRead(actor, entry);
+        EodClarificationAccessPolicy.requireCanRead(actor, entry, currentPieces(entryId));
 
         List<EodClarification> rounds = clarificationRepository.findByEodEntryId(entryId);
         if (rounds.isEmpty()) return;
@@ -206,7 +242,8 @@ public class EodClarificationService {
     public EodClarificationReplyDto reply(Long entryId, String actingEmail, String message, List<MultipartFile> files) {
         AppUser actor = requireUser(actingEmail);
         EodEntry entry = requireEntry(entryId);
-        EodClarificationAccessPolicy.requireCanReply(actor, entry);
+        List<EodProjectApproval> pieces = currentPieces(entryId);
+        EodClarificationAccessPolicy.requireCanReply(actor, entry, pieces);
 
         EodClarification clarification = clarificationRepository
                 .findByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)
@@ -233,14 +270,16 @@ public class EodClarificationService {
         }
 
         if (actorIsEmployee) {
-            // Notify whoever opened this round — could be frozen RM, project lead, or PM.
-            AppUser opener = clarification.getOpenedBy();
-            if (opener != null) {
-                notificationService.send(opener.getId(), "EOD_CLARIFICATION_REPLY",
+            // Notify whoever holds the review NOW — the current approver / escalatee on each
+            // pending piece — not just whoever opened the round, who may have been replaced since.
+            // Falls back to the opener snapshot only when no current approver resolves (e.g. an
+            // ADMIN_GROUP piece has no named approver).
+            for (AppUser recipient : reviewerRecipients(clarification, entry, pieces)) {
+                notificationService.send(recipient.getId(), "EOD_CLARIFICATION_REPLY",
                         "New reply on an EOD clarification",
                         actor.getFullName() + " replied on the clarification for their EOD entry ("
                                 + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + ").",
-                        "/team/eod-inbox?highlight=" + entry.getId());
+                        reviewerInboxLink(recipient, entry));
             }
         } else {
             notificationService.send(entry.getEmployee().getId(), "EOD_CLARIFICATION_REPLY",
@@ -261,7 +300,7 @@ public class EodClarificationService {
         AppUser actor = requireUser(actingEmail);
         EodClarificationReply reply = requireReply(replyId);
         EodEntry entry = reply.getClarification().getEodEntry();
-        EodClarificationAccessPolicy.requireCanReply(actor, entry);
+        EodClarificationAccessPolicy.requireCanReply(actor, entry, currentPieces(entry.getId()));
         requireOwnReply(reply, actor);
         requireClarificationNotResolved(reply.getClarification());
         updateMessage(reply, message);
@@ -271,7 +310,7 @@ public class EodClarificationService {
         AppUser actor = requireUser(actingEmail);
         EodClarificationReply reply = requireReply(replyId);
         EodEntry entry = reply.getClarification().getEodEntry();
-        EodClarificationAccessPolicy.requireCanReply(actor, entry);
+        EodClarificationAccessPolicy.requireCanReply(actor, entry, currentPieces(entry.getId()));
         requireOwnReply(reply, actor);
         requireClarificationNotResolved(reply.getClarification());
         deleteReplyInternal(reply);
@@ -288,7 +327,7 @@ public class EodClarificationService {
         EodClarificationReplyAttachment attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attachment not found"));
         EodEntry entry = attachment.getReply().getClarification().getEodEntry();
-        EodClarificationAccessPolicy.requireCanRead(actor, entry);
+        EodClarificationAccessPolicy.requireCanRead(actor, entry, currentPieces(entry.getId()));
         return attachment;
     }
 
@@ -302,7 +341,8 @@ public class EodClarificationService {
     public EodClarificationStatusDto setStatus(Long entryId, String actingEmail, String status) {
         AppUser lead = requireUser(actingEmail);
         EodEntry entry = requireEntry(entryId);
-        EodClarificationAccessPolicy.requireCanOpenOrResolve(lead, entry);
+        List<EodProjectApproval> pieces = currentPieces(entryId);
+        EodClarificationAccessPolicy.requireCanOpenOrResolve(lead, entry, pieces);
 
         EodClarification clarification = clarificationRepository
                 .findByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)
@@ -333,16 +373,28 @@ public class EodClarificationService {
                     "/eod/history?highlight=" + entry.getId());
         }
 
-        return EodClarificationStatusDto.from(clarification);
+        return statusDto(clarification, lead, entry, pieces);
     }
 
+    /** Reviewer inbox: rounds where the viewer is a current piece approver / escalated-to PM, plus
+     *  rounds on entries whose frozen RM they are (visible read-only — see the repository query). */
     @Transactional(readOnly = true)
     public List<EodInboxItemDto> listForLead(String actingEmail, boolean open) {
         AppUser lead = requireUser(actingEmail);
         List<EodClarification> rows = open
-                ? clarificationRepository.findByEodEntry_ManagerIdAndStatusNotOrderByOpenedAtDesc(lead.getId(), EodClarification.Status.RESOLVED)
-                : clarificationRepository.findByEodEntry_ManagerIdAndStatusOrderByResolvedAtDesc(lead.getId(), EodClarification.Status.RESOLVED);
-        return enrich(rows, lead.getId());
+                ? clarificationRepository.findOpenForReviewer(lead.getId())
+                : clarificationRepository.findResolvedForReviewer(lead.getId());
+        return enrich(excludeOwnEntries(rows, lead.getId()), lead.getId());
+    }
+
+    /** A reviewer-side list must never contain the viewer's OWN EOD, whatever the query returned:
+     *  a user who is both employee and reviewer sees their own thread only in the employee view.
+     *  The repository queries already exclude it; this keeps the invariant enforced (and unit
+     *  testable) independent of them. */
+    private static List<EodClarification> excludeOwnEntries(List<EodClarification> rows, Long viewerId) {
+        return rows.stream()
+                .filter(c -> !c.getEodEntry().getEmployee().getId().equals(viewerId))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -361,10 +413,63 @@ public class EodClarificationService {
         List<EodClarification> rows = open
                 ? clarificationRepository.findOpenByPmId(pm.getId())
                 : clarificationRepository.findResolvedByPmId(pm.getId());
-        return enrich(rows, pm.getId());
+        return enrich(excludeOwnEntries(rows, pm.getId()), pm.getId());
     }
 
     // ── shared helpers ────────────────────────────────────────────────────────
+
+    /** Current-cycle approval pieces (superseded_at IS NULL) — the single source of truth for who
+     *  reviews this entry right now. */
+    private List<EodProjectApproval> currentPieces(Long entryId) {
+        return pieceRepository.findByEodEntryId(entryId);
+    }
+
+    private static boolean isOpenableStatus(EodEntry entry) {
+        return entry.getStatus() == EodEntry.Status.SUBMITTED
+                || entry.getStatus() == EodEntry.Status.PARTIALLY_APPROVED;
+    }
+
+    private static boolean canOpenNewRound(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
+        return isOpenableStatus(entry) && EodClarificationAccessPolicy.canReview(actor, entry, pieces);
+    }
+
+    private static EodClarificationStatusDto statusDto(EodClarification c, AppUser actor, EodEntry entry,
+                                                        List<EodProjectApproval> pieces) {
+        boolean open = c.isOpen();
+        return EodClarificationStatusDto.from(c,
+                !open && canOpenNewRound(actor, entry, pieces),
+                open && EodClarificationAccessPolicy.canReply(actor, entry, pieces),
+                // Resolving is a reviewer action: the owner can reply but never resolve.
+                open && EodClarificationAccessPolicy.canReview(actor, entry, pieces));
+    }
+
+    /** Who to ping when the employee replies: the approver and escalated-to PM of every PENDING
+     *  piece (de-duplicated, never the owner). Falls back to the snapshotted opener approver, then
+     *  the opener, so a reply is never silently dropped. */
+    private List<AppUser> reviewerRecipients(EodClarification clarification, EodEntry entry,
+                                              List<EodProjectApproval> pieces) {
+        Map<Long, AppUser> byId = new java.util.LinkedHashMap<>();
+        for (EodProjectApproval p : pieces) {
+            if (p.getStatus() != EodProjectApproval.Status.PENDING) continue;
+            if (p.getApprover() != null) byId.putIfAbsent(p.getApprover().getId(), p.getApprover());
+            if (p.getEscalatedTo() != null) byId.putIfAbsent(p.getEscalatedTo().getId(), p.getEscalatedTo());
+        }
+        byId.remove(entry.getEmployee().getId());
+        if (byId.isEmpty()) {
+            AppUser fallback = clarification.getOpenedByApprover() != null
+                    ? clarification.getOpenedByApprover() : clarification.getOpenedBy();
+            if (fallback != null && !fallback.getId().equals(entry.getEmployee().getId())) {
+                byId.put(fallback.getId(), fallback);
+            }
+        }
+        return new ArrayList<>(byId.values());
+    }
+
+    /** PMs work from /projects/eod-inbox; every other reviewer from /team/eod-inbox. */
+    private static String reviewerInboxLink(AppUser recipient, EodEntry entry) {
+        String base = recipient.getRole() == AppUser.Role.PM ? "/projects/eod-inbox" : "/team/eod-inbox";
+        return base + "?highlight=" + entry.getId();
+    }
 
     /** Batch-attaches each row's project/category names, last message, and the viewer's own
      *  read state (for the unread/bold indicator), then re-sorts by last activity (last reply's
@@ -424,6 +529,38 @@ public class EodClarificationService {
      *  EodAttachmentValidation — just against this feature's own EodClarificationReplyAttachment
      *  table instead of blocker_reply_attachment. */
     private EodClarificationReply saveReply(EodClarification clarification, AppUser sender, String message, List<MultipartFile> files) {
+        List<MultipartFile> attachments = validatedAttachments(message, files);
+        boolean hasMessage = message != null && !message.isBlank();
+        EodClarificationReply reply = new EodClarificationReply();
+        reply.setClarification(clarification);
+        reply.setSender(sender);
+        // message column is NOT NULL — an attachment-only reply stores empty string rather than null.
+        reply.setMessage(hasMessage ? message.trim() : "");
+        reply.setCreatedAt(OffsetDateTime.now());
+        EodClarificationReply saved = replyRepository.save(reply);
+
+        for (MultipartFile file : attachments) {
+            EodClarificationReplyAttachment attachment = new EodClarificationReplyAttachment();
+            attachment.setReply(saved);
+            attachment.setFileName(file.getOriginalFilename() != null ? file.getOriginalFilename() : "file");
+            attachment.setContentType(file.getContentType() != null ? file.getContentType() : "application/octet-stream");
+            attachment.setFileSize(file.getSize());
+            try {
+                attachment.setData(file.getBytes());
+            } catch (IOException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Could not read uploaded file");
+            }
+            attachment.setCreatedAt(OffsetDateTime.now());
+            attachmentRepository.save(attachment);
+        }
+
+        return saved;
+    }
+
+    /** Message-or-attachment rule, per-reply cap, and type / size / storage-cap checks — mirrors
+     *  BlockerConversationService.saveReply, reusing EodAttachmentValidation. Returns the non-empty
+     *  files. Pure validation: touches nothing, so it can run before a round is created. */
+    private List<MultipartFile> validatedAttachments(String message, List<MultipartFile> files) {
         List<MultipartFile> attachments = files == null ? List.of() : files.stream().filter(f -> !f.isEmpty()).toList();
         boolean hasMessage = message != null && !message.isBlank();
         if (!hasMessage && attachments.isEmpty()) {
@@ -447,32 +584,7 @@ public class EodClarificationService {
             }
             used += file.getSize();
         }
-
-        EodClarificationReply reply = new EodClarificationReply();
-        reply.setClarification(clarification);
-        reply.setSender(sender);
-        // message column is NOT NULL — an attachment-only reply (hasMessage false, caught above
-        // only when there's also no attachment) stores empty string rather than null.
-        reply.setMessage(hasMessage ? message.trim() : "");
-        reply.setCreatedAt(OffsetDateTime.now());
-        EodClarificationReply saved = replyRepository.save(reply);
-
-        for (MultipartFile file : attachments) {
-            EodClarificationReplyAttachment attachment = new EodClarificationReplyAttachment();
-            attachment.setReply(saved);
-            attachment.setFileName(file.getOriginalFilename() != null ? file.getOriginalFilename() : "file");
-            attachment.setContentType(file.getContentType() != null ? file.getContentType() : "application/octet-stream");
-            attachment.setFileSize(file.getSize());
-            try {
-                attachment.setData(file.getBytes());
-            } catch (IOException e) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Could not read uploaded file");
-            }
-            attachment.setCreatedAt(OffsetDateTime.now());
-            attachmentRepository.save(attachment);
-        }
-
-        return saved;
+        return attachments;
     }
 
     private List<EodClarificationAttachmentDto> attachmentsFor(Long replyId) {

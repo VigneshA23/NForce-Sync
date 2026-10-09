@@ -175,10 +175,15 @@ function GenericAttachmentView({ attachment, fetchAttachmentUrl, attachmentUrlQu
   );
 }
 
+const DEFAULT_ROLE_LABELS: Record<GenericThreadMessage['senderRole'], string> = { EMPLOYEE: 'Employee', TEAM_LEAD: 'Team Lead' };
+
 function GenericConversationMessage({
-  m, fetchAttachmentUrl, attachmentUrlQueryKey, currentUserId, onEdit, onDelete, locked,
+  m, fetchAttachmentUrl, attachmentUrlQueryKey, currentUserId, onEdit, onDelete, locked, roleLabels,
 }: {
   m: GenericThreadMessage;
+  /** Role text shown beside the sender's name. Defaults to Blockers' wording (Team Lead / Employee);
+   *  the clarification chat overrides the reviewing side to "Reviewer". */
+  roleLabels?: Record<GenericThreadMessage['senderRole'], string>;
   fetchAttachmentUrl: FetchAttachmentUrl;
   attachmentUrlQueryKey: AttachmentUrlQueryKey;
   /** Signed-in user's id — an action menu only ever shows Edit/Delete on that user's OWN
@@ -258,7 +263,7 @@ function GenericConversationMessage({
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--txt)' }}>
-            {m.senderName} <span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}>({isTeamLead ? 'Team Lead' : 'Employee'})</span>
+            {m.senderName} <span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}>({(roleLabels ?? DEFAULT_ROLE_LABELS)[m.senderRole]})</span>
           </span>
           <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>{date} {time}</span>
           <div style={{ marginLeft: 'auto' }}>
@@ -349,7 +354,7 @@ export function ThreadView({
   messages, isPending, replyToLabel, visibilityNote, isLocked, lockedMessage,
   onSend, isSending, fetchAttachmentUrl, attachmentUrlQueryKey,
   maxAttachmentsPerReply = MAX_ATTACHMENTS_PER_REPLY, hideComposer,
-  currentUserId, onEditMessage, onDeleteMessage,
+  currentUserId, onEditMessage, onDeleteMessage, emptyMessage, roleLabels,
 }: {
   messages: GenericThreadMessage[] | undefined;
   isPending: boolean;
@@ -374,6 +379,10 @@ export function ThreadView({
   currentUserId?: number;
   onEditMessage?: (replyId: number, message: string) => Promise<unknown>;
   onDeleteMessage?: (replyId: number) => Promise<unknown>;
+  /** Empty-list copy; defaults to "No messages yet." */
+  emptyMessage?: string;
+  /** Per-feature role wording for the sender label; omitted = Blockers' default. */
+  roleLabels?: Record<GenericThreadMessage['senderRole'], string>;
 }) {
   const { show: toast } = useToast();
   const [draft, setDraft] = useState('');
@@ -488,12 +497,13 @@ export function ThreadView({
         {isPending ? (
           <GlobalLoader fullScreen={false} compact label="Loading conversation..." />
         ) : (messages ?? []).length === 0 ? (
-          <div style={{ fontSize: 12.5, color: 'var(--txt-dim)' }}>No messages yet.</div>
+          <div style={{ fontSize: 12.5, color: 'var(--txt-dim)' }}>{emptyMessage ?? 'No messages yet.'}</div>
         ) : (
           (messages ?? []).map(m => (
             <GenericConversationMessage
               key={m.id} m={m} fetchAttachmentUrl={fetchAttachmentUrl} attachmentUrlQueryKey={attachmentUrlQueryKey}
               currentUserId={currentUserId} onEdit={onEditMessage} onDelete={onDeleteMessage} locked={isLocked}
+              roleLabels={roleLabels}
             />
           ))
         )}
@@ -714,13 +724,15 @@ export function ThreadView({
  * Thin adapter over the generic ThreadView above — this is what actually fetches/sends for
  * Blockers specifically.
  */
-export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote, range, isLocked }: {
+export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote, range, isLocked, readOnly }: {
   taskId: number;
   scope: ConversationScope;
   replyToLabel: string;
   visibilityNote: string;
   range?: DateRange;
   isLocked?: boolean;
+  /** Messages only — no reply box, no Edit / Delete (the Project Manager's view). Default off. */
+  readOnly?: boolean;
 }) {
   const { user } = useAuth();
   const { data: messages, isPending } = useBlockerThread(taskId, scope);
@@ -740,8 +752,9 @@ export function BlockerThreadView({ taskId, scope, replyToLabel, visibilityNote,
       fetchAttachmentUrl={id => fetchBlockerAttachmentUrl(scope, id)}
       attachmentUrlQueryKey={id => ['blocker-attachment-blob', scope, id]}
       currentUserId={user?.id}
-      onEditMessage={(replyId, message) => editReply.mutateAsync({ replyId, message })}
-      onDeleteMessage={replyId => deleteReply.mutateAsync(replyId)}
+      hideComposer={readOnly}
+      onEditMessage={readOnly ? undefined : (replyId, message) => editReply.mutateAsync({ replyId, message })}
+      onDeleteMessage={readOnly ? undefined : replyId => deleteReply.mutateAsync(replyId)}
     />
   );
 }
