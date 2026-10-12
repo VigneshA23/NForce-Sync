@@ -198,7 +198,7 @@ function MemberRow({ member, isLast, expanded, onToggle, onOpenApproval }: {
   );
 }
 
-// ── Blockers Today row ────────────────────────────────────────────────────────────
+// ── Blockers Needing Response row ────────────────────────────────────────────────────────────
 
 function BlockerRow({ b, isLast, flagged, onView }: {
   b: TeamBlockerDto; isLast: boolean; flagged: boolean; onView: () => void;
@@ -734,13 +734,13 @@ export default function TeamDashboard() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <Card style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--line)' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Blockers Today</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)' }}>Blockers Needing Response</div>
             </div>
             {blockersPending ? (
               <div style={{ padding: 16 }}><Skel h={60} /></div>
             ) : !blockers || blockers.length === 0 ? (
               <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>
-                No blockers reported.
+                No open blockers.
               </div>
             ) : (
               <>

@@ -65,12 +65,15 @@ function fmtLastReply(iso: string): string {
 // Mode-aware wording for the "Total Blockers" tile — independent implementation of the same
 // pattern used by PM Blockers' getBlockerRangeSubtitle, kept page-local per no-shared-component
 // scoping (this page has no equivalent "Average Open Duration" tile to share it with anyway).
+// An open (unresolved) blocker stays on the page from the day it was raised until it is resolved,
+// whatever date is selected, so the figure is "open as of the end of the window, plus whatever was
+// raised or resolved inside it" — never "blockers on that day".
 function totalBlockersCaption(mode: DateMode, from: string, to: string): string {
-  if (mode === 'today') return 'Across blockers today';
-  if (mode === 'yesterday') return `Across blockers yesterday, ${fmtShortDate(from)}`;
+  if (mode === 'today') return 'All open, plus raised or resolved today';
+  if (mode === 'yesterday') return `Open as of ${fmtShortDate(from)}, plus raised or resolved that day`;
   return from === to
-    ? `Across blockers on ${fmtShortDate(from)}`
-    : `Across blockers from ${fmtShortDate(from)} to ${fmtShortDate(to)}`;
+    ? `Open as of ${fmtShortDate(to)}, plus raised or resolved that day`
+    : `Open as of ${fmtShortDate(to)}, plus raised or resolved ${fmtShortDate(from)} to ${fmtShortDate(to)}`;
 }
 
 // ── KPI stat card (colored icon box, per reference — distinct from the neutral-box KpiCard) ──

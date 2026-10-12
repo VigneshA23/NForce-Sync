@@ -167,7 +167,7 @@ export function useTeamMemberStatuses(range: DateRange, live = false, teamLeadId
 }
 
 // `includeAcknowledged` defaults to false to match every existing caller (Team Dashboard's
-// "Open Blockers" KPI and "Blockers Today" widget both mean *unresolved* blockers) — only the
+// "Open Blockers" KPI and "Blockers Needing Response" widget both mean *unresolved, unacknowledged* blockers) — only the
 // Blockers page's own list passes true, since it needs to show acknowledged ones too.
 export function useTeamLeadBlockers(range: DateRange, live = false, includeAcknowledged = false, teamLeadId?: number | null) {
   return useQuery({
