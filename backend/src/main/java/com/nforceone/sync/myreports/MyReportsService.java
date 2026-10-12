@@ -104,11 +104,7 @@ public class MyReportsService {
 
     public List<ApprovalPieceDto> getPendingApprovals(String actingEmail) {
         AppUser actor = requireManager(actingEmail);
-        return pieceRepository.findByApproverIdAndApproverTypeAndStatus(
-                actor.getId(),
-                EodProjectApproval.ApproverType.REPORTING_MANAGER,
-                EodProjectApproval.Status.PENDING
-        ).stream().map(ApprovalPieceDto::from).toList();
+        return approvalPieceService.getPendingReportingManagerPieces(actor.getId());
     }
 
     public List<ApprovalPieceDto> getDecidedApprovals(String actingEmail, String statusName) {

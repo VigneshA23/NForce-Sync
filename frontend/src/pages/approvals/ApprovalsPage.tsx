@@ -514,7 +514,10 @@ function PieceCard({
             )}
             <span>·</span>
             <span>Submitted {fmtRelative(piece.frozenAt)}</span>
-            {decidedNote && <><span>·</span><span>{decidedNote}</span></>}
+            {!isPlainLog && (piece.taskLines?.length ?? 0) > 0 && (
+              <><span>·</span><span>{piece.taskLines.length} task{piece.taskLines.length !== 1 ? 's' : ''}</span></>
+            )}
+            {decidedNote &&<><span>·</span><span>{decidedNote}</span></>}
           </div>
 
           {/* Task table (PROJECT_GROUPED) */}

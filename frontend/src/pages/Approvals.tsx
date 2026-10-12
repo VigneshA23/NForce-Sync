@@ -240,7 +240,16 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
 
   const { data: entry } = useEodEntry(piece.eodEntryId);
   const projectTasks = (entry?.tasks ?? []).filter(t => t.projectId === piece.projectId);
-  const totalHours = projectTasks.reduce((s, t) => s + Number(t.hours ?? 0), 0);
+  // The piece itself carries its project's task lines (and, for a daily log, its line items), so
+  // the hours chip must not depend on the separate entry fetch above: until that resolves
+  // projectTasks is empty and the chip read "0h logged" for entries that clearly had hours.
+  const pieceTaskHours = (piece.taskLines ?? []).reduce((s, t) => s + Number(t.hours ?? 0), 0);
+  const totalHours = pieceTaskHours > 0
+    ? pieceTaskHours
+    : projectTasks.reduce((s, t) => s + Number(t.hours ?? 0), 0);
+  const plainLogHours = Number(piece.logTotalHours ?? 0) > 0
+    ? Number(piece.logTotalHours)
+    : (piece.logLines ?? []).reduce((s, l) => s + Number(l.hours ?? 0), 0);
 
   // The row's own status is fetched only while its menu is open (no poll per card) and wins over
   // the batched list once fresh; otherwise the batched list decides. An open round blocks EVERY
@@ -411,7 +420,7 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
           {/* Chips row — mirrors EntryRow's hours/status chip strip */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 9 }}>
             <Chip tone="neutral">
-              {hrs(piece.entryForm === 'PLAIN_LOG' ? (piece.logTotalHours ?? 0) : totalHours)}h logged
+              {hrs(piece.entryForm === 'PLAIN_LOG' ? plainLogHours : totalHours)}h logged
             </Chip>
             {blocked && (
               <span title={CLARIFICATION_BLOCKS_DECISION_REASON}>
