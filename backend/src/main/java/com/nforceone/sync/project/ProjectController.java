@@ -53,14 +53,14 @@ public class ProjectController {
         return projectService.create(request);
     }
 
-    /** Users assignable as a project's Team Lead — any active non-PM user. */
+    /** Users assignable as a project's Team Lead — active users with the Employee role only. */
     @GetMapping("/leads")
     @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public List<EmployeeRefDto> listAssignableLeads() {
         return projectService.listAssignableLeads();
     }
 
-    /** Users assignable as a project's overseeing PM — PM, Admin, and Super Admin accounts. */
+    /** Users assignable as a project's overseeing PM — active users with the PM role only. */
     @GetMapping("/managers")
     @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public List<EmployeeRefDto> listAssignableProjectManagers() {

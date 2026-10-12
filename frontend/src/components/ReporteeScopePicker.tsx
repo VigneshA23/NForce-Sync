@@ -14,7 +14,7 @@ import { listAssignableLeads } from '../api/projects';
  * for those, no new business logic lives here.
  *
  * role='PM'   → searchUsers({ role: 'PM' })           — PM accounts
- * role='LEAD' → /api/projects/leads (listAssignableLeads) — any active non-PM user who can lead
+ * role='LEAD' → /api/projects/leads (listAssignableLeads) — active Employee-role users who can lead
  */
 export function ReporteeScopePicker({ role, label, value, onChange }: {
   role: 'PM' | 'LEAD';

@@ -68,25 +68,27 @@ public class ProjectService {
     }
 
     /**
-     * Users assignable as a project's Team Lead: any active user except PM role.
-     * A PM cannot be a lead — they sit above the lead in the approval chain, so leading
-     * a project would put them on both sides of their own escalation.
+     * Users assignable as a project's Team Lead: active users with the EMPLOYEE role only.
+     * PM/ADMIN/SUPERADMIN cannot lead a project — a PM sits above the lead in the approval
+     * chain (leading would put them on both sides of their own escalation), and Admin/Super
+     * Admin are system roles, not delivery roles.
      */
     @Transactional(readOnly = true)
     public List<EmployeeRefDto> listAssignableLeads() {
         return appUserRepository
-                .findByRoleNotInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
-                        List.of(AppUser.Role.PM), AppUser.Status.ACTIVE)
+                .findByRoleAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
+                        AppUser.Role.EMPLOYEE, AppUser.Status.ACTIVE)
                 .stream()
                 .map(EmployeeRefDto::from)
                 .toList();
     }
 
-    /** Users assignable as a project's overseeing PM: any active user (any role). */
+    /** Users assignable as a project's overseeing PM: active users with the PM role only. */
     @Transactional(readOnly = true)
     public List<EmployeeRefDto> listAssignableProjectManagers() {
         return appUserRepository
-                .findByStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Status.ACTIVE)
+                .findByRoleAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
+                        AppUser.Role.PM, AppUser.Status.ACTIVE)
                 .stream()
                 .map(EmployeeRefDto::from)
                 .toList();
@@ -215,8 +217,10 @@ public class ProjectService {
     }
 
     /**
-     * Resolves the project's Team Lead. Any active non-PM user may lead a project (Phase 8a).
-     * Grandfathers an unchanged current holder so editing an unrelated field cannot force reassignment.
+     * Resolves the project's Team Lead. Only an active EMPLOYEE-role user may lead a project.
+     * Grandfathers an unchanged current holder so editing an unrelated field cannot force
+     * reassignment, and so a legacy/ineligible holder left over from before this rule does not
+     * break saving the rest of the form.
      */
     private AppUser resolveLead(Long leadId, AppUser currentHolder) {
         AppUser lead = appUserRepository.findById(leadId)
@@ -231,16 +235,18 @@ public class ProjectService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Team Lead must be an active user");
         }
-        if (lead.getRole() == AppUser.Role.PM) {
+        if (lead.getRole() != AppUser.Role.EMPLOYEE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "A user with the PM role cannot be assigned as Team Lead.");
+                    "Only a user with the Employee role can be assigned as Team Lead.");
         }
         return lead;
     }
 
     /**
-     * Resolves the overseeing Project Manager. Any active user may oversee a project.
-     * Grandfathers an unchanged current holder so an unrelated edit cannot silently move oversight.
+     * Resolves the overseeing Project Manager. Only an active PM-role user may oversee a project.
+     * Grandfathers an unchanged current holder so an unrelated edit cannot silently move oversight,
+     * and so a legacy/ineligible holder left over from before this rule does not break saving the
+     * rest of the form.
      */
     private AppUser resolvePm(Long pmId, AppUser currentHolder) {
         AppUser manager = appUserRepository.findById(pmId)
@@ -253,6 +259,10 @@ public class ProjectService {
         if (manager.getStatus() != AppUser.Status.ACTIVE || manager.getDeletedAt() != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Project Manager must be an active user");
+        }
+        if (manager.getRole() != AppUser.Role.PM) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Only a user with the Project Manager role can be assigned as Project Manager.");
         }
         return manager;
     }
