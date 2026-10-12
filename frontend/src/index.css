@@ -993,12 +993,12 @@ html[data-high-contrast="true"][data-status-cues="true"][data-theme="light"] {
 }
 
 /* ─── Daily Log form (Submit EOD for plain-log accounts) ────────── */
-/* One column, left-aligned (the title sits at the same left edge as every other page), capped at a
+/* One column, centered with a modest gutter either side (title and fields share the same column), capped at a
    comfortable width (1280px) so inputs never stretch across a 2560px screen. There is no side panel: the
    submission window, approval status and "how it works" live in the header area (see dailyLogParts.tsx).
    The fields sit in a container-query context, so the Next-Day Plan / Remarks and meta-row stacking follow the
    form's OWN width — correct with the sidebar open or as an off-canvas drawer. Tokens only; no new colours. */
-.nf-dl-page { max-width: 1280px; min-width: 0; }
+.nf-dl-page { max-width: 1280px; min-width: 0; margin: 0 auto; }
 .nf-dl-page select, .nf-dl-page input, .nf-dl-page textarea { min-width: 0; max-width: 100%; }
 
 .nf-dl-fields { container-type: inline-size; container-name: nf-dl; min-width: 0; }

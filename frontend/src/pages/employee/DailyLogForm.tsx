@@ -393,8 +393,8 @@ export default function DailyLogForm() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    // One left-aligned column capped for reading width (the title sits at the same left edge as every other
-    // page); see the .nf-dl-* rules in index.css.
+    // One centered column capped for reading width (equal gutters left and right on wide screens; the title and
+    // fields share the column); see the .nf-dl-* rules in index.css.
     <div className="nf-dl-page">
 
       {/* ── Header (SubmitEOD PageHeader style) ── */}
