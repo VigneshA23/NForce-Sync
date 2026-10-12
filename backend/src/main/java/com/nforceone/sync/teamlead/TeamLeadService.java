@@ -313,6 +313,14 @@ public class TeamLeadService {
                 : taskRepository.findBlockedByEmployeeIdsInAndDateRange(memberIds, from, to);
     }
 
+    /** A lead's OWN blockers on projects he leads, for his frozen reporting manager. */
+    private BlockerScope reportingManagerBlockerScope(Long managerId) {
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        return (from, to) -> taskRepository.findBlockedForReportingManager(managerId, from, to,
+                from.atStartOfDay(zone).toOffsetDateTime(),
+                to.plusDays(1).atStartOfDay(zone).toOffsetDateTime());
+    }
+
     private BlockerScope leadBlockerScope(Long leadId) {
         java.time.ZoneId zone = java.time.ZoneId.systemDefault();
         return (from, to) -> taskRepository.findBlockedForProjectLead(leadId, from, to,
@@ -338,6 +346,26 @@ public class TeamLeadService {
                 .toList();
     }
 
+    /** The reporting manager's Blockers page: his reports' own blockers on projects they lead.
+     *  The scope IS the authorization — a different manager simply gets an empty list. */
+    @Transactional(readOnly = true)
+    public List<TeamBlockerDto> getBlockersForReportingManager(LocalDate from, LocalDate to, Long managerId,
+                                                               boolean includeAcknowledged) {
+        return computeBlockers(reportingManagerBlockerScope(managerId), from, to, includeAcknowledged);
+    }
+
+    /** Single blocker for the reporting manager's page (a notification deep link can point outside
+     *  the selected date range). 403 unless it is one of this manager's reports' own-lead blockers. */
+    @Transactional(readOnly = true)
+    public TeamBlockerDto getBlockerByIdForReportingManager(Long taskId, AppUser manager) {
+        EodTask task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
+        if (!isReportingManagerOfOwnLeadBlocker(task, manager)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        return TeamBlockerDto.from(task, replyRepository.findByTaskIdOrderByCreatedAtAsc(taskId));
+    }
+
     /** Fetches a single blocker by task id, regardless of the caller's selected date range —
      *  backs a BLOCKER_REPLY notification's deep link (`?highlight=<id>`), which must resolve
      *  even when that blocker falls outside whatever range the Blockers page currently has. */
@@ -354,14 +382,12 @@ public class TeamLeadService {
 
     @Transactional
     public TeamBlockerDto acknowledgeBlocker(Long taskId, String actingEmail) {
-        AppUser lead = requireLead(actingEmail);
+        AppUser lead = requireBlockerActor(actingEmail);
         PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
 
-        if (!isProjectLeadOf(task, lead)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
+        requireCanManageBlocker(task, lead);
 
         task.setAcknowledgedAt(OffsetDateTime.now());
         task.setAcknowledgedBy(lead);
@@ -375,14 +401,12 @@ public class TeamLeadService {
      *  as not-open without any change to their own logic. */
     @Transactional
     public TeamBlockerDto setBlockerStatus(Long taskId, String actingEmail, BlockerStatusRequest body) {
-        AppUser lead = requireLead(actingEmail);
+        AppUser lead = requireBlockerActor(actingEmail);
         PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
 
-        if (!isProjectLeadOf(task, lead)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
+        requireCanManageBlocker(task, lead);
 
         // Resolved is a terminal state — reject any further status change (including via a
         // direct API call bypassing the UI's disabled control) rather than allowing it to be
@@ -607,6 +631,48 @@ public class TeamLeadService {
         return userRepository.findByManagerId(managerId).stream()
                 .filter(u -> u.getStatus() == AppUser.Status.ACTIVE && u.getDeletedAt() == null)
                 .toList();
+    }
+
+    /**
+     * Who may ACKNOWLEDGE or RESOLVE a blocker — stated explicitly, not inherited from the
+     * reviewer-side rules. Exactly two cases:
+     *   1. the lead of the project the blocker was raised on (never on their own blocker), or
+     *   2. the entry's frozen reporting manager, but ONLY for a blocker its author raised on a project
+     *      the author himself leads — the one case no other lead covers.
+     * An ordinary project-lead blocker therefore stays with that project's lead alone; a reporting
+     * manager who is not also that project's lead cannot acknowledge or resolve it.
+     */
+    private void requireCanManageBlocker(EodTask task, AppUser actor) {
+        if (isProjectLeadOf(task, actor) || isReportingManagerOfOwnLeadBlocker(task, actor)) return;
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+    }
+
+    /** Frozen manager of the entry, on a blocker whose author leads the blocker's own project. */
+    private boolean isReportingManagerOfOwnLeadBlocker(EodTask task, AppUser actor) {
+        var entry = task.getEodEntry();
+        var project = task.getProject();
+        Long authorId = entry.getEmployee().getId();
+        return entry.getManagerId() != null
+                && entry.getManagerId().equals(actor.getId())
+                && !authorId.equals(actor.getId())
+                && project != null
+                && project.getLead() != null
+                && project.getLead().getId().equals(authorId);
+    }
+
+    /** The acting user for a blocker write: an active project lead (Team Lead page) or someone with
+     *  direct reports (reporting manager page). Whether they may touch THIS blocker is decided per
+     *  task by requireCanManageBlocker. */
+    private AppUser requireBlockerActor(String email) {
+        AppUser actor = userRepository.findByEmailAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
+        if (actor.getRole() == AppUser.Role.SUPERADMIN) return actor;
+        boolean isLead = projectRepository.existsByLeadIdAndStatus(actor.getId(), Project.Status.ACTIVE);
+        if (!isLead && !userRepository.existsByManagerIdAndDeletedAtIsNull(actor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        return actor;
     }
 
     /** A blocker belongs to the lead of the project it was raised on — the same test

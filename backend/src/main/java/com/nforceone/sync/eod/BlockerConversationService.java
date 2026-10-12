@@ -115,10 +115,18 @@ public class BlockerConversationService {
         taskRepository.save(task);
 
         Long leadId = task.getEodEntry().getManagerId();
-        notificationService.send(leadId, "BLOCKER_REPLY",
-                "New reply on a blocker",
-                employee.getFullName() + " replied to their blocker: \"" + blockerLabel(task) + "\"",
-                "/team/blockers?highlight=" + task.getId());
+        // A lead's own blocker on a project he leads is handled by his reporting manager on the
+        // My Reporting Team > Blockers page; every other blocker keeps the Team Blockers link.
+        com.nforceone.sync.project.Project project = task.getProject();
+        boolean ownLeadBlocker = project != null && project.getLead() != null
+                && project.getLead().getId().equals(employee.getId());
+        String link = (ownLeadBlocker ? "/my-reports/blockers" : "/team/blockers") + "?highlight=" + task.getId();
+        if (leadId != null) {
+            notificationService.send(leadId, "BLOCKER_REPLY",
+                    "New reply on a blocker",
+                    employee.getFullName() + " replied to their blocker: \"" + blockerLabel(task) + "\"",
+                    link);
+        }
 
         return BlockerReplyDto.from(saved, task, attachmentsFor(saved.getId()));
     }
@@ -303,6 +311,14 @@ public class BlockerConversationService {
     // Now: frozen RM, the project's lead, and the project's PM are all allowed.
     private void requireLeadOwnsTask(EodTask task, AppUser actor) {
         Long actorId = actor.getId();
+        // Nobody reviews their OWN blocker, whatever else they are (a project lead raising a blocker on
+        // his own project is handled by his reporting manager). The owner uses the employee-side
+        // endpoints; this covers reading the thread and attachments and, through requireCanWriteAsLead,
+        // posting / editing / deleting replies.
+        if (actorId.equals(task.getEodEntry().getEmployee().getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You cannot act as the reviewer on your own blocker");
+        }
         if (actorId.equals(task.getEodEntry().getManagerId())) return;
         com.nforceone.sync.project.Project project = task.getProject();
         if (project != null) {

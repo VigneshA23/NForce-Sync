@@ -76,6 +76,35 @@ public class MyReportsController {
         return myReportsService.reject(pieceId, actingEmail(), request.comment());
     }
 
+    // Blockers raised by direct reports who lead the project they raised them on. Scoped to the
+    // entry's frozen manager in the query; the thread itself is read and replied to through the
+    // shared /team-lead/blockers/{id}/replies endpoints, which already authorise the frozen manager.
+    @GetMapping("/blockers")
+    public List<com.nforceone.sync.teamlead.dto.TeamBlockerDto> getBlockers(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "false") boolean includeAcknowledged) {
+        validateRange(from, to);
+        return myReportsService.getBlockers(from, to, includeAcknowledged, actingEmail());
+    }
+
+    @GetMapping("/blockers/{taskId}")
+    public com.nforceone.sync.teamlead.dto.TeamBlockerDto getBlocker(@PathVariable Long taskId) {
+        return myReportsService.getBlocker(taskId, actingEmail());
+    }
+
+    @PatchMapping("/blockers/{taskId}/acknowledge")
+    public com.nforceone.sync.teamlead.dto.TeamBlockerDto acknowledgeBlocker(@PathVariable Long taskId) {
+        return myReportsService.acknowledgeBlocker(taskId, actingEmail());
+    }
+
+    @PatchMapping("/blockers/{taskId}/status")
+    public com.nforceone.sync.teamlead.dto.TeamBlockerDto setBlockerStatus(
+            @PathVariable Long taskId,
+            @RequestBody com.nforceone.sync.teamlead.dto.BlockerStatusRequest body) {
+        return myReportsService.setBlockerStatus(taskId, actingEmail(), body);
+    }
+
     private void validateRange(LocalDate from, LocalDate to) {
         if (from.isAfter(to)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "'from' must not be after 'to'");

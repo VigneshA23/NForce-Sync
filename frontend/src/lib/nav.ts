@@ -224,6 +224,9 @@ const MY_REPORTS_SECTIONS: RoleNav = [
       { key: 'rm-eod-status',  label: 'Team EOD Status',       path: '/my-reports/eod-status',  icon: ClipboardList },
       { key: 'rm-utilization', label: 'Team Utilization',      path: '/my-reports/utilization', icon: Activity },
       { key: 'rm-approvals',   label: 'Pending Approvals',     path: '/my-reports/approvals',   icon: ClipboardCheck },
+      // A lead's own blockers on projects he leads are handled by his reporting manager here; they are
+      // excluded from Team Blockers. Shown to everyone with direct reports, leads included.
+      { key: 'rm-blockers',    label: 'Blockers',              path: '/my-reports/blockers',    icon: AlertOctagon },
       // Reporting-manager threads (the frozen RM sees them read-only unless also a reviewer) live in
       // the same reviewer list as Team Inbox, so this is the same page. Shown only to an RM who is
       // NOT a project lead — a lead already reaches it as Team Inbox, and a second entry would just

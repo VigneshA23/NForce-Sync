@@ -56,3 +56,27 @@ describe('inbox nav items by capability', () => {
     expect(inboxItems('employee', c).map(i => i.path)).toEqual(['/employee/eod-inbox']);
   });
 });
+
+describe('reporting manager Blockers nav item', () => {
+  const rmItems = (c: ServerUserCapabilities) => getNavSections('employee', c)
+    .flatMap(sec => sec.items.flatMap(e => isNavGroup(e) ? e.children : [e]))
+    .filter(i => i.key === 'rm-blockers');
+
+  it('shows for an RM who is not a lead, on /my-reports/blockers', () => {
+    const c = caps({ hasDirectReports: true });
+    expect(rmItems(c).map(i => i.path)).toEqual(['/my-reports/blockers']);
+    expect(getNavPaths('employee', c)).toContain('/my-reports/blockers');
+  });
+
+  it('also shows for an RM who is a lead, alongside Team Blockers — which is a different page', () => {
+    const c = caps({ leadsProjectIds: [1], hasDirectReports: true });
+    expect(rmItems(c)).toHaveLength(1);
+    expect(getNavPaths('employee', c)).toEqual(expect.arrayContaining(['/my-reports/blockers', '/team/blockers']));
+  });
+
+  it('does not show for someone with no direct reports, and the path is not permitted', () => {
+    const c = caps({ leadsProjectIds: [1] });
+    expect(rmItems(c)).toHaveLength(0);
+    expect(getNavPaths('employee', c)).not.toContain('/my-reports/blockers');
+  });
+});

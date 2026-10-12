@@ -247,7 +247,7 @@ function DetailPanel({ b, onClose }: { b: BlockedTask; onClose: () => void }) {
           </InfoField>
           {b.acknowledged && (
             <InfoField icon={<Clock size={14} aria-hidden="true" />} label="Replied By">
-              {b.acknowledgedByName ?? 'Your Team Lead'}
+              {b.acknowledgedByName ?? 'Your reviewer'}
             </InfoField>
           )}
         </div>
@@ -264,8 +264,8 @@ function DetailPanel({ b, onClose }: { b: BlockedTask; onClose: () => void }) {
           <BlockerThreadView
             taskId={b.taskId}
             scope="employee"
-            replyToLabel="Reply to your Team Lead"
-            visibilityNote="Replies are visible to your Team Lead"
+            replyToLabel="Reply to your reviewer"
+            visibilityNote="Replies are visible to your reviewer"
             isLocked={b.status === 'RESOLVED'}
           />
         </div>
@@ -394,7 +394,7 @@ export default function MyBlockers() {
               My Blockers
             </h1>
             <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-              Blockers you've reported and your Team Lead's replies.
+              Blockers you've reported and your reviewer's replies.
             </p>
           </div>
           <DateFilterButton
@@ -406,8 +406,8 @@ export default function MyBlockers() {
         {/* KPI row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
           <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={total} caption="In the selected range" accent="var(--warn)" />
-          <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={needsResponse} caption="No reply from Team Lead" accent="var(--risk)" />
-          <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Team Lead Replied" value={acknowledgedCount} caption="Awaiting your follow-up" accent="var(--info)" />
+          <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={needsResponse} caption="No reply from your reviewer" accent="var(--risk)" />
+          <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Reviewer Replied" value={acknowledgedCount} caption="Awaiting your follow-up" accent="var(--info)" />
         </div>
 
         {/* Filter bar */}

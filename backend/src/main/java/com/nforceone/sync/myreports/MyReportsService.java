@@ -124,6 +124,30 @@ public class MyReportsService {
         return approvalPieceService.reject(pieceId, actingEmail, comment);
     }
 
+    // ── Reporting Manager blockers (a lead's own blockers on projects he leads) ─────────────
+
+    public List<com.nforceone.sync.teamlead.dto.TeamBlockerDto> getBlockers(
+            LocalDate from, LocalDate to, boolean includeAcknowledged, String actingEmail) {
+        AppUser actor = requireManager(actingEmail);
+        return teamLeadService.getBlockersForReportingManager(from, to, actor.getId(), includeAcknowledged);
+    }
+
+    public com.nforceone.sync.teamlead.dto.TeamBlockerDto getBlocker(Long taskId, String actingEmail) {
+        AppUser actor = requireManager(actingEmail);
+        return teamLeadService.getBlockerByIdForReportingManager(taskId, actor);
+    }
+
+    public com.nforceone.sync.teamlead.dto.TeamBlockerDto acknowledgeBlocker(Long taskId, String actingEmail) {
+        requireManager(actingEmail);
+        return teamLeadService.acknowledgeBlocker(taskId, actingEmail);
+    }
+
+    public com.nforceone.sync.teamlead.dto.TeamBlockerDto setBlockerStatus(
+            Long taskId, String actingEmail, com.nforceone.sync.teamlead.dto.BlockerStatusRequest body) {
+        requireManager(actingEmail);
+        return teamLeadService.setBlockerStatus(taskId, actingEmail, body);
+    }
+
     private AppUser requireManager(String email) {
         AppUser actor = userRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResponseStatusException(

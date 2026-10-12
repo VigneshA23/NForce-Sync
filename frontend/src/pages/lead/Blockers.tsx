@@ -13,7 +13,7 @@ import { ConfirmModal } from '../../components/ConfirmModal';
 import { Pagination } from '../../components/Pagination';
 import { DateFilterButton, fmtShortDate, type DateFilterMode as DateMode } from '../../components/BlockerDateFilterButton';
 import {
-  useTeamLeadBlockers, useTeamLeadBlocker, useSetBlockerStatus, type TeamBlockerDto, type DateRange,
+  useTeamLeadBlockers, useTeamLeadBlocker, useSetBlockerStatus, type TeamBlockerDto, type DateRange, type BlockersVariant,
 } from '../../api/teamLead';
 import { toLocalISODate } from '../../lib/date';
 import { readStoredDateFilter, resolveBlockersDateFilter, writeStoredDateFilter } from '../../lib/blockersDateFilter';
@@ -290,9 +290,9 @@ function InfoField({ icon, label, children }: { icon: React.ReactNode; label: st
   );
 }
 
-function DetailPanel({ b, range, onClose, readOnly = false }: { b: TeamBlockerDto; range: DateRange; onClose: () => void; readOnly?: boolean }) {
+function DetailPanel({ b, range, onClose, readOnly = false, variant = 'lead' }: { b: TeamBlockerDto; range: DateRange; onClose: () => void; readOnly?: boolean; variant?: BlockersVariant }) {
   const { date: reportedDate, time: reportedTime } = fmtDateTimeParts(b.submittedAt ?? `${b.entryDate}T09:00:00`);
-  const setStatus = useSetBlockerStatus(range);
+  const setStatus = useSetBlockerStatus(range, variant);
   const [confirmResolve, setConfirmResolve] = useState(false);
 
   return (
@@ -384,7 +384,7 @@ function DetailPanel({ b, range, onClose, readOnly = false }: { b: TeamBlockerDt
             scope="lead"
             range={range}
             replyToLabel={`Reply to ${b.employeeName}`}
-            visibilityNote={`Replies are visible to ${b.employeeName} and other team leads`}
+            visibilityNote={variant === 'rm' ? `Replies are visible to ${b.employeeName}` : `Replies are visible to ${b.employeeName} and other team leads`}
             isLocked={b.status === 'RESOLVED'}
           />
         </div>
@@ -417,9 +417,13 @@ const PAGE_SIZE = 8;
 
 // ── main ───────────────────────────────────────────────────────────────────────────
 
-export default function Blockers() {
+/** The Team Lead's Blockers page, also used (variant="rm") by a reporting manager for his reports' own
+ *  blockers on projects they lead — same table, cards, filters and conversation, different data source
+ *  and wording. */
+export default function Blockers({ variant = 'lead' }: { variant?: BlockersVariant } = {}) {
   const { user } = useAuth();
-  const isSuperAdmin = user!.role === 'superadmin';
+  const isRm = variant === 'rm';
+  const isSuperAdmin = user!.role === 'superadmin' && !isRm;
   const [teamLeadId, setTeamLeadId] = useState<number | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const highlightParam = searchParams.get('highlight');
@@ -445,7 +449,7 @@ export default function Blockers() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { data: blockers, isPending, isFetching, isError, refetch } = useTeamLeadBlockers(range, isToday, true, teamLeadId);
+  const { data: blockers, isPending, isFetching, isError, refetch } = useTeamLeadBlockers(range, isToday, true, teamLeadId, variant);
 
   // "Today" live-polls in the background (see useTeamLeadBlockers' refetchInterval), so raw
   // isFetching can't drive the date-filter loading UI directly — every silent poll would flip
@@ -511,7 +515,7 @@ export default function Blockers() {
   // The selected blocker can fall outside the currently selected date range (e.g. arriving via
   // a notification's ?highlight= link) — fetch it directly rather than showing an empty panel.
   const needsFallback = selectedTaskId != null && blockers != null && matchedBlocker == null;
-  const { data: fallbackBlocker } = useTeamLeadBlocker(needsFallback ? selectedTaskId : undefined);
+  const { data: fallbackBlocker } = useTeamLeadBlocker(needsFallback ? selectedTaskId : undefined, variant);
   const selectedBlocker = matchedBlocker ?? fallbackBlocker ?? null;
 
   // Once the highlighted blocker's data resolves, jump the date filter to the day it was
@@ -584,7 +588,9 @@ export default function Blockers() {
               Blockers
             </h1>
             <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-              View and respond to blockers raised by your team.
+              {isRm
+                ? 'Blockers raised by your direct reports on projects they lead. As their reporting manager, you respond.'
+                : 'View and respond to blockers raised by your team.'}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -616,9 +622,9 @@ export default function Blockers() {
         {/* KPI row */}
         <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 16 }}>
           <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={total} caption={totalBlockersCaption(dateMode, range.from, range.to)} accent="var(--warn)" loading={isApplyingDateFilter} />
-          <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={needsResponse} caption="No reply from Team Lead" accent="var(--risk)" loading={isApplyingDateFilter} />
-          <StatCard icon={<Users size={18} aria-hidden="true" />} label="Acknowledged" value={acknowledgedCount} caption="Replied by Team Lead" accent="var(--info)" loading={isApplyingDateFilter} />
-          <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Resolved" value={resolvedCount} caption="Marked resolved by Team Lead" accent="var(--ok)" loading={isApplyingDateFilter} />
+          <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={needsResponse} caption={isRm ? 'Awaiting your reply' : 'No reply from Team Lead'} accent="var(--risk)" loading={isApplyingDateFilter} />
+          <StatCard icon={<Users size={18} aria-hidden="true" />} label="Acknowledged" value={acknowledgedCount} caption={isRm ? 'You have replied' : 'Replied by Team Lead'} accent="var(--info)" loading={isApplyingDateFilter} />
+          <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Resolved" value={resolvedCount} caption={isRm ? 'Marked resolved' : 'Marked resolved by Team Lead'} accent="var(--ok)" loading={isApplyingDateFilter} />
         </div>
 
         {/* Filter bar */}
@@ -730,7 +736,7 @@ export default function Blockers() {
             ))
           ) : pageItems.length === 0 ? (
             <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>
-              No blockers match these filters.
+              {isRm ? 'No blockers from your direct reports match these filters.' : 'No blockers match these filters.'}
             </div>
           ) : view === 'list' ? (
             pageItems.map((b, i) => (
@@ -769,7 +775,7 @@ export default function Blockers() {
         // rather than butting up against it — DetailPanel's own maxHeight (100vh - 88px) leaves
         // the matching 16px of breathing room below.
         <div style={{ position: 'sticky', top: 72 }}>
-          <DetailPanel b={selectedBlocker} range={range} onClose={() => setSelectedTaskId(null)} readOnly={isSuperAdmin} />
+          <DetailPanel b={selectedBlocker} range={range} onClose={() => setSelectedTaskId(null)} readOnly={isSuperAdmin} variant={variant} />
         </div>
       )}
     </div>
