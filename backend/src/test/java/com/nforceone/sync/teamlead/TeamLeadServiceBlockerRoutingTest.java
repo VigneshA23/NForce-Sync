@@ -76,7 +76,7 @@ class TeamLeadServiceBlockerRoutingTest {
         // actionRepo, designationRepo, replyRepo, notificationService, allocationRepo, projectRepo, executor
         service = new TeamLeadService(userRepository, null, taskRepository, holidayRepository, configRepository, utilizationService,
                 null, null, replyRepository, notificationService, allocationRepository, projectRepository,
-                (Executor) Runnable::run);
+                new LeadTeamPolicy(allocationRepository, projectRepository, null), (Executor) Runnable::run);
 
         lead      = user(1L, "Vignesh Lead");
         otherLead = user(2L, "Other Lead");

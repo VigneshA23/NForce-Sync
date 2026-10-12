@@ -541,7 +541,26 @@ public class EodService {
             entries = entryRepository.findByEmployeeIdOrderByEntryDateDesc(targetId);
         }
 
+        // A lead reading another employee's list sees only the entries he may read, scoped to his projects.
+        java.util.Set<Long> leadScopedIds = new java.util.HashSet<>();
+        if (!targetId.equals(actor.getId())) {
+            List<EodEntry> readable = new java.util.ArrayList<>();
+            for (EodEntry e : entries) {
+                EodAccessPolicy.AccessLevel level = accessPolicy.accessLevel(actor, e);
+                if (level == EodAccessPolicy.AccessLevel.NONE) continue;
+                if (level == EodAccessPolicy.AccessLevel.LEAD_SCOPED) leadScopedIds.add(e.getId());
+                readable.add(e);
+            }
+            entries = readable;
+        }
+
         List<EodEntryDto> dtos = mapWithBatchedComments(entries);
+        if (!leadScopedIds.isEmpty()) {
+            java.util.Set<Long> led = leadAccess.ledProjectIds(actor.getId());
+            dtos = dtos.stream()
+                    .map(d -> d.id() != null && leadScopedIds.contains(d.id()) ? d.scopedToProjects(led) : d)
+                    .toList();
+        }
         if (!includeMissing) return dtos;
 
         AppUser employee = requireUserById(targetId);
@@ -671,7 +690,7 @@ public class EodService {
                 null, null, null, List.of(), List.of(),
                 null, null, null, null, null, null, null, null, null, null,
                 // PLAIN_LOG fields — synthetic rows are always PROJECT_GROUPED context
-                EodEntry.EntryForm.PROJECT_GROUPED.name(), null, null, null, null, null, List.of(), false);
+                EodEntry.EntryForm.PROJECT_GROUPED.name(), null, null, null, null, null, List.of(), false, null);
     }
 
     @Transactional(readOnly = true)
@@ -679,11 +698,16 @@ public class EodService {
         AppUser actor = requireUserByEmail(actingEmail);
         EodEntry entry = requireEntryById(entryId);
 
-        if (!canReadEntry(actor, entry)) {
+        EodAccessPolicy.AccessLevel level = accessPolicy.accessLevel(actor, entry);
+        if (level == EodAccessPolicy.AccessLevel.NONE) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Access denied to this EOD entry");
         }
-        return toDetailDto(entry);
+        EodEntryDto dto = toDetailDto(entry);
+        // A Team Lead sees only the tasks on his own projects plus one aggregate for the rest.
+        return level == EodAccessPolicy.AccessLevel.LEAD_SCOPED
+                ? dto.scopedToProjects(leadAccess.ledProjectIds(actor.getId()))
+                : dto;
     }
 
     /**

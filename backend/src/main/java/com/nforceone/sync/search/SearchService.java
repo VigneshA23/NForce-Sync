@@ -20,16 +20,16 @@ public class SearchService {
 
     private final AppUserRepository    userRepository;
     private final ProjectRepository    projectRepository;
-    private final AllocationRepository allocationRepository;
+    private final com.nforceone.sync.teamlead.LeadTeamPolicy leadTeamPolicy;
     private final LeadAccessService    leadAccess;
 
     public SearchService(AppUserRepository userRepository,
                          ProjectRepository projectRepository,
-                         AllocationRepository allocationRepository,
+                         com.nforceone.sync.teamlead.LeadTeamPolicy leadTeamPolicy,
                          LeadAccessService leadAccess) {
         this.userRepository    = userRepository;
         this.projectRepository = projectRepository;
-        this.allocationRepository = allocationRepository;
+        this.leadTeamPolicy = leadTeamPolicy;
         this.leadAccess        = leadAccess;
     }
 
@@ -60,7 +60,7 @@ public class SearchService {
                     .toList();
             case EMPLOYEE -> {
                 if (leadAccess.leadsAnyProject(actor.getId())) {
-                    yield allocationRepository.findActiveMembersByProjectLead(actor.getId(), LocalDate.now())
+                    yield leadTeamPolicy.teamMembers(actor.getId())
                             .stream()
                             .filter(u -> u.getDeletedAt() == null && matchesUser(u, term))
                             .limit(5)

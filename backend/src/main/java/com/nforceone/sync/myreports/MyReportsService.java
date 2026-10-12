@@ -30,13 +30,16 @@ public class MyReportsService {
     private final EodProjectApprovalRepository pieceRepository;
     private final ApprovalPieceService approvalPieceService;
     private final EodService eodService;
+    private final com.nforceone.sync.eod.EodClarificationService clarificationService;
 
     public MyReportsService(AppUserRepository userRepository,
                              TeamLeadService teamLeadService,
                              ReportingScopeService reportingScopeService,
                              EodProjectApprovalRepository pieceRepository,
                              ApprovalPieceService approvalPieceService,
-                             EodService eodService) {
+                             EodService eodService,
+                             com.nforceone.sync.eod.EodClarificationService clarificationService) {
+        this.clarificationService = clarificationService;
         this.eodService = eodService;
         this.userRepository = userRepository;
         this.teamLeadService = teamLeadService;
@@ -122,6 +125,13 @@ public class MyReportsService {
     public ApprovalPieceDto reject(Long pieceId, String actingEmail, String comment) {
         requireManager(actingEmail);
         return approvalPieceService.reject(pieceId, actingEmail, comment);
+    }
+
+    // ── Reporting Manager EOD Inbox (clarification threads on entries whose frozen manager is me) ──
+
+    public List<com.nforceone.sync.eod.dto.EodInboxItemDto> getEodInbox(boolean open, String actingEmail) {
+        requireManager(actingEmail);
+        return clarificationService.listForReportingManager(actingEmail, open);
     }
 
     // ── Reporting Manager blockers (a lead's own blockers on projects he leads) ─────────────

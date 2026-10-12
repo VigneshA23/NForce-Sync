@@ -51,7 +51,7 @@ class UtilizationSnapshotTest {
     void setUp() {
         service = new UtilizationService(
                 entryRepository, userRepository, snapshotRepository,
-                holidayRepository, allocationRepository, pieceRepository);
+                holidayRepository, new com.nforceone.sync.teamlead.LeadTeamPolicy(allocationRepository, null, pieceRepository), pieceRepository);
         when(holidayRepository.existsByHolidayDate(DATE)).thenReturn(false);
         when(snapshotRepository.findByEmployeeIdAndSnapshotDate(EMP_ID, DATE))
                 .thenReturn(Optional.empty());

@@ -173,6 +173,25 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
     List<EodEntry> findByApproverPieceStatus(@Param("approverId") Long approverId,
                                               @Param("status") com.nforceone.sync.approval2.EodProjectApproval.Status status);
 
+    // Team Lead Approved/Rejected tabs: entries where the viewer decided a LEAD-type piece (a project he
+    // leads) — NOT reporting-manager or PM pieces, which belong to the My Reporting Team / PM pages.
+    @Query("""
+        SELECT DISTINCT e FROM EodEntry e
+        JOIN FETCH e.employee emp
+        LEFT JOIN FETCH e.tasks t
+        LEFT JOIN FETCH t.project
+        LEFT JOIN FETCH t.taskCategory
+        WHERE EXISTS (
+            SELECT 1 FROM EodProjectApproval p
+            WHERE p.eodEntry = e AND p.approver.id = :approverId
+            AND p.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
+            AND p.status = :status AND p.supersededAt IS NULL
+        )
+        ORDER BY e.entryDate DESC
+        """)
+    List<EodEntry> findByLeadApproverPieceStatus(@Param("approverId") Long approverId,
+                                                  @Param("status") com.nforceone.sync.approval2.EodProjectApproval.Status status);
+
     /**
      * Time-adjustment MINUTES spent inside a date window, for the monthly budget check.
      *

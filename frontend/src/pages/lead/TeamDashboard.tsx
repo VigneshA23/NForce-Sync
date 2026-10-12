@@ -13,7 +13,7 @@ import {
 import { todayISO as localTodayISO, formatDateShort, formatDateRange } from '../../lib/date';
 import { useAuth } from '../../lib/auth';
 import { getEntry } from '../../api/eod';
-import { usePendingApprovalsCount } from '../../api/approvals';
+import { useLeadPendingPiecesCount } from '../../api/approvalPieces';
 import { readStoredDateFilter, resolveTeamDashboardDateFilter, writeStoredDateFilter } from '../../lib/teamDashboardDateFilter';
 import {
   useTeamLeadBlockers, useTeamLeadSummary, useTeamLeadTrend, useTeamMemberStatuses,
@@ -106,7 +106,9 @@ function MemberDetail({ eodEntryId }: { eodEntryId: number }) {
   return (
     <div style={{ padding: '0 16px 14px 58px' }}>
       {data.tasks.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>No tasks logged.</div>
+        <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
+          {(data.otherProjectsHours ?? 0) > 0 ? 'No tasks on your projects.' : 'No tasks logged.'}
+        </div>
       ) : (
         data.tasks.map(t => (
           <div key={t.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, padding: '8px 0', borderTop: '1px solid var(--line)' }}>
@@ -122,6 +124,11 @@ function MemberDetail({ eodEntryId }: { eodEntryId: number }) {
             </div>
           </div>
         ))
+      )}
+      {(data.otherProjectsHours ?? 0) > 0 && (
+        <div style={{ fontSize: 11.5, color: 'var(--txt-mut)', padding: '8px 0 0', borderTop: '1px solid var(--line)' }}>
+          Other projects: <strong style={{ color: 'var(--txt)' }}>{data.otherProjectsHours}h</strong>
+        </div>
       )}
     </div>
   );
@@ -513,11 +520,11 @@ export default function TeamDashboard() {
   const { data: blockers, isPending: blockersPending, isFetching: blockersFetching } = useTeamLeadBlockers(range, isToday, false, teamLeadId);
   const { data: trend, isPending: trendPending } = useTeamLeadTrend(anchorDate, 7, teamLeadId);
 
-  // v1 count (submitted entries whose frozen manager is this user), scoped to the dashboard's own
-  // selected `range` so the "Review approvals" button and this KPI card reflect only that window.
-  // NOTE: the sidebar Approvals badge no longer uses this query — it counts the Approvals page's own
-  // v2 pending pieces — so this KPI can still differ from it for a user who is also a reporting manager.
-  const pendingApprovalsCount = usePendingApprovalsCount(true, range);
+  // The LEAD-type pieces this user holds, scoped to the dashboard's own selected `range` so the "Review
+  // approvals" button and this KPI card reflect only that window. It is the same list the Approvals page
+  // shows when opened with this range, and (without a range) the sidebar badge — so all three agree, and
+  // entries a lead handles as a reporting manager are not counted here.
+  const pendingApprovalsCount = useLeadPendingPiecesCount(true, range);
 
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
   const [rosterPage, setRosterPage] = useState(1);

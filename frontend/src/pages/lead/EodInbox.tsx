@@ -160,14 +160,17 @@ const EMPTY_MESSAGE: Record<EodInboxFilter, string> = {
   RESOLVED: 'Resolved clarifications will appear here.',
 };
 
-export default function EodInbox() {
+/** Team Inbox (variant "lead", default) or the reporting manager's EOD Inbox (variant "rm"): same page, same
+ *  conversation panel, a different list — see InboxRole 'rm'. */
+export default function EodInbox({ variant = 'lead' }: { variant?: 'lead' | 'rm' } = {}) {
+  const listRole = variant === 'rm' ? 'rm' : 'lead';
   const [searchParams] = useSearchParams();
   const highlightParam = searchParams.get('highlight');
   const highlightEntryId = highlightParam ? Number(highlightParam) : null;
 
-  const openQuery = useEodInbox('lead', true);
-  const resolvedQuery = useEodInbox('lead', false);
-  const markRead = useMarkClarificationRead('lead');
+  const openQuery = useEodInbox(listRole, true);
+  const resolvedQuery = useEodInbox(listRole, false);
+  const markRead = useMarkClarificationRead(listRole);
   const isPending = openQuery.isPending || resolvedQuery.isPending;
   const isError = openQuery.isError || resolvedQuery.isError;
   const refetch = () => { openQuery.refetch(); resolvedQuery.refetch(); };
@@ -291,7 +294,9 @@ export default function EodInbox() {
               EOD Inbox
             </h1>
             <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-              EOD entries with a clarification you've requested — they stay out of Approvals until resolved.
+              {variant === 'rm'
+                ? "Clarification threads on your direct reports' EOD entries."
+                : "EOD entries with a clarification you've requested — they stay out of Approvals until resolved."}
             </p>
           </div>
           <DateFilterButton

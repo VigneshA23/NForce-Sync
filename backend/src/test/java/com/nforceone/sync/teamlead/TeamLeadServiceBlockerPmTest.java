@@ -40,7 +40,7 @@ class TeamLeadServiceBlockerPmTest {
     @BeforeEach
     void setUp() {
         service = new TeamLeadService(userRepository, null, null, null, null, null, null, null, null, null,
-                null, projectRepository, (Executor) Runnable::run);
+                null, projectRepository, new LeadTeamPolicy(null, null, null), (Executor) Runnable::run);
         pm = new AppUser();
         pm.setId(7L);
         pm.setFullName("Surya T");

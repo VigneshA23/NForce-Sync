@@ -4,11 +4,10 @@ import {
   Search, AlertTriangle, MessageCircleQuestion, Check,
 } from 'lucide-react';
 import {
-  usePendingApprovals,
   useApprove, useReject, type PendingApprovalsRange,
 } from '../api/approvals';
 import {
-  usePendingPieces, useApprovePiece, useRejectPiece, useDecidedEntriesV2,
+  useLeadPendingPieces, useApprovePiece, useRejectPiece, useDecidedEntriesV2,
   type ApprovalPieceDto,
 } from '../api/approvalPieces';
 import {
@@ -167,6 +166,9 @@ function EntryRow({
                 daySummary below carries the worked/OT split and replaces the old separate
                 leave and OT chips, which together read as if they summed. */}
             <Chip tone="neutral">{hrs(total)}h logged</Chip>
+            {(entry.otherProjectsHours ?? 0) > 0 && (
+              <Chip tone="neutral" dashed>Other projects: {hrs(Number(entry.otherProjectsHours))}h</Chip>
+            )}
             {statusChip}
             {daySummary(entry) && (
               <Chip tone={overtime > 0 ? 'warn' : 'neutral'} dashed={overtime === 0}>
@@ -557,10 +559,11 @@ export default function Approvals() {
   const highlightParam = searchParams.get('highlight');
   const highlightId = highlightParam ? Number(highlightParam) : null;
 
-  const { isError: pendingError, refetch } = usePendingApprovals(true, range);
   const { data: approved, isPending: approvedLoading } = useDecidedEntriesV2('APPROVED');
   const { data: rejected, isPending: rejectedLoading } = useDecidedEntriesV2('REJECTED');
-  const { data: pendingPieces = [], isPending: piecesLoading } = usePendingPieces();
+  // The Pending tab is the viewer's LEAD-type pieces only (see useLeadPendingPieces); the date window, when
+  // the page was opened from the Team Dashboard, narrows it to the same set that KPI counted.
+  const { data: pendingPieces = [], isPending: piecesLoading, isError: pendingError, refetch } = useLeadPendingPieces(range);
   const reject = useReject();
   const refreshClarification = useRefreshClarification();
   const { show } = useToast();

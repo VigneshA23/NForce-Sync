@@ -58,6 +58,8 @@ interface MergedMember {
   pct: number | null;
   approvedHours: number;
   availableHours: number;
+  /** Hours logged on other leads' projects (aggregate only). The figures above are person-level. */
+  otherProjectsHours: number;
   status: StatusKey;
 }
 
@@ -313,6 +315,9 @@ function MemberRow({ member, selected, onSelect, onHover }: { member: MergedMemb
 
       <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
         {hrs(member.approvedHours)}h / {hrs(member.availableHours)}h
+        {member.otherProjectsHours > 0 && (
+          <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 2 }}>Other projects: {hrs(member.otherProjectsHours)}h</div>
+        )}
       </div>
 
       <div><StatusBadge status={member.status} /></div>
@@ -487,6 +492,9 @@ function DetailPanel({ member, dateISO, teamLeadId }: { member: MergedMember; da
           <div style={{ fontSize: 12, color: 'var(--txt-mut)', marginTop: 8 }}>
             Approved {hrs(member.approvedHours)}h / Available {hrs(member.availableHours)}h
           </div>
+          <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 4 }}>
+            Across all projects{member.otherProjectsHours > 0 ? ` · Other projects: ${hrs(member.otherProjectsHours)}h` : ''}
+          </div>
         </div>
         <RingGauge pct={member.pct ?? 0} color={color} label="Utilization" />
       </div>
@@ -612,6 +620,7 @@ export default function TeamUtilization() {
         pct: m.utilizationPct,
         approvedHours: util?.snapshot?.approvedProductiveHours ?? 0,
         availableHours: util?.snapshot?.availableHours ?? 0,
+        otherProjectsHours: util?.otherProjectsHours ?? 0,
         status: deriveStatus(m, workingDay),
       };
     });
@@ -824,7 +833,7 @@ export default function TeamUtilization() {
           <div className="nf-r-scroll-inner" style={{ '--nf-r-min': MEMBER_TABLE_MIN_WIDTH + 'px' } as React.CSSProperties}>
           <div style={{ display: 'grid', gridTemplateColumns: MEMBER_TABLE_COLUMNS, gap: 14, alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)' }}>Team Members ({visible.length})</span>
-            <span style={{ fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Utilization</span>
+            <span style={{ fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Utilization (all projects)</span>
             <span style={{ fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Approved / Available</span>
             <span style={{ fontSize: 10, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</span>
             <span />

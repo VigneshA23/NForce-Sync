@@ -14,7 +14,7 @@ function inboxItems(role: 'employee', c: ServerUserCapabilities) {
 }
 
 describe('inboxBadgeFor', () => {
-  const counts = { own: 3, team: 5, pm: 7 };
+  const counts = { own: 3, team: 5, pm: 7, rm: 9 };
 
   it('shows the viewer\'s OWN thread count on My Work > EOD Inbox, even for a lead', () => {
     expect(inboxBadgeFor({ path: '/employee/eod-inbox' }, counts)).toBe(3);
@@ -28,6 +28,11 @@ describe('inboxBadgeFor', () => {
     expect(inboxBadgeFor({ path: '/projects/eod-inbox' }, counts)).toBe(7);
   });
 
+  it('keeps the reporting manager inbox on its own list, apart from Team Inbox', () => {
+    expect(inboxBadgeFor({ path: '/my-reports/eod-inbox' }, counts)).toBe(9);
+    expect(inboxBadgeFor({ path: '/team/eod-inbox' }, counts)).toBe(5);
+  });
+
   it('has no opinion on any other item', () => {
     expect(inboxBadgeFor({ path: '/dashboard' }, counts)).toBeUndefined();
     expect(inboxBadgeFor({}, counts)).toBeUndefined();
@@ -35,19 +40,28 @@ describe('inboxBadgeFor', () => {
 });
 
 describe('inbox nav items by capability', () => {
-  it('a project lead has both inboxes: his own (emp-eod-inbox) and Team Inbox — no RM duplicate', () => {
-    const items = inboxItems('employee', caps({ leadsProjectIds: [1], hasDirectReports: true }));
+  it('a project lead (no reports) has his own inbox and Team Inbox', () => {
+    const items = inboxItems('employee', caps({ leadsProjectIds: [1] }));
     expect(items.map(i => i.key).sort()).toEqual(['emp-eod-inbox', 'eod-inbox']);
     expect(items.find(i => i.key === 'emp-eod-inbox')!.path).toBe('/employee/eod-inbox');
     expect(items.find(i => i.key === 'eod-inbox')!.path).toBe('/team/eod-inbox');
   });
 
-  it('an RM who is not a lead gets one EOD Inbox under My Reporting Team, on /team/eod-inbox', () => {
+  it('a lead who is also an RM sees each set in its own section: own inbox, Team Inbox and the RM inbox', () => {
+    const items = inboxItems('employee', caps({ leadsProjectIds: [1], hasDirectReports: true }));
+    expect(items.map(i => i.key).sort()).toEqual(['emp-eod-inbox', 'eod-inbox', 'rm-eod-inbox']);
+    expect(items.find(i => i.key === 'rm-eod-inbox')!.path).toBe('/my-reports/eod-inbox');
+    // Distinct paths, so no two items point at the same list.
+    expect(new Set(items.map(i => i.path)).size).toBe(3);
+  });
+
+  it('an RM who is not a lead gets one EOD Inbox under My Reporting Team, on /my-reports/eod-inbox', () => {
     const c = caps({ hasDirectReports: true });
     const items = inboxItems('employee', c);
     expect(items.map(i => i.key)).toContain('rm-eod-inbox');
     // The route guard compares against nav paths, so this is what makes the notification link work.
-    expect(getNavPaths('employee', c)).toContain('/team/eod-inbox');
+    expect(getNavPaths('employee', c)).toContain('/my-reports/eod-inbox');
+    expect(getNavPaths('employee', c)).not.toContain('/team/eod-inbox');
   });
 
   it('a plain employee has no reviewer inbox and /team/eod-inbox is not permitted', () => {

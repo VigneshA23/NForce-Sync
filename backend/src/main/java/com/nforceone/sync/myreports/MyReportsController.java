@@ -76,6 +76,14 @@ public class MyReportsController {
         return myReportsService.reject(pieceId, actingEmail(), request.comment());
     }
 
+    // Clarification threads on entries whose frozen manager is the caller. The thread itself is read and
+    // answered through the shared /team-lead/eod/{id}/clarification endpoints, which authorise the frozen RM.
+    @GetMapping("/eod-inbox")
+    public List<com.nforceone.sync.eod.dto.EodInboxItemDto> getEodInbox(
+            @RequestParam(defaultValue = "true") boolean open) {
+        return myReportsService.getEodInbox(open, actingEmail());
+    }
+
     // Blockers raised by direct reports who lead the project they raised them on. Scoped to the
     // entry's frozen manager in the query; the thread itself is read and replied to through the
     // shared /team-lead/blockers/{id}/replies endpoints, which already authorise the frozen manager.

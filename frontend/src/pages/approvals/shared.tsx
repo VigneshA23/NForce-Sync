@@ -358,6 +358,9 @@ export function EodEntryBody({ entry }: { entry: EodEntryDto }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <FieldLabel>Tasks</FieldLabel>
+      {entry.tasks.length === 0 && (entry.otherProjectsHours ?? 0) > 0 && (
+        <div style={{ fontSize: 12.5, color: 'var(--txt-dim)' }}>No tasks on your projects.</div>
+      )}
       {entry.tasks.map(t => (
         <div key={t.id} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '12px 14px' }}>
           <div className="nf-r-pairs" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 70px 110px', gap: 10, marginBottom: 8 }}>
@@ -373,6 +376,13 @@ export function EodEntryBody({ entry }: { entry: EodEntryDto }) {
           <EodAttachmentChips attachments={t.attachments} />
         </div>
       ))}
+      {/* A Team Lead's view of an entry that also has tasks on other leads' projects: one aggregate, no
+          names or details (the server strips them — see EodEntryDto#scopedToProjects). */}
+      {(entry.otherProjectsHours ?? 0) > 0 && (
+        <div style={{ fontSize: 12, color: 'var(--txt-mut)', border: '1px dashed var(--line2)', borderRadius: 8, padding: '8px 12px' }}>
+          Other projects: <strong style={{ color: 'var(--txt)' }}>{hrs(Number(entry.otherProjectsHours))}h</strong>
+        </div>
+      )}
 
       <div>
         <FieldLabel>Next-day plan</FieldLabel>

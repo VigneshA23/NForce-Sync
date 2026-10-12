@@ -279,7 +279,7 @@ public class EodClarificationService {
                         "New reply on an EOD clarification",
                         actor.getFullName() + " replied on the clarification for their EOD entry ("
                                 + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + ").",
-                        reviewerInboxLink(recipient, entry));
+                        reviewerInboxLink(recipient, entry, pieces));
             }
         } else {
             notificationService.send(entry.getEmployee().getId(), "EOD_CLARIFICATION_REPLY",
@@ -397,6 +397,17 @@ public class EodClarificationService {
                 .toList();
     }
 
+    /** The My Reporting Team inbox: rounds on entries whose frozen manager is the viewer (see the repository
+     *  query for why a lead who is also the RM does not see the same thread twice). */
+    @Transactional(readOnly = true)
+    public List<EodInboxItemDto> listForReportingManager(String actingEmail, boolean open) {
+        AppUser rm = requireUser(actingEmail);
+        List<EodClarification> rows = open
+                ? clarificationRepository.findOpenForReportingManager(rm.getId())
+                : clarificationRepository.findResolvedForReportingManager(rm.getId());
+        return enrich(excludeOwnEntries(rows, rm.getId()), rm.getId());
+    }
+
     @Transactional(readOnly = true)
     public List<EodInboxItemDto> listForEmployee(String actingEmail, boolean open) {
         AppUser employee = requireUser(actingEmail);
@@ -466,8 +477,21 @@ public class EodClarificationService {
     }
 
     /** PMs work from /projects/eod-inbox; every other reviewer from /team/eod-inbox. */
-    private static String reviewerInboxLink(AppUser recipient, EodEntry entry) {
-        String base = recipient.getRole() == AppUser.Role.PM ? "/projects/eod-inbox" : "/team/eod-inbox";
+    private static String reviewerInboxLink(AppUser recipient, EodEntry entry, List<EodProjectApproval> pieces) {
+        // A reporting manager who holds the entry only as RM (no LEAD piece) works from My Reporting Team >
+        // EOD Inbox; a lead from Team Inbox; a PM from the PM inbox.
+        boolean holdsLeadPiece = pieces.stream().anyMatch(p ->
+                p.getApproverType() == EodProjectApproval.ApproverType.LEAD
+                        && p.getApprover() != null && p.getApprover().getId().equals(recipient.getId()));
+        boolean holdsRmPiece = pieces.stream().anyMatch(p ->
+                p.getApproverType() == EodProjectApproval.ApproverType.REPORTING_MANAGER
+                        && p.getApprover() != null && p.getApprover().getId().equals(recipient.getId()));
+        String base;
+        if (holdsRmPiece && !holdsLeadPiece && recipient.getRole() != AppUser.Role.PM) {
+            base = "/my-reports/eod-inbox";
+        } else {
+            base = recipient.getRole() == AppUser.Role.PM ? "/projects/eod-inbox" : "/team/eod-inbox";
+        }
         return base + "?highlight=" + entry.getId();
     }
 

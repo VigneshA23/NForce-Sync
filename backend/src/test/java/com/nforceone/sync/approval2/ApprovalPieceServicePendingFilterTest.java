@@ -63,7 +63,7 @@ class ApprovalPieceServicePendingFilterTest {
                 pieceRepository, actionRepository, entryRepository,
                 userRepository, utilizationService, notificationService,
                 auditLogRepository, pmScopeService, logLineRepository, taskRepository,
-                clarificationRepository);
+                clarificationRepository, new com.nforceone.sync.teamlead.LeadTeamPolicy(null, null, null));
 
         pm = user(20L, AppUser.Role.PM, "Bob PM", PM_EMAIL);
         rm = user(21L, AppUser.Role.PM, "Suhita RM", RM_EMAIL);

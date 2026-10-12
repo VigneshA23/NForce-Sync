@@ -144,7 +144,7 @@ public class EodAttachmentService {
         AppUser actor = requireUserByEmail(actingEmail);
         EodAttachment attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attachment not found"));
-        if (!accessPolicy.canRead(actor, attachment.getEodEntry())) {
+        if (!accessPolicy.canReadAttachment(actor, attachment)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to this attachment");
         }
         return attachment;

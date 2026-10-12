@@ -16,7 +16,7 @@ import type { UserResult, ProjectResult } from '../api/search';
 import { toRole } from '../api/auth';
 import { fetchProfile } from '../api/profile';
 import { useUnreadNotificationsCount } from '../api/notifications';
-import { usePendingPiecesCount } from '../api/approvalPieces';
+import { usePendingPiecesCount, useLeadPendingPiecesCount } from '../api/approvalPieces';
 import { useMyReportsPendingCount } from '../api/myReports';
 import { useTeamLeadSummary } from '../api/teamLead';
 import { usePmBlockers } from '../api/pmBlockers';
@@ -578,7 +578,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   // Sidebar TL Approvals badge. Counts the same list the Approvals page's Pending tab shows (v2 pieces awaiting THIS user as approver), via
   // the same query key, so the badge can't disagree with the page. The old v1 count was every submitted entry
   // whose frozen manager is the user — including the ones he handles as a reporting manager on a different page.
-  const pendingApprovalsCount = usePendingPiecesCount(isLead);
+  const pendingApprovalsCount = useLeadPendingPiecesCount(isLead);
   // Sidebar PM Approvals badge — v2 pending pieces (all pending = escalated count for PM).
   const pmPendingCount = usePendingPiecesCount(isPm);
   // Sidebar RM Approvals badge — RM pending pieces.
@@ -615,9 +615,10 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   // Team Lead / reporting manager, and the PM's read-only list. A lead has both of the first two,
   // and they never overlap.
   const ownInboxCount  = useEodInboxCount('employee', role === 'employee' || isLead);
-  const teamInboxCount = useEodInboxCount('lead', isLead || caps.hasDirectReports);
+  const teamInboxCount = useEodInboxCount('lead', isLead);
   const pmInboxCount   = useEodInboxCount('pm', isPm);
-  const inboxCounts = { own: ownInboxCount, team: teamInboxCount, pm: pmInboxCount };
+  const rmInboxCount   = useEodInboxCount('rm', caps.hasDirectReports);
+  const inboxCounts = { own: ownInboxCount, team: teamInboxCount, pm: pmInboxCount, rm: rmInboxCount };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

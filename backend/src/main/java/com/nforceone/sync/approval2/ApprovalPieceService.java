@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -42,6 +43,7 @@ public class ApprovalPieceService {
     private final EodLogLineRepository logLineRepository;
     private final EodTaskRepository taskRepository;
     private final EodClarificationRepository clarificationRepository;
+    private final com.nforceone.sync.teamlead.LeadTeamPolicy leadTeamPolicy;
 
     public ApprovalPieceService(EodProjectApprovalRepository pieceRepository,
                                  EodProjectApprovalActionRepository actionRepository,
@@ -53,7 +55,9 @@ public class ApprovalPieceService {
                                  PmScopeService pmScopeService,
                                  EodLogLineRepository logLineRepository,
                                  EodTaskRepository taskRepository,
-                                 EodClarificationRepository clarificationRepository) {
+                                 EodClarificationRepository clarificationRepository,
+                                 com.nforceone.sync.teamlead.LeadTeamPolicy leadTeamPolicy) {
+        this.leadTeamPolicy = leadTeamPolicy;
         this.pieceRepository = pieceRepository;
         this.actionRepository = actionRepository;
         this.entryRepository = entryRepository;
@@ -125,12 +129,48 @@ public class ApprovalPieceService {
         return mapPiecesWithLogLines(pieces);
     }
 
+    /**
+     * Team Lead pending list: LEAD-type pieces whose approver is the viewer — i.e. the pieces on projects
+     * he leads. Reporting-manager pieces are deliberately excluded (they live on My Reporting Team >
+     * Pending Approvals), and so are PM-type pieces. Unlike {@link #getPendingForActor}, a lead who also
+     * manages a project still gets his LEAD pieces here. Super Admin / Admin keep their existing view.
+     * {@code from}/{@code to} optionally narrow by entry date (the Team Dashboard KPI's window).
+     */
+    @Transactional(readOnly = true)
+    public List<ApprovalPieceDto> getLeadPendingPieces(String actorEmail, LocalDate from, LocalDate to) {
+        AppUser actor = requireUserByEmail(actorEmail);
+        if (actor.getRole() == AppUser.Role.SUPERADMIN || actor.getRole() == AppUser.Role.ADMIN) {
+            return getPendingForActor(actorEmail);
+        }
+        List<EodProjectApproval> pieces = pieceRepository.findByApproverIdAndApproverTypeAndStatus(
+                actor.getId(), EodProjectApproval.ApproverType.LEAD, EodProjectApproval.Status.PENDING);
+        if (from != null && to != null) {
+            pieces = pieces.stream()
+                    .filter(p -> !p.getEodEntry().getEntryDate().isBefore(from)
+                            && !p.getEodEntry().getEntryDate().isAfter(to))
+                    .toList();
+        }
+        return mapPiecesWithLogLines(pieces);
+    }
+
+    /**
+     * Team Lead Approved/Rejected tabs: entries where the viewer decided a LEAD-type piece, shown with
+     * only the tasks on projects he leads plus one aggregate "other projects" hours figure — a shared
+     * entry never exposes another lead's project names or task details. Super Admin / Admin keep the
+     * previous, unscoped view.
+     */
     @Transactional(readOnly = true)
     public List<EodEntryDto> getDecidedEntriesForActor(String actorEmail, String statusName) {
         AppUser actor = requireUserByEmail(actorEmail);
         EodProjectApproval.Status status = EodProjectApproval.Status.valueOf(statusName);
-        List<EodEntry> entries = entryRepository.findByApproverPieceStatus(actor.getId(), status);
-        return entries.stream().map(EodEntryDto::from).toList();
+        if (actor.getRole() == AppUser.Role.SUPERADMIN || actor.getRole() == AppUser.Role.ADMIN) {
+            return entryRepository.findByApproverPieceStatus(actor.getId(), status)
+                    .stream().map(EodEntryDto::from).toList();
+        }
+        java.util.Set<Long> ledProjects = leadTeamPolicy.ledProjectIds(actor.getId());
+        return entryRepository.findByLeadApproverPieceStatus(actor.getId(), status).stream()
+                .map(e -> EodEntryDto.from(e).scopedToProjects(ledProjects))
+                .toList();
     }
 
     /** PM decided tab: PROJECT_GROUPED pieces (PM-type + escalated-LEAD) in a given status. */

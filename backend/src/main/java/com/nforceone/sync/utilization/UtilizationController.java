@@ -23,13 +23,18 @@ public class UtilizationController {
             @PathVariable Long id,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return utilizationService.getForEmployee(id, from, to);
+        return utilizationService.getForEmployeeAs(actingEmail(), id, from, to);
     }
 
     @GetMapping("/team/{managerId}")
     public List<TeamUtilDto> getForTeam(
             @PathVariable Long managerId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return utilizationService.getForTeam(managerId, date);
+        return utilizationService.getForTeamAs(actingEmail(), managerId, date);
+    }
+
+    private String actingEmail() {
+        return (String) org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication().getPrincipal();
     }
 }

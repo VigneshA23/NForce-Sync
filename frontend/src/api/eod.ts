@@ -71,6 +71,9 @@ export interface EodEntryDto {
   logLines: EodLogLineDto[];
   /** WEEKEND only: the employee worked that day. False/absent = a no-work weekend. */
   weekendWorked?: boolean;
+  /** Set only on a Team Lead's scoped view of a shared entry: total hours logged on projects he does not
+   *  lead — an aggregate with no names or task details. */
+  otherProjectsHours?: number | null;
 }
 
 export interface EodLogLineDto {

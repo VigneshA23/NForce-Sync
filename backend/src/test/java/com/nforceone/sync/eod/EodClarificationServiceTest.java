@@ -664,4 +664,75 @@ class EodClarificationServiceTest {
         assertEquals(List.of(300L), items.stream().map(i -> i.eodEntryId()).toList());
         assertFalse(items.get(0).unread(), "the opener's own round is not unread to him");
     }
+
+    // ── Team Inbox vs the reporting-manager inbox ─────────────────────────────
+
+    @Test
+    void employeeReply_toAReportingManagerHoldingOnlyAnRmPiece_linksToTheRmInbox() {
+        EodProjectApproval rmPiece = piece(5L, rm, EodProjectApproval.Status.PENDING);
+        rmPiece.setApproverType(EodProjectApproval.ApproverType.REPORTING_MANAGER);
+        when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(rmPiece));
+        when(clarificationRepository.findByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
+                .thenReturn(Optional.of(openRound(rm)));
+
+        service.reply(100L, employee.getEmail(), "Here is the detail", null);
+
+        verify(notificationService).send(eq(rm.getId()), eq("EOD_CLARIFICATION_REPLY"), anyString(), anyString(),
+                eq("/my-reports/eod-inbox?highlight=100"));
+    }
+
+    @Test
+    void employeeReply_toSomeoneWhoIsBothLeadAndRm_linksToTheTeamInbox() {
+        EodProjectApproval asLead = piece(6L, lead, EodProjectApproval.Status.PENDING);
+        EodProjectApproval asRm = piece(7L, lead, EodProjectApproval.Status.PENDING);
+        asRm.setApproverType(EodProjectApproval.ApproverType.REPORTING_MANAGER);
+        when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(asLead, asRm));
+        when(clarificationRepository.findByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
+                .thenReturn(Optional.of(openRound(lead)));
+
+        service.reply(100L, employee.getEmail(), "Here is the detail", null);
+
+        verify(notificationService, times(1)).send(eq(lead.getId()), eq("EOD_CLARIFICATION_REPLY"), anyString(),
+                anyString(), eq("/team/eod-inbox?highlight=100"));
+    }
+
+    @Test
+    void reportingManagerInbox_usesItsOwnQuery_andNeverTheTeamInboxOne() {
+        EodClarification round = openRound(rm);
+        when(clarificationRepository.findOpenForReportingManager(rm.getId())).thenReturn(List.of(round));
+
+        var items = service.listForReportingManager(rm.getEmail(), true);
+
+        assertEquals(List.of(100L), items.stream().map(i -> i.eodEntryId()).toList());
+        verify(clarificationRepository, never()).findOpenForReviewer(anyLong());
+    }
+
+    @Test
+    void reportingManagerInbox_neverContainsTheViewersOwnEntry() {
+        EodEntry rmsOwn = new EodEntry();
+        rmsOwn.setId(300L);
+        rmsOwn.setEmployee(rm);
+        rmsOwn.setEntryDate(LocalDate.of(2026, 9, 2));
+        rmsOwn.setStatus(EodEntry.Status.SUBMITTED);
+        EodClarification own = new EodClarification();
+        own.setId(601L);
+        own.setEodEntry(rmsOwn);
+        own.setOpenedBy(pm);
+        own.setOpenedAt(OffsetDateTime.now());
+        own.setStatus(EodClarification.Status.NEEDS_RESPONSE);
+        when(clarificationRepository.findOpenForReportingManager(rm.getId())).thenReturn(List.of(own, openRound(rm)));
+
+        var items = service.listForReportingManager(rm.getEmail(), true);
+
+        assertEquals(List.of(100L), items.stream().map(i -> i.eodEntryId()).toList());
+    }
+
+    @Test
+    void teamInbox_neverCallsTheReportingManagerQuery() {
+        when(clarificationRepository.findOpenForReviewer(lead.getId())).thenReturn(List.of(openRound(lead)));
+
+        service.listForLead(lead.getEmail(), true);
+
+        verify(clarificationRepository, never()).findOpenForReportingManager(anyLong());
+    }
 }

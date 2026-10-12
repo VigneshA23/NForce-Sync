@@ -127,16 +127,44 @@ class EodAccessPolicyTest {
     @Test
     void lead_team_member_can_read_project_entry() {
         otherUser.setRole(AppUser.Role.EMPLOYEE);
-        when(leadAccess.isInLeadTeam(owner.getId(), otherUser.getId())).thenReturn(true);
+        when(leadAccess.canReadEntryAsLead(otherUser.getId(), projectEntry)).thenReturn(true);
 
         assertTrue(policy.canRead(otherUser, projectEntry));
+        assertEquals(EodAccessPolicy.AccessLevel.LEAD_SCOPED, policy.accessLevel(otherUser, projectEntry));
     }
 
     @Test
     void non_lead_team_member_cannot_read_project_entry() {
         otherUser.setRole(AppUser.Role.EMPLOYEE);
-        when(leadAccess.isInLeadTeam(owner.getId(), otherUser.getId())).thenReturn(false);
+        when(leadAccess.canReadEntryAsLead(otherUser.getId(), projectEntry)).thenReturn(false);
 
         assertFalse(policy.canRead(otherUser, projectEntry));
+        assertEquals(EodAccessPolicy.AccessLevel.NONE, policy.accessLevel(otherUser, projectEntry));
+    }
+
+    // ── Entry read: the lead / RM tiers ───────────────────────────────────────
+
+    @Test
+    void frozen_reporting_manager_reads_the_whole_project_entry() {
+        otherUser.setRole(AppUser.Role.EMPLOYEE);
+        projectEntry.setManagerId(otherUser.getId());
+
+        assertEquals(EodAccessPolicy.AccessLevel.FULL, policy.accessLevel(otherUser, projectEntry));
+        verifyNoInteractions(leadAccess);
+    }
+
+    @Test
+    void roles_with_access_today_keep_full_access_and_never_hit_the_lead_check() {
+        for (AppUser.Role role : new AppUser.Role[]{AppUser.Role.SUPERADMIN, AppUser.Role.ADMIN, AppUser.Role.PM}) {
+            otherUser.setRole(role);
+            assertEquals(EodAccessPolicy.AccessLevel.FULL, policy.accessLevel(otherUser, projectEntry), role.name());
+        }
+        verifyNoInteractions(leadAccess);
+    }
+
+    @Test
+    void owner_is_always_full_even_if_also_a_lead() {
+        owner.setRole(AppUser.Role.EMPLOYEE);
+        assertEquals(EodAccessPolicy.AccessLevel.FULL, policy.accessLevel(owner, projectEntry));
     }
 }

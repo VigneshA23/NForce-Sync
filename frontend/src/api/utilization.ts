@@ -18,6 +18,8 @@ export interface TeamUtilDto {
   employeeName: string;
   employeeCode: string;
   snapshot: UtilSnapshotDto | null;
+  /** Approved hours on projects the lead does not lead — a bare aggregate. The percentages are person-level. */
+  otherProjectsHours: number;
 }
 
 export function useTeamUtil(managerId: number | undefined, date: string) {

@@ -54,7 +54,7 @@ class MyReportsServiceMemberEodTest {
     @BeforeEach
     void setUp() {
         service = new MyReportsService(userRepository, teamLeadService, reportingScopeService,
-                pieceRepository, approvalPieceService, eodService);
+                pieceRepository, approvalPieceService, eodService, null);
 
         manager = user(MANAGER_ID, "Mina Manager", "M-001", MANAGER_EMAIL);
         reportee = user(REPORTEE_ID, "Rae Reportee", "E-002", "rae@nforceone.com");

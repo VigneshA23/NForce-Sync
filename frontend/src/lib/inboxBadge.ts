@@ -15,6 +15,8 @@ export interface InboxCounts {
   team: number;
   /** Unread rounds in the PM's read-only inbox (/projects/eod-inbox). */
   pm: number;
+  /** Unread rounds on entries whose frozen manager is the viewer (/my-reports/eod-inbox). */
+  rm: number;
 }
 
 export function inboxBadgeFor(item: { path?: string }, counts: InboxCounts): number | undefined {
@@ -22,6 +24,7 @@ export function inboxBadgeFor(item: { path?: string }, counts: InboxCounts): num
     case '/employee/eod-inbox': return counts.own;
     case '/team/eod-inbox':     return counts.team;
     case '/projects/eod-inbox': return counts.pm;
+    case '/my-reports/eod-inbox': return counts.rm;
     default:                    return undefined;
   }
 }

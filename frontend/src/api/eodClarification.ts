@@ -9,7 +9,10 @@ import { isStaleStateError } from '../lib/clarificationGate';
 // as Blockers (no websocket layer anywhere in this app).
 
 export type ClarificationScope = 'lead' | 'employee';
-export type InboxRole = 'lead' | 'pm' | 'employee';
+// 'rm' is the My Reporting Team inbox: threads on entries whose frozen manager is the viewer, kept apart from
+// 'lead' (Team Inbox) so each section shows only its own set. Threads themselves are opened, read and answered
+// through the same endpoints as 'lead'.
+export type InboxRole = 'lead' | 'pm' | 'employee' | 'rm';
 export type ClarificationStatusValue = 'NEEDS_RESPONSE' | 'ACKNOWLEDGED' | 'RESOLVED';
 
 export interface EodClarificationStatusDto {
@@ -162,7 +165,7 @@ export function useDeleteClarificationReply(entryId: number, scope: Clarificatio
 // fetchBlockerAttachmentUrl: ClarificationThreadView passes this into the generic ThreadView's
 // `fetchAttachmentUrl` prop — a hook can't be invoked from inside a callback prop.
 export function fetchClarificationAttachmentUrl(scope: InboxRole, attachmentId: number): Promise<string> {
-  const path = scope === 'lead' ? '/team-lead/eod/attachments'
+  const path = scope === 'lead' || scope === 'rm' ? '/team-lead/eod/attachments'
     : scope === 'employee' ? '/employee/eod/attachments'
     : '/pm-eod-inbox/attachments';
   return api.get(`${path}/${attachmentId}`, { responseType: 'blob' })
@@ -267,7 +270,8 @@ export function useRefreshClarification() {
 // ── EOD Inbox lists (Team Lead full, PM read-only) ──────────────────────────
 
 function inboxPath(role: InboxRole): string {
-  return role === 'lead' ? '/team-lead/eod-inbox'
+  return role === 'rm' ? '/my-reports/eod-inbox'
+    : role === 'lead' ? '/team-lead/eod-inbox'
     : role === 'employee' ? '/employee/eod-inbox'
     : '/pm-eod-inbox';
 }
@@ -307,7 +311,7 @@ export function useEodInboxCount(role: InboxRole, enabled = true) {
 }
 
 function markReadPath(role: InboxRole, entryId: number): string {
-  return role === 'pm' ? `/pm-eod-inbox/${entryId}/read` : `${basePath(role === 'lead' ? 'lead' : 'employee')}/eod/${entryId}/clarification/read`;
+  return role === 'pm' ? `/pm-eod-inbox/${entryId}/read` : `${basePath(role === 'lead' || role === 'rm' ? 'lead' : 'employee')}/eod/${entryId}/clarification/read`;
 }
 
 /** Opening a row's conversation panel marks that round read for the viewer — clears the

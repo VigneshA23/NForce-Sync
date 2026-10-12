@@ -43,6 +43,14 @@ public class ApprovalPieceController {
         return pieceService.getPendingForActor(actingEmail());
     }
 
+    // Team Lead > Approvals Pending tab and sidebar badge: LEAD-type pieces held by the caller only.
+    @GetMapping("/lead-pending")
+    public List<ApprovalPieceDto> getLeadPending(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to) {
+        return pieceService.getLeadPendingPieces(actingEmail(), from, to);
+    }
+
     @GetMapping("/entry/{entryId}/pieces")
     public List<ApprovalPieceDto> getPiecesForEntry(@PathVariable Long entryId) {
         return pieceService.getPiecesForEntry(entryId, actingEmail());

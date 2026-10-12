@@ -9,7 +9,7 @@ import com.nforceone.sync.businessrules.HolidayRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
-import com.nforceone.sync.project.AllocationRepository;
+import com.nforceone.sync.teamlead.LeadTeamPolicy;
 import com.nforceone.sync.utilization.dto.DayUtilDto;
 import com.nforceone.sync.utilization.dto.TeamUtilDto;
 import com.nforceone.sync.utilization.dto.UtilSnapshotDto;
@@ -39,20 +39,20 @@ public class UtilizationService {
     private final AppUserRepository              userRepository;
     private final UtilSnapshotRepository         snapshotRepository;
     private final HolidayRepository              holidayRepository;
-    private final AllocationRepository           allocationRepository;
+    private final LeadTeamPolicy                 leadTeamPolicy;
     private final EodProjectApprovalRepository   pieceRepository;
 
     public UtilizationService(EodEntryRepository entryRepository,
                                AppUserRepository userRepository,
                                UtilSnapshotRepository snapshotRepository,
                                HolidayRepository holidayRepository,
-                               AllocationRepository allocationRepository,
+                               LeadTeamPolicy leadTeamPolicy,
                                EodProjectApprovalRepository pieceRepository) {
         this.entryRepository    = entryRepository;
         this.userRepository     = userRepository;
         this.snapshotRepository = snapshotRepository;
         this.holidayRepository  = holidayRepository;
-        this.allocationRepository = allocationRepository;
+        this.leadTeamPolicy = leadTeamPolicy;
         this.pieceRepository    = pieceRepository;
     }
 
@@ -331,11 +331,51 @@ public class UtilizationService {
                 .toList();
     }
 
+    /**
+     * Access-checked entry point for the HTTP layer. Team Utilization of lead X may be read by X himself
+     * (a lead only ever asks for his own team), and by the roles that already had unrestricted access —
+     * Super Admin, Admin and PM. Anyone else gets 403; before this check any authenticated user could
+     * pass any lead's id.
+     */
+    @Transactional(readOnly = true)
+    public List<TeamUtilDto> getForTeamAs(String actorEmail, Long managerId, LocalDate date) {
+        AppUser actor = requireActor(actorEmail);
+        if (!hasBroadUtilizationAccess(actor) && !actor.getId().equals(managerId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You can only view the utilization of your own team");
+        }
+        return getForTeam(managerId, date);
+    }
+
+    /** Same rule for one employee's snapshots: self, a lead whose team includes them, or a broad role. */
+    @Transactional(readOnly = true)
+    public List<UtilSnapshotDto> getForEmployeeAs(String actorEmail, Long employeeId, LocalDate from, LocalDate to) {
+        AppUser actor = requireActor(actorEmail);
+        if (!hasBroadUtilizationAccess(actor)
+                && !actor.getId().equals(employeeId)
+                && !leadTeamPolicy.isInTeam(employeeId, actor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You can only view the utilization of yourself or your own team");
+        }
+        return getForEmployee(employeeId, from, to);
+    }
+
+    private boolean hasBroadUtilizationAccess(AppUser actor) {
+        return actor.getRole() == AppUser.Role.SUPERADMIN
+                || actor.getRole() == AppUser.Role.ADMIN
+                || actor.getRole() == AppUser.Role.PM;
+    }
+
+    private AppUser requireActor(String email) {
+        return userRepository.findByEmailAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated"));
+    }
+
     @Transactional(readOnly = true)
     public List<TeamUtilDto> getForTeam(Long managerId, LocalDate date) {
-        // Uses allocation-based team definition (Phase 8): members are those actively allocated
-        // to projects led by this lead on `date`, not manager_id direct reports.
-        List<AppUser> reports = allocationRepository.findActiveMembersByProjectLead(managerId, date);
+        // The single team definition (LeadTeamPolicy): members actively allocated on `date` to projects led
+        // by this lead — not the manager_id reporting relationship.
+        List<AppUser> reports = leadTeamPolicy.teamMembers(managerId, date);
         if (reports.isEmpty()) return List.of();
 
         // Fetch all snapshots for all team members in one query
@@ -345,6 +385,8 @@ public class UtilizationService {
                 .stream()
                 .collect(Collectors.toMap(UtilSnapshot::getEmployeeId, s -> s));
 
+        Map<Long, BigDecimal> otherHours = otherProjectsHours(ids, leadTeamPolicy.ledProjectIds(managerId), date);
+
         return reports.stream().map(emp -> {
             UtilSnapshot snap = snapByEmployee.get(emp.getId());
             UtilSnapshot resolved = snap != null ? snap : buildSnapshot(emp.getId(), date);
@@ -352,8 +394,39 @@ public class UtilizationService {
                     emp.getId(),
                     emp.getFullName(),
                     emp.getEmployeeCode(),
-                    UtilSnapshotDto.from(resolved)
+                    UtilSnapshotDto.from(resolved),
+                    otherHours.getOrDefault(emp.getId(), BigDecimal.ZERO)
             );
         }).toList();
+    }
+
+    /**
+     * Per member: the hours that count toward their (person-level) utilization that day but were logged
+     * on projects the lead does not lead. Mirrors buildSnapshot's rule — only tasks whose project piece
+     * is approved count — and returns a bare number: no project names, no task details.
+     */
+    private Map<Long, BigDecimal> otherProjectsHours(List<Long> memberIds, Set<Long> ledProjectIds, LocalDate date) {
+        Map<Long, BigDecimal> result = new HashMap<>();
+        for (EodEntry entry : entryRepository.findWithTasksByEmployeeIdInAndEntryDateBetween(memberIds, date, date)) {
+            boolean countable = entry.getStatus() == EodEntry.Status.APPROVED
+                    || entry.getStatus() == EodEntry.Status.PARTIALLY_APPROVED;
+            if (!countable || entry.getEntryForm() != EodEntry.EntryForm.PROJECT_GROUPED) continue;
+            Set<Long> approvedProjectIds = pieceRepository.findByEodEntryId(entry.getId()).stream()
+                    .filter(p -> p.getSupersededAt() == null
+                            && p.getStatus() == EodProjectApproval.Status.APPROVED
+                            && p.getProject() != null)
+                    .map(p -> p.getProject().getId())
+                    .collect(Collectors.toSet());
+            BigDecimal other = BigDecimal.ZERO;
+            for (EodTask task : entry.getTasks()) {
+                if (task.getHours() == null || task.getProject() == null) continue;
+                Long projectId = task.getProject().getId();
+                if (approvedProjectIds.contains(projectId) && !ledProjectIds.contains(projectId)) {
+                    other = other.add(task.getHours());
+                }
+            }
+            result.merge(entry.getEmployee().getId(), other, BigDecimal::add);
+        }
+        return result;
     }
 }

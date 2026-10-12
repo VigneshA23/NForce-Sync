@@ -53,6 +53,32 @@ export function usePendingPiecesCount(enabled = true): number {
   }).data ?? 0;
 }
 
+/** Team Lead > Approvals Pending tab: LEAD-type pieces held by the signed-in user only (no reporting-manager
+ *  or PM pieces). Optional entry-date window, e.g. the Team Dashboard KPI's range. */
+export function useLeadPendingPieces(range?: { from: string; to: string }) {
+  return useQuery({
+    queryKey: ['v2', 'approvals', 'lead-pending', range?.from ?? null, range?.to ?? null],
+    queryFn: () => api.get<ApprovalPieceDto[]>('/v2/approvals/lead-pending', { params: range }).then(r => r.data),
+    staleTime: STALE,
+    refetchInterval: STALE,
+    refetchIntervalInBackground: true,
+  });
+}
+
+/** Same list as useLeadPendingPieces (same query key), as a count — the sidebar badge and the Team
+ *  Dashboard KPI, which therefore can never disagree with the page they link to. */
+export function useLeadPendingPiecesCount(enabled = true, range?: { from: string; to: string }): number {
+  return useQuery({
+    queryKey: ['v2', 'approvals', 'lead-pending', range?.from ?? null, range?.to ?? null],
+    queryFn: () => api.get<ApprovalPieceDto[]>('/v2/approvals/lead-pending', { params: range }).then(r => r.data),
+    enabled,
+    select: (d) => d.length,
+    staleTime: STALE,
+    refetchInterval: STALE,
+    refetchIntervalInBackground: true,
+  }).data ?? 0;
+}
+
 export function usePendingPieces() {
   return useQuery({
     queryKey: ['v2', 'approvals', 'pending'],

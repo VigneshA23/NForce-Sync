@@ -54,8 +54,35 @@ public record EodEntryDto(
         // V110+ line items — empty for legacy PLAIN_LOG entries (frontend renders synthetic row).
         List<EodLogLineDto> logLines,
         // WEEKEND only — see EodEntry.weekendWorked. False for every other day type.
-        Boolean          weekendWorked
+        Boolean          weekendWorked,
+        // Set ONLY on the Team Lead's scoped view of an entry that has tasks on other projects: the total
+        // hours of those tasks, with no project names or details. Null everywhere else.
+        BigDecimal       otherProjectsHours
 ) {
+    /**
+     * The Team Lead's view of an entry: only the tasks on projects he leads (plus tasks with no project,
+     * e.g. leave rows, which reveal nothing about another team), and a single aggregate for the hours
+     * logged on everyone else's projects — no names, codes, descriptions or attachments of those tasks.
+     */
+    public EodEntryDto scopedToProjects(java.util.Set<Long> ledProjectIds) {
+        List<EodTaskDto> mine = new java.util.ArrayList<>();
+        BigDecimal other = BigDecimal.ZERO;
+        for (EodTaskDto t : tasks) {
+            boolean visible = t.projectId() == null || ledProjectIds.contains(t.projectId());
+            if (visible) {
+                mine.add(t);
+            } else if (t.hours() != null) {
+                other = other.add(t.hours());
+            }
+        }
+        return new EodEntryDto(id, employeeId, employeeName, employeeCode, entryDate, status, dayType,
+                timeAdjustmentType, timeAdjustmentMinutes, isOvertime, overtimeHours, workLocation, nextDayPlan,
+                remarks, submittedAt, createdAt, updatedAt, mine, attachments, reviewerComment, escalated,
+                tlInactivityHours, tlName, tlId, undertimeHours, isResubmission, decidedByName, decidedByRole,
+                decidedAt, entryForm, logSummary, logTotalHours, logNotes, logApproverName, logApproverType,
+                logLines, weekendWorked, other);
+    }
+
     // Default factory — no reviewer comment (used in approval flow, saveDraft, submit)
     public static EodEntryDto from(EodEntry e) {
         return from(e, null);
@@ -128,7 +155,8 @@ public record EodEntryDto(
                 null, // logApproverName — populated by ApprovalPieceService when needed
                 null, // logApproverType
                 logLines != null ? logLines : List.of(),
-                Boolean.TRUE.equals(e.getWeekendWorked())
+                Boolean.TRUE.equals(e.getWeekendWorked()),
+                null
         );
     }
 }

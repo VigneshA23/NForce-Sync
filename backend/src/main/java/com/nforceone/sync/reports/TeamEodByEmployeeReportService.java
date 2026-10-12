@@ -45,6 +45,7 @@ public class TeamEodByEmployeeReportService {
 
     private final AppUserRepository appUserRepository;
     private final AllocationRepository allocationRepository;
+    private final com.nforceone.sync.teamlead.LeadTeamPolicy leadTeamPolicy;
     private final EodEntryRepository eodEntryRepository;
     private final DesignationRepository designationRepository;
     private final ShiftDefinitionRepository shiftRepository;
@@ -55,7 +56,9 @@ public class TeamEodByEmployeeReportService {
                                            EodEntryRepository eodEntryRepository,
                                            DesignationRepository designationRepository,
                                            ShiftDefinitionRepository shiftRepository,
-                                           ProjectRepository projectRepository) {
+                                           ProjectRepository projectRepository,
+                                           com.nforceone.sync.teamlead.LeadTeamPolicy leadTeamPolicy) {
+        this.leadTeamPolicy = leadTeamPolicy;
         this.appUserRepository = appUserRepository;
         this.allocationRepository = allocationRepository;
         this.eodEntryRepository = eodEntryRepository;
@@ -275,6 +278,6 @@ public class TeamEodByEmployeeReportService {
                     .sorted(Comparator.comparing(AppUser::getFullName))
                     .toList();
         }
-        return allocationRepository.findActiveMembersByProjectLead(lead.getId(), java.time.LocalDate.now());
+        return leadTeamPolicy.teamMembers(lead.getId());
     }
 }

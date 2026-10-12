@@ -1,12 +1,10 @@
 package com.nforceone.sync.teamlead;
 
-import com.nforceone.sync.project.AllocationRepository;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 
 /**
  * Thin injectable helper for capability-based authorization checks that other packages
@@ -18,12 +16,12 @@ import java.time.LocalDate;
 public class LeadAccessService {
 
     private final ProjectRepository    projectRepository;
-    private final AllocationRepository allocationRepository;
+    private final LeadTeamPolicy       leadTeamPolicy;
 
     public LeadAccessService(ProjectRepository projectRepository,
-                              AllocationRepository allocationRepository) {
-        this.projectRepository    = projectRepository;
-        this.allocationRepository = allocationRepository;
+                              LeadTeamPolicy leadTeamPolicy) {
+        this.projectRepository = projectRepository;
+        this.leadTeamPolicy    = leadTeamPolicy;
     }
 
     /** True when the actor is the assigned lead on at least one active project. */
@@ -42,7 +40,16 @@ public class LeadAccessService {
      * Allocation-based: same definition as TeamLeadService.activeMembers / isInLeadTeam.
      */
     public boolean isInLeadTeam(Long employeeId, Long actorId) {
-        return allocationRepository.findActiveMembersByProjectLead(actorId, LocalDate.now())
-                .stream().anyMatch(u -> u.getId().equals(employeeId));
+        return leadTeamPolicy.isInTeam(employeeId, actorId);
+    }
+
+    /** See LeadTeamPolicy#canReadEntryAsLead — a task on one of his projects or a piece he approves. */
+    public boolean canReadEntryAsLead(Long actorId, com.nforceone.sync.eod.EodEntry entry) {
+        return leadTeamPolicy.canReadEntryAsLead(actorId, entry);
+    }
+
+    /** Ids of the projects the actor leads. */
+    public java.util.Set<Long> ledProjectIds(Long actorId) {
+        return leadTeamPolicy.ledProjectIds(actorId);
     }
 }

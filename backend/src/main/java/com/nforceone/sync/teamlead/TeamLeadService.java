@@ -82,6 +82,7 @@ public class TeamLeadService {
     private final NotificationService          notificationService;
     private final AllocationRepository         allocationRepository;
     private final ProjectRepository            projectRepository;
+    private final LeadTeamPolicy               leadTeamPolicy;
     private final Executor                     dashboardQueryExecutor;
 
     public TeamLeadService(AppUserRepository userRepository,
@@ -96,7 +97,9 @@ public class TeamLeadService {
                             NotificationService notificationService,
                             AllocationRepository allocationRepository,
                             ProjectRepository projectRepository,
+                            LeadTeamPolicy leadTeamPolicy,
                             Executor dashboardQueryExecutor) {
+        this.leadTeamPolicy = leadTeamPolicy;
         this.userRepository    = userRepository;
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
@@ -624,7 +627,7 @@ public class TeamLeadService {
     // ── helpers ──────────────────────────────────────────────────────────────────
 
     private List<AppUser> activeMembers(Long leadId) {
-        return allocationRepository.findActiveMembersByProjectLead(leadId, LocalDate.now());
+        return leadTeamPolicy.teamMembers(leadId);
     }
 
     private List<AppUser> activeMembersByManagerId(Long managerId) {
