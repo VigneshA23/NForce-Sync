@@ -22,6 +22,10 @@ public record SaveEodRequest(
 
         String workLocation,
 
+        /** WEEKEND only: true when the employee worked that day. Null (older clients) is inferred
+         *  from whether any task / log line was sent. Ignored for every other day type. */
+        Boolean weekendWorked,
+
         /** Capped at 300 characters, matching MAX_TEXT_LEN on the Submit EOD form. */
         @Size(max = 300) String nextDayPlan,
         @Size(max = 300) String remarks,

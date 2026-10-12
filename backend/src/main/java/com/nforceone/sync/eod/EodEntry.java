@@ -52,6 +52,11 @@ public class EodEntry {
     @Column(name = "time_adjustment_minutes")
     private Integer timeAdjustmentMinutes;
 
+    /** WEEKEND only: the employee actually worked that day (tasks required, all hours overtime).
+     *  False on a weekend means a no-work day. Meaningless for every other day type. */
+    @Column(name = "weekend_worked", nullable = false)
+    private Boolean weekendWorked = Boolean.FALSE;
+
     /** Hours logged beyond the day's reference. Flagged for the manager, never a rejection. */
     @Column(name = "is_overtime", nullable = false)
     private Boolean isOvertime = Boolean.FALSE;

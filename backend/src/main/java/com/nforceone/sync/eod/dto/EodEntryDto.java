@@ -52,7 +52,9 @@ public record EodEntryDto(
         String           logApproverName,
         String           logApproverType,
         // V110+ line items — empty for legacy PLAIN_LOG entries (frontend renders synthetic row).
-        List<EodLogLineDto> logLines
+        List<EodLogLineDto> logLines,
+        // WEEKEND only — see EodEntry.weekendWorked. False for every other day type.
+        Boolean          weekendWorked
 ) {
     // Default factory — no reviewer comment (used in approval flow, saveDraft, submit)
     public static EodEntryDto from(EodEntry e) {
@@ -125,7 +127,8 @@ public record EodEntryDto(
                 e.getLogNotes(),
                 null, // logApproverName — populated by ApprovalPieceService when needed
                 null, // logApproverType
-                logLines != null ? logLines : List.of()
+                logLines != null ? logLines : List.of(),
+                Boolean.TRUE.equals(e.getWeekendWorked())
         );
     }
 }
