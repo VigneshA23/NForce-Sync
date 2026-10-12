@@ -3,7 +3,7 @@
  *
  * Design matches SubmitEOD.tsx exactly: same inputStyle (var(--line2), borderRadius 6),
  * same Label primitive, same section spacing (marginTop 24/28), same button style.
- * Layout: one column, left-aligned, capped at ~1040px (see .nf-dl-* in index.css). The old right-hand
+ * Layout: one column, left-aligned, capped at ~1280px (see .nf-dl-* in index.css). The old right-hand
  * cards live on as: a submission-window chip/banner + an approval status line under the header, and a
  * "How it works" popover beside the title (dailyLogParts.tsx).
  */
