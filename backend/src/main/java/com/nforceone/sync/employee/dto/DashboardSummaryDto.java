@@ -21,7 +21,10 @@ public record DashboardSummaryDto(
             /** True when the cutoff lands on the day AFTER `today`, as it does for a shift that
              *  crosses midnight (15:30-00:30 with a 00:30 cutoff). Without this the UI shows a
              *  bare "00:30" that reads as though the deadline already passed this morning. */
-            boolean cutoffNextDay
+            boolean cutoffNextDay,
+            /** The server's clock when this was computed (same zone as {@code cutoffTime}), so the UI can count
+             *  down to the cutoff from SERVER time instead of trusting the browser's clock. */
+            java.time.LocalDateTime serverNow
     ) {}
 
     public record QuickStats(

@@ -3,23 +3,27 @@
  *
  * Design matches SubmitEOD.tsx exactly: same inputStyle (var(--line2), borderRadius 6),
  * same Label primitive, same section spacing (marginTop 24/28), same button style.
- * Layout: plain form on left (no card wrappers) + 320px sticky sidebar on right.
+ * Layout: one column, left-aligned, capped at ~1040px (see .nf-dl-* in index.css). The old right-hand
+ * cards live on as: a submission-window chip/banner + an approval status line under the header, and a
+ * "How it works" popover beside the title (dailyLogParts.tsx).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertTriangle, CheckCircle, Clock, Send, Save, Copy, Plus, Trash2, XCircle,
-  ChevronLeft, ChevronRight,
+  AlertTriangle, CheckCircle, Clock, Send, Save, Copy, Plus, Trash2,
+  ChevronLeft, ChevronRight, ListPlus,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../../lib/toast';
-import { todayISO, formatDate, formatTime12h } from '../../lib/date';
+import { todayISO, formatDate } from '../../lib/date';
 import { saveDraft, submitEntry, listEntries, getDayDefaults } from '../../api/eod';
 import { useEntryPieces } from '../../api/approvalPieces';
 import { useDashboardSummary } from '../../api/employee';
 import type { EodEntryDto, EodLogLineDto, SaveLogLineRequest } from '../../api/eod';
 import { DatePicker } from '../../components/DatePicker';
+import { ApprovalStatusLine, HowItWorksPopover, SubmissionWindow } from './dailyLogParts';
+import { useSubmissionWindow } from './useSubmissionWindow';
 import { api } from '../../api/client';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -74,9 +78,6 @@ function editable(entry: EodEntryDto | null | undefined) {
   return !entry || entry.status === 'DRAFT' || entry.status === 'REJECTED';
 }
 
-function initials(name: string) {
-  return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
-}
 
 // ── Design tokens — exact copies from SubmitEOD ───────────────────────────────
 
@@ -193,7 +194,7 @@ export default function DailyLogForm() {
     staleTime: 0, enabled: !!user,
   });
 
-  const { data: dashboard } = useDashboardSummary();
+  const { data: dashboard, dataUpdatedAt: dashboardFetchedAt } = useDashboardSummary();
 
   const [loadYday, setLoadYday] = useState(false);
   const { data: ydayEntries } = useQuery({
@@ -257,8 +258,9 @@ export default function DailyLogForm() {
   const isToday      = selectedDate === todayISO();
   const isPast       = selectedDate < todayISO();
   const cutoff       = dashboard?.cutoffStatus;
-  const cutoffPassed = isToday && (cutoff?.cutoffPassed ?? false);
-  const showLate     = (isPast || cutoffPassed) && isEditable;
+  // The "Submission window" (closes-at, countdown, closed, late) is counted from the server's clock.
+  const windowState  = useSubmissionWindow(cutoff, dashboardFetchedAt, isToday);
+  const showPastDate = isPast && isEditable;
 
   const rmPiece      = pieces.find(p => p.approverType === 'REPORTING_MANAGER');
   const managerName  = rmPiece?.approverName ?? null;
@@ -391,12 +393,12 @@ export default function DailyLogForm() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    // No width cap: like Submit EOD, the page fills the shell's content area. Width is handled by the grid
-    // below (form column grows; the side column is a fixed clamp()) — see the .nf-dl-* rules in index.css.
+    // One left-aligned column capped for reading width (the title sits at the same left edge as every other
+    // page); see the .nf-dl-* rules in index.css.
     <div className="nf-dl-page">
 
       {/* ── Header (SubmitEOD PageHeader style) ── */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:24 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:12 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <button
             onClick={() => handleDateChange(prevDate)}
@@ -426,8 +428,16 @@ export default function DailyLogForm() {
               Today
             </button>
           )}
+          <HowItWorksPopover />
         </div>
         {entryStatus && <StatusBadge status={entryStatus} />}
+      </div>
+
+      {/* Status strip: who reviews it and where it stands, plus the submission window (a chip while open, a
+          banner once closed). Replaces the Approval and Submission-window cards. */}
+      <div style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-start', gap:'10px 16px', marginBottom:20 }}>
+        <ApprovalStatusLine pieces={pieces} />
+        <SubmissionWindow state={windowState} editable={isEditable} />
       </div>
 
       {/* ── Full-width banners ── */}
@@ -454,13 +464,12 @@ export default function DailyLogForm() {
         </div>
       )}
 
-      {showLate && (
+      {showPastDate && (
         <div style={{ display:'flex', gap:12, alignItems:'flex-start', padding:'12px 16px', borderRadius:8, marginBottom:16, background:'rgba(224,169,59,.08)', border:'1px solid rgba(224,169,59,.3)' }}>
           <Clock size={15} style={{ color:'#E0A93B', flexShrink:0, marginTop:1 }} aria-hidden />
           <div>
-            {isToday && cutoffPassed && cutoff?.cutoffTime
-              ? <><div style={{ fontSize:13, color:'var(--txt)', fontWeight:500 }}>Submission window closed at {formatTime12h(cutoff.cutoffTime)}.</div><div style={{ fontSize:12, color:'var(--txt-mut)', marginTop:2 }}>Entries submitted after the cutoff are accepted and marked late.</div></>
-              : <><div style={{ fontSize:13, color:'var(--txt)', fontWeight:500 }}>Submitting for a past date.</div><div style={{ fontSize:12, color:'var(--txt-mut)', marginTop:2 }}>This entry will be marked late.</div></>}
+            <div style={{ fontSize:13, color:'var(--txt)', fontWeight:500 }}>Submitting for a past date.</div>
+            <div style={{ fontSize:12, color:'var(--txt-mut)', marginTop:2 }}>This entry will be marked late.</div>
           </div>
         </div>
       )}
@@ -481,19 +490,9 @@ export default function DailyLogForm() {
         </div>
       )}
 
-      {/* Submission window as a compact strip above the form at 1024-1279px, where the side column is gone
-          (the full card shows in the side column above that, and stacked below the form under 1024). */}
-      {cutoff && isToday && (
-        <div className="nf-dl-strip">
-          <CutoffCard compact cutoffTime={cutoff.cutoffTime} cutoffPassed={cutoff.cutoffPassed} cutoffNextDay={cutoff.cutoffNextDay} />
-        </div>
-      )}
-
-      {/* ── Two-column layout ── */}
-      <div className="nf-dl-grid">
-
-        {/* ══════════════════════════════════════ LEFT: form (SubmitEOD style) */}
-        <div>
+      {/* The fields sit in their own container-query context, so stacking follows the form's OWN width
+          (sidebar open or not). The sticky action bar below is deliberately outside it. */}
+      <div className="nf-dl-fields">
 
           {/* Meta row — Entry date | Day type | Work location (matches SubmitEOD) */}
           <div className="nf-dl-meta" style={{ marginTop:24 }}>
@@ -521,7 +520,7 @@ export default function DailyLogForm() {
           </div>
 
           {/* Non-work day / leave banner */}
-          {(isNonWork || isLeave || isWeekend) && (
+          {(isNonWork || isWeekend) && (
             <div style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'12px 16px', borderRadius:8, marginTop:24, background:'rgba(47,182,124,.08)', border:'1px solid rgba(47,182,124,.3)' }}>
               <CheckCircle size={15} style={{ color:'var(--ok)', flexShrink:0, marginTop:1 }} aria-hidden />
               <div>
@@ -578,10 +577,44 @@ export default function DailyLogForm() {
                 </div>
               )}
 
-              {/* Empty state — editable */}
+              {/* Empty state — editable: two clear actions */}
               {lines.length===0 && !isLeave && isEditable && (
-                <div style={{ padding:'28px 20px', borderRadius:8, textAlign:'center', border:'1px dashed var(--line2)', color:'var(--txt-dim)', fontSize:13 }}>
-                  Add line items to log your time, or mark the day as leave below.
+                <div style={{ padding:'32px 20px', borderRadius:10, textAlign:'center', border:'1px dashed var(--line2)', background:'var(--raised)' }}>
+                  <div aria-hidden style={{ width:40, height:40, borderRadius:'50%', background:'var(--raised2)', border:'1px solid var(--line)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 12px' }}>
+                    <ListPlus size={18} color="var(--txt-dim)" />
+                  </div>
+                  <div style={{ fontSize:14, fontWeight:600, color:'var(--txt)', marginBottom:4 }}>No time logged yet</div>
+                  <div style={{ fontSize:12.5, color:'var(--txt-dim)', marginBottom:18, lineHeight:1.5 }}>
+                    Break your day into line items{!isWeekend ? ', or mark the whole day as leave' : ''}.
+                  </div>
+                  <div style={{ display:'flex', gap:10, justifyContent:'center', flexWrap:'wrap' }}>
+                    <button onClick={addLine} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'9px 16px', borderRadius:6, background:'var(--raised2)', border:'1px solid var(--brand)', color:'var(--txt)', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                      <Plus size={14} aria-hidden />Add line item
+                    </button>
+                    {!isWeekend && (
+                      <button onClick={() => { setIsLeave(true); setDirty(true); }} style={{ padding:'9px 16px', borderRadius:6, background:'transparent', border:'1px solid var(--line2)', color:'var(--txt-mut)', fontSize:13, fontWeight:500, cursor:'pointer' }}>
+                        Mark as leave day
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Leave day: a clear confirmation, with Cancel as a quiet secondary action */}
+              {isLeave && (
+                <div role="status" style={{ display:'flex', gap:14, alignItems:'center', flexWrap:'wrap', padding:'16px 18px', borderRadius:10, background:'rgba(47,182,124,.08)', border:'1px solid rgba(47,182,124,.3)' }}>
+                  <CheckCircle size={20} style={{ color:'var(--ok)', flexShrink:0 }} aria-hidden />
+                  <div style={{ flex:'1 1 220px', minWidth:0 }}>
+                    <div style={{ fontSize:14, fontWeight:600, color:'var(--txt)' }}>Marked as a leave day</div>
+                    <div style={{ fontSize:12.5, color:'var(--txt-mut)', marginTop:2, lineHeight:1.5 }}>
+                      Auto-approved — no manager review needed.{isEditable ? ' Record it when you are ready.' : ''}
+                    </div>
+                  </div>
+                  {isEditable && (
+                    <button onClick={() => { setIsLeave(false); setDirty(true); }} style={{ padding:'7px 14px', borderRadius:6, background:'transparent', border:'1px solid var(--line2)', color:'var(--txt-mut)', fontSize:12.5, fontWeight:500, cursor:'pointer' }}>
+                      Cancel leave
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -624,7 +657,7 @@ export default function DailyLogForm() {
               )}
 
               {/* Add line */}
-              {isEditable && !isLeave && (
+              {isEditable && !isLeave && lines.length > 0 && (
                 <button
                   onClick={addLine}
                   style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:6, marginTop:10, background:'transparent', border:'1px dashed var(--line2)', color:'var(--txt-mut)', fontSize:13, cursor:'pointer', transition:'border-color 120ms, color 120ms' }}
@@ -635,23 +668,6 @@ export default function DailyLogForm() {
                 </button>
               )}
 
-              {/* Leave toggle */}
-              {isEditable && lines.length===0 && !isWeekend && (
-                <div style={{ display:'flex', alignItems:'center', gap:12, marginTop:12 }}>
-                  <button
-                    onClick={() => { setIsLeave(v => !v); setDirty(true); }}
-                    style={{
-                      padding:'8px 18px', borderRadius:6, fontSize:13, fontWeight:500, cursor:'pointer',
-                      background: isLeave ? 'var(--brand)' : 'var(--raised2)',
-                      border: `1px solid ${isLeave ? 'var(--brand-deep)' : 'var(--line2)'}`,
-                      color: isLeave ? '#fff' : 'var(--txt)',
-                    }}
-                  >
-                    {isLeave ? 'Cancel leave' : 'Mark as leave day'}
-                  </button>
-                  {isLeave && <span style={{ fontSize:12, color:'var(--txt-dim)' }}>Auto-approved — no manager review needed.</span>}
-                </div>
-              )}
             </div>
           )}
 
@@ -682,17 +698,19 @@ export default function DailyLogForm() {
           </div>
 
           {/* Additional notes — full width of the form column, capped so a line never runs 1000px+ */}
-          <div className="nf-dl-notes" style={{ marginTop:24 }}>
+          <div style={{ marginTop:24 }}>
             <Label>Additional notes <span style={{ color:'var(--txt-dim)', textTransform:'none', fontWeight:400, letterSpacing:0 }}>(optional, private)</span></Label>
             {isReadOnly
               ? <div style={{ ...inputStyle, opacity:0.7, lineHeight:1.5 }}>{notes || '-'}</div>
               : <>
                   <Txt value={notes} onChange={e => { setNotes(e.target.value); setDirty(true); }} placeholder="Extended notes for your own record — not visible to your reviewer." rows={3} maxLength={MAX_NOTES} style={{ minHeight:96 }} />
-                  <div style={{ fontSize:11, color:notes.length>MAX_NOTES?'var(--risk)':'var(--txt-dim)', textAlign:'right', marginTop:4 }}>{notes.length}/{MAX_NOTES}</div>
+                  <CharCount value={notes} max={MAX_NOTES} />
                 </>}
           </div>
 
           {/* ── Action buttons (SubmitEOD style — right-aligned) ── */}
+      </div>
+
           {/* Sticky action bar: solid background + top border, always on screen; it sits in normal flow at the end
               of the form (so it never covers the last fields) and only floats while that end is off-screen. */}
           {isEditable && !confirming && (
@@ -741,20 +759,6 @@ export default function DailyLogForm() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* ══════════════════════════════════════ RIGHT SIDEBAR */}
-        <div className="nf-dl-side">
-          {cutoff && isToday && (
-            <div className="nf-dl-cutoff-card">
-              <CutoffCard cutoffTime={cutoff.cutoffTime} cutoffPassed={cutoff.cutoffPassed} cutoffNextDay={cutoff.cutoffNextDay} />
-            </div>
-          )}
-          <ReviewerCard entry={entry} pieces={pieces} />
-          <HowItWorksCard />
-        </div>
-
-      </div>
     </div>
   );
 }
@@ -837,167 +841,6 @@ function LineRow({ line, index, categories, isReadOnly, onUpdate, onRemove }: Li
             <div style={{ fontSize:11, color:'var(--warn)', marginTop:4 }}>Minimum {MIN_DESC} characters required</div>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Sidebar components ────────────────────────────────────────────────────────
-
-const SIDEBAR_CARD: React.CSSProperties = {
-  background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 12, overflow: 'hidden',
-};
-
-const SIDEBAR_HEAD: React.CSSProperties = {
-  padding: '11px 16px', borderBottom: '1px solid var(--line)',
-  fontSize: 11, fontWeight: 700, color: 'var(--txt-mut)',
-  letterSpacing: '0.08em', textTransform: 'uppercase',
-  display: 'flex', alignItems: 'center', gap: 7,
-};
-
-const PIECE_STATUS_CFG: Record<string, { color: string; label: string; Icon: typeof CheckCircle }> = {
-  APPROVED: { color: '#2FB67C', label: 'Approved', Icon: CheckCircle },
-  REJECTED: { color: '#E4373D', label: 'Rejected', Icon: XCircle    },
-  PENDING:  { color: '#4C8DD6', label: 'Pending',  Icon: Clock       },
-};
-
-function CutoffCard({ cutoffTime, cutoffPassed, cutoffNextDay, compact = false }: { cutoffTime: string|null; cutoffPassed: boolean; cutoffNextDay: boolean; compact?: boolean }) {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => { const id = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(id); }, []);
-  if (!cutoffTime) return null;
-
-  const [hh, mm]   = cutoffTime.split(':').map(Number);
-  const cutoffDate = new Date(now);
-  if (cutoffNextDay) cutoffDate.setDate(cutoffDate.getDate() + 1);
-  cutoffDate.setHours(hh, mm, 0, 0);
-
-  const diffMs   = cutoffDate.getTime() - now.getTime();
-  const diffMins = Math.floor(diffMs / 60_000);
-  const h        = Math.floor(diffMins / 60);
-  const m        = diffMins % 60;
-  const passed   = cutoffPassed || diffMs <= 0;
-  const urgent   = !passed && diffMins < 60;
-  const color    = passed ? '#E4373D' : urgent ? '#E0A93B' : '#2FB67C';
-  const timeStr  = passed ? 'Closed' : h > 0 ? `${h}h ${m}m` : `${m}m`;
-
-  // Compact: one line (icon · label · time · closes-at) for the strip above the form at 1024-1279px.
-  if (compact) {
-    return (
-      <div style={{ ...SIDEBAR_CARD, display:'flex', alignItems:'center', flexWrap:'wrap', gap:'6px 14px', padding:'10px 16px', marginBottom:16,
-        borderColor: passed?'rgba(228,55,61,.3)':urgent?'rgba(224,169,59,.3)':'rgba(47,182,124,.25)' }}>
-        <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', color }}>
-          <Clock size={12} color={color} /> Submission window
-        </span>
-        <span style={{ fontSize:passed?15:18, fontWeight:800, color, fontFamily:'"JetBrains Mono",monospace', letterSpacing:'-0.02em' }}>{timeStr}</span>
-        <span style={{ fontSize:12, color:'var(--txt-dim)' }}>
-          {passed ? 'Late submissions still accepted.' : urgent ? 'until cutoff — submit soon' : 'remaining to submit on time'}
-          {' · '}Closes at {formatTime12h(cutoffTime)}{cutoffNextDay?' (next day)':' today'}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ ...SIDEBAR_CARD, borderColor: passed?'rgba(228,55,61,.3)':urgent?'rgba(224,169,59,.3)':'rgba(47,182,124,.25)' }}>
-      <div style={{ ...SIDEBAR_HEAD, borderBottomColor: passed?'rgba(228,55,61,.2)':urgent?'rgba(224,169,59,.2)':'var(--line)', color }}>
-        <Clock size={12} color={color} />
-        Submission window
-      </div>
-      <div style={{ padding:'18px 16px', textAlign:'center' }}>
-        <div style={{ fontSize:passed?20:34, fontWeight:800, color, fontFamily:'"JetBrains Mono",monospace', letterSpacing:'-0.02em', lineHeight:1 }}>
-          {timeStr}
-        </div>
-        <div style={{ fontSize:12, color:'var(--txt-dim)', marginTop:6 }}>
-          {passed ? 'Late submissions still accepted.' : urgent ? 'until cutoff — submit soon' : 'remaining to submit on time'}
-        </div>
-        <div style={{ marginTop:12, padding:'7px 10px', borderRadius:6, background:'var(--raised2)', border:'1px solid var(--line)', fontSize:11, color:'var(--txt-dim)' }}>
-          Closes at {formatTime12h(cutoffTime)}{cutoffNextDay?' (next day)':' today'}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ReviewerCard({ entry, pieces }: {
-  entry: EodEntryDto|null;
-  pieces: import('../../api/approvalPieces').ApprovalPieceDto[];
-}) {
-  const typeLabel = (t: string) =>
-    t==='REPORTING_MANAGER'?'Reporting Manager':t==='ADMIN_GROUP'?'Admin Group':t==='AUTO_APPROVED'?'Auto-approved':t;
-
-  if (!entry || !pieces.length) {
-    return (
-      <div style={SIDEBAR_CARD}>
-        <div style={SIDEBAR_HEAD}><CheckCircle size={12} />Approval</div>
-        <div style={{ padding:'20px 16px', textAlign:'center' }}>
-          <div style={{ width:38, height:38, borderRadius:'50%', background:'var(--raised2)', border:'1px solid var(--line)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 10px' }}>
-            <Clock size={17} color="var(--txt-dim)" />
-          </div>
-          <div style={{ fontSize:13, color:'var(--txt-dim)', lineHeight:1.6 }}>
-            Submit your daily log to see the reviewer assigned to your entry.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={SIDEBAR_CARD}>
-      <div style={SIDEBAR_HEAD}><CheckCircle size={12} />Approval</div>
-      <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:10 }}>
-        {pieces.map(p => {
-          const cfg  = PIECE_STATUS_CFG[p.status] ?? PIECE_STATUS_CFG.PENDING;
-          const Icon = cfg.Icon;
-          return (
-            <div key={p.id} style={{ padding:'12px 13px', borderRadius:9, background:'var(--raised2)', border:'1px solid var(--line)' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-                <div style={{ width:32, height:32, borderRadius:'50%', background:`${cfg.color}18`, border:`1.5px solid ${cfg.color}40`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                  <span style={{ fontSize:11, fontWeight:700, color:cfg.color }}>
-                    {p.approverName ? initials(p.approverName) : '—'}
-                  </span>
-                </div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13, fontWeight:600, color:'var(--txt)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                    {p.approverName ?? typeLabel(p.approverType)}
-                  </div>
-                  <div style={{ fontSize:11, color:'var(--txt-dim)', marginTop:1 }}>{typeLabel(p.approverType)}</div>
-                </div>
-                <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', borderRadius:20, background:`${cfg.color}18`, border:`1px solid ${cfg.color}40`, fontSize:10, fontWeight:700, color:cfg.color, flexShrink:0 }}>
-                  <Icon size={10} />{cfg.label}
-                </span>
-              </div>
-              {p.comment && (
-                <div style={{ marginTop:9, padding:'8px 10px', borderRadius:7, background:'rgba(228,55,61,.07)', border:'1px solid rgba(228,55,61,.2)', fontSize:12, color:'var(--txt)', lineHeight:1.55 }}>
-                  {p.comment}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function HowItWorksCard() {
-  return (
-    <div style={SIDEBAR_CARD}>
-      <div style={SIDEBAR_HEAD}><Clock size={12} />How it works</div>
-      <div style={{ padding:'14px 16px', display:'flex', flexDirection:'column', gap:10 }}>
-        {[
-          'Select your day type and work location.',
-          'Add category line items for your time breakdown.',
-          'Fill in your next-day plan, then submit.',
-          'Leave or holiday days are auto-approved instantly.',
-          'Rejected logs can be edited and resubmitted.',
-        ].map((text, i) => (
-          <div key={i} style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
-            <div style={{ width:20, height:20, borderRadius:'50%', background:'var(--raised2)', border:'1px solid var(--line)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
-              <span style={{ fontSize:10, fontWeight:700, color:'var(--txt-dim)' }}>{i+1}</span>
-            </div>
-            <span style={{ fontSize:12, color:'var(--txt-mut)', lineHeight:1.65 }}>{text}</span>
-          </div>
-        ))}
       </div>
     </div>
   );

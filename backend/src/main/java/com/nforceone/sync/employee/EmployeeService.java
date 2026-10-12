@@ -207,14 +207,15 @@ public class EmployeeService {
         ShiftDefinition shift = shiftFor(employee.getShiftId());
         LocalDateTime cutoffAt = shift == null ? null : ShiftSchedule.cutoffAt(shift, today);
         if (cutoffAt == null) {
-            return new DashboardSummaryDto.CutoffStatus(today, status, false, null, false);
+            return new DashboardSummaryDto.CutoffStatus(today, status, false, null, false, LocalDateTime.now());
         }
 
-        boolean cutoffPassed = LocalDateTime.now().isAfter(cutoffAt);
+        LocalDateTime serverNow = LocalDateTime.now();
+        boolean cutoffPassed = serverNow.isAfter(cutoffAt);
         // Still reported as time-of-day + "is it tomorrow", because that is what the banner
         // renders; the difference is that it is now derived from a real instant.
         return new DashboardSummaryDto.CutoffStatus(today, status, cutoffPassed,
-                cutoffAt.toLocalTime(), cutoffAt.toLocalDate().isAfter(today));
+                cutoffAt.toLocalTime(), cutoffAt.toLocalDate().isAfter(today), serverNow);
     }
 
     /** The given shift id's definition, or null when the employee has none assigned.

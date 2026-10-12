@@ -16,6 +16,8 @@ export interface CutoffStatus {
   cutoffTime: string | null;
   /** Cutoff falls on the day after `today` — true for a shift crossing midnight. */
   cutoffNextDay: boolean;
+  /** The server's clock (local date-time, same zone as cutoffTime) when this was computed. */
+  serverNow?: string | null;
 }
 
 export interface QuickStats {
