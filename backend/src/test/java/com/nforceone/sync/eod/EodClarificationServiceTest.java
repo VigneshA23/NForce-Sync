@@ -531,4 +531,137 @@ class EodClarificationServiceTest {
         assertFalse(dto.canResolve());
         assertDoesNotThrow(() -> service.getThread(100L, pm.getEmail()));
     }
+
+    // ── employee-side unread: a round opened by a reporting manager ───────────
+    //
+    // The unread flag and the employee inbox list are approver-agnostic: they key off the entry's
+    // owner and "the last activity was not sent by the viewer", never the opener's role or the
+    // piece type. These pin that, including the dual-role case (a project lead whose OWN EOD is
+    // reviewed by his reporting manager), where the sidebar badge previously never showed.
+
+    private EodEntry ownEntry(Long entryId, AppUser owner) {
+        EodEntry e = new EodEntry();
+        e.setId(entryId);
+        e.setEmployee(owner);
+        e.setManagerId(rm.getId());
+        e.setEntryDate(LocalDate.of(2026, 9, 2));
+        e.setStatus(EodEntry.Status.SUBMITTED);
+        return e;
+    }
+
+    private EodProjectApproval rmPiece(EodEntry e) {
+        EodProjectApproval p = new EodProjectApproval();
+        p.setId(77L);
+        p.setEodEntry(e);
+        p.setApprover(rm);
+        p.setApproverType(EodProjectApproval.ApproverType.REPORTING_MANAGER);
+        p.setStatus(EodProjectApproval.Status.PENDING);
+        return p;
+    }
+
+    private EodClarification rmRound(EodEntry e) {
+        EodClarification c = new EodClarification();
+        c.setId(600L);
+        c.setEodEntry(e);
+        c.setOpenedBy(rm);
+        c.setOpenedByApprover(rm);
+        c.setOpenedAt(OffsetDateTime.now().minusMinutes(10));
+        c.setStatus(EodClarification.Status.NEEDS_RESPONSE);
+        return c;
+    }
+
+    @Test
+    void rmOpensOnALeadsOwnEod_leadGetsTheNotification_andAnUnreadRowInHisOwnInbox() {
+        EodEntry leadsEntry = ownEntry(200L, lead);
+        EodProjectApproval piece = rmPiece(leadsEntry);
+        when(entryRepository.findWithDetailsById(200L)).thenReturn(Optional.of(leadsEntry));
+        when(pieceRepository.findByEodEntryId(200L)).thenReturn(List.of(piece));
+
+        EodClarificationStatusDto dto = service.open(200L, rm.getEmail(), null);
+        assertTrue(dto.open());
+        verify(notificationService).send(eq(lead.getId()), eq("EOD_CLARIFICATION_REQUESTED"),
+                anyString(), anyString(), anyString());
+
+        EodClarification round = rmRound(leadsEntry);
+        when(clarificationRepository.findByEodEntry_Employee_IdAndStatusNotOrderByOpenedAtDesc(
+                lead.getId(), EodClarification.Status.RESOLVED)).thenReturn(List.of(round));
+
+        var items = service.listForEmployee(lead.getEmail(), true);
+        assertEquals(1, items.size());
+        assertTrue(items.get(0).unread(), "the lead's OWN inbox must show the RM's round as unread");
+    }
+
+    @Test
+    void forALead_ownInboxAndTeamInboxStayDisjoint() {
+        EodEntry leadsEntry = ownEntry(200L, lead);
+        EodClarification ownRound = rmRound(leadsEntry);               // RM -> lead, on lead's own EOD
+        EodClarification reportRound = roundOn(100L, 502L, employee, lead); // lead -> a report
+        when(clarificationRepository.findByEodEntry_Employee_IdAndStatusNotOrderByOpenedAtDesc(
+                lead.getId(), EodClarification.Status.RESOLVED)).thenReturn(List.of(ownRound));
+        // Even if the reviewer query ever returned the lead's own round, the invariant drops it.
+        when(clarificationRepository.findOpenForReviewer(lead.getId())).thenReturn(List.of(ownRound, reportRound));
+
+        var own  = service.listForEmployee(lead.getEmail(), true);
+        var team = service.listForLead(lead.getEmail(), true);
+
+        assertEquals(List.of(200L), own.stream().map(i -> i.eodEntryId()).toList());
+        assertEquals(List.of(100L), team.stream().map(i -> i.eodEntryId()).toList());
+        // The round the lead opened himself is not unread to him; the badge counts only the other.
+        assertFalse(team.get(0).unread());
+        assertTrue(own.get(0).unread());
+    }
+
+    @Test
+    void plainEmployee_seesAnRmOpenedRoundAsUnread_andAnotherEmployeeSeesNothing() {
+        EodEntry employeesEntry = ownEntry(300L, employee);
+        EodClarification round = rmRound(employeesEntry);
+        when(clarificationRepository.findByEodEntry_Employee_IdAndStatusNotOrderByOpenedAtDesc(
+                employee.getId(), EodClarification.Status.RESOLVED)).thenReturn(List.of(round));
+        AppUser stranger = user(5L, "Someone Else", AppUser.Role.EMPLOYEE);
+        lenient().when(userRepository.findByEmailAndDeletedAtIsNull(stranger.getEmail())).thenReturn(Optional.of(stranger));
+
+        var mine = service.listForEmployee(employee.getEmail(), true);
+        assertEquals(1, mine.size());
+        assertTrue(mine.get(0).unread());
+        assertTrue(service.listForEmployee(stranger.getEmail(), true).isEmpty());
+    }
+
+    @Test
+    void unread_clearsOnceRead_andReturnsWhenTheRmRepliesAfterwards() {
+        EodEntry leadsEntry = ownEntry(200L, lead);
+        EodClarification round = rmRound(leadsEntry);
+        when(clarificationRepository.findByEodEntry_Employee_IdAndStatusNotOrderByOpenedAtDesc(
+                lead.getId(), EodClarification.Status.RESOLVED)).thenReturn(List.of(round));
+
+        // Opened it after the round started -> read.
+        EodClarificationReadState read = new EodClarificationReadState();
+        read.setClarification(round);
+        read.setUser(lead);
+        read.setLastReadAt(round.getOpenedAt().plusMinutes(1));
+        when(readStateRepository.findByClarificationIdInAndUserId(List.of(600L), lead.getId()))
+                .thenReturn(List.of(read));
+        assertFalse(service.listForEmployee(lead.getEmail(), true).get(0).unread());
+
+        // The RM replies after that read -> unread again (a second request on the same EOD is the
+        // same mechanism: any later activity from someone other than the viewer).
+        EodClarificationReply reply = new EodClarificationReply();
+        reply.setClarification(round);
+        reply.setSender(rm);
+        reply.setMessage("Please add the missing detail");
+        reply.setCreatedAt(read.getLastReadAt().plusMinutes(5));
+        when(replyRepository.findByClarificationIdInOrderByCreatedAtAsc(List.of(600L))).thenReturn(List.of(reply));
+        assertTrue(service.listForEmployee(lead.getEmail(), true).get(0).unread());
+    }
+
+    @Test
+    void rmWhoIsNotALead_seesTheRoundInTheReviewerList_asReadByHimself() {
+        EodEntry employeesEntry = ownEntry(300L, employee);
+        EodClarification round = rmRound(employeesEntry);
+        when(clarificationRepository.findOpenForReviewer(rm.getId())).thenReturn(List.of(round));
+
+        var items = service.listForLead(rm.getEmail(), true);
+
+        assertEquals(List.of(300L), items.stream().map(i -> i.eodEntryId()).toList());
+        assertFalse(items.get(0).unread(), "the opener's own round is not unread to him");
+    }
 }
