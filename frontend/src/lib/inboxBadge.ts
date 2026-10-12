@@ -25,3 +25,20 @@ export function inboxBadgeFor(item: { path?: string }, counts: InboxCounts): num
     default:                    return undefined;
   }
 }
+
+/**
+ * Which open-blockers count a sidebar Blockers item shows. Same trap as the inbox items: the Team
+ * Lead's "Team Blockers" and the PM's "Blockers" share the nav key `blockers`, so a key-based lookup
+ * gave a user who is both a lead and a PM the lead's count on the PM item (the PM page said 0 while
+ * the badge said 1). Path tells them apart.
+ */
+export function blockersBadgeFor(
+  item: { path?: string },
+  counts: { lead: number; pm: number },
+): number | undefined {
+  switch (item.path) {
+    case '/team/blockers':     return counts.lead;
+    case '/projects/blockers': return counts.pm;
+    default:                   return undefined;
+  }
+}

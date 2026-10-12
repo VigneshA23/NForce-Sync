@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inboxBadgeFor } from './inboxBadge';
+import { inboxBadgeFor, blockersBadgeFor } from './inboxBadge';
 import { getNavPaths, getNavSections, isNavGroup } from './nav';
 import type { ServerUserCapabilities } from '../api/auth';
 
@@ -78,5 +78,20 @@ describe('reporting manager Blockers nav item', () => {
     const c = caps({ leadsProjectIds: [1] });
     expect(rmItems(c)).toHaveLength(0);
     expect(getNavPaths('employee', c)).not.toContain('/my-reports/blockers');
+  });
+});
+
+describe('blockersBadgeFor', () => {
+  // Dheeraj is a lead AND a PM: Team Blockers has 1 open blocker, the PM Blockers page has none.
+  const counts = { lead: 1, pm: 0 };
+
+  it('puts the lead count on Team Blockers and the PM count on the PM Blockers item', () => {
+    expect(blockersBadgeFor({ path: '/team/blockers' }, counts)).toBe(1);
+    expect(blockersBadgeFor({ path: '/projects/blockers' }, counts)).toBe(0);
+  });
+
+  it('does not touch the employee My Blockers item or anything else', () => {
+    expect(blockersBadgeFor({ path: '/blockers' }, counts)).toBeUndefined();
+    expect(blockersBadgeFor({ path: '/my-reports/blockers' }, counts)).toBeUndefined();
   });
 });

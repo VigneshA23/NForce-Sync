@@ -6,7 +6,7 @@ import { Menu, X, Search, Bell, LogOut, UserCircle2, HelpCircle, FolderKanban, C
 import { BrandMark } from './BrandMark';
 import { ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, navPathFor, getNavSections, navSubItemPath, isNavGroup } from '../lib/nav';
 import type { NavItem } from '../lib/nav';
-import { inboxBadgeFor } from '../lib/inboxBadge';
+import { inboxBadgeFor, blockersBadgeFor } from '../lib/inboxBadge';
 import { useAuth, getHomeRouteForRole } from '../lib/auth';
 import { useAccentColor, ACCENT_BAND_POSITION_X } from '../lib/accentColor';
 import sidebarDecoration from '../assets/sidebar-decoration.png';
@@ -709,8 +709,8 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                 if (item.key === 'approvals' && item.path === '/team/approvals') return pendingApprovalsCount;
                 if (item.key === 'approvals' && item.path === '/projects/approvals') return pmPendingCount;
                 if (item.key === 'rm-approvals') return rmPendingCount;
-                if (isLead && item.key === 'blockers') return openBlockersCount;
-                if (isPm && item.key === 'blockers') return pmOpenBlockersCount;
+                const blockersBadge = blockersBadgeFor(item, { lead: openBlockersCount, pm: pmOpenBlockersCount });
+                if (blockersBadge !== undefined) return blockersBadge;
                 const inboxBadge = inboxBadgeFor(item, inboxCounts);
                 if (inboxBadge !== undefined) return inboxBadge;
                 return item.badge;
