@@ -81,7 +81,7 @@ function initials(name: string) {
 // ── Design tokens — exact copies from SubmitEOD ───────────────────────────────
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '8px 10px',
+  width: '100%', padding: '8px 10px', minHeight: 38,   // one height for every single-line control
   background: 'var(--raised2)', border: '1px solid var(--line2)',
   borderRadius: 6, color: 'var(--txt)', fontSize: 13,
   outline: 'none', boxSizing: 'border-box',
@@ -391,10 +391,12 @@ export default function DailyLogForm() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ maxWidth: 1140, margin: '0 auto' }}>
+    // No width cap: like Submit EOD, the page fills the shell's content area. Width is handled by the grid
+    // below (form column grows; the side column is a fixed clamp()) — see the .nf-dl-* rules in index.css.
+    <div className="nf-dl-page">
 
       {/* ── Header (SubmitEOD PageHeader style) ── */}
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:24 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:24 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <button
             onClick={() => handleDateChange(prevDate)}
@@ -409,7 +411,9 @@ export default function DailyLogForm() {
           <button
             onClick={() => handleDateChange(nextDate)}
             disabled={isToday}
-            style={{ display:'flex', alignItems:'center', justifyContent:'center', width:30, height:30, borderRadius:6, background:'var(--raised2)', border:'1px solid var(--line2)', cursor:isToday?'not-allowed':'pointer', color:isToday?'var(--line)':'var(--txt-mut)', flexShrink:0 }}
+            // Disabled while viewing today: dimmed, but still a visible chevron (it used to be var(--line) on
+            // a near-identical background, which read as an empty box beside the title).
+            style={{ display:'flex', alignItems:'center', justifyContent:'center', width:30, height:30, borderRadius:6, background:'var(--raised2)', border:'1px solid var(--line2)', cursor:isToday?'not-allowed':'pointer', color:isToday?'var(--txt-dim)':'var(--txt-mut)', opacity:isToday?0.55:1, flexShrink:0 }}
             aria-label="Next day"
           >
             <ChevronRight size={15} />
@@ -477,14 +481,22 @@ export default function DailyLogForm() {
         </div>
       )}
 
+      {/* Submission window as a compact strip above the form at 1024-1279px, where the side column is gone
+          (the full card shows in the side column above that, and stacked below the form under 1024). */}
+      {cutoff && isToday && (
+        <div className="nf-dl-strip">
+          <CutoffCard compact cutoffTime={cutoff.cutoffTime} cutoffPassed={cutoff.cutoffPassed} cutoffNextDay={cutoff.cutoffNextDay} />
+        </div>
+      )}
+
       {/* ── Two-column layout ── */}
-      <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1fr) 310px', gap:28, alignItems:'start' }}>
+      <div className="nf-dl-grid">
 
         {/* ══════════════════════════════════════ LEFT: form (SubmitEOD style) */}
         <div>
 
           {/* Meta row — Entry date | Day type | Work location (matches SubmitEOD) */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:16, marginTop:24 }}>
+          <div className="nf-dl-meta" style={{ marginTop:24 }}>
             <div>
               <Label>Entry date</Label>
               <DatePicker value={selectedDate} onChange={handleDateChange} max={todayISO()} inputStyle={inputStyle} />
@@ -643,44 +655,48 @@ export default function DailyLogForm() {
             </div>
           )}
 
-          {/* Next-day plan */}
+          {/* Next-day plan (required, first) and Remarks (optional): side by side from 1536px up, stacked below. */}
+          <div className="nf-dl-textpair" style={{ marginTop:24 }}>
           {!isNonWork && !isWeekend && (
-            <div style={{ marginTop:24 }}>
+            <div>
               <Label>Next-day plan {!isWeekend && <Req />}</Label>
               {isReadOnly
                 ? <div style={{ ...inputStyle, opacity:0.7, minHeight:60, lineHeight:1.5 }}>{nextDayPlan || '-'}</div>
                 : <>
-                    <Txt value={nextDayPlan} onChange={e => { setNextDayPlan(e.target.value); setDirty(true); }} placeholder="What are you planning to work on tomorrow?" rows={3} maxLength={MAX_TEXT} />
+                    <Txt value={nextDayPlan} onChange={e => { setNextDayPlan(e.target.value); setDirty(true); }} placeholder="What are you planning to work on tomorrow?" rows={3} maxLength={MAX_TEXT} style={{ minHeight:96 }} />
                     <CharCount value={nextDayPlan} />
                   </>}
             </div>
           )}
 
           {/* Remarks */}
-          <div style={{ marginTop:16 }}>
+          <div>
             <Label>Remarks <span style={{ color:'var(--txt-dim)', textTransform:'none', fontWeight:400, letterSpacing:0 }}>(optional)</span></Label>
             {isReadOnly
               ? <div style={{ ...inputStyle, opacity:0.7, minHeight:50, lineHeight:1.5 }}>{remarks || '-'}</div>
               : <>
-                  <Txt value={remarks} onChange={e => { setRemarks(e.target.value); setDirty(true); }} placeholder="Any blockers, dependencies, or context for your manager?" rows={2} maxLength={MAX_TEXT} />
+                  <Txt value={remarks} onChange={e => { setRemarks(e.target.value); setDirty(true); }} placeholder="Any blockers, dependencies, or context for your manager?" rows={2} maxLength={MAX_TEXT} style={{ minHeight:96 }} />
                   <CharCount value={remarks} />
                 </>}
           </div>
+          </div>
 
-          {/* Additional notes */}
-          <div style={{ marginTop:16 }}>
+          {/* Additional notes — full width of the form column, capped so a line never runs 1000px+ */}
+          <div className="nf-dl-notes" style={{ marginTop:24 }}>
             <Label>Additional notes <span style={{ color:'var(--txt-dim)', textTransform:'none', fontWeight:400, letterSpacing:0 }}>(optional, private)</span></Label>
             {isReadOnly
               ? <div style={{ ...inputStyle, opacity:0.7, lineHeight:1.5 }}>{notes || '-'}</div>
               : <>
-                  <Txt value={notes} onChange={e => { setNotes(e.target.value); setDirty(true); }} placeholder="Extended notes for your own record — not visible to your reviewer." rows={3} maxLength={MAX_NOTES} style={{ minHeight:80 }} />
+                  <Txt value={notes} onChange={e => { setNotes(e.target.value); setDirty(true); }} placeholder="Extended notes for your own record — not visible to your reviewer." rows={3} maxLength={MAX_NOTES} style={{ minHeight:96 }} />
                   <div style={{ fontSize:11, color:notes.length>MAX_NOTES?'var(--risk)':'var(--txt-dim)', textAlign:'right', marginTop:4 }}>{notes.length}/{MAX_NOTES}</div>
                 </>}
           </div>
 
           {/* ── Action buttons (SubmitEOD style — right-aligned) ── */}
+          {/* Sticky action bar: solid background + top border, always on screen; it sits in normal flow at the end
+              of the form (so it never covers the last fields) and only floats while that end is off-screen. */}
           {isEditable && !confirming && (
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8, marginTop:28 }}>
+            <div className="nf-dl-actionbar" style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8 }}>
               {autosaving && <div style={{ fontSize:12, color:'var(--txt-dim)' }}>Saved just now</div>}
               <div style={{ display:'flex', gap:10 }}>
                 <button
@@ -705,7 +721,7 @@ export default function DailyLogForm() {
 
           {/* Confirmation dialog */}
           {isEditable && confirming && (
-            <div style={{ marginTop:20, padding:'16px 18px', borderRadius:8, background:'rgba(177,17,22,.06)', border:'1px solid rgba(177,17,22,.2)' }}>
+            <div className="nf-dl-actionbar nf-dl-confirm" style={{ padding:'16px 18px', borderRadius:8, background:'color-mix(in srgb, var(--brand) 8%, var(--shell))', border:'1px solid rgba(177,17,22,.2)' }}>
               <div style={{ fontSize:14, fontWeight:600, color:'var(--txt)', marginBottom:6 }}>
                 {isLeave || isNonWork ? 'Record this as a leave day?' : noWorkWeekend ? 'Record this weekend as no work?' : `Submit your daily log for ${formatDate(selectedDate)}?`}
               </div>
@@ -728,9 +744,11 @@ export default function DailyLogForm() {
         </div>
 
         {/* ══════════════════════════════════════ RIGHT SIDEBAR */}
-        <div style={{ display:'flex', flexDirection:'column', gap:16, position:'sticky', top:24 }}>
+        <div className="nf-dl-side">
           {cutoff && isToday && (
-            <CutoffCard cutoffTime={cutoff.cutoffTime} cutoffPassed={cutoff.cutoffPassed} cutoffNextDay={cutoff.cutoffNextDay} />
+            <div className="nf-dl-cutoff-card">
+              <CutoffCard cutoffTime={cutoff.cutoffTime} cutoffPassed={cutoff.cutoffPassed} cutoffNextDay={cutoff.cutoffNextDay} />
+            </div>
           )}
           <ReviewerCard entry={entry} pieces={pieces} />
           <HowItWorksCard />
@@ -843,7 +861,7 @@ const PIECE_STATUS_CFG: Record<string, { color: string; label: string; Icon: typ
   PENDING:  { color: '#4C8DD6', label: 'Pending',  Icon: Clock       },
 };
 
-function CutoffCard({ cutoffTime, cutoffPassed, cutoffNextDay }: { cutoffTime: string|null; cutoffPassed: boolean; cutoffNextDay: boolean }) {
+function CutoffCard({ cutoffTime, cutoffPassed, cutoffNextDay, compact = false }: { cutoffTime: string|null; cutoffPassed: boolean; cutoffNextDay: boolean; compact?: boolean }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const id = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(id); }, []);
   if (!cutoffTime) return null;
@@ -861,6 +879,23 @@ function CutoffCard({ cutoffTime, cutoffPassed, cutoffNextDay }: { cutoffTime: s
   const urgent   = !passed && diffMins < 60;
   const color    = passed ? '#E4373D' : urgent ? '#E0A93B' : '#2FB67C';
   const timeStr  = passed ? 'Closed' : h > 0 ? `${h}h ${m}m` : `${m}m`;
+
+  // Compact: one line (icon · label · time · closes-at) for the strip above the form at 1024-1279px.
+  if (compact) {
+    return (
+      <div style={{ ...SIDEBAR_CARD, display:'flex', alignItems:'center', flexWrap:'wrap', gap:'6px 14px', padding:'10px 16px', marginBottom:16,
+        borderColor: passed?'rgba(228,55,61,.3)':urgent?'rgba(224,169,59,.3)':'rgba(47,182,124,.25)' }}>
+        <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', color }}>
+          <Clock size={12} color={color} /> Submission window
+        </span>
+        <span style={{ fontSize:passed?15:18, fontWeight:800, color, fontFamily:'"JetBrains Mono",monospace', letterSpacing:'-0.02em' }}>{timeStr}</span>
+        <span style={{ fontSize:12, color:'var(--txt-dim)' }}>
+          {passed ? 'Late submissions still accepted.' : urgent ? 'until cutoff — submit soon' : 'remaining to submit on time'}
+          {' · '}Closes at {formatTime12h(cutoffTime)}{cutoffNextDay?' (next day)':' today'}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div style={{ ...SIDEBAR_CARD, borderColor: passed?'rgba(228,55,61,.3)':urgent?'rgba(224,169,59,.3)':'rgba(47,182,124,.25)' }}>

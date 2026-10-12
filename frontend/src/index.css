@@ -991,3 +991,78 @@ html[data-high-contrast="true"][data-status-cues="true"][data-theme="light"] {
   0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
   30% { opacity: 1; transform: translateY(-3px); }
 }
+
+/* ─── Daily Log form (Submit EOD for plain-log accounts) ────────── */
+/* No max-width: the page fills the shell's content area exactly like the project-based Submit EOD.
+   Width is managed here, not by a centered cap:
+     >=1280px   form column grows; side column is a fixed clamp(), sticky below the topbar
+     1024-1279  one column; Submission window is a compact strip ABOVE the form, Approval + How It Works
+                sit in a row below it
+     <1024      one column; every panel stacks below the form (no horizontal scroll)
+   >=1536px also puts Next-Day Plan and Remarks side by side. Tokens only; no new colours. */
+.nf-dl-page { min-width: 0; }
+.nf-dl-page select, .nf-dl-page input, .nf-dl-page textarea { min-width: 0; max-width: 100%; }
+
+.nf-dl-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 22vw, 360px);
+  gap: 28px;
+  align-items: start;
+}
+.nf-dl-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 72px;               /* the sticky topbar (56px) + a 16px gap */
+  min-width: 0;
+}
+.nf-dl-strip { display: none; }
+
+/* Entry date / Day type / Work location: fixed-ish columns so they do not balloon on wide screens. */
+.nf-dl-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 280px));
+  gap: 16px;
+}
+
+/* Next-Day Plan (first, required) and Remarks (optional). A lone child (Remarks on a weekend / leave day)
+   takes the full row but stays capped. */
+.nf-dl-textpair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+.nf-dl-textpair > :only-child { grid-column: 1 / -1; max-width: 880px; }
+@media (min-width: 1536px) {
+  .nf-dl-textpair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+.nf-dl-notes { max-width: 880px; }
+
+/* Sticky action bar: lives in normal flow at the end of the form (so it never covers the last fields) and
+   floats at the bottom of the viewport while that end is off-screen. Solid background + top border. */
+.nf-dl-actionbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-top: 28px;
+  padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--shell);
+  border-top: 1px solid var(--line);
+}
+.nf-dl-actionbar.nf-dl-confirm { padding: 16px 18px calc(16px + env(safe-area-inset-bottom, 0px)); }
+
+@media (max-width: 1279px) {
+  .nf-dl-grid { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .nf-dl-side {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    align-items: start;
+  }
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .nf-dl-strip { display: block; }
+  .nf-dl-cutoff-card { display: none; }
+}
+@media (max-width: 640px) {
+  .nf-dl-meta { grid-template-columns: minmax(0, 1fr); }
+  .nf-dl-actionbar > div { width: 100%; }
+  .nf-dl-actionbar button { flex: 1 1 auto; justify-content: center; }
+}
