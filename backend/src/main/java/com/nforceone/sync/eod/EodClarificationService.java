@@ -185,7 +185,7 @@ public class EodClarificationService {
                 "Clarification requested on your EOD entry",
                 lead.getFullName() + " requested clarification on your EOD entry for "
                         + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + ".",
-                "/eod/history?highlight=" + entry.getId());
+                "/employee/eod-inbox?highlight=" + entry.getId());
 
         return statusDto(clarification, lead, entry, pieces);
     }
@@ -286,7 +286,7 @@ public class EodClarificationService {
                     actor.getFullName() + " replied to your clarification",
                     actor.getFullName() + " replied on the clarification for your EOD entry ("
                             + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + ").",
-                    "/eod/history?highlight=" + entry.getId());
+                    "/employee/eod-inbox?highlight=" + entry.getId());
         }
 
         return EodClarificationReplyDto.from(saved, clarification, attachmentsFor(saved.getId()));
@@ -370,7 +370,7 @@ public class EodClarificationService {
                     "The clarification on your EOD entry for "
                             + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate())
                             + " has been marked resolved. It is back in review.",
-                    "/eod/history?highlight=" + entry.getId());
+                    "/employee/eod-inbox?highlight=" + entry.getId());
         }
 
         return statusDto(clarification, lead, entry, pieces);

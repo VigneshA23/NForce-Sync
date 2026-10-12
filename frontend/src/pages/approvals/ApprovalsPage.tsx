@@ -514,7 +514,10 @@ function PieceCard({
             )}
             <span>·</span>
             <span>Submitted {fmtRelative(piece.frozenAt)}</span>
-            {decidedNote && <><span>·</span><span>{decidedNote}</span></>}
+            {!isPlainLog && (piece.taskLines?.length ?? 0) > 0 && (
+              <><span>·</span><span>{piece.taskLines.length} task{piece.taskLines.length !== 1 ? 's' : ''}</span></>
+            )}
+            {decidedNote &&<><span>·</span><span>{decidedNote}</span></>}
           </div>
 
           {/* Task table (PROJECT_GROUPED) */}
@@ -605,7 +608,7 @@ function PieceCard({
 // ── ApprovalsPage ─────────────────────────────────────────────────────────────
 
 export type ApprovalsTab = 'pending' | 'escalated' | 'approved' | 'rejected';
-type SortMode = 'oldest' | 'latest' | 'hours' | 'name';
+export type SortMode = 'oldest' | 'latest' | 'hours' | 'name';
 
 const PAGE_SIZE = 10;
 
@@ -627,6 +630,9 @@ export interface ApprovalsPageProps {
   rejectBusy: boolean;
   /** Ordered list of tabs to show. */
   tabs: ApprovalsTab[];
+  /** Sort the list opens with. Defaults to oldest-first (the PM escalation queue's order); the
+   *  Reporting Manager page passes 'latest' so the newest submissions are on top. */
+  defaultSort?: SortMode;
   /** Show Team Lead filter dropdown (PM Approvals). */
   showTlFilter?: boolean;
   /** Show Project and Category filter dropdowns (PM Approvals). */
@@ -646,7 +652,7 @@ export default function ApprovalsPage({
   pendingLoading, approvedLoading, rejectedLoading,
   pendingError, onRefetch,
   onApprove, onReject, approveBusy, rejectBusy,
-  tabs, showTlFilter, showProjectFilter, clarificationReadOnly = false,
+  tabs, showTlFilter, showProjectFilter, clarificationReadOnly = false, defaultSort = 'oldest',
 }: ApprovalsPageProps) {
   const { show } = useToast();
   const refreshClarification = useRefreshClarification();
@@ -661,7 +667,7 @@ export default function ApprovalsPage({
 
   const [tab, setTab]                   = useState<ApprovalsTab>(tabs[0]);
   const [search, setSearch]             = useState('');
-  const [sort, setSort]                 = useState<SortMode>('oldest');
+  const [sort, setSort]                 = useState<SortMode>(defaultSort);
   const [tlFilter, setTlFilter]         = useState<Set<string>>(new Set());
   const [employeeFilter, setEmployeeFilter] = useState<Set<string>>(new Set());
   const [projectFilter, setProjectFilter]   = useState<Set<string>>(new Set());

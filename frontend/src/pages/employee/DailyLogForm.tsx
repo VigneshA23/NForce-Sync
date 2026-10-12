@@ -150,6 +150,8 @@ export default function DailyLogForm() {
   const [lines,        setLines]        = useState<LogLine[]>([]);
   const [notes,        setNotes]        = useState('');
   const [isLeave,      setIsLeave]      = useState(false);
+  // Weekend only: "I worked on this day". Off (default) = no-work weekend, no line items; reset on date change.
+  const [weekendWorked, setWeekendWorked] = useState(false);
   const [dirty,        setDirty]        = useState(false);
   const [confirming,   setConfirming]   = useState(false);
   const [autosaving,   setAutosaving]   = useState(false);
@@ -214,7 +216,11 @@ export default function DailyLogForm() {
 
     if (entry) {
       setEntryId(entry.id ?? null); setEntryStatus(entry.status);
-      setDayType(entry.dayType ?? 'WORKING_DAY');
+      // The server rejects any day type but WEEKEND on a locked weekend date, so an editable entry that
+      // predates the lock is shown (and re-saved) as Weekend; a submitted one keeps its filed day type.
+      setDayType((entry.status === 'DRAFT' || entry.status === 'REJECTED') && dayDefaults?.dayType === 'WEEKEND'
+        ? 'WEEKEND' : (entry.dayType ?? 'WORKING_DAY'));
+      setWeekendWorked(entry.weekendWorked === true || (entry.logLines?.length ?? 0) > 0 || (entry.logTotalHours ?? 0) > 0);
       setWorkLocation(entry.workLocation ?? ''); setNextDayPlan(entry.nextDayPlan ?? '');
       setRemarks(entry.remarks ?? ''); setNotes(entry.logNotes ?? '');
       if (entry.entryForm === 'PLAIN_LOG') {
@@ -224,7 +230,7 @@ export default function DailyLogForm() {
       }
     } else {
       setEntryId(null); setEntryStatus(null);
-      setDayType(dayDefaults?.dayType ?? 'WORKING_DAY');
+      setDayType(dayDefaults?.dayType ?? 'WORKING_DAY'); setWeekendWorked(false);
       setWorkLocation(dayDefaults?.workLocation ?? '');
       setNextDayPlan(''); setRemarks(''); setNotes(''); setLines([]); setIsLeave(false);
     }
@@ -242,6 +248,10 @@ export default function DailyLogForm() {
   const isNonWork    = dayType === 'LEAVE' || dayType === 'HOLIDAY';
   const isWeekend    = dayType === 'WEEKEND';
   const wLocDisabled = isNonWork || isWeekend;
+  // The server decides what is a weekend (Business Rules weekend rule; holidays win), so the lock reads
+  // its answer instead of re-deriving it from getDay(). A working Saturday under SUN_ONLY is not locked.
+  const weekendLocked = dayDefaults?.dayType === 'WEEKEND';
+  const noWorkWeekend  = isWeekend && !weekendWorked;
   const total        = isLeave ? 0 : sumHours(lines);
   const hoursOver    = total > dailyCap;
   const isToday      = selectedDate === todayISO();
@@ -260,7 +270,7 @@ export default function DailyLogForm() {
   function handleDateChange(d: string) { appliedRef.current = null; setSelectedDate(d); setErrors([]); }
 
   function handleDayTypeChange(v: string) {
-    setDayType(v);
+    setDayType(v); setWeekendWorked(false);
     if (v !== 'WORKING_DAY' && v !== 'FIRST_HALF_LEAVE' && v !== 'SECOND_HALF_LEAVE') setWorkLocation('');
     setErrors([]); setDirty(true);
   }
@@ -295,19 +305,21 @@ export default function DailyLogForm() {
     dayType: dayType as 'WORKING_DAY'|'LEAVE'|'HOLIDAY'|'WEEKEND'|'FIRST_HALF_LEAVE'|'SECOND_HALF_LEAVE',
     timeAdjustmentType: null, timeAdjustmentMinutes: null,
     workLocation: wLocDisabled ? null : (workLocation || null),
+    weekendWorked: isWeekend ? weekendWorked : undefined,
     nextDayPlan: nextDayPlan || null, remarks: remarks || null,
     tasks: [], attachmentIds: [], entryForm: 'PLAIN_LOG' as const,
-    logLines: (isLeave || isNonWork ? [] : lines).map((l, i) => ({
+    logLines: (isLeave || isNonWork || noWorkWeekend ? [] : lines).map((l, i) => ({
       categoryId: l.categoryId ?? 0, hours: l.hours, description: l.description, sortOrder: i,
     } as SaveLogLineRequest)),
     logNotes: notes.trim() || null,
-  }), [selectedDate, dayType, workLocation, nextDayPlan, remarks, lines, notes, isLeave, isNonWork, wLocDisabled]);
+  }), [selectedDate, dayType, workLocation, nextDayPlan, remarks, lines, notes, isLeave, isNonWork, wLocDisabled, isWeekend, weekendWorked, noWorkWeekend]);
 
   // ── Validation ────────────────────────────────────────────────────────────
 
   function validate(): string[] {
-    if (isNonWork) return [];
+    if (isNonWork || noWorkWeekend) return [];
     const e: string[] = [];
+    if (isWeekend && lines.length === 0) e.push('Add at least one line item when you worked on a weekend.');
     if (!wLocDisabled && !workLocation)    e.push('Work location is required.');
     if (!isWeekend && !nextDayPlan.trim()) e.push('Next-day plan is required.');
     if (!isLeave && !isNonWork && lines.some(l =>
@@ -345,7 +357,7 @@ export default function DailyLogForm() {
       setEntryStatus(saved.status);
       appliedRef.current = entrySignature(selectedDate, saved);
       setDirty(false); qc.invalidateQueries({ queryKey: ['eod'] });
-      showToast('success', isLeave || isNonWork ? 'Leave day recorded' : 'Daily log submitted');
+      showToast('success', isLeave || isNonWork ? 'Leave day recorded' : noWorkWeekend ? 'Weekend recorded' : 'Daily log submitted');
     },
     onError: (err: unknown) => {
       if ((err as Error).message !== 'validation') showToast('error', apiErr(err));
@@ -479,10 +491,10 @@ export default function DailyLogForm() {
             </div>
             <div>
               <Label>Day type <Req /></Label>
-              {isReadOnly
-                ? <div style={{ ...inputStyle, opacity:0.7 }}>{DAY_TYPES.find(d => d.value===dayType)?.label ?? dayType}</div>
+              {isReadOnly || (weekendLocked && isWeekend)
+                ? <div title={!isReadOnly ? 'Weekend dates are always logged as Weekend' : undefined} style={{ ...inputStyle, opacity:0.7 }}>{DAY_TYPES.find(d => d.value===dayType)?.label ?? dayType}</div>
                 : <Sel value={dayType} onChange={e => handleDayTypeChange(e.target.value)}>
-                    {DAY_TYPES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                    {DAY_TYPES.filter(d => d.value !== 'WEEKEND' || dayType === 'WEEKEND').map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
                   </Sel>}
             </div>
             <div>
@@ -497,7 +509,7 @@ export default function DailyLogForm() {
           </div>
 
           {/* Non-work day / leave banner */}
-          {(isNonWork || isLeave) && (
+          {(isNonWork || isLeave || isWeekend) && (
             <div style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'12px 16px', borderRadius:8, marginTop:24, background:'rgba(47,182,124,.08)', border:'1px solid rgba(47,182,124,.3)' }}>
               <CheckCircle size={15} style={{ color:'var(--ok)', flexShrink:0, marginTop:1 }} aria-hidden />
               <div>
@@ -505,14 +517,21 @@ export default function DailyLogForm() {
                 <div style={{ fontSize:12, color:'var(--txt-mut)', lineHeight:1.5 }}>
                   {dayType==='LEAVE' || isLeave ? 'Leave day — this entry will be auto-approved.'
                     : dayType==='HOLIDAY' ? 'Company holiday — this entry will be auto-approved.'
-                    : 'Weekend — no line items required.'}
+                    : weekendWorked ? 'You worked this weekend day. Every hour you log counts as overtime.'
+                    : 'Weekend — no line items required. Submit as-is to record no work, or turn on "I worked on this day".'}
                 </div>
+                {isWeekend && isEditable && (
+                  <label style={{ display:'flex', alignItems:'center', gap:8, marginTop:10, fontSize:13, color:'var(--txt)', cursor:'pointer' }}>
+                    <input type="checkbox" checked={weekendWorked} onChange={e => { setWeekendWorked(e.target.checked); setErrors([]); setDirty(true); }} />
+                    I worked on this day
+                  </label>
+                )}
               </div>
             </div>
           )}
 
           {/* ── Time breakdown section (SubmitEOD Tasks section style) ── */}
-          {!isNonWork && (
+          {!isNonWork && !noWorkWeekend && (
             <div style={{ marginTop:28 }}>
               {/* Section header */}
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
@@ -605,7 +624,7 @@ export default function DailyLogForm() {
               )}
 
               {/* Leave toggle */}
-              {isEditable && lines.length===0 && (
+              {isEditable && lines.length===0 && !isWeekend && (
                 <div style={{ display:'flex', alignItems:'center', gap:12, marginTop:12 }}>
                   <button
                     onClick={() => { setIsLeave(v => !v); setDirty(true); }}
@@ -678,7 +697,7 @@ export default function DailyLogForm() {
                   style={{ padding:'9px 22px', borderRadius:6, background:'var(--brand)', border:'1px solid var(--brand-deep)', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', boxShadow:'0 2px 8px color-mix(in srgb, var(--brand) 35%, transparent)', display:'flex', alignItems:'center', gap:7 }}
                 >
                   <Send size={14} />
-                  {isLeave || isNonWork ? 'Record leave' : 'Submit log'}
+                  {isLeave || isNonWork ? 'Record leave' : noWorkWeekend ? 'Record weekend' : 'Submit log'}
                 </button>
               </div>
             </div>
@@ -688,10 +707,10 @@ export default function DailyLogForm() {
           {isEditable && confirming && (
             <div style={{ marginTop:20, padding:'16px 18px', borderRadius:8, background:'rgba(177,17,22,.06)', border:'1px solid rgba(177,17,22,.2)' }}>
               <div style={{ fontSize:14, fontWeight:600, color:'var(--txt)', marginBottom:6 }}>
-                {isLeave || isNonWork ? 'Record this as a leave day?' : `Submit your daily log for ${formatDate(selectedDate)}?`}
+                {isLeave || isNonWork ? 'Record this as a leave day?' : noWorkWeekend ? 'Record this weekend as no work?' : `Submit your daily log for ${formatDate(selectedDate)}?`}
               </div>
               <div style={{ fontSize:12, color:'var(--txt-mut)', marginBottom:14 }}>
-                {isLeave || isNonWork
+                {isLeave || isNonWork || noWorkWeekend
                   ? 'It will be auto-approved. No manager review required.'
                   : managerName
                     ? `This will be sent to ${managerName} for review.`

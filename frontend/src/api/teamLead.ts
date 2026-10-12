@@ -167,13 +167,24 @@ export function useTeamMemberStatuses(range: DateRange, live = false, teamLeadId
 }
 
 // `includeAcknowledged` defaults to false to match every existing caller (Team Dashboard's
-// "Open Blockers" KPI and "Blockers Today" widget both mean *unresolved* blockers) — only the
+// "Open Blockers" KPI and "Blockers Needing Response" widget both mean *unresolved, unacknowledged* blockers) — only the
 // Blockers page's own list passes true, since it needs to show acknowledged ones too.
-export function useTeamLeadBlockers(range: DateRange, live = false, includeAcknowledged = false, teamLeadId?: number | null) {
+// The Blockers page has two audiences with the same shape: the project lead ('lead', default) and a
+// reporting manager looking at his reports' own blockers ('rm', /my-reports/blockers). Same DTO, same
+// page, different endpoint and cache namespace.
+export type BlockersVariant = 'lead' | 'rm';
+
+const blockerEndpoint = (variant: BlockersVariant) => variant === 'rm' ? '/my-reports/blockers' : '/team-lead/blockers';
+const blockerKey = (variant: BlockersVariant, ...rest: unknown[]) =>
+  variant === 'rm' ? ['rm-blockers', ...rest] : ['team-lead', 'blockers', ...rest];
+
+export function useTeamLeadBlockers(range: DateRange, live = false, includeAcknowledged = false, teamLeadId?: number | null, variant: BlockersVariant = 'lead') {
   return useQuery({
-    queryKey: ['team-lead', 'blockers', range.from, range.to, includeAcknowledged, teamLeadId ?? null],
+    queryKey: [...blockerKey(variant, range.from, range.to, includeAcknowledged, teamLeadId ?? null)],
     queryFn: () =>
-      api.get<TeamBlockerDto[]>('/team-lead/blockers', { params: { ...range, includeAcknowledged, teamLeadId: teamLeadId ?? undefined } }).then(r => r.data),
+      api.get<TeamBlockerDto[]>(blockerEndpoint(variant), {
+        params: variant === 'rm' ? { ...range, includeAcknowledged } : { ...range, includeAcknowledged, teamLeadId: teamLeadId ?? undefined },
+      }).then(r => r.data),
     staleTime: rangeStaleTime(live),
     refetchInterval: live ? LIVE_REFETCH_INTERVAL : false,
     refetchIntervalInBackground: live,
@@ -330,10 +341,10 @@ export function useTeamMonthlyActivity(month: string, activeMemberCount: number)
 // The Blockers page's list is scoped to whatever date range is currently selected — a
 // BLOCKER_REPLY notification's `?highlight=<id>` deep link can point at a blocker outside
 // that range. This fetches that one blocker directly so the link always resolves.
-export function useTeamLeadBlocker(taskId: number | undefined) {
+export function useTeamLeadBlocker(taskId: number | undefined, variant: BlockersVariant = 'lead') {
   return useQuery({
-    queryKey: ['team-lead', 'blocker', taskId],
-    queryFn: () => api.get<TeamBlockerDto>(`/team-lead/blockers/${taskId}`).then(r => r.data),
+    queryKey: [variant === 'rm' ? 'rm-blocker' : 'team-lead', ...(variant === 'rm' ? [] : ['blocker']), taskId],
+    queryFn: () => api.get<TeamBlockerDto>(`${blockerEndpoint(variant)}/${taskId}`).then(r => r.data),
     enabled: taskId != null,
   });
 }
@@ -354,12 +365,17 @@ export function useAcknowledgeBlocker(range: DateRange) {
 // Manual status change from the Blockers page's status dropdown (Needs Response / Acknowledged
 // / Resolved) — invalidates the same queries as useAcknowledgeBlocker plus the single-blocker
 // fallback fetch, so the table, KPI tiles, and an out-of-range detail panel all stay in sync.
-export function useSetBlockerStatus(range: DateRange) {
+export function useSetBlockerStatus(range: DateRange, variant: BlockersVariant = 'lead') {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ taskId, status }: { taskId: number; status: TeamBlockerDto['status'] }) =>
-      api.patch<TeamBlockerDto>(`/team-lead/blockers/${taskId}/status`, { status }).then(r => r.data),
+      api.patch<TeamBlockerDto>(`${blockerEndpoint(variant)}/${taskId}/status`, { status }).then(r => r.data),
     onSuccess: (_, { taskId }) => {
+      if (variant === 'rm') {
+        qc.invalidateQueries({ queryKey: ['rm-blockers'] });
+        qc.invalidateQueries({ queryKey: ['rm-blocker', taskId] });
+        return;
+      }
       qc.invalidateQueries({ queryKey: ['team-lead', 'blockers', range.from, range.to] });
       qc.invalidateQueries({ queryKey: ['team-lead', 'member-status', range.from, range.to] });
       qc.invalidateQueries({ queryKey: ['team-lead', 'summary', range.from, range.to] });

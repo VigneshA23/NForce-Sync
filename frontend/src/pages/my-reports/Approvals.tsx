@@ -32,6 +32,7 @@ export default function MyReportsApprovals() {
       approveBusy={approvePiece.isPending}
       rejectBusy={rejectPiece.isPending}
       tabs={['pending', 'approved', 'rejected']}
+      defaultSort="latest"
     />
   );
 }

@@ -69,6 +69,65 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
                                                           @Param("from") LocalDate from,
                                                           @Param("to") LocalDate to);
 
+    // Team Lead blockers, routed by the PROJECT THE BLOCKER WAS RAISED ON: a lead sees every blocker
+    // whose task belongs to a project they lead — not "whoever is allocated to one of my projects
+    // today", which hid blockers when the author's allocation had ended or not yet started, or sat on
+    // a different project, and wrongly surfaced blockers raised on someone else's project. A lead's own
+    // blockers are excluded (they stay on their My Blockers page and the PM's read-only page).
+    //
+    // An open (unresolved) blocker carries over: it is returned from its entry date until it is
+    // resolved, whatever the window. A resolved one is returned when it was raised inside the window
+    // or resolved inside it. The page's cards and the Team Dashboard's Open Blockers KPI both read this.
+    @Query("SELECT DISTINCT t FROM EodTask t " +
+           "JOIN FETCH t.eodEntry e " +
+           "JOIN FETCH e.employee emp " +
+           "LEFT JOIN FETCH emp.manager " +
+           "JOIN FETCH t.project p " +
+           "LEFT JOIN FETCH t.taskCategory " +
+           "LEFT JOIN FETCH t.acknowledgedBy " +
+           "LEFT JOIN FETCH t.resolvedBy " +
+           "WHERE t.taskStatus = com.nforceone.sync.eod.EodTask.TaskStatus.BLOCKED " +
+           "AND p.lead.id = :leadId " +
+           "AND emp.id <> :leadId " +
+           "AND e.status <> com.nforceone.sync.eod.EodEntry.Status.DRAFT " +
+           "AND ( (t.resolvedAt IS NULL AND e.entryDate <= :to) " +
+           "      OR (e.entryDate BETWEEN :from AND :to) " +
+           "      OR (t.resolvedAt >= :fromTs AND t.resolvedAt < :toTs) ) " +
+           "ORDER BY e.entryDate DESC")
+    List<EodTask> findBlockedForProjectLead(@Param("leadId") Long leadId,
+                                            @Param("from") LocalDate from,
+                                            @Param("to") LocalDate to,
+                                            @Param("fromTs") java.time.OffsetDateTime fromTs,
+                                            @Param("toTs") java.time.OffsetDateTime toTs);
+
+    // Reporting Manager blockers: a lead's OWN blocker on a project he leads — the ones no other lead
+    // sees (findBlockedForProjectLead excludes the lead's own) — handled by the lead's reporting
+    // manager. Scoped strictly to the entry's frozen manager (manager_id, snapshotted at first
+    // submit), never "any direct report", and never blockers on someone else's project: those stay
+    // with that project's lead. Same carry-over rule as the lead query.
+    @Query("SELECT DISTINCT t FROM EodTask t " +
+           "JOIN FETCH t.eodEntry e " +
+           "JOIN FETCH e.employee emp " +
+           "LEFT JOIN FETCH emp.manager " +
+           "JOIN FETCH t.project p " +
+           "LEFT JOIN FETCH t.taskCategory " +
+           "LEFT JOIN FETCH t.acknowledgedBy " +
+           "LEFT JOIN FETCH t.resolvedBy " +
+           "WHERE t.taskStatus = com.nforceone.sync.eod.EodTask.TaskStatus.BLOCKED " +
+           "AND e.managerId = :managerId " +
+           "AND p.lead.id = emp.id " +
+           "AND emp.id <> :managerId " +
+           "AND e.status <> com.nforceone.sync.eod.EodEntry.Status.DRAFT " +
+           "AND ( (t.resolvedAt IS NULL AND e.entryDate <= :to) " +
+           "      OR (e.entryDate BETWEEN :from AND :to) " +
+           "      OR (t.resolvedAt >= :fromTs AND t.resolvedAt < :toTs) ) " +
+           "ORDER BY e.entryDate DESC")
+    List<EodTask> findBlockedForReportingManager(@Param("managerId") Long managerId,
+                                                 @Param("from") LocalDate from,
+                                                 @Param("to") LocalDate to,
+                                                 @Param("fromTs") java.time.OffsetDateTime fromTs,
+                                                 @Param("toTs") java.time.OffsetDateTime toTs);
+
     // Cross-team view for the Project Manager Blockers page: every blocker raised against any
     // of the PM's own projects, regardless of which Team Lead the reporting employee belongs to.
     // JOIN FETCHes eodEntry/employee/manager/project/taskCategory up front — PmBlockerDto.from

@@ -6,6 +6,7 @@ import { Menu, X, Search, Bell, LogOut, UserCircle2, HelpCircle, FolderKanban, C
 import { BrandMark } from './BrandMark';
 import { ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, navPathFor, getNavSections, navSubItemPath, isNavGroup } from '../lib/nav';
 import type { NavItem } from '../lib/nav';
+import { inboxBadgeFor, blockersBadgeFor } from '../lib/inboxBadge';
 import { useAuth, getHomeRouteForRole } from '../lib/auth';
 import { useAccentColor, ACCENT_BAND_POSITION_X } from '../lib/accentColor';
 import sidebarDecoration from '../assets/sidebar-decoration.png';
@@ -607,10 +608,15 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
     ? (pmRangeBlockers ?? []).filter(b => b.status !== 'RESOLVED').length
     : 0;
 
-  // Sidebar EOD Inbox badge — open clarification count, for Team Lead, PM, and Employee alike.
-  // Shares the "open" list's query cache with the EOD Inbox page itself (see useEodInboxCount).
-  const eodInboxRole = isLead ? 'lead' : isPm ? 'pm' : 'employee';
-  const eodInboxCount = useEodInboxCount(eodInboxRole, isLead || isPm || role === 'employee');
+  // Sidebar EOD Inbox badges — unread clarification counts. Each shares its "open" list's query
+  // cache with the matching inbox page (see useEodInboxCount). Three separate lists, picked per
+  // nav item by path (see inboxBadgeFor): the viewer's OWN EOD threads, the threads they review as
+  // Team Lead / reporting manager, and the PM's read-only list. A lead has both of the first two,
+  // and they never overlap.
+  const ownInboxCount  = useEodInboxCount('employee', role === 'employee' || isLead);
+  const teamInboxCount = useEodInboxCount('lead', isLead || caps.hasDirectReports);
+  const pmInboxCount   = useEodInboxCount('pm', isPm);
+  const inboxCounts = { own: ownInboxCount, team: teamInboxCount, pm: pmInboxCount };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -703,9 +709,10 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                 if (item.key === 'approvals' && item.path === '/team/approvals') return pendingApprovalsCount;
                 if (item.key === 'approvals' && item.path === '/projects/approvals') return pmPendingCount;
                 if (item.key === 'rm-approvals') return rmPendingCount;
-                if (isLead && item.key === 'blockers') return openBlockersCount;
-                if (isPm && item.key === 'blockers') return pmOpenBlockersCount;
-                if ((isLead || isPm || role === 'employee') && item.key === 'eod-inbox') return eodInboxCount;
+                const blockersBadge = blockersBadgeFor(item, { lead: openBlockersCount, pm: pmOpenBlockersCount });
+                if (blockersBadge !== undefined) return blockersBadge;
+                const inboxBadge = inboxBadgeFor(item, inboxCounts);
+                if (inboxBadge !== undefined) return inboxBadge;
                 return item.badge;
               }
 

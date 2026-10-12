@@ -69,6 +69,8 @@ export interface EodEntryDto {
   logApproverType: string | null;
   // V110+ line items — empty [] for legacy PLAIN_LOG entries, absent for PROJECT_GROUPED
   logLines: EodLogLineDto[];
+  /** WEEKEND only: the employee worked that day. False/absent = a no-work weekend. */
+  weekendWorked?: boolean;
 }
 
 export interface EodLogLineDto {
@@ -108,6 +110,8 @@ export interface SaveEodRequest {
   timeAdjustmentType: string | null;
   timeAdjustmentMinutes: number | null;
   workLocation: string | null;
+  /** WEEKEND only — "I worked on this day". Omitted for every other day type. */
+  weekendWorked?: boolean;
   nextDayPlan: string | null;
   remarks: string | null;
   tasks: SaveTaskRequest[];

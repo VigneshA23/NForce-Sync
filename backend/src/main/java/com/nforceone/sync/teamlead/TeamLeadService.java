@@ -123,7 +123,7 @@ public class TeamLeadService {
      */
     public TeamLeadSummaryDto getSummary(LocalDate from, LocalDate to, String actingEmail, Long teamLeadId) {
         Long leadId = resolveLeadId(actingEmail, teamLeadId);
-        return computeSummary(from, to, activeMembers(leadId));
+        return computeSummary(from, to, activeMembers(leadId), leadBlockerScope(leadId));
     }
 
     /** For callers (e.g. MyReportsService) that scope team by manager_id, not project lead. */
@@ -131,7 +131,14 @@ public class TeamLeadService {
         return computeSummary(from, to, activeMembersByManagerId(managerId));
     }
 
+    /** Member-scoped callers (reporting manager, My Reporting Team) keep their own entry-date-only
+     *  blocker definition — only the Team Lead's project-routed scope carries open blockers over. */
     private TeamLeadSummaryDto computeSummary(LocalDate from, LocalDate to, List<AppUser> members) {
+        return computeSummary(from, to, members, memberBlockerScope(members.stream().map(AppUser::getId).toList()));
+    }
+
+    private TeamLeadSummaryDto computeSummary(LocalDate from, LocalDate to, List<AppUser> members,
+                                              BlockerScope blockerScope) {
         List<Long> memberIds = members.stream().map(AppUser::getId).toList();
 
         // Independent reads, fanned out — see AsyncQueryConfig/EmployeeService for why: each is
@@ -149,9 +156,10 @@ public class TeamLeadService {
         // and a Hibernate session closes the instant the repository call returns — touching
         // t.getEodEntry() even one line later throws LazyInitializationException. Wrong query, not
         // wrong thread.
+        // Same scope (and so the same carried-over blockers) the Blockers page lists, so the KPI and
+        // the page's Needs Response card can never disagree.
         CompletableFuture<Integer> activeBlockersF = CompletableFuture.supplyAsync(() ->
-                memberIds.isEmpty() ? 0 :
-                (int) taskRepository.findBlockedByEmployeeIdsInAndDateRange(memberIds, from, to).stream()
+                (int) blockerScope.tasks(from, to).stream()
                         .filter(t -> t.getAcknowledgedAt() == null)
                         .count(),
                 dashboardQueryExecutor);
@@ -204,7 +212,7 @@ public class TeamLeadService {
 
     public List<MemberEodStatusDto> getMemberStatuses(LocalDate from, LocalDate to, String actingEmail, Long teamLeadId) {
         Long leadId = resolveLeadId(actingEmail, teamLeadId);
-        return computeMemberStatuses(from, to, activeMembers(leadId));
+        return computeMemberStatuses(from, to, activeMembers(leadId), leadBlockerScope(leadId));
     }
 
     /** For callers (e.g. MyReportsService) that scope team by manager_id, not project lead. */
@@ -225,6 +233,12 @@ public class TeamLeadService {
     }
 
     private List<MemberEodStatusDto> computeMemberStatuses(LocalDate from, LocalDate to, List<AppUser> members) {
+        return computeMemberStatuses(from, to, members,
+                memberBlockerScope(members.stream().map(AppUser::getId).toList()));
+    }
+
+    private List<MemberEodStatusDto> computeMemberStatuses(LocalDate from, LocalDate to, List<AppUser> members,
+                                                           BlockerScope blockerScope) {
         List<Long> memberIds = members.stream().map(AppUser::getId).toList();
 
         // Independent reads, fanned out — see AsyncQueryConfig/EmployeeService for why.
@@ -232,8 +246,13 @@ public class TeamLeadService {
                 CompletableFuture.supplyAsync(this::requireConfig, dashboardQueryExecutor);
         CompletableFuture<Boolean> holidayTodayF =
                 CompletableFuture.supplyAsync(() -> holidayRepository.existsByHolidayDate(to), dashboardQueryExecutor);
-        CompletableFuture<List<TeamBlockerDto>> openBlockersF = CompletableFuture.supplyAsync(
-                () -> computeBlockers(from, to, memberIds, false), dashboardQueryExecutor);
+        // Only "who has an open, unacknowledged blocker" is needed per member — no reply threads.
+        CompletableFuture<java.util.Set<Long>> membersWithOpenBlockerF = CompletableFuture.supplyAsync(
+                () -> blockerScope.tasks(from, to).stream()
+                        .filter(t -> t.getAcknowledgedAt() == null)
+                        .map(t -> t.getEodEntry().getEmployee().getId())
+                        .collect(java.util.stream.Collectors.toSet()),
+                dashboardQueryExecutor);
         CompletableFuture<Map<Long, List<String>>> projectNamesByEmployeeF = CompletableFuture.supplyAsync(
                 () -> activeProjectNamesByEmployee(memberIds, to), dashboardQueryExecutor);
         CompletableFuture<Map<Long, EodEntry>> entryByMemberF =
@@ -241,11 +260,11 @@ public class TeamLeadService {
         CompletableFuture<Map<Long, BigDecimal>> pctByMemberF = CompletableFuture.supplyAsync(
                 () -> utilizationService.resolveUtilizationPctForEmployees(memberIds, to), dashboardQueryExecutor);
 
-        CompletableFuture.allOf(configF, holidayTodayF, openBlockersF,
+        CompletableFuture.allOf(configF, holidayTodayF, membersWithOpenBlockerF,
                 projectNamesByEmployeeF, entryByMemberF, pctByMemberF).join();
         BusinessRuleConfig config = Futures.join(configF);
         boolean holidayToday = Futures.join(holidayTodayF);
-        List<TeamBlockerDto> openBlockers = Futures.join(openBlockersF);
+        java.util.Set<Long> membersWithOpenBlocker = Futures.join(membersWithOpenBlockerF);
         Map<Long, List<String>> projectNamesByEmployee = Futures.join(projectNamesByEmployeeF);
         Map<Long, EodEntry> entryByMember = Futures.join(entryByMemberF);
         Map<Long, BigDecimal> pctByMember = Futures.join(pctByMemberF);
@@ -256,8 +275,7 @@ public class TeamLeadService {
             BigDecimal pct = pctByMember.get(member.getId());
             boolean underutilized = pct != null && pct.compareTo(config.getUnderutilizedThresholdPct()) < 0;
             boolean overloaded    = pct != null && pct.compareTo(config.getOverloadedThresholdPct()) > 0;
-            boolean hasOpenBlocker = openBlockers.stream()
-                    .anyMatch(b -> b.employeeId().equals(member.getId()) && !b.acknowledged());
+            boolean hasOpenBlocker = membersWithOpenBlocker.contains(member.getId());
             List<String> projectNames = projectNamesByEmployee.getOrDefault(member.getId(), List.of());
 
             AppUser mgr = member.getManager();
@@ -278,13 +296,40 @@ public class TeamLeadService {
     @Transactional(readOnly = true)
     public List<TeamBlockerDto> getBlockers(LocalDate from, LocalDate to, String actingEmail, boolean includeAcknowledged, Long teamLeadId) {
         Long leadId = resolveLeadId(actingEmail, teamLeadId);
-        List<Long> memberIds = activeMembers(leadId).stream().map(AppUser::getId).toList();
-        return computeBlockers(from, to, memberIds, includeAcknowledged);
+        return computeBlockers(leadBlockerScope(leadId), from, to, includeAcknowledged);
     }
 
-    private List<TeamBlockerDto> computeBlockers(LocalDate from, LocalDate to, List<Long> memberIds, boolean includeAcknowledged) {
-        if (memberIds.isEmpty()) return java.util.Collections.emptyList();
-        List<EodTask> tasks = taskRepository.findBlockedByEmployeeIdsInAndDateRange(memberIds, from, to)
+    /** Where a set of blockers comes from. Two scopes exist on purpose: the Team Lead's, routed by
+     *  the project each blocker was raised on and carrying open blockers over until resolved, and the
+     *  member-based one (reporting manager / My Reporting Team) that stays entry-date-only. */
+    @FunctionalInterface
+    private interface BlockerScope {
+        List<EodTask> tasks(LocalDate from, LocalDate to);
+    }
+
+    private BlockerScope memberBlockerScope(List<Long> memberIds) {
+        return (from, to) -> memberIds.isEmpty()
+                ? List.of()
+                : taskRepository.findBlockedByEmployeeIdsInAndDateRange(memberIds, from, to);
+    }
+
+    /** A lead's OWN blockers on projects he leads, for his frozen reporting manager. */
+    private BlockerScope reportingManagerBlockerScope(Long managerId) {
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        return (from, to) -> taskRepository.findBlockedForReportingManager(managerId, from, to,
+                from.atStartOfDay(zone).toOffsetDateTime(),
+                to.plusDays(1).atStartOfDay(zone).toOffsetDateTime());
+    }
+
+    private BlockerScope leadBlockerScope(Long leadId) {
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        return (from, to) -> taskRepository.findBlockedForProjectLead(leadId, from, to,
+                from.atStartOfDay(zone).toOffsetDateTime(),
+                to.plusDays(1).atStartOfDay(zone).toOffsetDateTime());
+    }
+
+    private List<TeamBlockerDto> computeBlockers(BlockerScope scope, LocalDate from, LocalDate to, boolean includeAcknowledged) {
+        List<EodTask> tasks = scope.tasks(from, to)
                 .stream()
                 .filter(t -> includeAcknowledged || t.getAcknowledgedAt() == null)
                 .toList();
@@ -301,6 +346,26 @@ public class TeamLeadService {
                 .toList();
     }
 
+    /** The reporting manager's Blockers page: his reports' own blockers on projects they lead.
+     *  The scope IS the authorization — a different manager simply gets an empty list. */
+    @Transactional(readOnly = true)
+    public List<TeamBlockerDto> getBlockersForReportingManager(LocalDate from, LocalDate to, Long managerId,
+                                                               boolean includeAcknowledged) {
+        return computeBlockers(reportingManagerBlockerScope(managerId), from, to, includeAcknowledged);
+    }
+
+    /** Single blocker for the reporting manager's page (a notification deep link can point outside
+     *  the selected date range). 403 unless it is one of this manager's reports' own-lead blockers. */
+    @Transactional(readOnly = true)
+    public TeamBlockerDto getBlockerByIdForReportingManager(Long taskId, AppUser manager) {
+        EodTask task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
+        if (!isReportingManagerOfOwnLeadBlocker(task, manager)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        return TeamBlockerDto.from(task, replyRepository.findByTaskIdOrderByCreatedAtAsc(taskId));
+    }
+
     /** Fetches a single blocker by task id, regardless of the caller's selected date range —
      *  backs a BLOCKER_REPLY notification's deep link (`?highlight=<id>`), which must resolve
      *  even when that blocker falls outside whatever range the Blockers page currently has. */
@@ -309,7 +374,7 @@ public class TeamLeadService {
         AppUser lead = requireLead(actingEmail);
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
-        if (lead.getRole() != AppUser.Role.SUPERADMIN && !isInLeadTeam(task.getEodEntry().getEmployee().getId(), lead.getId())) {
+        if (lead.getRole() != AppUser.Role.SUPERADMIN && !isProjectLeadOf(task, lead)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
         return TeamBlockerDto.from(task, replyRepository.findByTaskIdOrderByCreatedAtAsc(taskId));
@@ -317,14 +382,12 @@ public class TeamLeadService {
 
     @Transactional
     public TeamBlockerDto acknowledgeBlocker(Long taskId, String actingEmail) {
-        AppUser lead = requireLead(actingEmail);
+        AppUser lead = requireBlockerActor(actingEmail);
         PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
 
-        if (!isInLeadTeam(task.getEodEntry().getEmployee().getId(), lead.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
+        requireCanManageBlocker(task, lead);
 
         task.setAcknowledgedAt(OffsetDateTime.now());
         task.setAcknowledgedBy(lead);
@@ -338,14 +401,12 @@ public class TeamLeadService {
      *  as not-open without any change to their own logic. */
     @Transactional
     public TeamBlockerDto setBlockerStatus(Long taskId, String actingEmail, BlockerStatusRequest body) {
-        AppUser lead = requireLead(actingEmail);
+        AppUser lead = requireBlockerActor(actingEmail);
         PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
 
-        if (!isInLeadTeam(task.getEodEntry().getEmployee().getId(), lead.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
-        }
+        requireCanManageBlocker(task, lead);
 
         // Resolved is a terminal state — reject any further status change (including via a
         // direct API call bypassing the UI's disabled control) rather than allowing it to be
@@ -572,9 +633,57 @@ public class TeamLeadService {
                 .toList();
     }
 
-    private boolean isInLeadTeam(Long employeeId, Long leadId) {
-        return allocationRepository.findActiveMembersByProjectLead(leadId, LocalDate.now())
-                .stream().anyMatch(u -> u.getId().equals(employeeId));
+    /**
+     * Who may ACKNOWLEDGE or RESOLVE a blocker — stated explicitly, not inherited from the
+     * reviewer-side rules. Exactly two cases:
+     *   1. the lead of the project the blocker was raised on (never on their own blocker), or
+     *   2. the entry's frozen reporting manager, but ONLY for a blocker its author raised on a project
+     *      the author himself leads — the one case no other lead covers.
+     * An ordinary project-lead blocker therefore stays with that project's lead alone; a reporting
+     * manager who is not also that project's lead cannot acknowledge or resolve it.
+     */
+    private void requireCanManageBlocker(EodTask task, AppUser actor) {
+        if (isProjectLeadOf(task, actor) || isReportingManagerOfOwnLeadBlocker(task, actor)) return;
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+    }
+
+    /** Frozen manager of the entry, on a blocker whose author leads the blocker's own project. */
+    private boolean isReportingManagerOfOwnLeadBlocker(EodTask task, AppUser actor) {
+        var entry = task.getEodEntry();
+        var project = task.getProject();
+        Long authorId = entry.getEmployee().getId();
+        return entry.getManagerId() != null
+                && entry.getManagerId().equals(actor.getId())
+                && !authorId.equals(actor.getId())
+                && project != null
+                && project.getLead() != null
+                && project.getLead().getId().equals(authorId);
+    }
+
+    /** The acting user for a blocker write: an active project lead (Team Lead page) or someone with
+     *  direct reports (reporting manager page). Whether they may touch THIS blocker is decided per
+     *  task by requireCanManageBlocker. */
+    private AppUser requireBlockerActor(String email) {
+        AppUser actor = userRepository.findByEmailAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
+        if (actor.getRole() == AppUser.Role.SUPERADMIN) return actor;
+        boolean isLead = projectRepository.existsByLeadIdAndStatus(actor.getId(), Project.Status.ACTIVE);
+        if (!isLead && !userRepository.existsByManagerIdAndDeletedAtIsNull(actor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        return actor;
+    }
+
+    /** A blocker belongs to the lead of the project it was raised on — the same test
+     *  BlockerConversationService applies to the thread, so list, detail and actions agree. A lead's
+     *  own blocker is never theirs to act on (it stays on their My Blockers and the PM's page). */
+    private boolean isProjectLeadOf(EodTask task, AppUser lead) {
+        var project = task.getProject();
+        return project != null
+                && project.getLead() != null
+                && project.getLead().getId().equals(lead.getId())
+                && !task.getEodEntry().getEmployee().getId().equals(lead.getId());
     }
 
     /** A member's status for one date, resolved by exactly the rule the member-statuses list uses. */

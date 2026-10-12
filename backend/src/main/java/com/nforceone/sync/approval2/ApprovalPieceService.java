@@ -149,6 +149,14 @@ public class ApprovalPieceService {
         return mapPiecesWithLogLines(all);
     }
 
+    /** Reporting-Manager pending tab: REPORTING_MANAGER pieces still awaiting the actor, with task
+     *  and log lines loaded so the hours chip is not built from an empty list. */
+    @Transactional(readOnly = true)
+    public List<ApprovalPieceDto> getPendingReportingManagerPieces(Long actorId) {
+        return mapPiecesWithLogLines(pieceRepository.findByApproverIdAndApproverTypeAndStatus(
+                actorId, EodProjectApproval.ApproverType.REPORTING_MANAGER, EodProjectApproval.Status.PENDING));
+    }
+
     /** Reporting-Manager decided tab: REPORTING_MANAGER pieces in a given status. */
     @Transactional(readOnly = true)
     public List<ApprovalPieceDto> getDecidedReportingManagerPieces(String actorEmail, String statusName) {

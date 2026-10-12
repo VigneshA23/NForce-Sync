@@ -215,17 +215,6 @@ function newRow(): TaskRow {
   };
 }
 
-/**
- * True when a row is still the untouched placeholder state — no project, category, hours,
- * status, description or attachment. Only meaningful for a Weekend day, where task logging is
- * optional: the default (or a freshly-added, still-empty) row must not be treated as "a task the
- * employee logged" and forced through the same required-field checks a Working Day row gets.
- */
-function isTaskRowBlank(t: TaskRow): boolean {
-  return !t.projectId && !t.taskCategoryId && t.hours.trim() === ''
-    && t.taskStatus === '' && !t.description.trim() && t.attachments.length === 0;
-}
-
 function rowFromDto(dto: EodTaskDto): TaskRow {
   return {
     localId:          `row-${++rowSeq}`,
@@ -286,8 +275,7 @@ function Req() {
 }
 
 /**
- * The one "Add task" control, shared by the normal (Working Day, etc.) Tasks section and the
- * collapsed Weekend state — same element either way, never a second/simplified control.
+ * The one "Add task" control for the Tasks section.
  */
 function AddTaskButton({ onClick, style }: { onClick: () => void; style?: React.CSSProperties }) {
   return (
@@ -497,11 +485,10 @@ export default function SubmitEOD() {
   const [tasks,        setTasks]        = useState<TaskRow[]>([newRow()]);
   const [reviewerComment, setReviewerComment] = useState<string | null>(null);
 
-  // Weekend only: the task-row fields start hidden behind the "Add task" button — set once the
-  // employee clicks it, so the collapsed state doesn't reappear on every re-render. A saved/typed
-  // real task (see hasRealWeekendTask below) shows the rows regardless of this flag, so reopening
-  // a day that already has weekend OT logged never hides it behind a click.
-  const [weekendExpanded, setWeekendExpanded] = useState(false);
+  // Weekend only: "I worked on this day". Off (default) = a no-work weekend: the Tasks section is
+  // hidden and nothing is validated or sent. On = the Tasks section appears with the normal task
+  // validations and every logged hour counts as overtime. Reset whenever the date changes.
+  const [weekendWorked, setWeekendWorked] = useState(false);
 
   // Time adjustment (Working day only)
   const [adjEnabled, setAdjEnabled] = useState(false);
@@ -604,7 +591,13 @@ export default function SubmitEOD() {
     if (entry) {
       setEntryId(entry.id);
       setEntryStatus(entry.status);
-      setDayType(entry.dayType ?? 'WORKING_DAY');
+      // The server rejects any day type but WEEKEND on a locked weekend date, so an editable
+      // entry that predates the lock is shown (and re-saved) as Weekend. A submitted one keeps
+      // the day type it was actually filed under.
+      const entryEditable = entry.status === 'DRAFT' || entry.status === 'REJECTED';
+      setDayType(entryEditable && dayDefaults?.dayType === 'WEEKEND'
+        ? 'WEEKEND'
+        : (entry.dayType ?? 'WORKING_DAY'));
       setAdjEnabled(entry.timeAdjustmentType != null);
       setAdjType(entry.timeAdjustmentType ?? null);
       setAdjMinutes(entry.timeAdjustmentMinutes != null ? String(entry.timeAdjustmentMinutes) : '');
@@ -617,9 +610,8 @@ export default function SubmitEOD() {
         ? entry.tasks.map(t => rowFromDto(t))
         : [newRow()],
       );
-      // A saved entry with real weekend OT rows shows them via hasRealWeekendTask below
-      // regardless of this flag — reset it plainly rather than trying to infer it from the entry.
-      setWeekendExpanded(false);
+      // Entries saved before weekend_worked existed carry only their tasks, so fall back to that.
+      setWeekendWorked(entry.weekendWorked === true || entry.tasks.length > 0);
     } else {
       setEntryId(null);
       setEntryStatus(null);
@@ -635,7 +627,7 @@ export default function SubmitEOD() {
       setRemarks('');
       setReviewerComment(null);
       setTasks([newRow()]);
-      setWeekendExpanded(false);
+      setWeekendWorked(false);
     }
     setErrors([]);
   }, [entries, loadingEntry, selectedDate, categories, dayDefaults, loadingDayDefaults]);
@@ -649,9 +641,8 @@ export default function SubmitEOD() {
 
   function handleDayTypeChange(next: string) {
     setDayType(next);
-    // A fresh switch into (or out of) Weekend should start collapsed again — any already-typed
-    // real task still shows via hasRealWeekendTask regardless of this flag.
-    setWeekendExpanded(false);
+    // A fresh switch into (or out of) Weekend starts as a no-work day again.
+    setWeekendWorked(false);
     // A holiday and a full-day leave carry no work location — but a half-day leave still does,
     // since the other half of the day is still worked.
     const nextIsWorkDay = next === 'WORKING_DAY' || next === 'FIRST_HALF_LEAVE' || next === 'SECOND_HALF_LEAVE';
@@ -756,12 +747,13 @@ export default function SubmitEOD() {
   // isNonWorkDay (which hides the whole Tasks section, see the render below).
   const isWeekend = dayType === 'WEEKEND';
   const workLocDisabled = isNonWorkDay || isWeekend;
-  // True once a row actually carries something (see isTaskRowBlank) — a saved/typed real weekend
-  // OT task shows the row fields even if the employee never clicked "Add task" this session
-  // (e.g. reopening a day that already has one). Combined with weekendExpanded (set by the click
-  // itself) to decide whether the task-row fields are visible at all on a Weekend day.
-  const hasRealWeekendTask = isWeekend && tasks.some(t => !isTaskRowBlank(t));
-  const showWeekendTaskRows = hasRealWeekendTask || weekendExpanded;
+  // The server decides what counts as a weekend (Business Rules weekend rule, holidays win), so
+  // the lock reads its answer instead of re-deriving it from getDay(): Day Type is pinned to
+  // Weekend and cannot be changed. A working Saturday under SUN_ONLY, or a weekend holiday, is
+  // not locked.
+  const weekendLocked = dayDefaults?.dayType === 'WEEKEND';
+  // A weekend with no work carries no tasks at all; only "I worked on this day" brings them back.
+  const noWorkWeekend = isWeekend && !weekendWorked;
 
   // ── Time adjustment derived state ─────────────────────────────────────────
   const isWorkingDay  = dayType === 'WORKING_DAY';
@@ -965,6 +957,9 @@ export default function SubmitEOD() {
 
     const errs: string[] = [];
 
+    // A no-work weekend has nothing to validate: no tasks, no hours, no plan.
+    if (noWorkWeekend) return errs;
+
     // Required only when the field is actually enabled. A holiday and leave day both
     // disable and clear it, so demanding it there would make those days unsubmittable.
     if (!workLocDisabled && !workLocation) {
@@ -977,16 +972,16 @@ export default function SubmitEOD() {
       errs.push('Next-day plan is required.');
     }
 
-    // On a Weekend, task logging is optional overtime — a still-blank placeholder row (the
-    // default row, or an untouched "Add task" click) isn't a task the employee actually logged,
-    // so it's excluded here rather than forced through the same required-field checks below.
-    // Every other day type is untouched: activeTasks === tasks.
-    const activeTasks = isWeekend ? tasks.filter(t => !isTaskRowBlank(t)) : tasks;
+    // Reaching here on a weekend means "I worked on this day" is on, so the rows go through the
+    // same required-field checks a Working Day row gets (blank placeholder rows included).
+    const activeTasks = tasks;
 
-    if (activeTasks.length === 0 && !isWeekend) {
+    if (activeTasks.length === 0) {
       errs.push(isHalfLeave
         ? `At least one task row is required for ${HALF_LEAVE_LABELS[dayType]}.`
-        : 'At least one task row is required for a working day.');
+        : isWeekend
+          ? 'At least one task row is required when you worked on a weekend.'
+          : 'At least one task row is required for a working day.');
       return errs;
     }
     activeTasks.forEach((t, i) => {
@@ -1075,13 +1070,13 @@ export default function SubmitEOD() {
       // Never send a location the day type doesn't allow. The server also nulls it for a
       // holiday, but sending it would be a lie about what the form showed.
       workLocation: workLocDisabled ? null : (workLocation || null),
+      // WEEKEND only; undefined (omitted) for every other day type.
+      weekendWorked: isWeekend ? weekendWorked : undefined,
       nextDayPlan:  nextDayPlan  || null,
       remarks:      remarks      || null,
-      // A holiday or leave day carries no rows at all; the server discards any it receives anyway.
-      // On a Weekend, a still-blank placeholder row is not a task the employee logged (see
-      // isTaskRowBlank/activeTasks in validate()) — dropped here too so an untouched Add-task
-      // row doesn't get submitted as an empty task.
-      tasks: isNonWorkDay ? [] : (isWeekend ? tasks.filter(t => !isTaskRowBlank(t)) : tasks).map(t => ({
+      // A holiday, leave day or no-work weekend carries no rows at all; the server discards any
+      // it receives anyway.
+      tasks: (isNonWorkDay || noWorkWeekend) ? [] : tasks.map(t => ({
         projectId:      t.projectId,
         taskCategoryId: t.taskCategoryId,
         description:    t.description || null,
@@ -1135,17 +1130,8 @@ export default function SubmitEOD() {
     // once this task's underlying row is gone (see reassignForSave's ON DELETE SET NULL note).
     const row = tasks.find(t => t.localId === localId);
     row?.attachments.forEach(a => deleteAttachmentMutation.mutate(a.id));
-    // Unlike Working Day (always >= 1 row, enforced by canRemove below), Weekend has no minimum
-    // task requirement — removing its only row would otherwise leave `tasks` empty, so it's
-    // replaced with a fresh blank placeholder instead (same shape the day starts in).
     const remaining = tasks.filter(t => t.localId !== localId);
     setTasks(remaining.length > 0 ? remaining : [newRow()]);
-    // No real row left (either none remain, or what's left is still just blank placeholders) —
-    // collapse back to the default "no tasks required" Weekend state rather than showing an
-    // empty/blank Tasks section.
-    if (isWeekend && remaining.every(t => isTaskRowBlank(t))) {
-      setWeekendExpanded(false);
-    }
   }
 
   function handleCategoryChange(localId: string, catId: string) {
@@ -1310,13 +1296,16 @@ export default function SubmitEOD() {
             </div>
             <div>
               <Label>Day type <Req /></Label>
-              {isReadOnly ? (
-                <div style={{ ...inputStyle, opacity: 0.7 }}>
+              {isReadOnly || (weekendLocked && isWeekend) ? (
+                <div
+                  style={{ ...inputStyle, opacity: 0.7 }}
+                  title={!isReadOnly ? 'Weekend dates are always logged as Weekend' : undefined}
+                >
                   {DAY_TYPES.find(d => d.value === dayType)?.label ?? dayType}
                 </div>
               ) : (
                 <Sel value={dayType} onChange={e => handleDayTypeChange(e.target.value)}>
-                  {DAY_TYPES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                  {DAY_TYPES.filter(d => d.value !== 'WEEKEND' || dayType === 'WEEKEND').map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
                 </Sel>
               )}
             </div>
@@ -1532,19 +1521,30 @@ export default function SubmitEOD() {
                     ? 'This is a company holiday. Hours and project fields are skipped.'
                     : isLeaveDay
                       ? 'You are on leave. Hours and project fields are skipped.'
-                      : 'This is a weekend day. If you worked today, add a task below to log it as overtime.'}
+                      : weekendWorked
+                        ? 'You worked this weekend day. Every hour you log counts as overtime.'
+                        : 'This is a weekend day. Submit as-is to record no work, or turn on "I worked on this day" to log tasks as overtime.'}
                 </div>
+                {/* Weekend only, and only while the entry can still be edited. Off by default. */}
+                {isWeekend && isEditable && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13, color: 'var(--txt)', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={weekendWorked}
+                      onChange={e => { setWeekendWorked(e.target.checked); setErrors([]); }}
+                    />
+                    I worked on this day
+                  </label>
+                )}
               </div>
             </div>
           )}
 
           {/* Tasks section — grouped by project. Each group shows the approver so the
               employee knows who reviews each piece before they submit. */}
-          {!isNonWorkDay && (isEditable || !isWeekend || showWeekendTaskRows) && (
+          {!isNonWorkDay && !noWorkWeekend && (
           <div style={{ marginTop: 28 }}>
-            {isWeekend && !showWeekendTaskRows ? (
-              <AddTaskButton onClick={() => setWeekendExpanded(true)} />
-            ) : (
+            {(
               <>
                 {/* Header: label + hours progress bar */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -1656,11 +1656,10 @@ export default function SubmitEOD() {
                                 onUpdate={patch => updateTask(task.localId, patch)}
                                 onRemove={() => removeTask(task.localId)}
                                 onCategoryChange={catId => handleCategoryChange(task.localId, catId)}
-                                // Working Day (and Half Leave) always need >= 1 task row, so removal is
-                                // blocked at the last one. Weekend has no such minimum — its only row can
-                                // always be removed, collapsing the section back to the default state
-                                // (handled in removeTask above).
-                                canRemove={isWeekend || tasks.length > 1}
+                                // Working Day, Half Leave and a worked Weekend all need >= 1 task row, so
+                                // removal is blocked at the last one. To log no work on a weekend, turn
+                                // "I worked on this day" off instead.
+                                canRemove={tasks.length > 1}
                                 onFileSelected={e => handleTaskFileSelected(task.localId, e)}
                                 onPreviewAttachment={handlePreviewAttachment}
                                 onRemoveAttachment={attachmentId => handleRemoveTaskAttachment(task.localId, attachmentId)}

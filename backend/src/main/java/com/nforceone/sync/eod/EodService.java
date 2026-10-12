@@ -177,10 +177,22 @@ public class EodService {
 
         // PLAIN_LOG draft: persist log lines (V110+) or legacy summary/hours, skip task processing.
         if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
-            boolean hasLines = request.logLines() != null;
+            EodEntry.DayType plainDayType = resolveDayType(request.dayType(), request.entryDate());
+            boolean plainIsWeekend = plainDayType == EodEntry.DayType.WEEKEND;
+            boolean plainContentSent = request.logLines() != null
+                    ? !request.logLines().isEmpty()
+                    : request.logTotalHours() != null && request.logTotalHours().signum() > 0;
+            // Null (older client) is inferred from whether any content was sent.
+            boolean weekendWorked = plainIsWeekend
+                    && (request.weekendWorked() != null ? request.weekendWorked() : plainContentSent);
+            // A no-work weekend carries no log lines at all, whatever the client sent.
+            List<com.nforceone.sync.eod.dto.SaveEodLogLineRequest> plainLines =
+                    (plainIsWeekend && !weekendWorked) ? List.of() : request.logLines();
+            entry.setWeekendWorked(weekendWorked);
+            boolean hasLines = plainLines != null;
             if (hasLines) {
                 // V110+ path: server computes logTotalHours from line sum.
-                BigDecimal total = request.logLines().stream()
+                BigDecimal total = plainLines.stream()
                         .map(l -> l.hours() != null ? l.hours() : BigDecimal.ZERO)
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
                 entry.setLogTotalHours(total);
@@ -194,14 +206,11 @@ public class EodService {
 
             // Store dayType, workLocation, nextDayPlan, remarks for PLAIN_LOG (same columns as
             // the employee form — saveDraft previously left them null; now they are carried through).
-            EodEntry.DayType plainDayType = request.dayType() != null
-                    ? request.dayType() : EodEntry.DayType.WORKING_DAY;
             entry.setDayType(plainDayType);
             boolean plainNonWork = plainDayType == EodEntry.DayType.LEAVE
                     || plainDayType == EodEntry.DayType.FIRST_HALF_LEAVE
                     || plainDayType == EodEntry.DayType.SECOND_HALF_LEAVE
                     || plainDayType == EodEntry.DayType.HOLIDAY;
-            boolean plainIsWeekend = plainDayType == EodEntry.DayType.WEEKEND;
             entry.setWorkLocation((plainNonWork || plainIsWeekend) ? null : request.workLocation());
             entry.setNextDayPlan(request.nextDayPlan());
             entry.setRemarks(request.remarks());
@@ -220,7 +229,7 @@ public class EodService {
             if (hasLines) {
                 logLineRepository.deleteByEntryId(savedPlain.getId());
                 int order = 0;
-                for (com.nforceone.sync.eod.dto.SaveEodLogLineRequest lineReq : request.logLines()) {
+                for (com.nforceone.sync.eod.dto.SaveEodLogLineRequest lineReq : plainLines) {
                     EodLogLine line = new EodLogLine();
                     line.setEntry(savedPlain);
                     com.nforceone.sync.project.TaskCategory category = categoryRepository.findById(lineReq.categoryId())
@@ -253,13 +262,18 @@ public class EodService {
                     java.util.Map.of(), logLines);
         }
 
-        EodEntry.DayType dayType = request.dayType() != null
-                ? request.dayType()
-                : EodEntry.DayType.WORKING_DAY;
+        EodEntry.DayType dayType = resolveDayType(request.dayType(), request.entryDate());
         entry.setDayType(dayType);
 
         boolean isHoliday = dayType == EodEntry.DayType.HOLIDAY;
         boolean isWeekend = dayType == EodEntry.DayType.WEEKEND;
+        // Weekend only: did the employee work? Null (older client) is inferred from whether any
+        // task was sent. A no-work weekend never stores task rows, whatever the client sent.
+        boolean weekendWorked = isWeekend
+                && (request.weekendWorked() != null
+                        ? request.weekendWorked()
+                        : request.tasks() != null && !request.tasks().isEmpty());
+        entry.setWeekendWorked(weekendWorked);
 
         // A holiday has nothing to log, so it carries no work location and no task rows. A
         // weekend carries no work location either — any tasks on it are optional overtime, not a
@@ -281,7 +295,7 @@ public class EodService {
         // (orphanRemoval), so a task-level attachment cannot keep pointing at an eod_task.id
         // across saves — reassignForSave below re-points it right after save().
         entry.getTasks().clear();
-        if (!isHoliday && request.tasks() != null) {
+        if (!isHoliday && !(isWeekend && !weekendWorked) && request.tasks() != null) {
             for (SaveEodTaskRequest taskReq : request.tasks()) {
                 entry.getTasks().add(buildTask(taskReq, entry));
             }
@@ -332,6 +346,7 @@ public class EodService {
         }
         if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
             validatePlainLog(entry);
+            applyPlainWeekendOvertime(entry);
         } else {
             // A holiday has nothing to log, so every task-level and hours check is skipped
             // outright — not satisfied with empty rows or 0 hours, simply not run.
@@ -438,9 +453,22 @@ public class EodService {
             }
         }
 
+        // A no-work weekend (PROJECT_GROUPED; the PLAIN_LOG one is covered above) routes to a single
+        // AUTO_APPROVED piece, so promote the entry now — otherwise it would sit SUBMITTED with no
+        // approver forever.
+        boolean weekendNoWork = saved.getEntryForm() != EodEntry.EntryForm.PLAIN_LOG
+                && saved.getDayType() == EodEntry.DayType.WEEKEND
+                && saved.getTasks().isEmpty();
+        if (weekendNoWork) {
+            saved.setStatus(EodEntry.Status.APPROVED);
+            entryRepository.save(saved);
+            writeAuditLog("EOD_ENTRY", saved.getId(), "WEEKEND_NO_WORK_AUTO_APPROVED", employee,
+                    "{\"date\":\"" + saved.getEntryDate() + "\"}");
+        }
+
         // Leave days are already auto-approved — skip all approver notifications.
         // PLAIN_LOG: single notify to frozen RM. PROJECT_GROUPED: one notify per distinct approver.
-        if (!isPlainLogLeave) {
+        if (!isPlainLogLeave && !weekendNoWork) {
             if (saved.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
                 if (saved.getManagerId() != null) {
                     notificationService.send(saved.getManagerId(), "EOD_SUBMITTED",
@@ -588,6 +616,35 @@ public class EodService {
      * inconsistency out of scope here; only Submit EOD's day-type default and missing-EOD scan
      * (both driven by this method) need to honor the configured rule for this feature.
      */
+    /**
+     * The weekend lock: a weekend date that is not also a company holiday. A holiday wins over the
+     * weekend (same priority as getDayDefaults), so on a Saturday holiday the day type stays free.
+     */
+    private boolean isWeekendLocked(LocalDate d) {
+        return isWeekend(d) && !holidayRepository.existsByHolidayDate(d);
+    }
+
+    /**
+     * Resolves the day type to persist for a save and enforces the weekend lock server-side, so a
+     * direct API call cannot bypass the form. A locked weekend only accepts WEEKEND (null — an
+     * older client — resolves to it); WEEKEND is only accepted on a weekend date at all.
+     */
+    private EodEntry.DayType resolveDayType(EodEntry.DayType requested, LocalDate date) {
+        if (isWeekendLocked(date)) {
+            if (requested != null && requested != EodEntry.DayType.WEEKEND) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Day type must be WEEKEND on a weekend date.");
+            }
+            return EodEntry.DayType.WEEKEND;
+        }
+        EodEntry.DayType resolved = requested != null ? requested : EodEntry.DayType.WORKING_DAY;
+        if (resolved == EodEntry.DayType.WEEKEND && !isWeekend(date)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Day type WEEKEND is only valid on a weekend date.");
+        }
+        return resolved;
+    }
+
     private boolean isWeekend(LocalDate d) {
         java.time.DayOfWeek dow = d.getDayOfWeek();
         if (dow == java.time.DayOfWeek.SUNDAY) return true;
@@ -614,7 +671,7 @@ public class EodService {
                 null, null, null, List.of(), List.of(),
                 null, null, null, null, null, null, null, null, null, null,
                 // PLAIN_LOG fields — synthetic rows are always PROJECT_GROUPED context
-                EodEntry.EntryForm.PROJECT_GROUPED.name(), null, null, null, null, null, List.of());
+                EodEntry.EntryForm.PROJECT_GROUPED.name(), null, null, null, null, null, List.of(), false);
     }
 
     @Transactional(readOnly = true)
@@ -690,6 +747,17 @@ public class EodService {
      * are mandatory only for WORKING_DAY; LEAVE may submit with none.
      */
     private void validateLoggedDay(EodEntry entry) {
+        // A weekend is either a no-work day (nothing to validate — no tasks, no hours, no plan)
+        // or, when the employee worked, a day that must carry at least one task. A weekend that
+        // already has tasks but predates weekend_worked falls through to the normal checks below.
+        if (entry.getDayType() == EodEntry.DayType.WEEKEND && entry.getTasks().isEmpty()) {
+            if (Boolean.TRUE.equals(entry.getWeekendWorked())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "At least one task is required when you worked on a weekend.");
+            }
+            return;
+        }
+
         // A full-day leave has nothing to log by definition — the UI hides the Tasks section
         // and submits an empty list — so only a WORKING_DAY is required to carry a task row.
         if (entry.getDayType() == EodEntry.DayType.WORKING_DAY && entry.getTasks().isEmpty()) {
@@ -858,6 +926,12 @@ public class EodService {
                 || plainDayType == EodEntry.DayType.HOLIDAY;
         boolean plainIsWeekend = plainDayType == EodEntry.DayType.WEEKEND;
 
+        // Weekend: a no-work day has nothing to validate; "I worked" must carry at least one line.
+        if (plainIsWeekend && Boolean.TRUE.equals(entry.getWeekendWorked()) && !plainHasContent(entry, lines)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "At least one line item is required when you worked on a weekend.");
+        }
+
         if (!plainNonWork && !plainIsWeekend) {
             boolean hasContent = !lines.isEmpty()
                     || (entry.getLogTotalHours() != null
@@ -869,6 +943,24 @@ public class EodService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Next-day plan is required.");
             }
         }
+    }
+
+    private static boolean plainHasContent(EodEntry entry, List<EodLogLine> lines) {
+        return !lines.isEmpty()
+                || (entry.getLogTotalHours() != null && entry.getLogTotalHours().signum() > 0);
+    }
+
+    /**
+     * PLAIN_LOG counterpart of applyOvertime for a weekend: there is no baseline, so every logged
+     * hour is overtime — the same rule applyOvertime applies to a PROJECT_GROUPED weekend. Other
+     * PLAIN_LOG day types keep their existing behaviour (never flagged).
+     */
+    private void applyPlainWeekendOvertime(EodEntry entry) {
+        if (entry.getDayType() != EodEntry.DayType.WEEKEND) return;
+        BigDecimal hours = entry.getLogTotalHours() != null ? entry.getLogTotalHours() : BigDecimal.ZERO;
+        boolean overtime = hours.signum() > 0;
+        entry.setIsOvertime(overtime);
+        entry.setOvertimeHours(overtime ? hours.setScale(2, RoundingMode.HALF_UP) : null);
     }
 
     private BigDecimal totalHours(EodEntry entry) {
@@ -982,7 +1074,9 @@ public class EodService {
      * banner and the "not longer than your shift" check, just not as the hours basis.
      */
     private void applyOvertime(EodEntry entry, AppUser employee) {
-        if (entry.getDayType() == EodEntry.DayType.HOLIDAY) {
+        // A no-work weekend has no tasks, so it is zero hours and never overtime.
+        boolean noWorkWeekend = entry.getDayType() == EodEntry.DayType.WEEKEND && entry.getTasks().isEmpty();
+        if (entry.getDayType() == EodEntry.DayType.HOLIDAY || noWorkWeekend) {
             entry.setIsOvertime(Boolean.FALSE);
             entry.setOvertimeHours(null);
             return;

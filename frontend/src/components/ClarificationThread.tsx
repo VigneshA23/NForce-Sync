@@ -8,7 +8,7 @@ import { ThreadView } from './BlockerThread';
 
 /** The reviewing side is "Reviewer" whoever it is (TL-assigned employee, escalated PM, Super Admin);
  *  the employee side stays "Employee". Blockers keeps its own "Team Lead" wording. */
-const CLARIFICATION_ROLE_LABELS = { EMPLOYEE: 'Employee', TEAM_LEAD: 'Reviewer' } as const;
+const CLARIFICATION_ROLE_LABELS = { EMPLOYEE: 'Employee', TEAM_LEAD: 'Reviewer', REPORTING_MANAGER: 'Reviewer' } as const;
 
 /**
  * Shared conversation UI for an EOD Clarification round — used by the Team Lead's EOD Inbox

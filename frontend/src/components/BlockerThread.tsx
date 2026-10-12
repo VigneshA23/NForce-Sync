@@ -110,7 +110,7 @@ export interface GenericThreadMessage {
   id: number;
   senderId: number;
   senderName: string;
-  senderRole: 'EMPLOYEE' | 'TEAM_LEAD';
+  senderRole: 'EMPLOYEE' | 'TEAM_LEAD' | 'REPORTING_MANAGER';
   createdAt: string;
   message: string;
   attachments: GenericThreadAttachment[];
@@ -175,7 +175,7 @@ function GenericAttachmentView({ attachment, fetchAttachmentUrl, attachmentUrlQu
   );
 }
 
-const DEFAULT_ROLE_LABELS: Record<GenericThreadMessage['senderRole'], string> = { EMPLOYEE: 'Employee', TEAM_LEAD: 'Team Lead' };
+const DEFAULT_ROLE_LABELS: Record<GenericThreadMessage['senderRole'], string> = { EMPLOYEE: 'Employee', TEAM_LEAD: 'Team Lead', REPORTING_MANAGER: 'Reporting Manager' };
 
 function GenericConversationMessage({
   m, fetchAttachmentUrl, attachmentUrlQueryKey, currentUserId, onEdit, onDelete, locked, roleLabels,
@@ -197,7 +197,8 @@ function GenericConversationMessage({
    *  menu the same way the reply box itself locks, but Copy still works on closed history. */
   locked?: boolean;
 }) {
-  const isTeamLead = m.senderRole === 'TEAM_LEAD';
+  // Everyone who is not the employee is the reviewing side (Team Lead or reporting manager).
+  const isTeamLead = m.senderRole !== 'EMPLOYEE';
   const { date, time } = fmtDateTimeParts(m.createdAt);
   const { show: toast } = useToast();
   const [editing, setEditing] = useState(false);

@@ -20,7 +20,7 @@ export interface BlockerReplyDto {
   id: number;
   senderId: number;
   senderName: string;
-  senderRole: 'EMPLOYEE' | 'TEAM_LEAD';
+  senderRole: 'EMPLOYEE' | 'TEAM_LEAD' | 'REPORTING_MANAGER';
   createdAt: string;
   message: string;
   attachments: BlockerAttachmentDto[];
