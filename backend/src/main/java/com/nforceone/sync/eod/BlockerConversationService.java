@@ -79,9 +79,15 @@ public class BlockerConversationService {
 
         BlockerReply saved = saveReply(task, lead, message, files);
 
-        task.setAcknowledgedAt(OffsetDateTime.now());
-        task.setAcknowledgedBy(lead);
-        taskRepository.save(task);
+        // A reply is a response — it acknowledges the blocker — only from whoever OWNS handling it: the
+        // project's lead, or the reporting manager of a lead's own blocker (no other lead handles that one).
+        // A reporting manager replying on a blocker raised on a project someone else leads is not that lead's
+        // response: it must not mark it acknowledged or take it out of the lead's "Needs Response" queue.
+        if (handlesBlocker(task, lead)) {
+            task.setAcknowledgedAt(OffsetDateTime.now());
+            task.setAcknowledgedBy(lead);
+            taskRepository.save(task);
+        }
 
         AppUser employee = task.getEodEntry().getEmployee();
         notificationService.send(employee.getId(), "BLOCKER_REPLY",
@@ -114,12 +120,16 @@ public class BlockerConversationService {
         taskRepository.save(task);
 
         Long leadId = task.getEodEntry().getManagerId();
-        // A lead's own blocker on a project he leads is handled by his reporting manager on the
-        // My Reporting Team > Blockers page; every other blocker keeps the Team Blockers link.
+        // The recipient is the entry's frozen reporting manager. A reporting manager reads ALL of his direct
+        // reports' blockers on My Reporting Team > Blockers; only a recipient who is also the project's Team
+        // Lead works from Team Blockers.
         com.nforceone.sync.project.Project project = task.getProject();
+        boolean recipientLeadsProject = project != null && project.getLead() != null
+                && project.getLead().getId().equals(leadId);
         boolean ownLeadBlocker = project != null && project.getLead() != null
                 && project.getLead().getId().equals(employee.getId());
-        String link = (ownLeadBlocker ? "/my-reports/blockers" : "/team/blockers") + "?highlight=" + task.getId();
+        String link = (ownLeadBlocker || !recipientLeadsProject ? "/my-reports/blockers" : "/team/blockers")
+                + "?highlight=" + task.getId();
         if (leadId != null) {
             notificationService.send(leadId, "BLOCKER_REPLY",
                     "New reply on a blocker",
@@ -331,6 +341,15 @@ public class BlockerConversationService {
      * who reaches the task solely as the project's PM acts in the PM capacity, which is read-only —
      * whatever their role (anyone can be a project's PM by assignment). A role-PM user is rejected first.
      */
+    /** Does this replier own handling of the blocker (so his reply counts as the response)? */
+    private static boolean handlesBlocker(EodTask task, AppUser replier) {
+        com.nforceone.sync.project.Project project = task.getProject();
+        if (project == null || project.getLead() == null) return true;   // no other lead exists: the RM handles it
+        Long leadId = project.getLead().getId();
+        return leadId.equals(replier.getId())
+                || leadId.equals(task.getEodEntry().getEmployee().getId());   // a lead's own blocker
+    }
+
     private void requireCanWriteAsLead(EodTask task, AppUser actor) {
         requireLeadOwnsTask(task, actor);
         Long actorId = actor.getId();

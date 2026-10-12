@@ -83,8 +83,8 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
           <ClarificationThreadView
             entryId={item.eodEntryId}
             scope="employee"
-            replyToLabel="Reply to your Team Lead"
-            visibilityNote="Replies are visible to your Team Lead"
+            replyToLabel="Reply to your reviewer"
+            visibilityNote="Replies are visible to your reviewer"
             isLocked={!item.open}
           />
         </div>
@@ -94,7 +94,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
 }
 
 const EMPTY_MESSAGE: Record<EodInboxFilter, string> = {
-  ALL: "When your Team Lead requests clarification on a submitted EOD, it'll show up here.",
+  ALL: "When your reviewer requests clarification on a submitted EOD, it'll show up here.",
   NEEDS_RESPONSE: 'No threads need a response right now.',
   ACKNOWLEDGED: 'No acknowledged threads right now.',
   RESOLVED: 'Resolved clarifications will appear here.',
@@ -211,7 +211,7 @@ export default function EmployeeEodInbox() {
               EOD Inbox
             </h1>
             <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-              EOD entries where your Team Lead has requested clarification — reply here.
+              EOD entries where your reviewer has requested clarification — reply here.
             </p>
           </div>
           <DateFilterButton

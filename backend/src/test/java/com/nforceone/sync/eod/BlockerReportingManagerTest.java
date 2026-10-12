@@ -226,10 +226,41 @@ class BlockerReportingManagerTest {
     }
 
     @Test
-    void employeeFollowUp_onAnOrdinaryBlocker_keepsTheTeamBlockersLink() {
+    void employeeFollowUp_onAnOrdinaryBlocker_linksTheRmToMyReportingTeamBlockers_notTeamBlockers() {
+        // Dheeraj is only akhila's frozen RM (vignesh leads SYNC): he reads her blockers on My Reporting Team.
         service.postReplyAsEmployee(201L, akhila.getEmail(), "any update?", List.of());
 
         verify(notificationService).send(eq(dheeraj.getId()), eq("BLOCKER_REPLY"), any(), any(),
-                eq("/team/blockers?highlight=201"));
+                eq("/my-reports/blockers?highlight=201"));
+    }
+
+    @Test
+    void rmReply_onABlockerOnAProjectSomeoneElseLeads_doesNotAcknowledgeIt_leadsQueueUntouched() {
+        assertNull(ordinary.getAcknowledgedAt());
+
+        assertDoesNotThrow(() -> service.postReplyAsLead(ordinary.getId(), dheeraj.getEmail(), "Can I help?", List.of()));
+
+        assertNull(ordinary.getAcknowledgedAt(), "an RM's reply must not take it out of the lead's Needs Response queue");
+        assertNull(ordinary.getAcknowledgedBy());
+        assertEquals("NEEDS_RESPONSE", ordinary.getBlockerStatus());
+        // The report still hears about it.
+        verify(notificationService).send(eq(akhila.getId()), eq("BLOCKER_REPLY"), any(), any(), any());
+    }
+
+    @Test
+    void theProjectLeadsReply_stillAcknowledges() {
+        service.postReplyAsLead(ordinary.getId(), vignesh.getEmail(), "on it", List.of());
+        assertNotNull(ordinary.getAcknowledgedAt());
+    }
+
+    @Test
+    void replyLabels_carryTheCapacity_andTheEmployeeFacingNameIsNeutral() {
+        assertEquals("Reporting Manager", BlockerReplyDto.from(reply(ordinary, dheeraj), ordinary, List.of()).senderLabel());
+        assertEquals("Team Lead", BlockerReplyDto.from(reply(ordinary, vignesh), ordinary, List.of()).senderLabel());
+        assertEquals("Employee", BlockerReplyDto.from(reply(ordinary, akhila), ordinary, List.of()).senderLabel());
+        // No capacity on this blocker -> the account role.
+        AppUser superAdmin = user(9L, "Naveen");
+        superAdmin.setRole(AppUser.Role.SUPERADMIN);
+        assertEquals("Super Admin", BlockerReplyDto.from(reply(ordinary, superAdmin), ordinary, List.of()).senderLabel());
     }
 }

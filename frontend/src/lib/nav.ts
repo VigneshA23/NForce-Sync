@@ -301,13 +301,18 @@ const LEAD_COMBINED_SECTIONS: RoleNav = [
   },
 ];
 
-// EOD Submit + History for roles other than 'employee' whose eodForm is non-null.
-// Employee and employee-with-lead already get this via NAV.employee / MY_WORK_SECTIONS.
+// The employee-side EOD items for anyone who submits EODs but is not the EMPLOYEE role and has no
+// "My Work" section: Submit EOD, My EOD History, plus My Blockers and EOD Inbox — where their reviewer's
+// replies and clarification requests arrive. Gated on submitsEod (has a reporting manager), not on role.
+// Employee and employee-with-lead already get these via NAV.employee / MY_WORK_SECTIONS.
 const MY_EOD_SECTIONS: RoleNav = [
   {
     section: 'My EOD',
     items: [
       { key: 'eod-submit',  label: 'Submit EOD',      path: '/eod/submit',  icon: ClipboardList },
+      // Same keys and paths as the employee nav, so the same badge lookups (by path) apply.
+      { key: 'my-blockers',   label: 'My Blockers',   path: '/blockers',           icon: AlertOctagon },
+      { key: 'emp-eod-inbox', label: 'EOD Inbox',     path: '/employee/eod-inbox', icon: Inbox },
       {
         key: 'eod-history', label: 'My EOD History', path: '/eod/history', icon: BarChart3,
         subItems: [
@@ -383,12 +388,24 @@ export function getNavSections(role: Role, capabilities: ServerUserCapabilities)
   return sections;
 }
 
+/**
+ * Does this user have the employee-side EOD items — My Blockers and EOD Inbox — in his sidebar? The EMPLOYEE
+ * role, anyone who leads a project (My Work), or anyone who submits EODs. One question, so an unread-count
+ * fetch is never made for an item that is not shown, nor skipped for one that is.
+ */
+export function hasEmployeeEodItems(role: Role, capabilities: ServerUserCapabilities): boolean {
+  return role === 'employee' || capabilities.leadsProjectIds.length > 0 || capabilities.submitsEod;
+}
+
 // Detail routes that have no sidebar entry of their own but belong to one that does. The guard,
 // breadcrumb and sidebar highlight all compare against exact nav paths, so a detail URL is mapped
 // back to its parent first: it is then allowed exactly when the parent is (same role/capability
 // gating), and keeps the parent's sidebar item highlighted.
 const NAV_DETAIL_ROUTES: { pattern: RegExp; parent: string }[] = [
   { pattern: /^\/my-reports\/eod-status\/\d+$/, parent: '/my-reports/eod-status' },
+  // The employee API lives under /employee/blockers; a link written in that shape lands on My Blockers
+  // and is allowed exactly when My Blockers is (see the redirect route in App.tsx).
+  { pattern: /^\/employee\/blockers$/, parent: '/blockers' },
 ];
 
 /** The nav path a URL path is governed by — itself, unless it is a registered detail route. */

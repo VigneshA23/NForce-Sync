@@ -100,22 +100,22 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
                                             @Param("fromTs") java.time.OffsetDateTime fromTs,
                                             @Param("toTs") java.time.OffsetDateTime toTs);
 
-    // Reporting Manager blockers: a lead's OWN blocker on a project he leads — the ones no other lead
-    // sees (findBlockedForProjectLead excludes the lead's own) — handled by the lead's reporting
-    // manager. Scoped strictly to the entry's frozen manager (manager_id, snapshotted at first
-    // submit), never "any direct report", and never blockers on someone else's project: those stay
-    // with that project's lead. Same carry-over rule as the lead query.
+    // Reporting Manager blockers: EVERY blocker raised by someone who reports to him — the entry's frozen
+    // manager (manager_id, snapshotted at first submit) is the viewer and the author is not. That covers a
+    // lead's own blocker on a project he leads (no other lead sees it: the RM acknowledges / resolves it) and
+    // a blocker on a project someone else leads (the project's lead still owns Acknowledge / Resolve; the RM
+    // can read and reply — see TeamBlockerDto#raisedOn). Entries from before V57 have no frozen manager and
+    // never match. Same carry-over rule as the lead query.
     @Query("SELECT DISTINCT t FROM EodTask t " +
            "JOIN FETCH t.eodEntry e " +
            "JOIN FETCH e.employee emp " +
            "LEFT JOIN FETCH emp.manager " +
-           "JOIN FETCH t.project p " +
+           "LEFT JOIN FETCH t.project p " +
            "LEFT JOIN FETCH t.taskCategory " +
            "LEFT JOIN FETCH t.acknowledgedBy " +
            "LEFT JOIN FETCH t.resolvedBy " +
            "WHERE t.taskStatus = com.nforceone.sync.eod.EodTask.TaskStatus.BLOCKED " +
            "AND e.managerId = :managerId " +
-           "AND p.lead.id = emp.id " +
            "AND emp.id <> :managerId " +
            "AND e.status <> com.nforceone.sync.eod.EodEntry.Status.DRAFT " +
            "AND ( (t.resolvedAt IS NULL AND e.entryDate <= :to) " +

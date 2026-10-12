@@ -356,6 +356,7 @@ export default function EodInbox({ variant = 'lead' }: { variant?: 'lead' | 'rm'
             page={page}
             onPageChange={setPage}
             pageSize={6}
+            capacityLabel={variant === 'rm' ? 'As Reporting Manager' : undefined}
             selectedClarificationId={selectedClarificationId}
             onSelect={clarificationId => {
               setViewEodEntryId(null);

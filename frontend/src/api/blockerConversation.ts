@@ -21,6 +21,9 @@ export interface BlockerReplyDto {
   senderId: number;
   senderName: string;
   senderRole: 'EMPLOYEE' | 'TEAM_LEAD' | 'REPORTING_MANAGER';
+  /** The capacity the sender spoke in ("Team Lead" / "Reporting Manager" / his account role) — shown beside
+   *  his name; the role-keyed labels are only a fallback for a payload without it. */
+  senderLabel?: string;
   createdAt: string;
   message: string;
   attachments: BlockerAttachmentDto[];

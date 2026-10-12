@@ -265,6 +265,7 @@ export default function PmEodInbox() {
             rows={filteredRows}
             page={page}
             onPageChange={setPage}
+            capacityLabel="As PM (read-only)"
             selectedClarificationId={selectedClarificationId}
             onSelect={clarificationId => {
               setViewEodEntryId(null);

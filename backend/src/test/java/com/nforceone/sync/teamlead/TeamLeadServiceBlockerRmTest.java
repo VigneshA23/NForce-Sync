@@ -140,13 +140,28 @@ class TeamLeadServiceBlockerRmTest {
     }
 
     @Test
-    void detail_onlyTheFrozenManagerOfAnOwnLeadBlocker() {
+    void detail_onlyTheFrozenManagerOfTheEntry_readsItsBlocker() {
         assertEquals(50L, service.getBlockerByIdForReportingManager(50L, dheeraj).taskId());
+        // An ordinary blocker (raised on a project someone else leads) is on the RM's page too: he is her RM.
+        assertEquals(51L, service.getBlockerByIdForReportingManager(51L, dheeraj).taskId());
+        // A different RM gets nothing; the author is never his own reviewer.
         assertForbidden(() -> service.getBlockerByIdForReportingManager(50L, otherRm));
-        // An ordinary blocker (author is not that project's lead) is not on the RM page at all.
-        assertForbidden(() -> service.getBlockerByIdForReportingManager(51L, dheeraj));
-        // The lead himself is not his own reviewer.
+        assertForbidden(() -> service.getBlockerByIdForReportingManager(51L, otherRm));
         assertForbidden(() -> service.getBlockerByIdForReportingManager(50L, vignesh));
+    }
+
+    @Test
+    void rowIsLabelled_raisedOnAProjectSomeoneElseLeads_versus_aLeadsOwnProject() {
+        assertEquals("OWN_LEAD_PROJECT", service.getBlockerByIdForReportingManager(50L, dheeraj).raisedOn());
+        TeamBlockerDto other = service.getBlockerByIdForReportingManager(51L, dheeraj);
+        assertEquals("OTHER_LEAD_PROJECT", other.raisedOn());
+        assertEquals("Vignesh A", other.projectLeadName());
+    }
+
+    @Test
+    void rm_cannotAcknowledgeOrResolve_aBlockerOnAProjectSomeoneElseLeads() {
+        assertForbidden(() -> service.acknowledgeBlocker(51L, dheeraj.getEmail()));
+        assertForbidden(() -> service.setBlockerStatus(51L, dheeraj.getEmail(), new BlockerStatusRequest("RESOLVED")));
     }
 
     // ── acknowledge / resolve: the explicit permission ────────────────────────

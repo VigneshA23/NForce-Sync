@@ -2,6 +2,7 @@ package com.nforceone.sync.employee;
 
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.eod.BlockerReadService;
 import com.nforceone.sync.eod.BlockerConversationService;
 import com.nforceone.sync.eod.BlockerReplyAttachment;
 import com.nforceone.sync.eod.EodClarificationReplyAttachment;
@@ -38,11 +39,14 @@ public class EmployeeController {
     private final BlockerConversationService conversationService;
     private final EmployeeProjectService employeeProjectService;
     private final EodClarificationService clarificationService;
+    private final BlockerReadService blockerReadService;
 
     public EmployeeController(AppUserRepository userRepository, EmployeeService employeeService,
                                BlockerConversationService conversationService,
                                EmployeeProjectService employeeProjectService,
-                               EodClarificationService clarificationService) {
+                               EodClarificationService clarificationService,
+                               BlockerReadService blockerReadService) {
+        this.blockerReadService = blockerReadService;
         this.userRepository  = userRepository;
         this.employeeService = employeeService;
         this.conversationService = conversationService;
@@ -108,6 +112,18 @@ public class EmployeeController {
     public DashboardSummaryDto.BlockedTask getBlocker(@PathVariable Long taskId) {
         AppUser user = currentUser();
         return employeeService.getBlockedTask(taskId, user.getId());
+    }
+
+    // Sidebar badge on My Blockers: blockers of mine with a reviewer reply newer than my last read of the thread.
+    @GetMapping("/blockers/unread-count")
+    public long getUnreadBlockerCount() {
+        return blockerReadService.unreadCount(actingEmail());
+    }
+
+    // Opening a blocker's thread marks it read for me (clears it from the badge).
+    @PostMapping("/blockers/{taskId}/read")
+    public void markBlockerRead(@PathVariable Long taskId) {
+        blockerReadService.markRead(taskId, actingEmail());
     }
 
     @GetMapping("/blockers/{taskId}/replies")

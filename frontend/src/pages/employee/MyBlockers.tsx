@@ -9,7 +9,8 @@ import { GlobalLoader } from '../../components/GlobalLoader';
 import { BlockerThreadView } from '../../components/BlockerThread';
 import { Pagination } from '../../components/Pagination';
 import { DateFilterButton, fmtShortDate, type DateFilterMode as DateMode } from '../../components/BlockerDateFilterButton';
-import { useEmployeeBlockers, useEmployeeBlocker, type BlockedTask } from '../../api/employee';
+import { useEmployeeBlockers, useEmployeeBlocker, useMarkMyBlockerRead, type BlockedTask } from '../../api/employee';
+import { useAuth } from '../../lib/auth';
 import type { DateRange } from '../../api/teamLead';
 
 // Mirrors pages/lead/Blockers.tsx's list + side-panel layout, trimmed to the fields
@@ -341,6 +342,23 @@ export default function MyBlockers() {
   const { data: fallbackBlocker } = useEmployeeBlocker(needsFallback ? selectedTaskId : undefined);
   const selectedBlocker = matchedBlocker ?? fallbackBlocker ?? null;
 
+  // Opening a blocker's thread marks it read (clears it from the sidebar badge). While it stays open, a
+  // reply that arrives is marked read too — a light re-mark, so an open thread never shows as unread.
+  const markRead = useMarkMyBlockerRead();
+  const openTaskId = selectedBlocker?.taskId ?? null;
+  const markReadMutate = markRead.mutate;
+  useEffect(() => {
+    if (openTaskId == null) return;
+    markReadMutate(openTaskId);
+    const t = setInterval(() => markReadMutate(openTaskId), 20_000);
+    return () => clearInterval(t);
+  }, [openTaskId, markReadMutate]);
+
+  // An account on the daily-log form has no project tasks, so it can never raise a blocker: say so rather
+  // than showing a bare "no matches" list.
+  const { user } = useAuth();
+  const isPlainLogAccount = user?.capabilities.eodForm === 'PLAIN_LOG';
+
   // Once the highlighted blocker's data resolves, jump the date filter to the day it was
   // reported on — the notification link only carries the blocker id, not its date, so
   // without this the page silently stays on "today" even when the blocker is from another day.
@@ -467,7 +485,9 @@ export default function MyBlockers() {
 
           {pageItems.length === 0 ? (
             <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>
-              No blockers match these filters.
+              {isPlainLogAccount && total === 0
+                ? 'You submit a daily-log EOD, which has no project tasks, so there are no blockers to raise here. Anything your reviewer sends about an EOD arrives in your EOD Inbox.'
+                : 'No blockers match these filters.'}
             </div>
           ) : (
             pageItems.map(b => (

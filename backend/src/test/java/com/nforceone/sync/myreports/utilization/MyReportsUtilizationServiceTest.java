@@ -101,7 +101,7 @@ class MyReportsUtilizationServiceTest {
             return ids.stream().map(users::get).toList();
         });
         lenient().when(userRepository.findById(any(Long.class))).thenAnswer(inv -> Optional.ofNullable(users.get(inv.<Long>getArgument(0))));
-        lenient().when(reportingScope.reportingScopeUserIds(MANAGER_ID)).thenReturn(List.of(A, B, C, D, E));
+        lenient().when(reportingScope.directReportIds(MANAGER_ID)).thenReturn(List.of(A, B, C, D, E));
         lenient().when(configRepository.findById(1L)).thenReturn(Optional.of(config));
         lenient().when(holidayRepository.findByHolidayDateBetween(any(), any())).thenReturn(List.of());
         lenient().when(snapshotRepository.findByEmployeeIdInAndSnapshotDateBetween(anyList(), any(), any()))

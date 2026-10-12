@@ -64,7 +64,7 @@ class MyReportsServiceMemberEodTest {
         lenient().when(userRepository.existsByManagerIdAndDeletedAtIsNull(MANAGER_ID)).thenReturn(true);
         lenient().when(userRepository.findById(REPORTEE_ID)).thenReturn(Optional.of(reportee));
         lenient().when(userRepository.findById(OUTSIDER_ID)).thenReturn(Optional.of(outsider));
-        lenient().when(reportingScopeService.reportingScopeUserIds(MANAGER_ID)).thenReturn(List.of(REPORTEE_ID));
+        lenient().when(reportingScopeService.directReportIds(MANAGER_ID)).thenReturn(List.of(REPORTEE_ID));
     }
 
     @Test

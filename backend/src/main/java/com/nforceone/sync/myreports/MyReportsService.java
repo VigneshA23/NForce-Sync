@@ -50,19 +50,19 @@ public class MyReportsService {
 
     public TeamLeadSummaryDto getSummary(LocalDate from, LocalDate to, String actingEmail) {
         AppUser actor = requireManager(actingEmail);
-        List<Long> scopeIds = reportingScopeService.reportingScopeUserIds(actor.getId());
+        List<Long> scopeIds = reportingScopeService.directReportIds(actor.getId());
         return teamLeadService.getSummaryForScope(from, to, scopeIds);
     }
 
     public List<MemberEodStatusDto> getMemberStatuses(LocalDate from, LocalDate to, String actingEmail) {
         AppUser actor = requireManager(actingEmail);
-        List<Long> scopeIds = reportingScopeService.reportingScopeUserIds(actor.getId());
+        List<Long> scopeIds = reportingScopeService.directReportIds(actor.getId());
         return teamLeadService.getMemberStatusesForScope(from, to, scopeIds);
     }
 
     /**
      * A reportee's EOD for one date. Authorised by the SAME resolver the member-statuses list uses
-     * ({@code reportingScopeUserIds}), deliberately not EodAccessPolicy's narrower project-lead
+     * ({@code directReportIds}), deliberately not EodAccessPolicy's narrower project-lead
      * rule — otherwise a row visible in the list could 403 when clicked.
      *
      * <p>Contents are only returned for submitted entries; the list counts DRAFT / REJECTED / MISSED
@@ -73,7 +73,7 @@ public class MyReportsService {
         if (date.isAfter(LocalDate.now())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "date must not be in the future");
         }
-        if (!reportingScopeService.reportingScopeUserIds(actor.getId()).contains(employeeId)) {
+        if (!reportingScopeService.directReportIds(actor.getId()).contains(employeeId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Access denied: this employee is not in your reporting team");
         }

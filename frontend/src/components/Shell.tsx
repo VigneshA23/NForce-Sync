@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Menu, X, Search, Bell, LogOut, UserCircle2, HelpCircle, FolderKanban, ChevronDown, KeyRound, Settings } from 'lucide-react';
 import { BrandMark } from './BrandMark';
-import { ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, navPathFor, getNavSections, navSubItemPath, isNavGroup } from '../lib/nav';
+import { ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, navPathFor, getNavSections, navSubItemPath, isNavGroup, hasEmployeeEodItems } from '../lib/nav';
 import type { NavItem } from '../lib/nav';
 import { inboxBadgeFor, blockersBadgeFor } from '../lib/inboxBadge';
 import { useAuth, getHomeRouteForRole } from '../lib/auth';
@@ -18,6 +18,7 @@ import { fetchProfile } from '../api/profile';
 import { useUnreadNotificationsCount } from '../api/notifications';
 import { usePendingPiecesCount, useLeadPendingPiecesCount } from '../api/approvalPieces';
 import { useMyReportsPendingCount } from '../api/myReports';
+import { useMyBlockersUnreadCount } from '../api/employee';
 import { useTeamLeadSummary } from '../api/teamLead';
 import { usePmBlockers } from '../api/pmBlockers';
 import { useEodInboxCount } from '../api/eodClarification';
@@ -614,7 +615,11 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   // nav item by path (see inboxBadgeFor): the viewer's OWN EOD threads, the threads they review as
   // Team Lead / reporting manager, and the PM's read-only list. A lead has both of the first two,
   // and they never overlap.
-  const ownInboxCount  = useEodInboxCount('employee', role === 'employee' || isLead);
+  // The employee-side items (My Blockers, EOD Inbox) exist for anyone who submits EODs, not only the
+  // EMPLOYEE role — so the unread counts are fetched on that same condition, never on the role alone.
+  const hasOwnEodItems = hasEmployeeEodItems(role, caps);
+  const ownInboxCount  = useEodInboxCount('employee', hasOwnEodItems);
+  const ownBlockersUnread = useMyBlockersUnreadCount(hasOwnEodItems);
   const teamInboxCount = useEodInboxCount('lead', isLead);
   const pmInboxCount   = useEodInboxCount('pm', isPm);
   const rmInboxCount   = useEodInboxCount('rm', caps.hasDirectReports);
@@ -711,7 +716,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                 if (item.key === 'approvals' && item.path === '/team/approvals') return pendingApprovalsCount;
                 if (item.key === 'approvals' && item.path === '/projects/approvals') return pmPendingCount;
                 if (item.key === 'rm-approvals') return rmPendingCount;
-                const blockersBadge = blockersBadgeFor(item, { lead: openBlockersCount, pm: pmOpenBlockersCount });
+                const blockersBadge = blockersBadgeFor(item, { lead: openBlockersCount, pm: pmOpenBlockersCount, own: ownBlockersUnread });
                 if (blockersBadge !== undefined) return blockersBadge;
                 const inboxBadge = inboxBadgeFor(item, inboxCounts);
                 if (inboxBadge !== undefined) return inboxBadge;

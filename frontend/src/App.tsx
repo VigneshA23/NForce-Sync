@@ -209,6 +209,7 @@ function AppRoutes() {
             <Route path="/dashboard"    element={<EmployeeDashboard />} />
             <Route path="/my-projects"  element={<EmployeeMyProjects />} />
             <Route path="/blockers"     element={<MyBlockers />} />
+            <Route path="/employee/blockers" element={<MyBlockers />} />
             <Route path="/employee/eod-inbox" element={<EmployeeEodInbox />} />
             <Route path="/eod/submit"  element={<EodSubmitRoute />} />
             <Route path="/eod/history" element={<EodHistory />} />

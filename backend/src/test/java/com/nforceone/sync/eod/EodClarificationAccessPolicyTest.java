@@ -98,9 +98,29 @@ class EodClarificationAccessPolicyTest {
     }
 
     @Test
-    void superAdmin_canOpenOrResolve() {
+    void superAdmin_roleAlone_cannotOpenReplyOrResolve_butStillReads() {
         AppUser root = user(99L, "Root", AppUser.Role.SUPERADMIN);
-        assertDoesNotThrow(() -> EodClarificationAccessPolicy.requireCanOpenOrResolve(root, entry, pieces()));
+        assertForbidden(() -> EodClarificationAccessPolicy.requireCanOpenOrResolve(root, entry, pieces()));
+        assertForbidden(() -> EodClarificationAccessPolicy.requireCanReply(root, entry, pieces()));
+        // The org-wide READ view is unchanged.
+        assertDoesNotThrow(() -> EodClarificationAccessPolicy.requireCanRead(root, entry, pieces()));
+    }
+
+    @Test
+    void superAdmin_withARealCapacity_keepsIt() {
+        // As the approver of a piece (a reporting manager's RM piece), a Super Admin reviews like anyone else.
+        AppUser root = user(99L, "Root", AppUser.Role.SUPERADMIN);
+        EodProjectApproval rmPiece = new EodProjectApproval();
+        rmPiece.setApprover(root);
+        rmPiece.setApproverType(EodProjectApproval.ApproverType.REPORTING_MANAGER);
+        rmPiece.setStatus(EodProjectApproval.Status.PENDING);
+        assertDoesNotThrow(() -> EodClarificationAccessPolicy.requireCanOpenOrResolve(root, entry, java.util.List.of(rmPiece)));
+        assertDoesNotThrow(() -> EodClarificationAccessPolicy.requireCanReply(root, entry, java.util.List.of(rmPiece)));
+        // ...and on an ADMIN_GROUP piece (no specific approver), like an Admin.
+        EodProjectApproval group = new EodProjectApproval();
+        group.setApproverType(EodProjectApproval.ApproverType.ADMIN_GROUP);
+        group.setStatus(EodProjectApproval.Status.PENDING);
+        assertDoesNotThrow(() -> EodClarificationAccessPolicy.requireCanOpenOrResolve(root, entry, java.util.List.of(group)));
     }
 
     @Test

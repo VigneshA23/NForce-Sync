@@ -48,7 +48,7 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
   `SchemaManagementException: missing column`. That's a skipped migration, not a code bug.
 - Flyway expands `${...}` as a placeholder EVEN INSIDE `--` comments — never put `${}` (e.g. a JS
   template literal) in a migration comment; it fails to parse before touching the DB.
-- Top version as of 2026-10-06 is **V110** (daily log line items: eod_log_line table, task_category.scope). Re-run the query above before adding the next migration; other branches may have moved past V110 since.
+- Top version in this repo is **V113** (blocker_read_state, the employee-side My Blockers unread badge); V110 was the daily log line items. Re-run the query above before adding the next migration; other branches may have moved past V110 since.
 - **Fresh DB — resolved.** `beforeMigrate.sql` Flyway SQL callback (runs before any migration) now creates `business_rule_config` if absent. Any new environment provisioned from V1 will apply the callback first, so V33 ALTER never fails on a missing table.
 - An earlier, uncommitted Cerebras-based assistant prototype had applied `assistant_conversation`,
   `assistant_message` and `assistant_knowledge` out-of-band (V78–V81). **These are gone** — V91

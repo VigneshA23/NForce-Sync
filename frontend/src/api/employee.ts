@@ -1,4 +1,4 @@
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { api } from './client';
 import type { HolidayDto } from './businessRules';
 import type { DateRange } from './teamLead';
@@ -83,6 +83,32 @@ export function useEmployeeBlocker(taskId: number | undefined) {
     enabled: taskId != null,
     staleTime: 15_000,
     refetchInterval: 30_000,
+  });
+}
+
+const MY_BLOCKERS_UNREAD_KEY = ['employee', 'blockers', 'unread-count'] as const;
+
+/** Sidebar badge on My Blockers: how many of MY blockers have a reviewer reply I have not read yet — counted
+ *  per blocker (not per message), cleared when I open that blocker's thread (useMarkMyBlockerRead). */
+export function useMyBlockersUnreadCount(enabled = true): number {
+  return useQuery({
+    queryKey: MY_BLOCKERS_UNREAD_KEY,
+    queryFn: () => api.get<number>('/employee/blockers/unread-count').then(r => r.data),
+    enabled,
+    staleTime: 10_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
+  }).data ?? 0;
+}
+
+/** Opening a blocker's thread marks it read; the badge count drops at once instead of on the next poll. */
+export function useMarkMyBlockerRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (taskId: number) => api.post(`/employee/blockers/${taskId}/read`, {}),
+    // No optimistic decrement: the count is per blocker across ALL my blockers, so a blind -1 could
+    // under-count when this thread was already read. Refetch settles it within a round trip.
+    onSettled: () => qc.invalidateQueries({ queryKey: MY_BLOCKERS_UNREAD_KEY }),
   });
 }
 

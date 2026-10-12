@@ -45,7 +45,8 @@ export interface EodClarificationReplyDto {
   id: number;
   senderId: number;
   senderName: string;
-  senderRole: 'EMPLOYEE' | 'TEAM_LEAD';
+  senderRole: 'EMPLOYEE' | 'TEAM_LEAD' | 'REPORTING_MANAGER';
+  senderLabel?: string;
   createdAt: string;
   message: string;
   attachments: EodClarificationAttachmentDto[];

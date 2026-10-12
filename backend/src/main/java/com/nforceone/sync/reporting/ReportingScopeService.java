@@ -23,6 +23,20 @@ public class ReportingScopeService {
                 Long.class, actorId);
     }
 
+    /**
+     * The viewer's DIRECT reports: active people whose {@code manager_id} is the viewer, one level only — no
+     * indirect reports and no project members. The scope of My Reporting Team > Team Overview, Team EOD Status
+     * and Team Utilization. (A person list has no entry to carry a frozen manager, so the live manager is the
+     * only option; items tied to a submission — approvals, blockers, inbox — use the entry's frozen manager.)
+     * Deliberately separate from {@link #reportingScopeUserIds}, whose wider V105 definition other callers keep.
+     */
+    @Transactional(readOnly = true)
+    public List<Long> directReportIds(Long actorId) {
+        return jdbc.queryForList(
+                "SELECT id FROM app_user WHERE manager_id = ? AND id <> ? AND status = 'ACTIVE' AND deleted_at IS NULL",
+                Long.class, actorId, actorId);
+    }
+
     /** Only the direct-report subtree (no project member expansion). */
     @Transactional(readOnly = true)
     public List<Long> subtreeUserIds(Long actorId) {

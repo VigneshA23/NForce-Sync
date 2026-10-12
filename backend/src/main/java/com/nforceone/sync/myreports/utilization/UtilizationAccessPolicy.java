@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * Who may see whom on the Team Utilization page — same shape as {@code EodAccessPolicy}.
  *
- * <p>The scope is {@link ReportingScopeService#reportingScopeUserIds}: the very resolver the My
+ * <p>The scope is {@link ReportingScopeService#directReportIds}: the very resolver the My
  * Reports member list and EOD Status page use, so a row visible on one page can never 403 on another.
  * The entry gate mirrors {@code MyReportsService}: the caller must have at least one direct report.
  */
@@ -40,7 +40,7 @@ class UtilizationAccessPolicy {
 
     /** Every employee the actor may see utilization for. */
     List<Long> scopeMemberIds(AppUser actor) {
-        return reportingScope.reportingScopeUserIds(actor.getId());
+        return reportingScope.directReportIds(actor.getId());
     }
 
     /** 403 unless {@code employeeId} is in the actor's reporting scope. */

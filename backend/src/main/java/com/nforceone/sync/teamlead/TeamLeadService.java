@@ -358,12 +358,12 @@ public class TeamLeadService {
     }
 
     /** Single blocker for the reporting manager's page (a notification deep link can point outside
-     *  the selected date range). 403 unless it is one of this manager's reports' own-lead blockers. */
+     *  the selected date range). 403 unless the entry's frozen manager is this user and the author is not. */
     @Transactional(readOnly = true)
     public TeamBlockerDto getBlockerByIdForReportingManager(Long taskId, AppUser manager) {
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
-        if (!isReportingManagerOfOwnLeadBlocker(task, manager)) {
+        if (!isFrozenManagerOf(task, manager)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
         return TeamBlockerDto.from(task, replyRepository.findByTaskIdOrderByCreatedAtAsc(taskId));
@@ -648,6 +648,14 @@ public class TeamLeadService {
         // A user who reaches this blocker only as its project's PM is read-only on it (capacity, not role):
         // the same user keeps full lead actions on the projects he leads.
         throw PmReadOnlyPolicy.denial(com.nforceone.sync.project.PmScopeService.isPmOf(actor, task.getProject()), "blockers");
+    }
+
+    /** The entry's frozen reporting manager, reading a blocker raised by someone else (a direct report). */
+    private boolean isFrozenManagerOf(EodTask task, AppUser actor) {
+        var entry = task.getEodEntry();
+        return entry.getManagerId() != null
+                && entry.getManagerId().equals(actor.getId())
+                && !entry.getEmployee().getId().equals(actor.getId());
     }
 
     /** Frozen manager of the entry, on a blocker whose author leads the blocker's own project. */

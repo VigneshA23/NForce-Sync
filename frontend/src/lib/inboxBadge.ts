@@ -37,11 +37,13 @@ export function inboxBadgeFor(item: { path?: string }, counts: InboxCounts): num
  */
 export function blockersBadgeFor(
   item: { path?: string },
-  counts: { lead: number; pm: number },
+  counts: { lead: number; pm: number; own?: number },
 ): number | undefined {
   switch (item.path) {
     case '/team/blockers':     return counts.lead;
     case '/projects/blockers': return counts.pm;
+    // The employee-side My Blockers: unread reviewer replies on the viewer's OWN blockers.
+    case '/blockers':          return counts.own;
     default:                   return undefined;
   }
 }

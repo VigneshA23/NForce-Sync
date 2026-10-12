@@ -158,11 +158,12 @@ function fmtOpenedAtCompact(iso: string): string {
 
 const ellipsis: React.CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
-function EodInboxTableRow({ row, index, selected, onClick }: {
+function EodInboxTableRow({ row, index, selected, onClick, capacityLabel }: {
   row: EodInboxRowView;
   index: number;
   selected: boolean;
   onClick: () => void;
+  capacityLabel?: string;
 }) {
   const { item } = row;
   const accentColor = CLARIFICATION_STATUS_META[item.status].color;
@@ -202,8 +203,16 @@ function EodInboxTableRow({ row, index, selected, onClick }: {
         </div>
       </div>
 
-      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', minWidth: 0, ...ellipsis }} title={item.projectName ?? undefined}>
-        {item.projectName ?? '—'}
+      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', minWidth: 0 }} title={item.projectName ?? undefined}>
+        <div style={ellipsis}>{item.projectName ?? '—'}</div>
+        {capacityLabel && (
+          <span style={{
+            display: 'inline-block', marginTop: 3, padding: '1px 7px', borderRadius: 10, fontSize: 10.5, fontWeight: 600,
+            color: 'var(--info)', whiteSpace: 'nowrap',
+            background: 'color-mix(in srgb, var(--info) 14%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--info) 28%, transparent)',
+          }}>{capacityLabel}</span>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -247,7 +256,7 @@ function EodInboxTableRow({ row, index, selected, onClick }: {
 }
 
 export function EodInboxTable({
-  rows, page, onPageChange, selectedClarificationId, onSelect, pageSize = EOD_INBOX_PAGE_SIZE,
+  rows, page, onPageChange, selectedClarificationId, onSelect, pageSize = EOD_INBOX_PAGE_SIZE, capacityLabel,
 }: {
   rows: EodInboxRowView[];
   page: number;
@@ -260,6 +269,9 @@ export function EodInboxTable({
   /** Defaults to EOD_INBOX_PAGE_SIZE — set to override just this call site's page size without
    *  affecting the other roles' EOD Inbox (Employee, PM) that share this same table. */
   pageSize?: number;
+  /** The hat this list is viewed in, shown as a small chip on each row ("As PM (read-only)" / "As Reporting
+   *  Manager") so an entry that also appears in another section does not read as a duplicate. */
+  capacityLabel?: string;
 }) {
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const pageItems = rows.slice((page - 1) * pageSize, page * pageSize);
@@ -294,6 +306,7 @@ export function EodInboxTable({
               row={row}
               index={(page - 1) * pageSize + i + 1}
               selected={row.item.clarificationId === selectedClarificationId}
+              capacityLabel={capacityLabel}
               onClick={() => onSelect(row.item.clarificationId)}
             />
           ))}

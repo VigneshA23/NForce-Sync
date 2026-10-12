@@ -11,6 +11,7 @@ public record BlockerReplyDto(
         Long                       senderId,
         String                     senderName,
         String                     senderRole,   // "EMPLOYEE" | "TEAM_LEAD" | "REPORTING_MANAGER" — derived, not stored
+        String                     senderLabel,  // capacity shown beside the name: "Team Lead" / "Reporting Manager" / account role
         OffsetDateTime             createdAt,
         String                     message,
         List<BlockerAttachmentDto> attachments
@@ -29,6 +30,8 @@ public record BlockerReplyDto(
                 senderId,
                 r.getSender().getFullName(),
                 isEmployee ? "EMPLOYEE" : isRm ? "REPORTING_MANAGER" : "TEAM_LEAD",
+                com.nforceone.sync.eod.ReviewerCapacity.label(r.getSender(), task.getEodEntry(),
+                        java.util.Collections.singletonList(task.getProject())),
                 r.getCreatedAt(),
                 r.getMessage(),
                 attachments

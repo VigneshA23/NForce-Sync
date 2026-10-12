@@ -111,6 +111,8 @@ export interface GenericThreadMessage {
   senderId: number;
   senderName: string;
   senderRole: 'EMPLOYEE' | 'TEAM_LEAD' | 'REPORTING_MANAGER';
+  /** Capacity beside the name (server-derived); wins over the role-keyed labels below. */
+  senderLabel?: string;
   createdAt: string;
   message: string;
   attachments: GenericThreadAttachment[];
@@ -264,7 +266,7 @@ function GenericConversationMessage({
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--txt)' }}>
-            {m.senderName} <span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}>({(roleLabels ?? DEFAULT_ROLE_LABELS)[m.senderRole]})</span>
+            {m.senderName} <span style={{ fontWeight: 400, color: 'var(--txt-dim)' }}>({m.senderLabel ?? (roleLabels ?? DEFAULT_ROLE_LABELS)[m.senderRole]})</span>
           </span>
           <span style={{ fontSize: 11, color: 'var(--txt-dim)' }}>{date} {time}</span>
           <div style={{ marginLeft: 'auto' }}>

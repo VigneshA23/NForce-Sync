@@ -165,6 +165,13 @@ function BlockerRow({ b, index, selected, onClick }: {
         <div style={{ fontSize: 11.5, color: 'var(--txt-mut)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {b.projectName ?? b.projectCode ?? '—'}
         </div>
+        {/* The hat this list is seen in: a blocker that is also on his reporting-manager page is not a duplicate. */}
+        <span style={{
+          display: 'inline-block', marginTop: 3, padding: '1px 7px', borderRadius: 10, fontSize: 10.5, fontWeight: 600,
+          color: 'var(--info)', whiteSpace: 'nowrap',
+          background: 'color-mix(in srgb, var(--info) 14%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--info) 28%, transparent)',
+        }}>As PM (read-only)</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <Avatar name={b.employeeName} bg={avatarColor(b.employeeName)} size={26} />

@@ -77,7 +77,7 @@ final class EodClarificationAccessPolicy {
                 && piece.getApprover() != null && piece.getApprover().getId().equals(actor.getId())) {
             return true;
         }
-        return actor.getRole() == AppUser.Role.ADMIN
+        return (actor.getRole() == AppUser.Role.ADMIN || actor.getRole() == AppUser.Role.SUPERADMIN)
                 && piece.getApproverType() == EodProjectApproval.ApproverType.ADMIN_GROUP;
     }
 
@@ -92,7 +92,10 @@ final class EodClarificationAccessPolicy {
     /** True when the actor may open / resolve / reply as the reviewing side of this entry. */
     static boolean canReview(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
         if (isOwningEmployee(actor, entry)) return false;
-        return actor.getRole() == AppUser.Role.SUPERADMIN || isPendingApprover(actor, pieces);
+        // A real capacity only — Team Lead / reporting-manager piece approver, or an Admin / Super Admin on an
+        // ADMIN_GROUP piece. The Super Admin role alone no longer opens, replies to or resolves a thread on
+        // any entry in the org; reading stays org-wide (canRead).
+        return isPendingApprover(actor, pieces);
     }
 
     /** True when the actor may post into a round: the owner (as employee) or a reviewer. */

@@ -205,11 +205,33 @@ function StatusDropdown({ status, onChange, disabled }: {
 
 // ── main table row ────────────────────────────────────────────────────────────────
 
-function BlockerRow({ b, index, selected, onClick }: {
+/** Small capacity / context chip shown on a row so a blocker reads as "which hat am I seeing this in". */
+function CapacityChip({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'info' }) {
+  const color = tone === 'info' ? 'var(--info)' : 'var(--txt-mut)';
+  return (
+    <span style={{
+      display: 'inline-block', marginTop: 4, marginRight: 4, padding: '1px 7px', borderRadius: 10, fontSize: 10.5,
+      fontWeight: 600, color, whiteSpace: 'nowrap',
+      background: `color-mix(in srgb, ${color} 14%, transparent)`,
+      border: `1px solid color-mix(in srgb, ${color} 28%, transparent)`,
+    }}>{children}</span>
+  );
+}
+
+/** On the reporting manager's page: where was this blocker raised? Drives the row chip and which controls
+ *  the panel offers (Acknowledge / Resolve exist only for a lead's own blocker; otherwise the lead owns them). */
+function rmContextLabel(b: TeamBlockerDto): string | null {
+  if (b.raisedOn === 'OWN_LEAD_PROJECT') return 'Raised by a lead on the project they lead';
+  if (b.raisedOn === 'OTHER_LEAD_PROJECT') return `On a project led by ${b.projectLeadName ?? 'another lead'}`;
+  return null;
+}
+
+function BlockerRow({ b, index, selected, onClick, variant = 'lead' }: {
   b: TeamBlockerDto;
   index: number;
   selected: boolean;
   onClick: () => void;
+  variant?: BlockersVariant;
 }) {
   const { date: reportedDate, time: reportedTime } = fmtDateTimeParts(b.submittedAt ?? `${b.entryDate}T09:00:00`);
   return (
@@ -241,7 +263,15 @@ function BlockerRow({ b, index, selected, onClick }: {
           </div>
         </div>
       </div>
-      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{b.projectName ?? b.projectCode ?? '—'}</div>
+      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>
+        {b.projectName ?? b.projectCode ?? '—'}
+        {variant === 'rm' && (
+          <div>
+            <CapacityChip tone="info">As Reporting Manager</CapacityChip>
+            {rmContextLabel(b) && <CapacityChip>{rmContextLabel(b)}</CapacityChip>}
+          </div>
+        )}
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <Avatar name={b.employeeName} bg={avatarColor(b.employeeName)} size={26} />
         <span style={{ fontSize: 12.5, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -322,7 +352,7 @@ function DetailPanel({ b, range, onClose, readOnly = false, variant = 'lead' }: 
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {b.status === 'RESOLVED' ? (
+            {b.status === 'RESOLVED' || (variant === 'rm' && b.raisedOn === 'OTHER_LEAD_PROJECT') ? (
               <StatusBadge status={b.status} />
             ) : (
               <StatusDropdown
@@ -344,6 +374,18 @@ function DetailPanel({ b, range, onClose, readOnly = false, variant = 'lead' }: 
           </div>
         </div>
 
+        {variant === 'rm' && (
+          <div style={{ marginBottom: 6 }}>
+            <CapacityChip tone="info">As Reporting Manager</CapacityChip>
+            {rmContextLabel(b) && <CapacityChip>{rmContextLabel(b)}</CapacityChip>}
+            {b.raisedOn === 'OTHER_LEAD_PROJECT' && (
+              <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 4 }}>
+                You can reply. Acknowledge and Resolve stay with {b.projectLeadName ?? 'the project lead'}, and your reply
+                does not move this out of their Needs Response queue.
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--txt)', marginBottom: 4 }}>
           <span style={{ color: 'var(--txt-dim)', fontWeight: 600 }}>Category: </span>
           {b.categoryName ?? 'Blocked task'}
@@ -589,7 +631,7 @@ export default function Blockers({ variant = 'lead' }: { variant?: BlockersVaria
             </h1>
             <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
               {isRm
-                ? 'Blockers raised by your direct reports on projects they lead. As their reporting manager, you respond.'
+                ? 'Blockers raised by everyone who reports to you. You can reply to any of them; Acknowledge and Resolve stay with the project\'s lead, except for a lead\'s own blocker, which you handle.'
                 : 'View and respond to blockers raised by your team.'}
             </p>
           </div>
@@ -623,7 +665,7 @@ export default function Blockers({ variant = 'lead' }: { variant?: BlockersVaria
         <div className="nf-r-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 16 }}>
           <StatCard icon={<AlertTriangle size={18} aria-hidden="true" />} label="Total Blockers" value={total} caption={totalBlockersCaption(dateMode, range.from, range.to)} accent="var(--warn)" loading={isApplyingDateFilter} />
           <StatCard icon={<UserX size={18} aria-hidden="true" />} label="Needs Response" value={needsResponse} caption={isRm ? 'Awaiting your reply' : 'No reply from Team Lead'} accent="var(--risk)" loading={isApplyingDateFilter} />
-          <StatCard icon={<Users size={18} aria-hidden="true" />} label="Acknowledged" value={acknowledgedCount} caption={isRm ? 'You have replied' : 'Replied by Team Lead'} accent="var(--info)" loading={isApplyingDateFilter} />
+          <StatCard icon={<Users size={18} aria-hidden="true" />} label="Acknowledged" value={acknowledgedCount} caption={isRm ? 'Acknowledged by the responsible reviewer' : 'Replied by Team Lead'} accent="var(--info)" loading={isApplyingDateFilter} />
           <StatCard icon={<CheckCircle2 size={18} aria-hidden="true" />} label="Resolved" value={resolvedCount} caption={isRm ? 'Marked resolved' : 'Marked resolved by Team Lead'} accent="var(--ok)" loading={isApplyingDateFilter} />
         </div>
 
@@ -741,7 +783,7 @@ export default function Blockers({ variant = 'lead' }: { variant?: BlockersVaria
           ) : view === 'list' ? (
             pageItems.map((b, i) => (
               <BlockerRow
-                key={b.taskId} b={b} index={(page - 1) * PAGE_SIZE + i + 1} selected={b.taskId === selectedTaskId}
+                key={b.taskId} b={b} variant={variant} index={(page - 1) * PAGE_SIZE + i + 1} selected={b.taskId === selectedTaskId}
                 onClick={() => setSelectedTaskId(id => (id === b.taskId ? null : b.taskId))}
               />
             ))
@@ -753,7 +795,7 @@ export default function Blockers({ variant = 'lead' }: { variant?: BlockersVaria
                 </div>
                 {items.map(b => (
                   <BlockerRow
-                    key={b.taskId} b={b} index={rowIndexByTaskId.get(b.taskId) ?? 0} selected={b.taskId === selectedTaskId}
+                    key={b.taskId} b={b} variant={variant} index={rowIndexByTaskId.get(b.taskId) ?? 0} selected={b.taskId === selectedTaskId}
                     onClick={() => setSelectedTaskId(id => (id === b.taskId ? null : b.taskId))}
                   />
                 ))}

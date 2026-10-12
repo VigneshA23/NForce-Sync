@@ -88,6 +88,11 @@ export interface TeamBlockerDto {
   lastReplyAt: string | null;
   lastReplySenderName: string | null;
   lastReplySenderRole: 'EMPLOYEE' | 'TEAM_LEAD' | null;
+  /** The project's Team Lead (null when it has none). */
+  projectLeadName: string | null;
+  /** "OWN_LEAD_PROJECT": raised by the lead of its own project; "OTHER_LEAD_PROJECT": raised on a project someone
+   *  else leads; null: the project has no lead. Meaningful on the reporting manager's page. */
+  raisedOn: 'OWN_LEAD_PROJECT' | 'OTHER_LEAD_PROJECT' | null;
 }
 
 /**

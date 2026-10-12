@@ -612,6 +612,43 @@ class EodClarificationServiceTest {
     }
 
     @Test
+    void rmOpensOnAReportsEod_whoseAccountRoleIsNotEmployee_reportGetsTheLinkAndAnUnreadRow() {
+        // Suhita: role PM, reports to the RM. Nothing on the employee side may depend on the EMPLOYEE role.
+        AppUser suhita = user(7L, "Suhita", AppUser.Role.PM);
+        lenient().when(userRepository.findByEmailAndDeletedAtIsNull(suhita.getEmail())).thenReturn(Optional.of(suhita));
+        EodEntry hers = ownEntry(400L, suhita);
+        when(entryRepository.findWithDetailsById(400L)).thenReturn(Optional.of(hers));
+        when(pieceRepository.findByEodEntryId(400L)).thenReturn(List.of(rmPiece(hers)));
+
+        service.open(400L, rm.getEmail(), null);
+
+        verify(notificationService).send(eq(suhita.getId()), eq("EOD_CLARIFICATION_REQUESTED"),
+                anyString(), anyString(), eq("/employee/eod-inbox?highlight=400"));
+        when(clarificationRepository.findByEodEntry_Employee_IdAndStatusNotOrderByOpenedAtDesc(
+                suhita.getId(), EodClarification.Status.RESOLVED)).thenReturn(List.of(rmRound(hers)));
+        var items = service.listForEmployee(suhita.getEmail(), true);
+        assertEquals(1, items.size());
+        assertTrue(items.get(0).unread(), "the badge counts this row for a non-EMPLOYEE role too");
+        // A different RM sees nothing of it, and an RM never sees his own entry in his reviewer list.
+        AppUser otherRm = user(8L, "Other RM", AppUser.Role.EMPLOYEE);
+        lenient().when(userRepository.findByEmailAndDeletedAtIsNull(otherRm.getEmail())).thenReturn(Optional.of(otherRm));
+        assertTrue(service.listForReportingManager(otherRm.getEmail(), true).isEmpty());
+    }
+
+    @Test
+    void superAdminRoleAlone_cannotOpenAClarification_onAnEntryWhereHeHoldsNoCapacity() {
+        AppUser root = user(9L, "Root", AppUser.Role.SUPERADMIN);
+        lenient().when(userRepository.findByEmailAndDeletedAtIsNull(root.getEmail())).thenReturn(Optional.of(root));
+        EodEntry hers = ownEntry(401L, employee);
+        when(entryRepository.findWithDetailsById(401L)).thenReturn(Optional.of(hers));
+        when(pieceRepository.findByEodEntryId(401L)).thenReturn(List.of(rmPiece(hers)));   // RM piece belongs to `rm`
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> service.open(401L, root.getEmail(), null));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        verify(notificationService, never()).send(any(), any(), any(), any(), any());
+    }
+
+    @Test
     void plainEmployee_seesAnRmOpenedRoundAsUnread_andAnotherEmployeeSeesNothing() {
         EodEntry employeesEntry = ownEntry(300L, employee);
         EodClarification round = rmRound(employeesEntry);

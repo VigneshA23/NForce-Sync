@@ -33,7 +33,10 @@ public record TeamBlockerDto(
         int            replyCount,          // total messages in the thread, either sender
         OffsetDateTime lastReplyAt,         // most recent message overall, or null if none
         String         lastReplySenderName,
-        String         lastReplySenderRole  // "EMPLOYEE" | "TEAM_LEAD"
+        String         lastReplySenderRole, // "EMPLOYEE" | "TEAM_LEAD"
+        String         projectLeadName,     // the project's Team Lead, or null when it has none
+        String         raisedOn             // "OWN_LEAD_PROJECT": raised by the lead of its own project (no other lead);
+                                            // "OTHER_LEAD_PROJECT": raised on a project someone else leads; null: project has no lead
 ) {
     /** @param threadReplies this task's replies, any order — pass an empty list if none. */
     public static TeamBlockerDto from(EodTask t, List<BlockerReply> threadReplies) {
@@ -43,6 +46,10 @@ public record TeamBlockerDto(
         long openHours = submittedAt != null
                 ? java.time.Duration.between(submittedAt, OffsetDateTime.now()).toHours()
                 : 0;
+
+        var lead = t.getProject() != null ? t.getProject().getLead() : null;
+        String raisedOn = lead == null ? null
+                : lead.getId().equals(emp.getId()) ? "OWN_LEAD_PROJECT" : "OTHER_LEAD_PROJECT";
 
         BlockerReply lastReply = threadReplies.stream()
                 .max(java.util.Comparator.comparing(BlockerReply::getCreatedAt))
@@ -76,7 +83,9 @@ public record TeamBlockerDto(
                 threadReplies.size(),
                 lastReply != null ? lastReply.getCreatedAt() : null,
                 lastReply != null ? lastReply.getSender().getFullName() : null,
-                lastReplyRole
+                lastReplyRole,
+                lead != null ? lead.getFullName() : null,
+                raisedOn
         );
     }
 }
