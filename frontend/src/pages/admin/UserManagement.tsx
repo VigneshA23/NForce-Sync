@@ -907,40 +907,36 @@ function AddModal({
             <FieldError msg={errors.gender} />
           </Field>
 
-          {/* Department — plain fixed dropdown (no free-text entry). Optional:
-              no-department is a genuinely valid state, so "No department" is a real,
-              explicitly-chosen option — distinct from the untouched placeholder. */}
+          {/* Department — plain fixed dropdown (no free-text entry). Optional: leaving it
+              on the blank placeholder submits no department, no separate "none" choice needed. */}
           <Field label="Department">
             <select
               style={selectStyle(form.departmentId !== undefined)}
-              value={form.departmentId === undefined ? '' : form.departmentId === null ? 'none' : String(form.departmentId)}
+              value={form.departmentId == null ? '' : String(form.departmentId)}
               onChange={e => {
                 const v = e.target.value;
-                set('departmentId', v === 'none' ? null : v ? Number(v) : undefined);
+                set('departmentId', v ? Number(v) : undefined);
               }}
             >
               <option value="" style={placeholderOptionStyle}>Select department</option>
-              <option value="none" style={realOptionStyle}>No department</option>
               {departments.map((d: DepartmentDto) => (
                 <option key={d.id} value={d.id} style={realOptionStyle}>{d.name}</option>
               ))}
             </select>
           </Field>
 
-          {/* Designation — plain fixed dropdown (no free-text entry). Optional:
-              no-designation is a genuinely valid state, so "No designation" is a real,
-              explicitly-chosen option — distinct from the untouched placeholder. */}
+          {/* Designation — plain fixed dropdown (no free-text entry). Optional: leaving it
+              on the blank placeholder submits no designation, no separate "none" choice needed. */}
           <Field label="Designation">
             <select
               style={selectStyle(form.designationId !== undefined)}
-              value={form.designationId === undefined ? '' : form.designationId === null ? 'none' : String(form.designationId)}
+              value={form.designationId == null ? '' : String(form.designationId)}
               onChange={e => {
                 const v = e.target.value;
-                set('designationId', v === 'none' ? null : v ? Number(v) : undefined);
+                set('designationId', v ? Number(v) : undefined);
               }}
             >
               <option value="" style={placeholderOptionStyle}>Select designation</option>
-              <option value="none" style={realOptionStyle}>No designation</option>
               {designations.map((d: DesignationDto) => (
                 <option key={d.id} value={d.id} style={realOptionStyle}>{d.title}</option>
               ))}
