@@ -296,6 +296,46 @@ public class ApprovalPieceService {
         return ApprovalPieceDto.from(piece, loadLogLines(piece), loadTaskLines(piece));
     }
 
+    /**
+     * Entry-level approve / reject for the legacy {@code /api/approvals/{id}/approve|reject} endpoints, which
+     * the Team Lead detail modal still calls. It is a thin delegate to the piece path above, so there is ONE
+     * decision rule: it acts only on the current-cycle PENDING pieces the actor may decide (his own, an
+     * escalated-to-him piece, or — for an Admin / Super Admin — what they could already decide), and each
+     * goes through {@link #approve} / {@link #reject}, which enforce the self-approval block, the open
+     * clarification gate and the piece-derived entry status. Nothing here (or anywhere else) sets an entry
+     * APPROVED without touching its pieces, and a project manager can decide only what was escalated to him.
+     */
+    public EodEntryDto decideEntryPieces(Long entryId, String actorEmail, boolean approve, String comment) {
+        AppUser actor = requireUserByEmail(actorEmail);
+        EodEntry entry = entryRepository.findWithDetailsById(entryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "EOD entry not found"));
+
+        List<EodProjectApproval> pending = pieceRepository.findByEodEntryId(entryId).stream()
+                .filter(p -> p.getStatus() == EodProjectApproval.Status.PENDING)
+                .toList();
+        if (pending.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This entry has no pending approval pieces; it cannot be approved or rejected");
+        }
+        List<EodProjectApproval> mine = pending.stream().filter(p -> canActOn(actor, p)).toList();
+        if (mine.isEmpty()) {
+            if (PmScopeService.entryTouchesManagedProject(actor, entry)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Project Managers can approve or reject only the pieces escalated to them");
+            }
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Only the designated approver, an Admin (for admin-group pieces), or a Super Admin can act on this entry");
+        }
+        if (!approve && (comment == null || comment.isBlank())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Comment is required when rejecting");
+        }
+        for (EodProjectApproval piece : mine) {
+            if (approve) approve(piece.getId(), actorEmail, comment);
+            else reject(piece.getId(), actorEmail, comment);
+        }
+        return EodEntryDto.from(entryRepository.findWithDetailsById(entryId).orElse(entry));
+    }
+
     // ── private helpers ──────────────────────────────────────────────────────
 
     // An open clarification round blocks approve AND reject of EVERY piece on the entry, not just
@@ -318,15 +358,21 @@ public class ApprovalPieceService {
     }
 
     private void checkApproverAuthorization(AppUser actor, EodProjectApproval piece) {
-        if (actor.getRole() == AppUser.Role.SUPERADMIN) return;
-        if (piece.getApprover() != null && piece.getApprover().getId().equals(actor.getId())) return;
-        // Admin can act on ADMIN_GROUP pieces (no specific approver assigned).
-        if (actor.getRole() == AppUser.Role.ADMIN
-                && piece.getApproverType() == EodProjectApproval.ApproverType.ADMIN_GROUP) return;
-        // PM may act on an escalated piece where they are the designated fallback.
-        if (piece.getEscalatedTo() != null && piece.getEscalatedTo().getId().equals(actor.getId())) return;
+        if (canActOn(actor, piece)) return;
         throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                 "Only the designated approver, an Admin (for admin-group pieces), or a Super Admin can act on this piece");
+    }
+
+    /** The one "may this user decide this piece" rule: Super Admin, the piece's approver, an Admin on an
+     *  ADMIN_GROUP piece, or the PM the piece was escalated to. */
+    private boolean canActOn(AppUser actor, EodProjectApproval piece) {
+        if (actor.getRole() == AppUser.Role.SUPERADMIN) return true;
+        if (piece.getApprover() != null && piece.getApprover().getId().equals(actor.getId())) return true;
+        // Admin can act on ADMIN_GROUP pieces (no specific approver assigned).
+        if (actor.getRole() == AppUser.Role.ADMIN
+                && piece.getApproverType() == EodProjectApproval.ApproverType.ADMIN_GROUP) return true;
+        // PM may act on an escalated piece where they are the designated fallback.
+        return piece.getEscalatedTo() != null && piece.getEscalatedTo().getId().equals(actor.getId());
     }
 
     private void requirePieceStatus(EodProjectApproval piece, EodProjectApproval.Status required) {

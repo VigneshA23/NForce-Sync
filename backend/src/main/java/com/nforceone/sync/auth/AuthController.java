@@ -40,6 +40,7 @@ public class AuthController {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final ProjectRepository projectRepository;
     private final AllocationRepository allocationRepository;
+    private final com.nforceone.sync.project.PmScopeService pmScopeService;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtService jwtService,
@@ -49,7 +50,8 @@ public class AuthController {
                           AccountLockoutService accountLockoutService,
                           PasswordResetTokenRepository passwordResetTokenRepository,
                           ProjectRepository projectRepository,
-                          AllocationRepository allocationRepository) {
+                          AllocationRepository allocationRepository,
+                          com.nforceone.sync.project.PmScopeService pmScopeService) {
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.appUserRepository = appUserRepository;
@@ -59,6 +61,7 @@ public class AuthController {
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
+        this.pmScopeService = pmScopeService;
     }
 
     @PostMapping("/login")
@@ -207,7 +210,7 @@ public class AuthController {
     private UserDto buildUserDto(AppUser user) {
         List<Project> led = projectRepository.findByLeadIdOrderByNameAsc(user.getId())
                 .stream().filter(p -> p.getStatus() == Project.Status.ACTIVE).toList();
-        List<Project> managed = projectRepository.findByPmIdOrderByNameAsc(user.getId())
+        List<Project> managed = pmScopeService.managedProjects(user.getId())
                 .stream().filter(p -> p.getStatus() == Project.Status.ACTIVE).toList();
         boolean hasDirectReports = appUserRepository.existsByManagerIdAndDeletedAtIsNull(user.getId());
         String eodForm = computeEodForm(user);

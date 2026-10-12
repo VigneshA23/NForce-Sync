@@ -52,8 +52,8 @@ public class PmBlockersService {
 
     public PmBlockersFiltersDto getFilters(String actingEmail) {
         AppUser pm = requirePm(actingEmail);
-        List<Project> projects = scopedProjects(pm);
-        List<EodTask> tasks = findBlockedTasks(projects);
+        List<Project> projects = pmScopeService.scopedProjects(pm);
+        List<EodTask> tasks = findBlockedTasks(pm, projects);
 
         // Only project/team options that actually have a blocker — a PM's full portfolio can
         // include projects with zero blockers, which would otherwise show as filter options
@@ -86,7 +86,7 @@ public class PmBlockersService {
         }
 
         AppUser pm = requirePm(actingEmail);
-        List<Project> projects = scopedProjects(pm);
+        List<Project> projects = pmScopeService.scopedProjects(pm);
 
         if (projectId != null) {
             Project match = projects.stream().filter(p -> p.getId().equals(projectId)).findFirst()
@@ -95,7 +95,7 @@ public class PmBlockersService {
             projects = List.of(match);
         }
 
-        return findBlockedTasksInRange(projects, from, to).stream()
+        return findBlockedTasksInRange(pm, projects, from, to).stream()
                 .filter(t -> teamManagerId == null
                         || (t.getEodEntry().getEmployee().getManager() != null
                             && teamManagerId.equals(t.getEodEntry().getEmployee().getManager().getId())))
@@ -104,19 +104,26 @@ public class PmBlockersService {
                 .toList();
     }
 
-    private List<EodTask> findBlockedTasks(List<Project> projects) {
+    private List<EodTask> findBlockedTasks(AppUser pm, List<Project> projects) {
         List<Long> projectIds = projects.stream().map(Project::getId).toList();
         if (projectIds.isEmpty()) return List.of();
-        return eodTaskRepository.findBlockedByProjectIds(projectIds);
+        return excludeOwn(pm, eodTaskRepository.findBlockedByProjectIds(projectIds));
     }
 
     // Date range narrowed at the DB level (see EodTaskRepository) rather than fetched in full
     // and filtered in Java — the getBlockers list endpoint always has a from/to, so every call
     // (Today/Yesterday/Custom Range alike) benefits.
-    private List<EodTask> findBlockedTasksInRange(List<Project> projects, LocalDate from, LocalDate to) {
+    private List<EodTask> findBlockedTasksInRange(AppUser pm, List<Project> projects, LocalDate from, LocalDate to) {
         List<Long> projectIds = projects.stream().map(Project::getId).toList();
         if (projectIds.isEmpty()) return List.of();
-        return eodTaskRepository.findBlockedByProjectIdsAndDateRange(projectIds, from, to);
+        return excludeOwn(pm, eodTaskRepository.findBlockedByProjectIdsAndDateRange(projectIds, from, to));
+    }
+
+    /** A PM never reviews his own items: blockers he raised himself are not in his PM view. */
+    private static List<EodTask> excludeOwn(AppUser pm, List<EodTask> tasks) {
+        return tasks.stream()
+                .filter(t -> !t.getEodEntry().getEmployee().getId().equals(pm.getId()))
+                .toList();
     }
 
     private AppUser requirePm(String actingEmail) {
@@ -127,10 +134,4 @@ public class PmBlockersService {
         return user;
     }
 
-    private List<Project> scopedProjects(AppUser pm) {
-        if (pm.getRole() == AppUser.Role.SUPERADMIN) {
-            return projectRepository.findAllWithPmOrderByNameAsc();
-        }
-        return projectRepository.findByPmIdOrderByNameAsc(pm.getId());
-    }
 }

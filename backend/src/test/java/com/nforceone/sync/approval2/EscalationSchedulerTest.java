@@ -267,4 +267,51 @@ class EscalationSchedulerTest {
         verify(notificationService, times(1)).send(any(), any(), any(), any(), any());
         verify(notificationService).send(eq(pm.getId()), eq("ESCALATION_PM_NOTIFIED"), any(), any(), any());
     }
+
+    /**
+     * A skipped piece is retried by every hourly run (escalated_at stays null). The skip is audited ONCE per
+     * piece and reason, not every hour; routing is unchanged (still not escalated).
+     */
+    @Test
+    void pmIsLead_skipAuditIsNotRepeatedOnLaterRuns() {
+        piece.setApprover(pm);   // lead == PM
+        when(pieceRepository.findStaleLeadPiecesForEscalation(any())).thenReturn(List.of(piece));
+
+        scheduler.runEscalation(config);   // first run: recorded
+        verify(auditLogRepository, times(1)).save(any());
+
+        when(auditLogRepository.existsByEntityTypeAndEntityIdAndAction("EOD_PROJECT_APPROVAL", piece.getId(), "ESCALATION_SKIPPED_PM_IS_LEAD"))
+                .thenReturn(true);
+        int second = scheduler.runEscalation(config);   // later runs: same skip, no new row
+        int third = scheduler.runEscalation(config);
+
+        assertThat(second).isZero();
+        assertThat(third).isZero();
+        verify(auditLogRepository, times(1)).save(any());
+        assertThat(piece.getEscalatedAt()).isNull();
+    }
+
+    @Test
+    void pmIsEmployee_skipAuditIsNotRepeatedOnLaterRuns() {
+        entry.setEmployee(pm);
+        when(pieceRepository.findStaleLeadPiecesForEscalation(any())).thenReturn(List.of(piece));
+        when(auditLogRepository.existsByEntityTypeAndEntityIdAndAction("EOD_PROJECT_APPROVAL", piece.getId(), "ESCALATION_SKIPPED_PM_IS_EMPLOYEE"))
+                .thenReturn(true);
+
+        scheduler.runEscalation(config);
+
+        verify(auditLogRepository, never()).save(any());
+        verify(notificationService, never()).send(any(), any(), any(), any(), any());
+    }
+
+    /** The PM is told to act in the PM's Approvals page, not the Team Lead's. */
+    @Test
+    void pmNotificationLinksToThePmApprovalsPage_leadToTheTeamLeadOne() {
+        when(pieceRepository.findStaleLeadPiecesForEscalation(any())).thenReturn(List.of(piece));
+
+        scheduler.runEscalation(config);
+
+        verify(notificationService).send(eq(pm.getId()), eq("ESCALATION_PM_NOTIFIED"), any(), any(), eq("/projects/approvals"));
+        verify(notificationService).send(eq(lead.getId()), eq("ESCALATION_LEAD_NOTIFIED"), any(), any(), eq("/team/approvals"));
+    }
 }

@@ -38,13 +38,24 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
            "WHERE a.project.id = :projectId ORDER BY a.effectiveFrom DESC")
     List<Allocation> findByProjectIdWithRefs(@Param("projectId") Long projectId);
 
-    // Every allocation on a project this Team Lead leads (Project.pm — the Team Lead assignment,
-    // not the personal-allocation relation) — backs Super Admin's read-only "view as Team Lead"
-    // Resource Allocation visibility (Reportee Views enhancement). Filters via a join on
-    // project.pm.id rather than fetching pm eagerly, so this costs no extra round trip per row.
+    // Every allocation on a project this Team Lead leads (Project.lead — the Team Lead assignment;
+    // Project.pm is the overseeing Project Manager and must not leak in here) — backs Super Admin's
+    // read-only "view as Team Lead" Resource Allocation visibility (Reportee Views enhancement).
+    // Filters via a join on project.lead.id rather than fetching lead eagerly, so this costs no
+    // extra round trip per row.
     @Query("SELECT a FROM Allocation a JOIN FETCH a.employee JOIN FETCH a.project p " +
-           "WHERE p.pm.id = :teamLeadId ORDER BY a.effectiveFrom DESC")
-    List<Allocation> findByProjectPmIdWithRefs(@Param("teamLeadId") Long teamLeadId);
+           "WHERE p.lead.id = :teamLeadId ORDER BY a.effectiveFrom DESC")
+    List<Allocation> findByProjectLeadIdWithRefs(@Param("teamLeadId") Long teamLeadId);
+
+    // PM scope check: is this employee allocated (effective-dated, overlapping [from, to]) to any of the
+    // given projects? Backs per-employee access by id for a Project Manager (PmScopeService#isMember).
+    @Query("SELECT COUNT(a) > 0 FROM Allocation a " +
+           "WHERE a.employee.id = :employeeId AND a.project.id IN :projectIds " +
+           "AND a.effectiveFrom <= :to AND (a.effectiveTo IS NULL OR a.effectiveTo >= :from)")
+    boolean existsMemberOnProjects(@Param("employeeId") Long employeeId,
+                                   @Param("projectIds") java.util.Collection<Long> projectIds,
+                                   @Param("from") LocalDate from,
+                                   @Param("to") LocalDate to);
 
     /**
      * Headcount for the Projects tab. Counts only EMPLOYEE-role allocations so the number agrees

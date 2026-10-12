@@ -82,7 +82,7 @@ public class EodByEmployeeReportService {
         }
 
         AppUser pm = requirePm(actingEmail);
-        List<Project> projects = scopedProjects(pm);
+        List<Project> projects = pmScopeService.scopedProjects(pm);
 
         if (projectId != null) {
             Project match = projects.stream().filter(p -> p.getId().equals(projectId)).findFirst()
@@ -104,7 +104,8 @@ public class EodByEmployeeReportService {
             return new EodByEmployeeReportDto(0, 0, BigDecimal.ZERO, List.of());
         }
 
-        List<Allocation> allocations = allocationRepository.findActiveInRangeForProjects(projectIds, from, to);
+        java.util.Set<Long> scopedProjectIds = java.util.Set.copyOf(projectIds);
+        List<Allocation> allocations = pmScopeService.memberAllocations(pm, projectIds, from, to);
         if (teamManagerId != null) {
             allocations = allocations.stream()
                     .filter(a -> a.getEmployee().getManager() != null
@@ -171,6 +172,10 @@ public class EodByEmployeeReportService {
                 if (entry.getStatus() != EodEntry.Status.APPROVED) continue;
 
                 for (EodTask task : entry.getTasks()) {
+                    // People are scoped by allocation, but their DATA is scoped by project: a person on
+                    // this PM's project and on another PM's project must not leak the other project's
+                    // tasks or hours into this report (or its export).
+                    if (task.getProject() == null || !scopedProjectIds.contains(task.getProject().getId())) continue;
                     BigDecimal hours = task.getHours() != null ? task.getHours() : BigDecimal.ZERO;
                     totalHours = totalHours.add(hours);
                     entryDtos.add(new EodByEmployeeEntryDto(
@@ -248,10 +253,4 @@ public class EodByEmployeeReportService {
         return user;
     }
 
-    private List<Project> scopedProjects(AppUser pm) {
-        if (pm.getRole() == AppUser.Role.SUPERADMIN) {
-            return projectRepository.findAllWithPmOrderByNameAsc();
-        }
-        return projectRepository.findByPmIdOrderByNameAsc(pm.getId());
-    }
 }

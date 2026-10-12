@@ -18,8 +18,8 @@ public record CreateProjectRequest(
         @NotNull Long projectTypeId,
         @NotNull LocalDate startDate,
         LocalDate endDate,
-        /** The project's Team Lead, who approves its EOD entries. Must be an active non-PM user. */
+        /** The project's Team Lead, who approves its EOD entries. Must be an active Employee- or PM-role user (not also the PM). */
         @NotNull Long leadId,
-        /** The overseeing PM — scopes their Approvals queue, dashboard and reports. Active PM only. */
+        /** The overseeing PM — scopes their Approvals queue, dashboard and reports. Active Employee- or PM-role user (not also the Team Lead). */
         @NotNull Long pmId
 ) {}

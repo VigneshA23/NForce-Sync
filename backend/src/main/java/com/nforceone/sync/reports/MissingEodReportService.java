@@ -111,7 +111,7 @@ public class MissingEodReportService {
         }
 
         AppUser pm = requirePm(actingEmail);
-        List<Project> projects = scopedProjects(pm);
+        List<Project> projects = pmScopeService.scopedProjects(pm);
         if (projectId != null) {
             Project match = projects.stream().filter(p -> p.getId().equals(projectId)).findFirst()
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
@@ -124,7 +124,7 @@ public class MissingEodReportService {
             return new MissingEodReportDto(0, 0, List.of());
         }
 
-        List<Allocation> allocations = allocationRepository.findActiveInRangeForProjects(projectIds, from, to);
+        List<Allocation> allocations = pmScopeService.memberAllocations(pm, projectIds, from, to);
         if (teamManagerId != null) {
             allocations = allocations.stream()
                     .filter(a -> a.getEmployee().getManager() != null
@@ -348,12 +348,6 @@ public class MissingEodReportService {
         return user;
     }
 
-    private List<Project> scopedProjects(AppUser pm) {
-        if (pm.getRole() == AppUser.Role.SUPERADMIN) {
-            return projectRepository.findAllWithPmOrderByNameAsc();
-        }
-        return projectRepository.findByPmIdOrderByNameAsc(pm.getId());
-    }
 
     private BusinessRuleConfig requireConfig() {
         return configRepository.findById(CONFIG_ID)

@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Shield } from 'lucide-react';
-import { searchUsers } from '../api/admin';
-import { listAssignableLeads } from '../api/projects';
+import { listAssignableLeads, listAssignableProjectManagers } from '../api/projects';
 
 /**
  * Super Admin-only control shown at the top of a reused PM/Team Lead operational page. Lets a
@@ -13,7 +12,8 @@ import { listAssignableLeads } from '../api/projects';
  * params on the backend (Super Admin Reportee Views enhancement) — this is purely the picker
  * for those, no new business logic lives here.
  *
- * role='PM'   → searchUsers({ role: 'PM' })           — PM accounts
+ * role='PM'   → /api/projects/managers (listAssignableProjectManagers) — accounts that may be a project's PM
+ *                (PM-role or Employee-role: PM is a per-project assignment, not only a role)
  * role='LEAD' → /api/projects/leads (listAssignableLeads) — active Employee-role users who can lead
  */
 export function ReporteeScopePicker({ role, label, value, onChange }: {
@@ -23,8 +23,8 @@ export function ReporteeScopePicker({ role, label, value, onChange }: {
   onChange: (id: number | null) => void;
 }) {
   const pmQuery = useQuery({
-    queryKey: ['users', 'search', 'PM'],
-    queryFn: () => searchUsers({ role: 'PM' }),
+    queryKey: ['projects', 'managers'],
+    queryFn: listAssignableProjectManagers,
     staleTime: 5 * 60_000,
     enabled: role === 'PM',
   });

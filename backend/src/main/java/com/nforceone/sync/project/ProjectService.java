@@ -28,17 +28,24 @@ public class ProjectService {
     private final AppUserRepository appUserRepository;
     private final ProjectTypeRepository projectTypeRepository;
     private final EodProjectApprovalRepository pieceRepository;
+    private final PmScopeService pmScopeService;
+
+    /** Roles that may hold a per-project Team Lead / PM assignment. The assignment, not the role, is what
+     *  grants the capacity — the same person can be PM of some projects and Team Lead of others. */
+    private static final List<AppUser.Role> ASSIGNABLE_ROLES = List.of(AppUser.Role.EMPLOYEE, AppUser.Role.PM);
 
     public ProjectService(ProjectRepository projectRepository,
                           AllocationRepository allocationRepository,
                           AppUserRepository appUserRepository,
                           ProjectTypeRepository projectTypeRepository,
-                          EodProjectApprovalRepository pieceRepository) {
+                          EodProjectApprovalRepository pieceRepository,
+                          PmScopeService pmScopeService) {
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
         this.appUserRepository = appUserRepository;
         this.projectTypeRepository = projectTypeRepository;
         this.pieceRepository = pieceRepository;
+        this.pmScopeService = pmScopeService;
     }
 
     /**
@@ -59,36 +66,47 @@ public class ProjectService {
                 .toList();
     }
 
+    /**
+     * The project list for {@code actor}: ADMIN / SUPERADMIN see every project; anyone else only the
+     * projects he is PM of (PmScopeService), so another PM's project is never listed to him.
+     */
     @Transactional(readOnly = true)
-    public List<ProjectFullDto> listAll() {
-        return projectRepository.findAllWithPmOrderByNameAsc()
-                .stream()
+    public List<ProjectFullDto> listAll(String actingEmail) {
+        AppUser actor = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
+        List<Project> projects;
+        if (actor.getRole() == AppUser.Role.ADMIN || actor.getRole() == AppUser.Role.SUPERADMIN) {
+            projects = projectRepository.findAllWithPmOrderByNameAsc();
+        } else {
+            pmScopeService.requirePmScope(actor);
+            projects = pmScopeService.scopedProjects(actor);
+        }
+        return projects.stream()
                 .map(p -> ProjectFullDto.from(p, (int) allocationRepository.countByProjectIdAndEmployeeRole(p.getId(), AppUser.Role.EMPLOYEE)))
                 .toList();
     }
 
     /**
-     * Users assignable as a project's Team Lead: active users with the EMPLOYEE role only.
-     * PM/ADMIN/SUPERADMIN cannot lead a project — a PM sits above the lead in the approval
-     * chain (leading would put them on both sides of their own escalation), and Admin/Super
-     * Admin are system roles, not delivery roles.
+     * Users assignable as a project's Team Lead: active EMPLOYEE- or PM-role users. Leading is a
+     * per-project assignment, so a PM of other projects may lead this one (the only per-project rule is
+     * that the same person cannot be both the Team Lead and the PM of the SAME project — that would put
+     * him on both sides of his own escalation). Admin / Super Admin are system roles, not delivery roles.
      */
     @Transactional(readOnly = true)
     public List<EmployeeRefDto> listAssignableLeads() {
         return appUserRepository
-                .findByRoleAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
-                        AppUser.Role.EMPLOYEE, AppUser.Status.ACTIVE)
+                .findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(ASSIGNABLE_ROLES, AppUser.Status.ACTIVE)
                 .stream()
                 .map(EmployeeRefDto::from)
                 .toList();
     }
 
-    /** Users assignable as a project's overseeing PM: active users with the PM role only. */
+    /** Users assignable as a project's overseeing PM: active EMPLOYEE- or PM-role users (see {@link #listAssignableLeads}). */
     @Transactional(readOnly = true)
     public List<EmployeeRefDto> listAssignableProjectManagers() {
         return appUserRepository
-                .findByRoleAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
-                        AppUser.Role.PM, AppUser.Status.ACTIVE)
+                .findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(ASSIGNABLE_ROLES, AppUser.Status.ACTIVE)
                 .stream()
                 .map(EmployeeRefDto::from)
                 .toList();
@@ -112,6 +130,7 @@ public class ProjectService {
         project.setStatus(Project.Status.ACTIVE);
         project.setLead(resolveLead(req.leadId(), null));
         project.setPm(resolvePm(req.pmId(), null));
+        requireLeadAndPmDistinct(project.getLead(), project.getPm());
         project.setStartDate(req.startDate());
         project.setEndDate(req.endDate());
         project.setCreatedAt(OffsetDateTime.now());
@@ -161,8 +180,16 @@ public class ProjectService {
         project.setClient(client);
         project.setProjectType(projectType);
         project.setStatus(status);
-        project.setLead(resolveLead(req.leadId(), project.getLead()));
-        project.setPm(resolvePm(req.pmId(), project.getPm()));
+        AppUser previousLead = project.getLead();
+        AppUser previousPm = project.getPm();
+        project.setLead(resolveLead(req.leadId(), previousLead));
+        project.setPm(resolvePm(req.pmId(), previousPm));
+        // Grandfathered pairs (neither side changed) are left alone so an unrelated edit still saves.
+        boolean assignmentChanged = (previousLead == null || !previousLead.getId().equals(project.getLead().getId()))
+                || (previousPm == null || !previousPm.getId().equals(project.getPm().getId()));
+        if (assignmentChanged) {
+            requireLeadAndPmDistinct(project.getLead(), project.getPm());
+        }
         project.setStartDate(req.startDate());
         project.setEndDate(req.endDate());
 
@@ -172,9 +199,10 @@ public class ProjectService {
 
     /**
      * Assigns a new Team Lead to a project via the explicit lead-assignment endpoint.
-     * Three-rule validation (Phase 8a):
-     *   1. Candidate must not have PM role — PMs sit above the lead in the approval chain.
-     *   2. Candidate must not already be this project's PM (same-person check).
+     * Validation:
+     *   1. Candidate must be an EMPLOYEE- or PM-role user (leading is a per-project assignment, so a PM
+     *      of other projects may lead this one).
+     *   2. Candidate must not already be this project's PM (same-person check, per project).
      *   3. Candidate must have an active allocation on this project today.
      * Each rule returns a specific 400 naming the failure.
      */
@@ -185,9 +213,9 @@ public class ProjectService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "User not found: " + leadId));
 
-        if (candidate.getRole() == AppUser.Role.PM) {
+        if (!ASSIGNABLE_ROLES.contains(candidate.getRole())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    candidate.getFullName() + " has the PM role and cannot be assigned as Team Lead.");
+                    candidate.getFullName() + " cannot be assigned as Team Lead (only Employee or PM accounts can).");
         }
 
         if (project.getPm() != null && project.getPm().getId().equals(leadId)) {
@@ -235,15 +263,23 @@ public class ProjectService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Team Lead must be an active user");
         }
-        if (lead.getRole() != AppUser.Role.EMPLOYEE) {
+        if (!ASSIGNABLE_ROLES.contains(lead.getRole())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Only a user with the Employee role can be assigned as Team Lead.");
+                    "Only an Employee or Project Manager account can be assigned as Team Lead.");
         }
         return lead;
     }
 
+    /** One person cannot be both the Team Lead and the PM of the same project. */
+    private static void requireLeadAndPmDistinct(AppUser lead, AppUser pm) {
+        if (lead != null && pm != null && lead.getId().equals(pm.getId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    lead.getFullName() + " cannot be both the Team Lead and the Project Manager of the same project.");
+        }
+    }
+
     /**
-     * Resolves the overseeing Project Manager. Only an active PM-role user may oversee a project.
+     * Resolves the overseeing Project Manager. Only an active EMPLOYEE- or PM-role user may oversee a project.
      * Grandfathers an unchanged current holder so an unrelated edit cannot silently move oversight,
      * and so a legacy/ineligible holder left over from before this rule does not break saving the
      * rest of the form.
@@ -260,9 +296,9 @@ public class ProjectService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Project Manager must be an active user");
         }
-        if (manager.getRole() != AppUser.Role.PM) {
+        if (!ASSIGNABLE_ROLES.contains(manager.getRole())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Only a user with the Project Manager role can be assigned as Project Manager.");
+                    "Only an Employee or Project Manager account can be assigned as Project Manager.");
         }
         return manager;
     }

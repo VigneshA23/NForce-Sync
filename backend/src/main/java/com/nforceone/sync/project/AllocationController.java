@@ -22,25 +22,24 @@ public class AllocationController {
     }
 
     /**
-     * All allocations (optionally filtered by project or team lead). PM gets read-only access so
-     * the Projects & Allocation page can still show allocations; write endpoints are ADMIN-only.
-     * teamLeadId: see AllocationService.listAll(Long, Long) javadoc.
+     * All allocations (optionally filtered by project or team lead). Admin / Super Admin see the whole
+     * org; a project manager (by role or by assignment) sees only allocations on projects he is PM of —
+     * the scope is enforced in AllocationService.listAllAs via PmScopeService, not here. Write endpoints
+     * are ADMIN-only. teamLeadId: see AllocationService.listAll(Long, Long) javadoc.
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('PM','ADMIN','SUPERADMIN')")
     public List<AllocationDto> listAll(@RequestParam(required = false) Long projectId,
                                         @RequestParam(required = false) Long teamLeadId) {
-        return allocationService.listAll(projectId, teamLeadId);
+        return allocationService.listAllAs(actingEmail(), projectId, teamLeadId);
     }
 
     /**
-     * Read-only allocations for one project — accessible to PM so they can see who is on their
-     * projects without being able to create, edit, or delete.
+     * Read-only allocations for one project. Admin / Super Admin: any project. A project manager: only
+     * a project he is PM of; another PM's project id is a 403.
      */
     @GetMapping("/project/{projectId}")
-    @PreAuthorize("hasAnyRole('PM','ADMIN','SUPERADMIN')")
     public List<AllocationDto> listForProject(@PathVariable Long projectId) {
-        return allocationService.listAll(projectId);
+        return allocationService.listAllAs(actingEmail(), projectId, null);
     }
 
     @GetMapping("/employees")
@@ -70,5 +69,10 @@ public class AllocationController {
     @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public void delete(@PathVariable Long id) {
         allocationService.delete(id);
+    }
+
+    private String actingEmail() {
+        return (String) org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication().getPrincipal();
     }
 }

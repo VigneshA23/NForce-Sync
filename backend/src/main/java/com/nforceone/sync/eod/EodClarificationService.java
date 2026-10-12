@@ -486,11 +486,20 @@ public class EodClarificationService {
         boolean holdsRmPiece = pieces.stream().anyMatch(p ->
                 p.getApproverType() == EodProjectApproval.ApproverType.REPORTING_MANAGER
                         && p.getApprover() != null && p.getApprover().getId().equals(recipient.getId()));
+        // By the capacity in which the recipient holds the entry — one user can be lead, RM and PM at once.
+        boolean holdsPmCapacity = pieces.stream().anyMatch(p ->
+                (p.getApproverType() == EodProjectApproval.ApproverType.PM
+                        && p.getApprover() != null && p.getApprover().getId().equals(recipient.getId()))
+                        || (p.getEscalatedTo() != null && p.getEscalatedTo().getId().equals(recipient.getId())));
         String base;
-        if (holdsRmPiece && !holdsLeadPiece && recipient.getRole() != AppUser.Role.PM) {
+        if (holdsLeadPiece) {
+            base = "/team/eod-inbox";
+        } else if (holdsRmPiece) {
             base = "/my-reports/eod-inbox";
+        } else if (holdsPmCapacity || recipient.getRole() == AppUser.Role.PM) {
+            base = "/projects/eod-inbox";
         } else {
-            base = recipient.getRole() == AppUser.Role.PM ? "/projects/eod-inbox" : "/team/eod-inbox";
+            base = "/team/eod-inbox";
         }
         return base + "?highlight=" + entry.getId();
     }

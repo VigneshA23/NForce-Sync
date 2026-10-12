@@ -1,6 +1,7 @@
 package com.nforceone.sync.eod;
 
 import com.nforceone.sync.auth.AppUser;
+import com.nforceone.sync.project.PmScopeService;
 import com.nforceone.sync.reporting.ReportingScopeService;
 import com.nforceone.sync.teamlead.LeadAccessService;
 import org.springframework.stereotype.Component;
@@ -49,9 +50,10 @@ class EodAccessPolicy {
                     ? AccessLevel.FULL : AccessLevel.NONE;
         }
 
-        // PROJECT_GROUPED: PM sees all (project-scoped access validated at service layer), and the
-        // entry's frozen reporting manager sees his report's whole day.
-        if (actor.getRole() == AppUser.Role.PM) return AccessLevel.FULL;
+        // PROJECT_GROUPED: a PM reads an entry only when it has a task on a project he is PM of (the one
+        // PM scope, PmScopeService) — not any entry in the org by id — and the entry's frozen reporting
+        // manager sees his report's whole day.
+        if (PmScopeService.canReadEntryAsPm(actor, entry)) return AccessLevel.FULL;
         if (entry.getManagerId() != null && entry.getManagerId().equals(actor.getId())) return AccessLevel.FULL;
 
         // A Team Lead reads an entry only when it has a task on a project he leads or a piece he

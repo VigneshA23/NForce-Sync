@@ -49,6 +49,7 @@ class PlainLogEscalationEnrichTest {
     @Mock BusinessRuleConfigRepository configRepository;
     @Mock EodAttachmentService        attachmentService;
     @Mock EodClarificationRepository  clarificationRepository;
+    @Mock com.nforceone.sync.approval2.EodProjectApprovalRepository pieceRepository;
 
     private ApprovalService service;
     private AppUser pm;
@@ -59,7 +60,9 @@ class PlainLogEscalationEnrichTest {
         service = new ApprovalService(
                 entryRepository, userRepository, actionRepository, auditLogRepository,
                 utilizationService, objectMapper, notificationService,
-                configRepository, attachmentService, clarificationRepository);
+                configRepository, attachmentService, clarificationRepository,
+                org.mockito.Mockito.mock(com.nforceone.sync.approval2.ApprovalPieceService.class),
+                pieceRepository);
 
         pm = new AppUser();
         pm.setId(10L);
@@ -85,8 +88,8 @@ class PlainLogEscalationEnrichTest {
         when(userRepository.findByEmailAndDeletedAtIsNull("suryateja@example.com"))
                 .thenReturn(Optional.of(pm));
         when(configRepository.findById(any())).thenReturn(Optional.of(config));
-        when(entryRepository.findByPmIdAndStatus(pm.getId(), EodEntry.Status.SUBMITTED))
-                .thenReturn(List.of(plainLogEntry));
+        when(pieceRepository.findByEscalatedToIdAndStatus(pm.getId(), com.nforceone.sync.approval2.EodProjectApproval.Status.PENDING))
+                .thenReturn(List.of(pieceOn(plainLogEntry)));
         when(actionRepository.findByEodEntryIdIn(any())).thenReturn(List.of());
         when(attachmentService.loadForEntries(any()))
                 .thenReturn(new EodAttachmentService.AttachmentsByScope(Map.of(), Map.of()));
@@ -114,13 +117,20 @@ class PlainLogEscalationEnrichTest {
         projectEntry.setSubmittedAt(OffsetDateTime.now().minusHours(72));
         projectEntry.setManagerId(null);
 
-        when(entryRepository.findByPmIdAndStatus(pm.getId(), EodEntry.Status.SUBMITTED))
-                .thenReturn(List.of(projectEntry));
+        when(pieceRepository.findByEscalatedToIdAndStatus(pm.getId(), com.nforceone.sync.approval2.EodProjectApproval.Status.PENDING))
+                .thenReturn(List.of(pieceOn(projectEntry)));
 
         List<EodEntryDto> result = service.getPendingForActor("suryateja@example.com", null, null);
 
         assertThat(result).hasSize(1);
         // PROJECT_GROUPED with no TL and status=SUBMITTED must remain escalated=true
         assertThat(result.get(0).escalated()).as("PROJECT_GROUPED with no TL still escalates").isTrue();
+    }
+
+    /** The legacy PM list is now driven by pieces escalated to the PM (not every submitted entry on his projects). */
+    private static com.nforceone.sync.approval2.EodProjectApproval pieceOn(EodEntry entry) {
+        com.nforceone.sync.approval2.EodProjectApproval piece = new com.nforceone.sync.approval2.EodProjectApproval();
+        piece.setEodEntry(entry);
+        return piece;
     }
 }

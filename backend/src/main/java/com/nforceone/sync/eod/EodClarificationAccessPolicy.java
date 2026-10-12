@@ -25,13 +25,11 @@ import java.util.Objects;
  * project PM on the entry's tasks — unless they are also a reviewer under the rule above.
  *
  * Project Managers are READ-ONLY: they can read any thread they can see, but never review it — no
- * opening, replying as reviewer, or resolving — though they still approve / reject pieces. That holds
- * in two ways, because in this app anyone can be a project's PM by assignment, not only a user whose
- * role is PM:
- *   - by ROLE: a user with role PM is never a reviewer (see PmReadOnlyPolicy);
- *   - by CAPACITY: a piece the actor holds as the project's PM (approver type PM) or as the
- *     escalated-to PM gives them no reviewer rights, whatever their role. A piece they hold as the
- *     Team Lead (LEAD) or the reporting manager (REPORTING_MANAGER) still does.
+ * opening, replying as reviewer, or resolving — though they still approve / reject the pieces held by or
+ * escalated to them. That is a CAPACITY, not a role (PmScopeService): the same user may be PM of some
+ * projects and Team Lead of others, so a piece the actor holds as the project's PM (approver type PM) or
+ * as the escalated-to PM gives no reviewer rights, whatever his role, while a piece he holds as the Team
+ * Lead (LEAD) or the reporting manager (REPORTING_MANAGER) still does.
  * A PM replying on their OWN EOD is the owner (employee side), not a reviewer, and is unaffected.
  *
  * Nobody can act as reviewer on their own EOD, whatever their capabilities: the self-block runs
@@ -54,10 +52,7 @@ final class EodClarificationAccessPolicy {
 
     /** Any project in the entry's tasks has this actor as its PM — read-only. */
     static boolean isProjectPm(AppUser actor, EodEntry entry) {
-        return entry.getTasks().stream()
-                .map(EodTask::getProject).filter(Objects::nonNull)
-                .map(Project::getPm).filter(Objects::nonNull)
-                .anyMatch(pm -> pm.getId().equals(actor.getId()));
+        return com.nforceone.sync.project.PmScopeService.entryTouchesManagedProject(actor, entry);
     }
 
     /** Same approver test as ApprovalPieceService.checkApproverAuthorization (minus Super Admin). */
@@ -97,7 +92,6 @@ final class EodClarificationAccessPolicy {
     /** True when the actor may open / resolve / reply as the reviewing side of this entry. */
     static boolean canReview(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
         if (isOwningEmployee(actor, entry)) return false;
-        if (PmReadOnlyPolicy.isReadOnlyPm(actor)) return false;
         return actor.getRole() == AppUser.Role.SUPERADMIN || isPendingApprover(actor, pieces);
     }
 
@@ -121,17 +115,16 @@ final class EodClarificationAccessPolicy {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "You cannot manage a clarification as a reviewer on your own EOD entry");
         }
-        PmReadOnlyPolicy.requireNotReadOnlyPm(actor, "clarifications");
         if (canReview(actor, entry, pieces)) return;
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+        // Reached only as the project's PM (capacity, not role) -> read-only; otherwise the generic reason.
+        throw PmReadOnlyPolicy.denial(isProjectPm(actor, entry), "clarifications",
                 "Only an approver with a pending review on this entry can manage a clarification on it");
     }
 
     /** Reply: the owner (as the employee side) or a reviewer. */
     static void requireCanReply(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
         if (canReply(actor, entry, pieces)) return;
-        PmReadOnlyPolicy.requireNotReadOnlyPm(actor, "clarifications");   // clearer than a bare "Access denied"
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        throw PmReadOnlyPolicy.denial(isProjectPm(actor, entry), "clarifications");
     }
 
     /** Read: owner, any current approver, frozen RM, project PM, or Super Admin. */

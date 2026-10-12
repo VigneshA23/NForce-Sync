@@ -98,3 +98,23 @@ describe('splitPendingPieces', () => {
     expect(escalated.length + plain.length).toBe(pieces.length);
   });
 });
+
+describe('splitPendingPieces: PM Pending tab (showAllInPending)', () => {
+  it('puts escalated LEAD pieces and direct PM pieces together in Pending, with no escalated bucket', () => {
+    const { escalated, plain } = splitPendingPieces([escalatedLeadPiece, pmTypePiece], true, true);
+    expect(escalated).toHaveLength(0);
+    expect(plain).toEqual([escalatedLeadPiece, pmTypePiece]);
+  });
+
+  it('keeps each row\'s own escalation marker so the row can be labelled "Escalated"', () => {
+    const { plain } = splitPendingPieces([escalatedLeadPiece, pmTypePiece], true, true);
+    expect(plain.find(p => p.id === 1)?.escalatedAt).toBeTruthy();
+    expect(plain.find(p => p.id === 2)?.escalatedAt).toBeNull();
+  });
+
+  it('does not change the RM split when the flag is off', () => {
+    const { escalated, plain } = splitPendingPieces([escalatedLeadPiece, nonEscalatedLeadPiece], true, false);
+    expect(escalated).toEqual([escalatedLeadPiece]);
+    expect(plain).toEqual([nonEscalatedLeadPiece]);
+  });
+});

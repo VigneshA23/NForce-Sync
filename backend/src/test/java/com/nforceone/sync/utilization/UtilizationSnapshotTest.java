@@ -51,7 +51,8 @@ class UtilizationSnapshotTest {
     void setUp() {
         service = new UtilizationService(
                 entryRepository, userRepository, snapshotRepository,
-                holidayRepository, new com.nforceone.sync.teamlead.LeadTeamPolicy(allocationRepository, null, pieceRepository), pieceRepository);
+                holidayRepository, new com.nforceone.sync.teamlead.LeadTeamPolicy(allocationRepository, null, pieceRepository), pieceRepository,
+                org.mockito.Mockito.mock(com.nforceone.sync.project.PmScopeService.class));
         when(holidayRepository.existsByHolidayDate(DATE)).thenReturn(false);
         when(snapshotRepository.findByEmployeeIdAndSnapshotDate(EMP_ID, DATE))
                 .thenReturn(Optional.empty());

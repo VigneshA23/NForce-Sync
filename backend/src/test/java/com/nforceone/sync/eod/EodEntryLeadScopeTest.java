@@ -157,11 +157,20 @@ class EodEntryLeadScopeTest {
 
     @Test
     void owner_frozenRm_pm_andAdmin_seeEverything() {
+        projA.setPm(pm);   // the PM reads it because the entry touches a project he is PM of
         for (AppUser full : List.of(owner, rm, pm, admin)) {
             EodEntryDto dto = service.getEntry(100L, full.getEmail());
             assertEquals(3, dto.tasks().size(), full.getFullName());
             assertNull(dto.otherProjectsHours(), full.getFullName());
         }
+    }
+
+    @Test
+    void aPmWhoIsNotPmOfAnyProjectOnTheEntry_gets403_evenWithTheRolePm() {
+        // Role PM no longer opens every entry by id: only entries touching a project he is PM of.
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> service.getEntry(100L, pm.getEmail()));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
     }
 
     // ── the list path ─────────────────────────────────────────────────────────

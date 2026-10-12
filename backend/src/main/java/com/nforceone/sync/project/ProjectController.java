@@ -38,11 +38,11 @@ public class ProjectController {
         return projectService.listMine(actingEmail(), date != null ? date : LocalDate.now());
     }
 
-    /** Full project list — readable by PM (read-only view), Admin, and Super Admin. */
+    /** Full project list — Admin and Super Admin see every project; a project manager (by role or by
+     *  assignment) sees only the projects he is PM of. Enforced in ProjectService via PmScopeService. */
     @GetMapping("/all")
-    @PreAuthorize("hasAnyRole('PM','ADMIN','SUPERADMIN')")
     public List<ProjectFullDto> listAll() {
-        return projectService.listAll();
+        return projectService.listAll(actingEmail());
     }
 
     /** Create project — Admin and Super Admin only. */

@@ -52,6 +52,7 @@ class UtilizationTeamAccessTest {
     @Mock AllocationRepository allocationRepository;
     @Mock ProjectRepository projectRepository;
     @Mock EodProjectApprovalRepository pieceRepository;
+    @Mock com.nforceone.sync.project.PmScopeService pmScopeService;
 
     private UtilizationService service;
     private AppUser leadA, leadB, akhila, superAdmin, admin, pm, stranger;
@@ -60,7 +61,8 @@ class UtilizationTeamAccessTest {
     @BeforeEach
     void setUp() {
         service = new UtilizationService(entryRepository, userRepository, snapshotRepository, holidayRepository,
-                new LeadTeamPolicy(allocationRepository, projectRepository, pieceRepository), pieceRepository);
+                new LeadTeamPolicy(allocationRepository, projectRepository, pieceRepository), pieceRepository,
+                pmScopeService);
 
         leadA = user(1L, AppUser.Role.EMPLOYEE, "a"); leadB = user(2L, AppUser.Role.EMPLOYEE, "b");
         akhila = user(3L, AppUser.Role.EMPLOYEE, "akhila"); stranger = user(4L, AppUser.Role.EMPLOYEE, "x");
@@ -107,7 +109,7 @@ class UtilizationTeamAccessTest {
 
     @Test
     void rolesWithAccessToday_keepIt() {
-        for (AppUser broad : List.of(superAdmin, admin, pm)) {
+        for (AppUser broad : List.of(superAdmin, admin)) {
             assertDoesNotThrow(() -> service.getForTeamAs(broad.getEmail(), leadA.getId(), DATE), broad.getFullName());
         }
     }
@@ -120,6 +122,17 @@ class UtilizationTeamAccessTest {
         assertDoesNotThrow(() -> service.getForEmployeeAs(superAdmin.getEmail(), akhila.getId(), DATE, to));
         // lead B is not in lead C's... a stranger with no team containing akhila:
         assertForbidden(() -> service.getForEmployeeAs(stranger.getEmail(), akhila.getId(), DATE, to));
+    }
+
+    @Test
+    void projectManager_noLongerHasOrgWideUtilizationAccess_onlyMembersOfHisProjects() {
+        LocalDate to = DATE;
+        // Team utilization of an arbitrary lead is no longer open to a PM.
+        assertForbidden(() -> service.getForTeamAs(pm.getEmail(), leadA.getId(), DATE));
+        // An employee by id: forbidden unless he is a member of one of the PM's projects.
+        assertForbidden(() -> service.getForEmployeeAs(pm.getEmail(), akhila.getId(), DATE, to));
+        when(pmScopeService.isMember(pm, akhila.getId(), DATE, to)).thenReturn(true);
+        assertDoesNotThrow(() -> service.getForEmployeeAs(pm.getEmail(), akhila.getId(), DATE, to));
     }
 
     // ── the aggregate ─────────────────────────────────────────────────────────

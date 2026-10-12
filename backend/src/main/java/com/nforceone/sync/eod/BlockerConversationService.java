@@ -73,7 +73,6 @@ public class BlockerConversationService {
 
     public BlockerReplyDto postReplyAsLead(Long taskId, String actingEmail, String message, List<MultipartFile> files) {
         AppUser lead = requireUser(actingEmail);
-        PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         EodTask task = requireTask(taskId);
         requireCanWriteAsLead(task, lead);
         requireNotResolved(task);
@@ -137,7 +136,6 @@ public class BlockerConversationService {
 
     public void editReplyAsLead(Long replyId, String actingEmail, String message) {
         AppUser lead = requireUser(actingEmail);
-        PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         BlockerReply reply = requireReply(replyId);
         requireCanWriteAsLead(reply.getTask(), lead);
         requireOwnReply(reply, lead);
@@ -147,7 +145,6 @@ public class BlockerConversationService {
 
     public void deleteReplyAsLead(Long replyId, String actingEmail) {
         AppUser lead = requireUser(actingEmail);
-        PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         BlockerReply reply = requireReply(replyId);
         requireCanWriteAsLead(reply.getTask(), lead);
         requireOwnReply(reply, lead);
@@ -335,15 +332,13 @@ public class BlockerConversationService {
      * whatever their role (anyone can be a project's PM by assignment). A role-PM user is rejected first.
      */
     private void requireCanWriteAsLead(EodTask task, AppUser actor) {
-        PmReadOnlyPolicy.requireNotReadOnlyPm(actor, "blockers");
         requireLeadOwnsTask(task, actor);
         Long actorId = actor.getId();
         boolean isRm = actorId.equals(task.getEodEntry().getManagerId());
         com.nforceone.sync.project.Project project = task.getProject();
         boolean isLead = project != null && project.getLead() != null && actorId.equals(project.getLead().getId());
         if (!isRm && !isLead) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Project Managers have a read-only view of blockers. Replies and changes are handled by Team Leads.");
+            throw PmReadOnlyPolicy.denial(com.nforceone.sync.project.PmScopeService.isPmOf(actor, project), "blockers");
         }
     }
 

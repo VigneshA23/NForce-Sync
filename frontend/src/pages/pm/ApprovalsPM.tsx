@@ -17,7 +17,7 @@ export default function ApprovalsPM() {
   return (
     <ApprovalsPage
       title="Approvals"
-      subtitle="Project pieces awaiting your decision — pending PM action and Team Lead escalations"
+      subtitle="Pieces awaiting your decision — Team Lead escalations and projects with no Team Lead"
       pendingPieces={pending}
       decidedApproved={approved}
       decidedRejected={rejected}
@@ -30,7 +30,8 @@ export default function ApprovalsPM() {
       onReject={(pieceId, comment) => rejectPiece.mutateAsync({ pieceId, comment })}
       approveBusy={approvePiece.isPending}
       rejectBusy={rejectPiece.isPending}
-      tabs={['escalated', 'approved', 'rejected']}
+      tabs={['pending', 'approved', 'rejected']}
+      pendingShowsAll
       showTlFilter
       showProjectFilter
       clarificationReadOnly

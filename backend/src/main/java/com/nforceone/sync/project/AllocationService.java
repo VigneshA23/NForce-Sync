@@ -32,16 +32,19 @@ public class AllocationService {
     private final AllocationRepository allocationRepository;
     private final ProjectRepository projectRepository;
     private final AppUserRepository appUserRepository;
+    private final PmScopeService pmScopeService;
 
     @PersistenceContext
     private EntityManager entityManager;
 
     public AllocationService(AllocationRepository allocationRepository,
                              ProjectRepository projectRepository,
-                             AppUserRepository appUserRepository) {
+                             AppUserRepository appUserRepository,
+                             PmScopeService pmScopeService) {
         this.allocationRepository = allocationRepository;
         this.projectRepository = projectRepository;
         this.appUserRepository = appUserRepository;
+        this.pmScopeService = pmScopeService;
     }
 
     @Transactional(readOnly = true)
@@ -52,7 +55,7 @@ public class AllocationService {
     /**
      * {@code teamLeadId} is a Super Admin-only read override (Super Admin Reportee Views
      * enhancement) — narrows the list to allocations on projects this specific Team Lead leads
-     * (Project.pm), for the "Team Lead Views → Resource Allocation" reportee page. Ignored
+     * (Project.lead), for the "Team Lead Views → Resource Allocation" reportee page. Ignored
      * whenever {@code projectId} is also given (that filter already narrows it further). With no
      * filter at all, {@link #listAll(Long)} already returns every allocation org-wide to any PM
      * or Super Admin caller today, so adding this narrower filter option introduces no new data
@@ -64,11 +67,36 @@ public class AllocationService {
         if (projectId != null) {
             allocations = allocationRepository.findByProjectIdWithRefs(projectId);
         } else if (teamLeadId != null) {
-            allocations = allocationRepository.findByProjectPmIdWithRefs(teamLeadId);
+            allocations = allocationRepository.findByProjectLeadIdWithRefs(teamLeadId);
         } else {
             allocations = allocationRepository.findAllWithRefsOrderByEffectiveFromDesc();
         }
         return allocations.stream()
+                .map(AllocationDto::from)
+                .toList();
+    }
+
+    /**
+     * Caller-scoped read of allocations. ADMIN / SUPERADMIN get the unscoped org-wide behaviour of
+     * {@link #listAll(Long, Long)}; anyone else is a project manager (by role or assignment) and sees only
+     * allocations on projects he is PM of — a project outside his portfolio is a 403 even when asked for by
+     * id, and with no project given he gets his own projects' allocations rather than the whole org.
+     */
+    @Transactional(readOnly = true)
+    public List<AllocationDto> listAllAs(String actingEmail, Long projectId, Long teamLeadId) {
+        AppUser actor = appUserRepository.findByEmailAndDeletedAtIsNull(actingEmail)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
+        if (actor.getRole() == AppUser.Role.ADMIN || actor.getRole() == AppUser.Role.SUPERADMIN) {
+            return listAll(projectId, teamLeadId);
+        }
+        pmScopeService.requirePmScope(actor);
+        if (projectId != null) {
+            pmScopeService.requireProjectInScope(actor, projectId);
+            return listAll(projectId, null);
+        }
+        return pmScopeService.scopedProjects(actor).stream()
+                .flatMap(p -> allocationRepository.findByProjectIdWithRefs(p.getId()).stream())
                 .map(AllocationDto::from)
                 .toList();
     }

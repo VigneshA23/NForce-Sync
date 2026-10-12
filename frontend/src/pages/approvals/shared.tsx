@@ -13,7 +13,6 @@ import type { EodEntryDto, EodTaskDto, EodAttachmentDto } from '../../api/eod';
 import { previewEodAttachment } from '../../lib/eodAttachments';
 import { useClarificationStatusForApprovals } from '../../api/eodClarification';
 import { useAuth } from '../../lib/auth';
-import { isReadOnlyPm } from '../../lib/pmReadOnly';
 import { clarificationMenuState } from '../../lib/clarificationGate';
 import { extractError } from '../../lib/extractError';
 
@@ -450,7 +449,7 @@ export function SubmissionDetailModal({
   // Same rules as the row's kebab menu, from the server's flags (see clarificationMenuState).
   const menu = clarificationMenuState({
     isOwn, blockedByList: false, status: clarificationStatus, busy: approveBusy || rejectBusy,
-    readOnlyReviewer: isReadOnlyPm(user?.role),
+    readOnlyReviewer: false,
   });
   const clarificationItem = menu.clarification.find(c => c.kind !== 'loading');
 

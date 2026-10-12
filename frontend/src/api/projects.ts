@@ -145,13 +145,13 @@ export async function listAssignableEmployees(): Promise<EmployeeRefDto[]> {
   return res.data;
 }
 
-/** Users who may be a project's Team Lead — active Team Leads (MANAGER) only. */
+/** Users who may be a project's Team Lead — active Employee- or PM-role accounts (a per-project assignment). */
 export async function listAssignableLeads(): Promise<EmployeeRefDto[]> {
   const res = await api.get<EmployeeRefDto[]>('/projects/leads');
   return res.data;
 }
 
-/** Users who may oversee a project as its PM — active PM accounts. */
+/** Users who may oversee a project as its PM — active Employee- or PM-role accounts (a per-project assignment). */
 export async function listAssignableProjectManagers(): Promise<EmployeeRefDto[]> {
   const res = await api.get<EmployeeRefDto[]>('/projects/managers');
   return res.data;

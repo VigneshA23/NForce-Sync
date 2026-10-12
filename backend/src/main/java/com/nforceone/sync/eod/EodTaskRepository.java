@@ -180,15 +180,20 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
     List<EodTaskCategoryNameRow> findCategoryNamesByEntryIds(@Param("entryIds") List<Long> entryIds);
 
     // ── Project Dashboard aggregates ──────────────────────────────────────────
-    // All scoped to APPROVED entries only — matches UtilizationService's convention that only
-    // approved hours count as "actual" utilization. employeeIds narrows to whatever the caller's
+    // Piece-based, exactly like UtilizationService (Team Utilization): a task counts only when its OWN
+    // project's piece is APPROVED (non-superseded), so a PARTIALLY_APPROVED entry contributes the approved
+    // projects' hours and a PM sees only approved hours on his projects — both pages agree.
+    // employeeIds narrows to whatever the caller's
     // Employee/Team filter resolved to, so every widget (not just tables) respects those filters.
 
     @Query("SELECT new com.nforceone.sync.eod.dto.ProjectHoursRow(t.project.id, SUM(t.hours)) " +
            "FROM EodTask t " +
            "WHERE t.project.id IN :projectIds " +
            "AND t.eodEntry.employee.id IN :employeeIds " +
-           "AND t.eodEntry.status = com.nforceone.sync.eod.EodEntry.Status.APPROVED " +
+           "AND t.eodEntry.status IN (com.nforceone.sync.eod.EodEntry.Status.APPROVED, com.nforceone.sync.eod.EodEntry.Status.PARTIALLY_APPROVED) " +
+           "AND EXISTS (SELECT 1 FROM com.nforceone.sync.approval2.EodProjectApproval ap WHERE ap.eodEntry = t.eodEntry " +
+           "AND ap.project = t.project AND ap.status = com.nforceone.sync.approval2.EodProjectApproval.Status.APPROVED " +
+           "AND ap.supersededAt IS NULL) " +
            "AND t.eodEntry.entryDate BETWEEN :from AND :to " +
            "GROUP BY t.project.id")
     List<ProjectHoursRow> sumHoursByProject(@Param("projectIds") List<Long> projectIds,
@@ -201,7 +206,10 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
            "FROM EodTask t " +
            "WHERE t.project.id IN :projectIds " +
            "AND t.eodEntry.employee.id IN :employeeIds " +
-           "AND t.eodEntry.status = com.nforceone.sync.eod.EodEntry.Status.APPROVED " +
+           "AND t.eodEntry.status IN (com.nforceone.sync.eod.EodEntry.Status.APPROVED, com.nforceone.sync.eod.EodEntry.Status.PARTIALLY_APPROVED) " +
+           "AND EXISTS (SELECT 1 FROM com.nforceone.sync.approval2.EodProjectApproval ap WHERE ap.eodEntry = t.eodEntry " +
+           "AND ap.project = t.project AND ap.status = com.nforceone.sync.approval2.EodProjectApproval.Status.APPROVED " +
+           "AND ap.supersededAt IS NULL) " +
            "AND t.eodEntry.entryDate BETWEEN :from AND :to " +
            "GROUP BY t.eodEntry.employee.id, t.project.id")
     List<EmployeeProjectHoursRow> sumHoursByEmployeeAndProject(@Param("projectIds") List<Long> projectIds,
@@ -219,7 +227,10 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
            "FROM EodTask t " +
            "WHERE t.project.id IN :projectIds " +
            "AND t.eodEntry.employee.id IN :employeeIds " +
-           "AND t.eodEntry.status = com.nforceone.sync.eod.EodEntry.Status.APPROVED " +
+           "AND t.eodEntry.status IN (com.nforceone.sync.eod.EodEntry.Status.APPROVED, com.nforceone.sync.eod.EodEntry.Status.PARTIALLY_APPROVED) " +
+           "AND EXISTS (SELECT 1 FROM com.nforceone.sync.approval2.EodProjectApproval ap WHERE ap.eodEntry = t.eodEntry " +
+           "AND ap.project = t.project AND ap.status = com.nforceone.sync.approval2.EodProjectApproval.Status.APPROVED " +
+           "AND ap.supersededAt IS NULL) " +
            "AND t.eodEntry.entryDate BETWEEN :from AND :to " +
            "AND t.taskCategory.isProductive = true " +
            "GROUP BY t.project.id")
@@ -233,7 +244,10 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
            "FROM EodTask t " +
            "WHERE t.project.id IN :projectIds " +
            "AND t.eodEntry.employee.id IN :employeeIds " +
-           "AND t.eodEntry.status = com.nforceone.sync.eod.EodEntry.Status.APPROVED " +
+           "AND t.eodEntry.status IN (com.nforceone.sync.eod.EodEntry.Status.APPROVED, com.nforceone.sync.eod.EodEntry.Status.PARTIALLY_APPROVED) " +
+           "AND EXISTS (SELECT 1 FROM com.nforceone.sync.approval2.EodProjectApproval ap WHERE ap.eodEntry = t.eodEntry " +
+           "AND ap.project = t.project AND ap.status = com.nforceone.sync.approval2.EodProjectApproval.Status.APPROVED " +
+           "AND ap.supersededAt IS NULL) " +
            "AND t.eodEntry.entryDate BETWEEN :from AND :to " +
            "AND t.taskCategory.isProductive = true " +
            "GROUP BY t.eodEntry.employee.id, t.project.id")
@@ -246,7 +260,10 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
            "FROM EodTask t " +
            "WHERE t.project.id IN :projectIds " +
            "AND t.eodEntry.employee.id IN :employeeIds " +
-           "AND t.eodEntry.status = com.nforceone.sync.eod.EodEntry.Status.APPROVED " +
+           "AND t.eodEntry.status IN (com.nforceone.sync.eod.EodEntry.Status.APPROVED, com.nforceone.sync.eod.EodEntry.Status.PARTIALLY_APPROVED) " +
+           "AND EXISTS (SELECT 1 FROM com.nforceone.sync.approval2.EodProjectApproval ap WHERE ap.eodEntry = t.eodEntry " +
+           "AND ap.project = t.project AND ap.status = com.nforceone.sync.approval2.EodProjectApproval.Status.APPROVED " +
+           "AND ap.supersededAt IS NULL) " +
            "AND t.eodEntry.entryDate BETWEEN :from AND :to " +
            "AND t.taskCategory IS NOT NULL " +
            "GROUP BY t.taskCategory.name")
@@ -260,7 +277,10 @@ public interface EodTaskRepository extends JpaRepository<EodTask, Long> {
            "FROM EodTask t " +
            "WHERE t.project.id IN :projectIds " +
            "AND t.eodEntry.employee.id IN :employeeIds " +
-           "AND t.eodEntry.status = com.nforceone.sync.eod.EodEntry.Status.APPROVED " +
+           "AND t.eodEntry.status IN (com.nforceone.sync.eod.EodEntry.Status.APPROVED, com.nforceone.sync.eod.EodEntry.Status.PARTIALLY_APPROVED) " +
+           "AND EXISTS (SELECT 1 FROM com.nforceone.sync.approval2.EodProjectApproval ap WHERE ap.eodEntry = t.eodEntry " +
+           "AND ap.project = t.project AND ap.status = com.nforceone.sync.approval2.EodProjectApproval.Status.APPROVED " +
+           "AND ap.supersededAt IS NULL) " +
            "AND t.eodEntry.entryDate BETWEEN :from AND :to " +
            "GROUP BY t.eodEntry.entryDate")
     List<DateHoursRow> sumHoursByDate(@Param("projectIds") List<Long> projectIds,

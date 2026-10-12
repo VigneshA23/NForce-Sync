@@ -52,6 +52,8 @@ public class ApprovalService {
     private final BusinessRuleConfigRepository configRepository;
     private final EodAttachmentService    attachmentService;
     private final EodClarificationRepository clarificationRepository;
+    private final com.nforceone.sync.approval2.ApprovalPieceService pieceService;
+    private final com.nforceone.sync.approval2.EodProjectApprovalRepository pieceRepository;
 
     public ApprovalService(EodEntryRepository entryRepository,
                            AppUserRepository userRepository,
@@ -62,7 +64,9 @@ public class ApprovalService {
                            NotificationService notificationService,
                            BusinessRuleConfigRepository configRepository,
                            EodAttachmentService attachmentService,
-                           EodClarificationRepository clarificationRepository) {
+                           EodClarificationRepository clarificationRepository,
+                           com.nforceone.sync.approval2.ApprovalPieceService pieceService,
+                           com.nforceone.sync.approval2.EodProjectApprovalRepository pieceRepository) {
         this.entryRepository     = entryRepository;
         this.userRepository      = userRepository;
         this.actionRepository    = actionRepository;
@@ -73,6 +77,8 @@ public class ApprovalService {
         this.configRepository    = configRepository;
         this.attachmentService   = attachmentService;
         this.clarificationRepository = clarificationRepository;
+        this.pieceService = pieceService;
+        this.pieceRepository = pieceRepository;
     }
 
     // from/to are both null or both present — enforced by the controller, which only forwards
@@ -114,8 +120,8 @@ public class ApprovalService {
         }
 
         if (actor.getRole() == AppUser.Role.PM) {
-            List<EodEntry> entries = entryRepository.findByPmIdAndStatus(actor.getId(), EodEntry.Status.SUBMITTED);
-            return enrichAll(entries);
+            // A PM decides only what was ESCALATED to him — not every submitted entry on his projects.
+            return enrichAll(escalatedEntries(actor, com.nforceone.sync.approval2.EodProjectApproval.Status.PENDING));
         }
         List<EodEntry> entries = (from != null && to != null)
                 ? entryRepository.findPendingByManagerIdAndEntryDateBetween(actor.getId(), EodEntry.Status.SUBMITTED, from, to)
@@ -154,11 +160,13 @@ public class ApprovalService {
         }
 
         if (actor.getRole() == AppUser.Role.PM) {
-            // Deliberately NOT scoped to actions this PM personally took — a PM oversees every
-            // team touching their projects, so Approved/Rejected must include entries a Team
-            // Lead decided too. See findByPmIdAndStatus's javadoc.
-            List<EodEntry> entries = entryRepository.findByPmIdAndStatus(actor.getId(), status);
-            return enrichAll(entries);
+            // Only entries with a piece escalated to this PM (what he decides), in the requested state.
+            com.nforceone.sync.approval2.EodProjectApproval.Status pieceStatus = switch (status) {
+                case APPROVED -> com.nforceone.sync.approval2.EodProjectApproval.Status.APPROVED;
+                case REJECTED -> com.nforceone.sync.approval2.EodProjectApproval.Status.REJECTED;
+                default -> null;
+            };
+            return pieceStatus == null ? List.of() : enrichAll(escalatedEntries(actor, pieceStatus));
         }
         List<EodEntry> entries = entryRepository.findDecidedByManagerId(actor.getId(), status);
         return enrichAll(entries);
@@ -175,51 +183,31 @@ public class ApprovalService {
                 .toList();
     }
 
+    // The legacy entry-level endpoints are kept for the Team Lead detail modal, but they no longer carry
+    // their own decision logic: each one delegates to the piece path (ApprovalPieceService), the single rule
+    // for who may decide what. So a project manager can decide only what was escalated to him, a
+    // self-approval is rejected, the clarification gate applies, and the entry status is always derived from
+    // its pieces — no path here sets an entry APPROVED without touching them.
     public EodEntryDto approve(Long entryId, String actorEmail, String comment) {
-        AppUser actor = requireUserByEmail(actorEmail);
-        EodEntry entry = requireEntryById(entryId);
-        checkManagerAuthorization(actor, entry);
-        requireStatus(entry, EodEntry.Status.SUBMITTED);
-        requireNoOpenClarification(entry);
-        return approveEntry(entry, actor, comment);
+        return pieceService.decideEntryPieces(entryId, actorEmail, true, comment);
     }
 
     public EodEntryDto reject(Long entryId, String actorEmail, String comment) {
-        AppUser actor = requireUserByEmail(actorEmail);
-        EodEntry entry = requireEntryById(entryId);
-        checkManagerAuthorization(actor, entry);
-        requireStatus(entry, EodEntry.Status.SUBMITTED);
-        requireNoOpenClarification(entry);
-
-        OffsetDateTime now = OffsetDateTime.now();
-        recordAction(entry, actor, ApprovalAction.Action.REJECT, comment, now);
-
-        entry.setStatus(EodEntry.Status.REJECTED);
-        entry.setUpdatedAt(now);
-        entryRepository.save(entry);
-
-        writeAudit(entry, "EOD_REJECTED", actor, now);
-        notificationService.send(entry.getEmployee().getId(), "EOD_REJECTED",
-                "EOD entry rejected",
-                "Your EOD entry for " + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + " was rejected."
-                        + (comment != null && !comment.isBlank() ? " Comment: " + comment : ""),
-                "/eod/submit?date=" + entry.getEntryDate());
-        return EodEntryDto.from(entry);
+        return pieceService.decideEntryPieces(entryId, actorEmail, false, comment);
     }
 
     // requestChanges() removed in V44 — reject() covers it. A rejected entry is editable and
     // resubmittable, which is all "changes requested" ever did.
 
-    // Entries not yet SUBMITTED (already decided elsewhere) are silently skipped rather than
-    // aborting the whole batch — a TL clicking "Approve all" expects the ready ones to go
-    // through. checkManagerAuthorization inside approveEntry still throws hard for an
-    // unauthorized entry that otherwise passed this filter.
+    // Entries with nothing left to decide (already decided elsewhere) are silently skipped rather than
+    // aborting the whole batch — a TL clicking "Approve all" expects the ready ones to go through.
+    // decideEntryPieces still throws hard for an entry the caller may not decide.
     public List<EodEntryDto> batchApprove(List<Long> entryIds, String actorEmail) {
-        AppUser actor = requireUserByEmail(actorEmail);
         return entryIds.stream()
                 .map(this::requireEntryById)
-                .filter(entry -> entry.getStatus() == EodEntry.Status.SUBMITTED)
-                .map(entry -> approveEntry(entry, actor, null))
+                .filter(entry -> entry.getStatus() == EodEntry.Status.SUBMITTED
+                        || entry.getStatus() == EodEntry.Status.PARTIALLY_APPROVED)
+                .map(entry -> pieceService.decideEntryPieces(entry.getId(), actorEmail, true, null))
                 .toList();
     }
 
@@ -325,26 +313,6 @@ public class ApprovalService {
 
     // ── private helpers ─────────────────────────────────────────────
 
-    private EodEntryDto approveEntry(EodEntry entry, AppUser actor, String comment) {
-        checkManagerAuthorization(actor, entry);
-        requireStatus(entry, EodEntry.Status.SUBMITTED);
-        requireNoOpenClarification(entry);
-
-        OffsetDateTime now = OffsetDateTime.now();
-        recordAction(entry, actor, ApprovalAction.Action.APPROVE, comment, now);
-
-        entry.setStatus(EodEntry.Status.APPROVED);
-        entry.setUpdatedAt(now);
-        entryRepository.save(entry);
-
-        writeAudit(entry, "EOD_APPROVED", actor, now);
-        utilizationService.recomputeForEntry(entry.getId());
-        notificationService.send(entry.getEmployee().getId(), "EOD_APPROVED",
-                "EOD entry approved",
-                "Your EOD entry for " + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + " has been approved.",
-                "/eod/history");
-        return EodEntryDto.from(entry);
-    }
 
     private void checkManagerAuthorization(AppUser actor, EodEntry entry) {
         if (actor.getRole() == AppUser.Role.SUPERADMIN) return;
@@ -352,16 +320,9 @@ public class ApprovalService {
         AppUser manager = resolveManagerFromSnapshot(entry);
         boolean isDirectManager = manager != null && manager.getId().equals(actor.getId());
 
-        // Keys off projectManager, NOT pm — pm holds the project's Team Lead. Using pm here let a
-        // PM load entries via findByPmIdAndStatus (which correctly keys off
-        // projectManager) and then get 403 on approve/reject, since their id was being matched
-        // against the Team Lead field instead.
-        boolean isProjectManager = entry.getTasks().stream()
-                .map(EodTask::getProject)
-                .filter(Objects::nonNull)
-                .map(Project::getPm)
-                .filter(Objects::nonNull)
-                .anyMatch(pm -> pm.getId().equals(actor.getId()));
+        // READ access to an entry's audit trail only (approve/reject no longer pass through here — they
+        // delegate to ApprovalPieceService). A PM qualifies when the entry touches a project he is PM of.
+        boolean isProjectManager = com.nforceone.sync.project.PmScopeService.entryTouchesManagedProject(actor, entry);
 
         if (!isDirectManager && !isProjectManager) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
@@ -380,49 +341,14 @@ public class ApprovalService {
         return entry.getEmployee().getManager();
     }
 
-    private void requireStatus(EodEntry entry, EodEntry.Status required) {
-        if (entry.getStatus() != required) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Entry must be in " + required + " status; current: " + entry.getStatus());
-        }
-    }
 
-    // Defense in depth — the pending queries already exclude entries with an open clarification
-    // round (see EodEntryRepository), so the UI should never offer Approve/Reject on one of
-    // these. This guards a stale tab / direct API call from bypassing that.
-    private void requireNoOpenClarification(EodEntry entry) {
-        if (clarificationRepository.existsByEodEntryIdAndStatusNot(entry.getId(), EodClarification.Status.RESOLVED)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "This entry has an open clarification and cannot be approved or rejected until it is resolved");
-        }
-    }
 
-    private void recordAction(EodEntry entry, AppUser actor,
-                               ApprovalAction.Action action, String comment,
-                               OffsetDateTime now) {
-        ApprovalAction aa = new ApprovalAction();
-        aa.setEodEntry(entry);
-        aa.setActor(actor);
-        aa.setAction(action);
-        aa.setComment(comment);
-        aa.setActedAt(now);
-        actionRepository.save(aa);
-    }
-
-    // Records employeeName + entryDate in afterValue so the admin dashboard's Recent
-    // Activity panel can render "Approved [Name]'s EOD entry — [date]" instead of raw IDs.
-    private void writeAudit(EodEntry entry, String action, AppUser actor, OffsetDateTime now) {
-        AuditLog log = new AuditLog();
-        log.setEntityType("EOD_ENTRY");
-        log.setEntityId(entry.getId());
-        log.setAction(action);
-        log.setActor(actor);
-        log.setAfterValue(objectMapper.writeValueAsString(Map.of(
-                "employeeName", entry.getEmployee().getFullName(),
-                "entryDate", entry.getEntryDate().toString()
-        )));
-        log.setOccurredAt(now);
-        auditLogRepository.save(log);
+    /** Distinct entries having a current-cycle piece escalated to {@code pm} in the given piece state. */
+    private List<EodEntry> escalatedEntries(AppUser pm, com.nforceone.sync.approval2.EodProjectApproval.Status status) {
+        return pieceRepository.findByEscalatedToIdAndStatus(pm.getId(), status).stream()
+                .map(com.nforceone.sync.approval2.EodProjectApproval::getEodEntry)
+                .collect(Collectors.toMap(EodEntry::getId, e -> e, (a, b) -> a, java.util.LinkedHashMap::new))
+                .values().stream().toList();
     }
 
     private AppUser requireUserByEmail(String email) {

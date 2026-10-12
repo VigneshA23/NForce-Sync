@@ -230,6 +230,7 @@ class BlockerConversationAuthTest {
     void pmRole_cannotPostAReply_403() {
         AppUser pmRole = pmRoleOnTheProject();
         when(userRepository.findByEmailAndDeletedAtIsNull(pmRole.getEmail())).thenReturn(Optional.of(pmRole));
+        when(taskRepository.findById(task.getId())).thenReturn(Optional.of(task));
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> service.postReplyAsLead(task.getId(), pmRole.getEmail(), "hello", List.of()));
@@ -244,6 +245,9 @@ class BlockerConversationAuthTest {
     void pmRole_cannotEditOrDeleteAReply_403() {
         AppUser pmRole = pmRoleOnTheProject();
         when(userRepository.findByEmailAndDeletedAtIsNull(pmRole.getEmail())).thenReturn(Optional.of(pmRole));
+        BlockerReply existing = new BlockerReply();
+        existing.setId(1L); existing.setTask(task); existing.setSender(pmRole);
+        when(replyRepository.findById(1L)).thenReturn(Optional.of(existing));
 
         assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
                 () -> service.editReplyAsLead(1L, pmRole.getEmail(), "edited")).getStatusCode());
@@ -271,5 +275,34 @@ class BlockerConversationAuthTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> service.postReplyAsLead(task.getId(), pm.getEmail(), "assigned PM", List.of()));
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    }
+
+    // â”€â”€ capacity, not role: one user, PM here and Team Lead there â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    @Test
+    void aPmRoleUserWhoLeadsThisProject_hasFullLeadActionsThere() {
+        // Dheeraj-style: role PM, PM of other projects, but the Team Lead of THIS one.
+        AppUser dual = user(6L, "Dheeraj S", "dual@example.com");
+        dual.setRole(AppUser.Role.PM);
+        project.setLead(dual);
+        project.setPm(pm);
+        stubUserAndTask(dual);
+
+        assertDoesNotThrow(() -> service.postReplyAsLead(task.getId(), dual.getEmail(), "lead reply", List.of()));
+    }
+
+    @Test
+    void theSameUserIsReadOnlyOnAProjectWhereHeIsOnlyThePm() {
+        AppUser dual = user(6L, "Dheeraj S", "dual@example.com");
+        dual.setRole(AppUser.Role.PM);
+        project.setLead(lead);
+        project.setPm(dual);   // PM here (he leads some OTHER project)
+        when(userRepository.findByEmailAndDeletedAtIsNull(dual.getEmail())).thenReturn(Optional.of(dual));
+        when(taskRepository.findById(task.getId())).thenReturn(Optional.of(task));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> service.postReplyAsLead(task.getId(), dual.getEmail(), "x", List.of()));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+        assertTrue(ex.getReason().contains("read-only view of blockers"), ex.getReason());
     }
 }

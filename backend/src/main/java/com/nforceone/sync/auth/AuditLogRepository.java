@@ -24,6 +24,8 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long>, JpaSp
 
     long countByOccurredAtAfter(OffsetDateTime since);
 
+    boolean existsByEntityTypeAndEntityIdAndAction(String entityType, Long entityId, String action);
+
     // Dashboard "Recent Activity" / "Audit Events (24h)" — admin/config-level events only.
     // Routine EOD approvals are excluded here (high volume, not admin-actionable); the full
     // trail including EOD_ENTRY remains visible and filterable on the Audit Log screen.

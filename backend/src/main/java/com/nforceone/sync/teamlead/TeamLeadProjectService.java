@@ -314,7 +314,7 @@ public class TeamLeadProjectService {
     }
 
     /**
-     * Re-derives the Team Lead's own project list (by {@code Project.pm}, not by the caller's
+     * Re-derives the Team Lead's own project list (by {@code Project.lead}, not by the caller's
      * say-so) — this is the authorization boundary: a project not in that list is not one this
      * Team Lead is the assigned Team Lead of, and either way they may not read or write its
      * details/categories.

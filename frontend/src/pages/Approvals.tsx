@@ -17,7 +17,6 @@ import { ClarificationChatPopup } from '../components/ClarificationChatPopup';
 import { DropdownMenu, type DropdownMenuItem } from '../components/DropdownMenu';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { useAuth } from '../lib/auth';
-import { isReadOnlyPm } from '../lib/pmReadOnly';
 import {
   CLARIFICATION_BLOCKS_DECISION_REASON, clarificationMenuState, decisionBlockedReason, isBlockingStatus,
 } from '../lib/clarificationGate';
@@ -268,7 +267,7 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
   const padding = '9px 16px';
   const menu = clarificationMenuState({
     isOwn, blockedByList: clarificationOpen, status: liveStatus, busy,
-    readOnlyReviewer: isReadOnlyPm(user?.role),
+    readOnlyReviewer: false,
   });
   const menuItems: DropdownMenuItem[] = [
     {

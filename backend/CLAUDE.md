@@ -33,7 +33,7 @@ DB user is the local Mac username, trust auth, empty password (local dev only).
 - New users are created ONLY by a Super Admin (no public signup endpoint for now — email verification comes later).
 - Password reset: single-use link, 1-hour validity, generic "if that email exists" response (build the endpoint shape now, email delivery can be stubbed).
 - Deactivation not deletion: deactivated users are blocked from login but retain their row.
-- Roles (4, final): EMPLOYEE, PM, ADMIN, SUPERADMIN. Team Lead = project assignment (any active non-PM). Reporting Manager = manager_id FK relationship, not a role.
+- Roles (4, final): EMPLOYEE, PM, ADMIN, SUPERADMIN. Team Lead = per-project assignment (`project.lead_id`) and Project Manager = per-project assignment (`project.pm_id`) — any active Employee- or PM-role user may hold either, on different projects (never both on the same one). PM scope lives in `PmScopeService` (one definition for the six Projects pages, their badges and access checks); PM is read-only on blockers/clarifications by CAPACITY (`PmReadOnlyPolicy`), not by role. Reporting Manager = manager_id FK relationship, not a role.
 - Authorization enforced SERVER-SIDE on every request — never trust the frontend alone.
 - Before any non-local deployment, set a real JWT_SECRET environment variable — application.yml's current value is an intentionally obvious dev-only placeholder and must never be used outside local development.
 

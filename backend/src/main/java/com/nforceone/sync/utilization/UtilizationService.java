@@ -9,6 +9,7 @@ import com.nforceone.sync.businessrules.HolidayRepository;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
+import com.nforceone.sync.project.PmScopeService;
 import com.nforceone.sync.teamlead.LeadTeamPolicy;
 import com.nforceone.sync.utilization.dto.DayUtilDto;
 import com.nforceone.sync.utilization.dto.TeamUtilDto;
@@ -41,19 +42,22 @@ public class UtilizationService {
     private final HolidayRepository              holidayRepository;
     private final LeadTeamPolicy                 leadTeamPolicy;
     private final EodProjectApprovalRepository   pieceRepository;
+    private final PmScopeService                 pmScopeService;
 
     public UtilizationService(EodEntryRepository entryRepository,
                                AppUserRepository userRepository,
                                UtilSnapshotRepository snapshotRepository,
                                HolidayRepository holidayRepository,
                                LeadTeamPolicy leadTeamPolicy,
-                               EodProjectApprovalRepository pieceRepository) {
+                               EodProjectApprovalRepository pieceRepository,
+                               PmScopeService pmScopeService) {
         this.entryRepository    = entryRepository;
         this.userRepository     = userRepository;
         this.snapshotRepository = snapshotRepository;
         this.holidayRepository  = holidayRepository;
         this.leadTeamPolicy = leadTeamPolicy;
         this.pieceRepository    = pieceRepository;
+        this.pmScopeService     = pmScopeService;
     }
 
     // Computes utilization for employee/date without touching the persisted snapshot row.
@@ -353,17 +357,17 @@ public class UtilizationService {
         AppUser actor = requireActor(actorEmail);
         if (!hasBroadUtilizationAccess(actor)
                 && !actor.getId().equals(employeeId)
-                && !leadTeamPolicy.isInTeam(employeeId, actor.getId())) {
+                && !leadTeamPolicy.isInTeam(employeeId, actor.getId())
+                && !pmScopeService.isMember(actor, employeeId, from, to)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "You can only view the utilization of yourself or your own team");
+                    "You can only view the utilization of yourself, your own team or members of your projects");
         }
         return getForEmployee(employeeId, from, to);
     }
 
     private boolean hasBroadUtilizationAccess(AppUser actor) {
         return actor.getRole() == AppUser.Role.SUPERADMIN
-                || actor.getRole() == AppUser.Role.ADMIN
-                || actor.getRole() == AppUser.Role.PM;
+                || actor.getRole() == AppUser.Role.ADMIN;
     }
 
     private AppUser requireActor(String email) {

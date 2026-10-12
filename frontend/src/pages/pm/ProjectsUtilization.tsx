@@ -81,6 +81,10 @@ function SectionLabel({ children, action }: { children: React.ReactNode; action?
   );
 }
 
+/** One wording for "nobody is on these projects" — shown by the banner and by every panel that is built from
+ *  the allocation rows, so an empty allocation set can never read as "nothing was approved". */
+const NO_ALLOCATION_MSG = 'No one is allocated to your projects in this range.';
+
 function EmptyMsg({ children }: { children: React.ReactNode }) {
   return <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: 'var(--txt-dim)' }}>{children}</div>;
 }
@@ -412,7 +416,7 @@ function ResourceTable({ rows }: { rows: ResourceUtilizationRowDto[] }) {
   const slice  = sorted.slice(page * RESOURCE_PAGE_SIZE, (page + 1) * RESOURCE_PAGE_SIZE);
 
   if (total === 0) {
-    return <EmptyMsg>No employee data in this range</EmptyMsg>;
+    return <EmptyMsg>{NO_ALLOCATION_MSG}</EmptyMsg>;
   }
 
   return (
@@ -492,7 +496,7 @@ function TopContributorsPanel({ resourceRows, style }: { resourceRows: ResourceU
   return (
     <Card style={style}>
       <SectionLabel><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Award size={12} />Top Contributors</span></SectionLabel>
-      {contributors.length === 0 ? <EmptyMsg>No approved hours in this range</EmptyMsg> : (
+      {contributors.length === 0 ? <EmptyMsg>{NO_ALLOCATION_MSG}</EmptyMsg> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {slice.map((c, i) => {
             const rank = page * CONTRIBUTOR_PAGE_SIZE + i;
@@ -1019,6 +1023,20 @@ export default function ProjectsUtilization() {
           <CalendarRangePopover from={from} to={to} onApply={(f, t) => setCustomRange({ from: f, to: t })} />
         </div>
       </div>
+
+      {/* Distinct empty state: the portfolio has projects but nobody is allocated to them in this range.
+          The backend returns 0% for that case; without this banner it reads as "nothing approved yet". */}
+      {cards.totalAssignedProjects > 0 && resourceUtilization.length === 0 && (
+        <div role="status" style={{
+          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, padding: '12px 16px', borderRadius: 10,
+          background: 'color-mix(in srgb, var(--warn) 12%, var(--panel))',
+          border: '1px solid color-mix(in srgb, var(--warn) 32%, transparent)',
+          fontSize: 13, color: 'var(--txt)',
+        }}>
+          <Users size={15} aria-hidden="true" style={{ color: 'var(--warn)', flexShrink: 0 }} />
+          <span>{NO_ALLOCATION_MSG} The 0% below reflects that, not unapproved hours.</span>
+        </div>
+      )}
 
       {/* KPI tiles */}
       <div className="pm-util-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 16 }}>

@@ -70,7 +70,7 @@ public class TeamEodByEmployeeReportService {
     public TeamReportFiltersDto getFilters(String actingEmail) {
         AppUser lead = requireManager(actingEmail);
 
-        // Project options: the projects actually assigned to this Team Lead — Project.pm, the
+        // Project options: the projects actually assigned to this Team Lead — Project.lead, the
         // same source of truth as "My Projects" (TeamLeadProjectService.listMyProjects) — NOT
         // derived from the team's own allocations, which reflects which projects the lead's
         // direct reports happen to work on rather than which projects this lead is the Team

@@ -93,7 +93,7 @@ export function clarificationMenuState(input: {
   status: MenuStatus | undefined;
   /** An approve / reject request is already in flight. */
   busy?: boolean;
-  /** Project Manager: may view clarification threads, never raise one (see lib/pmReadOnly.ts). */
+  /** Project Manager: may view clarification threads, never raise one. */
   readOnlyReviewer?: boolean;
 }): ClarificationMenuState {
   const { isOwn, blockedByList, status, busy = false, readOnlyReviewer = false } = input;

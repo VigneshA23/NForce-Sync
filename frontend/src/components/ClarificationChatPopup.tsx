@@ -13,7 +13,6 @@ import { useToast } from '../lib/toast';
 import { extractError } from '../lib/extractError';
 import { formatDate } from '../lib/date';
 import { scopeFor } from '../lib/clarificationGate';
-import { isReadOnlyPm } from '../lib/pmReadOnly';
 import { CLARIFICATION_STATUS_META, CLARIFICATION_STATUS_OPTIONS } from '../lib/clarificationStatus';
 
 /**
@@ -78,8 +77,9 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
   const resolved = status != null && !open && status.status === 'RESOLVED';
   // No open round: only a reviewer who canOpen may type — and that first message opens it.
   const canStart = scope === 'lead' && !open && status?.canOpen === true;
-  // Project Managers are read-only: even if a flag said otherwise, no composer and no status control.
-  const readOnlyPm = (readOnly || isReadOnlyPm(user?.role)) && scope === 'lead';
+  // Project Managers are read-only on a thread reached through their PM projects: the page says so
+  // (`readOnly`), the server's canReply / canOpen flags are per-entry, and the backend rejects a write with 403.
+  const readOnlyPm = readOnly && scope === 'lead';
   const composerEnabled = !readOnlyPm && (open ? status?.canReply === true : canStart);
 
   async function changeStatus(next: ClarificationStatusValue) {

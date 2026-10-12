@@ -386,7 +386,6 @@ public class TeamLeadService {
     @Transactional
     public TeamBlockerDto acknowledgeBlocker(Long taskId, String actingEmail) {
         AppUser lead = requireBlockerActor(actingEmail);
-        PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
 
@@ -405,7 +404,6 @@ public class TeamLeadService {
     @Transactional
     public TeamBlockerDto setBlockerStatus(Long taskId, String actingEmail, BlockerStatusRequest body) {
         AppUser lead = requireBlockerActor(actingEmail);
-        PmReadOnlyPolicy.requireNotReadOnlyPm(lead, "blockers");
         EodTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
 
@@ -647,7 +645,9 @@ public class TeamLeadService {
      */
     private void requireCanManageBlocker(EodTask task, AppUser actor) {
         if (isProjectLeadOf(task, actor) || isReportingManagerOfOwnLeadBlocker(task, actor)) return;
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        // A user who reaches this blocker only as its project's PM is read-only on it (capacity, not role):
+        // the same user keeps full lead actions on the projects he leads.
+        throw PmReadOnlyPolicy.denial(com.nforceone.sync.project.PmScopeService.isPmOf(actor, task.getProject()), "blockers");
     }
 
     /** Frozen manager of the entry, on a blocker whose author leads the blocker's own project. */
@@ -673,7 +673,9 @@ public class TeamLeadService {
         if (actor.getRole() == AppUser.Role.SUPERADMIN) return actor;
         boolean isLead = projectRepository.existsByLeadIdAndStatus(actor.getId(), Project.Status.ACTIVE);
         if (!isLead && !userRepository.existsByManagerIdAndDeletedAtIsNull(actor.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+            // Only a PM (no lead or reporting-manager capacity anywhere): read-only on blockers.
+            throw PmReadOnlyPolicy.denial(
+                    projectRepository.existsByPmIdAndStatus(actor.getId(), Project.Status.ACTIVE), "blockers");
         }
         return actor;
     }

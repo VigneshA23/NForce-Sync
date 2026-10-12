@@ -146,7 +146,7 @@ public class EscalationScheduler {
                 employee.getFullName() + "'s EOD for " + dateLabel
                 + " hasn't been reviewed by " + leadName + " within "
                 + config.getEscalationSlaHours() + "h. Please act on it.",
-                "/team/approvals");
+                "/projects/approvals");
 
         // Notify lead
         if (lead != null) {
@@ -162,6 +162,12 @@ public class EscalationScheduler {
     }
 
     private void writeAudit(EodProjectApproval piece, AppUser pm, String action) {
+        // A skipped escalation (no PM / PM is the lead / PM is the employee) leaves escalated_at null, so the
+        // hourly run meets the same piece again. Record each skip once per piece and reason, not every hour.
+        if (action.startsWith("ESCALATION_SKIPPED")
+                && auditLogRepository.existsByEntityTypeAndEntityIdAndAction("EOD_PROJECT_APPROVAL", piece.getId(), action)) {
+            return;
+        }
         AuditLog al = new AuditLog();
         al.setEntityType("EOD_PROJECT_APPROVAL");
         al.setEntityId(piece.getId());

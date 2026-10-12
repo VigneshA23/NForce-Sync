@@ -116,9 +116,41 @@ class EodAccessPolicyTest {
 
     // ── PROJECT_GROUPED: PM sees all ─────────────────────────────────────────
 
+    private com.nforceone.sync.eod.EodTask taskOn(com.nforceone.sync.project.Project project) {
+        com.nforceone.sync.eod.EodTask t = new com.nforceone.sync.eod.EodTask();
+        t.setEodEntry(projectEntry);
+        t.setProject(project);
+        return t;
+    }
+
     @Test
-    void pm_can_read_project_grouped_entry() {
+    void pm_reads_a_project_grouped_entry_only_when_it_touches_a_project_he_is_pm_of() {
         otherUser.setRole(AppUser.Role.PM);
+        com.nforceone.sync.project.Project mine = new com.nforceone.sync.project.Project();
+        mine.setId(10L); mine.setPm(otherUser);
+        projectEntry.getTasks().add(taskOn(mine));
+        assertTrue(policy.canRead(otherUser, projectEntry));
+        assertEquals(EodAccessPolicy.AccessLevel.FULL, policy.accessLevel(otherUser, projectEntry));
+    }
+
+    @Test
+    void pm_cannot_read_an_entry_on_another_pms_project_by_id() {
+        otherUser.setRole(AppUser.Role.PM);
+        AppUser anotherPm = new AppUser();
+        anotherPm.setId(77L);
+        com.nforceone.sync.project.Project theirs = new com.nforceone.sync.project.Project();
+        theirs.setId(11L); theirs.setPm(anotherPm);
+        projectEntry.getTasks().add(taskOn(theirs));
+        when(leadAccess.canReadEntryAsLead(otherUser.getId(), projectEntry)).thenReturn(false);
+        assertFalse(policy.canRead(otherUser, projectEntry));
+    }
+
+    @Test
+    void an_employee_role_user_who_is_pm_of_the_project_reads_it_too() {
+        otherUser.setRole(AppUser.Role.EMPLOYEE);
+        com.nforceone.sync.project.Project mine = new com.nforceone.sync.project.Project();
+        mine.setId(10L); mine.setPm(otherUser);
+        projectEntry.getTasks().add(taskOn(mine));
         assertTrue(policy.canRead(otherUser, projectEntry));
     }
 
@@ -155,7 +187,7 @@ class EodAccessPolicyTest {
 
     @Test
     void roles_with_access_today_keep_full_access_and_never_hit_the_lead_check() {
-        for (AppUser.Role role : new AppUser.Role[]{AppUser.Role.SUPERADMIN, AppUser.Role.ADMIN, AppUser.Role.PM}) {
+        for (AppUser.Role role : new AppUser.Role[]{AppUser.Role.SUPERADMIN, AppUser.Role.ADMIN}) {
             otherUser.setRole(role);
             assertEquals(EodAccessPolicy.AccessLevel.FULL, policy.accessLevel(otherUser, projectEntry), role.name());
         }

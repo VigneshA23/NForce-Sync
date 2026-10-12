@@ -21,11 +21,14 @@ class PmScopeServiceTest {
     @Mock
     private ProjectRepository projectRepository;
 
+    @Mock
+    private AllocationRepository allocationRepository;
+
     private PmScopeService pmScopeService;
 
     @BeforeEach
     void setUp() {
-        pmScopeService = new PmScopeService(projectRepository);
+        pmScopeService = new PmScopeService(projectRepository, allocationRepository);
     }
 
     // ── gate-check tests ──────────────────────────────────────────────────────
@@ -133,6 +136,94 @@ class PmScopeServiceTest {
         // Other PM's scope is separate — actor cannot see them
         var otherProjects = pmScopeService.scopedProjects(otherPm);
         assertTrue(otherProjects.isEmpty());
+    }
+
+    // ── one scope for every PM page ────────────────────────────────────────────
+
+    private static Project project(Long id, AppUser pm) {
+        Project p = new Project(); p.setId(id); p.setPm(pm); return p;
+    }
+
+    private static Allocation allocation(AppUser employee, Project project) {
+        Allocation a = new Allocation(); a.setEmployee(employee); a.setProject(project); return a;
+    }
+
+    @Test
+    void requireProjectInScope_isA403_forAnotherPmsProject_byId() {
+        AppUser pmA = user(30L, AppUser.Role.PM);
+        when(projectRepository.findByPmIdOrderByNameAsc(30L)).thenReturn(java.util.List.of(project(1001L, pmA)));
+
+        assertEquals(1001L, pmScopeService.requireProjectInScope(pmA, 1001L).getId());
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> pmScopeService.requireProjectInScope(pmA, 2002L));
+        assertEquals(403, ex.getStatusCode().value());
+    }
+
+    @Test
+    void superadminNarrowsToOnePmsPortfolio_butAPmCannotWidenHisOwn() {
+        AppUser sa = user(1L, AppUser.Role.SUPERADMIN);
+        AppUser pm = user(30L, AppUser.Role.PM);
+        when(projectRepository.findByPmIdOrderByNameAsc(99L)).thenReturn(java.util.List.of(project(7L, null)));
+        when(projectRepository.findByPmIdOrderByNameAsc(30L)).thenReturn(java.util.List.of(project(8L, pm)));
+
+        assertEquals(7L, pmScopeService.scopedProjects(sa, 99L).get(0).getId());
+        // the same override from a PM is ignored: he stays on his own projects
+        assertEquals(8L, pmScopeService.scopedProjects(pm, 99L).get(0).getId());
+    }
+
+    @Test
+    void members_areTheAllocationsOnHisProjects_withTheManagerHimselfExcluded() {
+        AppUser pm = user(30L, AppUser.Role.EMPLOYEE);   // a PM by assignment, allocated on his own project too
+        AppUser ravi = user(31L, AppUser.Role.EMPLOYEE);
+        Project p = project(1L, pm);
+        java.time.LocalDate from = java.time.LocalDate.of(2026, 10, 1);
+        java.time.LocalDate to = java.time.LocalDate.of(2026, 10, 12);
+        when(allocationRepository.findActiveInRangeForProjects(java.util.List.of(1L), from, to))
+                .thenReturn(java.util.List.of(allocation(pm, p), allocation(ravi, p)));
+
+        var result = pmScopeService.memberAllocations(pm, java.util.List.of(1L), from, to);
+
+        assertEquals(1, result.size());
+        assertEquals(31L, result.get(0).getEmployee().getId());
+    }
+
+    @Test
+    void members_ofNoProjects_isEmpty_withoutTouchingTheRepository() {
+        assertTrue(pmScopeService.memberAllocations(user(30L, AppUser.Role.PM), java.util.List.of(),
+                java.time.LocalDate.now(), java.time.LocalDate.now()).isEmpty());
+        verifyNoInteractions(allocationRepository);
+    }
+
+    @Test
+    void isMember_requiresAnAllocationOnOneOfHisProjects_andNeverTheManagerHimself() {
+        AppUser pm = user(30L, AppUser.Role.PM);
+        java.time.LocalDate d = java.time.LocalDate.of(2026, 10, 9);
+        when(projectRepository.findByPmIdOrderByNameAsc(30L)).thenReturn(java.util.List.of(project(1L, pm)));
+        when(allocationRepository.existsMemberOnProjects(31L, java.util.Set.of(1L), d, d)).thenReturn(true);
+        when(allocationRepository.existsMemberOnProjects(32L, java.util.Set.of(1L), d, d)).thenReturn(false);
+
+        assertTrue(pmScopeService.isMember(pm, 31L, d, d));
+        assertFalse(pmScopeService.isMember(pm, 32L, d, d));   // on someone else's project
+        assertFalse(pmScopeService.isMember(pm, 30L, d, d));   // himself
+    }
+
+    @Test
+    void perRecordChecks_followTheProjectsPm_notTheRole() {
+        AppUser pmByAssignment = user(30L, AppUser.Role.EMPLOYEE);
+        AppUser other = user(31L, AppUser.Role.PM);
+        Project p = project(1L, pmByAssignment);
+        com.nforceone.sync.eod.EodTask task = new com.nforceone.sync.eod.EodTask();
+        task.setProject(p);
+        com.nforceone.sync.eod.EodEntry entry = new com.nforceone.sync.eod.EodEntry();
+        entry.setEmployee(user(9L, AppUser.Role.EMPLOYEE));
+        entry.getTasks().add(task);
+
+        assertTrue(PmScopeService.isPmOf(pmByAssignment, p));
+        assertFalse(PmScopeService.isPmOf(other, p));
+        assertTrue(PmScopeService.canReadEntryAsPm(pmByAssignment, entry));
+        assertFalse(PmScopeService.canReadEntryAsPm(other, entry));     // a PM role is not enough
+        entry.setEmployee(pmByAssignment);
+        assertFalse(PmScopeService.canReadEntryAsPm(pmByAssignment, entry));   // never his own entry
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

@@ -99,7 +99,7 @@ public class ProjectDashboardService {
 
     public ProjectDashboardFiltersDto getFilters(String actingEmail, Long pmId) {
         AppUser pm = requirePm(actingEmail);
-        List<Project> projects = scopedProjects(pm, pmId);
+        List<Project> projects = pmScopeService.scopedProjects(pm, pmId);
         List<Long> projectIds = projects.stream().map(Project::getId).toList();
 
         List<ProjectOptionDto> projectOptions = projects.stream()
@@ -110,7 +110,7 @@ public class ProjectDashboardService {
             return new ProjectDashboardFiltersDto(projectOptions, List.of(), List.of(), List.of());
         }
 
-        List<Allocation> allocations = allocationRepository.findActiveInRangeForProjects(projectIds, FAR_PAST, FAR_FUTURE);
+        List<Allocation> allocations = pmScopeService.memberAllocations(pm, projectIds, FAR_PAST, FAR_FUTURE);
 
         Map<Long, AppUser> employeesById = allocations.stream()
                 .map(Allocation::getEmployee)
@@ -153,7 +153,7 @@ public class ProjectDashboardService {
         }
 
         AppUser pm = requirePm(actingEmail);
-        List<Project> projects = scopedProjects(pm, pmId);
+        List<Project> projects = pmScopeService.scopedProjects(pm, pmId);
 
         if (projectId != null) {
             Project match = projects.stream().filter(p -> p.getId().equals(projectId)).findFirst()
@@ -199,7 +199,7 @@ public class ProjectDashboardService {
         CompletableFuture<Long> leaveCategoryIdF =
                 CompletableFuture.supplyAsync(this::leaveCategoryId, dashboardQueryExecutor);
 
-        List<Allocation> allocations = allocationRepository.findActiveInRangeForProjects(projectIds, from, to);
+        List<Allocation> allocations = pmScopeService.memberAllocations(pm, projectIds, from, to);
 
         CompletableFuture.allOf(configF, allHolidaysF, leaveCategoryIdF).join();
         BusinessRuleConfig config = Futures.join(configF);
@@ -272,7 +272,7 @@ public class ProjectDashboardService {
         CompletableFuture<List<DateHoursRow>> dailyRowsF = CompletableFuture.supplyAsync(
                 () -> eodTaskRepository.sumHoursByDate(projectIds, employeeIds, from, to), dashboardQueryExecutor);
         CompletableFuture<PeriodSnapshot> previousF = CompletableFuture.supplyAsync(
-                () -> computeSnapshot(projectIds, prevFrom, prevTo, config, allHolidayDates), dashboardQueryExecutor);
+                () -> computeSnapshot(pm, projectIds, prevFrom, prevTo, config, allHolidayDates), dashboardQueryExecutor);
         // Only the query is fanned out here — computeMissingEod itself (below, after the join)
         // touches Allocation.employee.manager, a lazy relation Hibernate can only resolve on the
         // thread/session that owns the surrounding @Transactional, not on a worker thread.
@@ -394,11 +394,11 @@ public class ProjectDashboardService {
     private static final PeriodSnapshot EMPTY_SNAPSHOT =
             new PeriodSnapshot(false, Map.of(), BigDecimal.ZERO, BigDecimal.ZERO, 0);
 
-    private PeriodSnapshot computeSnapshot(List<Long> projectIds, LocalDate from, LocalDate to,
+    private PeriodSnapshot computeSnapshot(AppUser pm, List<Long> projectIds, LocalDate from, LocalDate to,
                                             BusinessRuleConfig config, Set<LocalDate> allHolidayDates) {
         if (projectIds.isEmpty()) return EMPTY_SNAPSHOT;
 
-        List<Allocation> allocations = allocationRepository.findActiveInRangeForProjects(projectIds, from, to);
+        List<Allocation> allocations = pmScopeService.memberAllocations(pm, projectIds, from, to);
         List<Long> employeeIds = allocations.stream().map(a -> a.getEmployee().getId()).distinct().toList();
         if (employeeIds.isEmpty()) return EMPTY_SNAPSHOT;
 
@@ -544,21 +544,6 @@ public class ProjectDashboardService {
                         HttpStatus.INTERNAL_SERVER_ERROR, "Authenticated user record missing"));
         pmScopeService.requirePmScope(user);
         return user;
-    }
-
-    /**
-     * {@code pmId} lets a Super Admin narrow the system-wide project list to one specific
-     * Project Manager's portfolio (Super Admin Reportee Views enhancement) — ignored for a
-     * non-SUPERADMIN caller, who always stays scoped to their own id regardless of what's passed.
-     */
-    private List<Project> scopedProjects(AppUser pm, Long pmId) {
-        if (pm.getRole() == AppUser.Role.SUPERADMIN) {
-            if (pmId != null) {
-                return projectRepository.findByPmIdOrderByNameAsc(pmId);
-            }
-            return projectRepository.findAllWithPmOrderByNameAsc();
-        }
-        return projectRepository.findByPmIdOrderByNameAsc(pm.getId());
     }
 
     private BusinessRuleConfig requireConfig() {

@@ -22,15 +22,18 @@ public class SearchService {
     private final ProjectRepository    projectRepository;
     private final com.nforceone.sync.teamlead.LeadTeamPolicy leadTeamPolicy;
     private final LeadAccessService    leadAccess;
+    private final com.nforceone.sync.project.PmScopeService pmScopeService;
 
     public SearchService(AppUserRepository userRepository,
                          ProjectRepository projectRepository,
                          com.nforceone.sync.teamlead.LeadTeamPolicy leadTeamPolicy,
-                         LeadAccessService leadAccess) {
+                         LeadAccessService leadAccess,
+                         com.nforceone.sync.project.PmScopeService pmScopeService) {
         this.userRepository    = userRepository;
         this.projectRepository = projectRepository;
         this.leadTeamPolicy = leadTeamPolicy;
         this.leadAccess        = leadAccess;
+        this.pmScopeService    = pmScopeService;
     }
 
     @Transactional(readOnly = true)
@@ -83,7 +86,7 @@ public class SearchService {
                     .map(p -> new SearchResultDto.ProjectResult(
                             p.getId(), p.getCode(), p.getName(), p.getStatus().name()))
                     .toList();
-            case PM -> projectRepository.findByPmIdOrderByNameAsc(actor.getId()).stream()
+            case PM -> pmScopeService.managedProjects(actor.getId()).stream()
                     .filter(p -> matchesProject(p, term))
                     .limit(5)
                     .map(p -> new SearchResultDto.ProjectResult(

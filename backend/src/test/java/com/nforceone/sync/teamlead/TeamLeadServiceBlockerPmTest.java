@@ -33,13 +33,15 @@ class TeamLeadServiceBlockerPmTest {
 
     @Mock AppUserRepository userRepository;
     @Mock ProjectRepository projectRepository;
+    @Mock com.nforceone.sync.eod.EodTaskRepository taskRepository;
+    @Mock com.nforceone.sync.eod.BlockerReplyRepository replyRepository;
 
     private TeamLeadService service;
     private AppUser pm;
 
     @BeforeEach
     void setUp() {
-        service = new TeamLeadService(userRepository, null, null, null, null, null, null, null, null, null,
+        service = new TeamLeadService(userRepository, null, taskRepository, null, null, null, null, null, replyRepository, null,
                 null, projectRepository, new LeadTeamPolicy(null, null, null), (Executor) Runnable::run);
         pm = new AppUser();
         pm.setId(7L);
@@ -65,21 +67,57 @@ class TeamLeadServiceBlockerPmTest {
         }
     }
 
+    private com.nforceone.sync.eod.EodTask blockerOn(Project project, AppUser author) {
+        com.nforceone.sync.eod.EodEntry entry = new com.nforceone.sync.eod.EodEntry();
+        entry.setEmployee(author);
+        com.nforceone.sync.eod.EodTask task = new com.nforceone.sync.eod.EodTask();
+        task.setId(1L);
+        task.setEodEntry(entry);
+        task.setProject(project);
+        return task;
+    }
+
+    private AppUser plainUser(long id) {
+        AppUser u = new AppUser();
+        u.setId(id);
+        u.setRole(AppUser.Role.EMPLOYEE);
+        return u;
+    }
+
     @Test
-    void pmRole_isRejectedByTheReadOnlyRule_evenWhenTheyWouldOtherwisePassTheLeadCheck() {
-        // Belt and braces: if a PM-role user ever did lead an active project, requireLead would let them
-        // through — the read-only guard must still stop the write, with its own explicit message.
+    void aPmWhoAlsoLeadsOtherProjects_isReadOnlyOnTheBlockerOfAProjectHeOnlyManages() {
+        // Capacity, not role: he leads some project (so he passes the actor check) but this blocker is on a
+        // project where he is only the PM -> read-only, with the explicit message.
         when(projectRepository.existsByLeadIdAndStatus(pm.getId(), Project.Status.ACTIVE)).thenReturn(true);
+        Project managed = new Project();
+        managed.setId(10L);
+        managed.setLead(plainUser(50L));
+        managed.setPm(pm);
+        when(taskRepository.findById(1L)).thenReturn(Optional.of(blockerOn(managed, plainUser(60L))));
 
         ResponseStatusException ack = assertThrows(ResponseStatusException.class,
                 () -> service.acknowledgeBlocker(1L, pm.getEmail()));
         ResponseStatusException status = assertThrows(ResponseStatusException.class,
                 () -> service.setBlockerStatus(1L, pm.getEmail(), new BlockerStatusRequest("RESOLVED")));
-
         for (ResponseStatusException ex : new ResponseStatusException[]{ack, status}) {
             assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
             assertTrue(ex.getReason().contains("read-only view of blockers"), ex.getReason());
         }
-        verify(projectRepository, atLeastOnce()).existsByLeadIdAndStatus(anyLong(), any());
+    }
+
+    @Test
+    void theSameUserKeepsFullLeadActionsOnTheProjectHeLeads() {
+        when(projectRepository.existsByLeadIdAndStatus(pm.getId(), Project.Status.ACTIVE)).thenReturn(true);
+        Project led = new Project();
+        led.setId(11L);
+        led.setLead(pm);
+        led.setPm(plainUser(70L));
+        com.nforceone.sync.eod.EodTask task = blockerOn(led, plainUser(60L));
+        when(taskRepository.findById(1L)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(replyRepository.findByTaskIdOrderByCreatedAtAsc(1L)).thenReturn(java.util.List.of());
+
+        assertDoesNotThrow(() -> service.acknowledgeBlocker(1L, pm.getEmail()));
+        assertNotNull(task.getAcknowledgedAt());
     }
 }

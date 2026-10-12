@@ -3,7 +3,7 @@
  * and Pending Approvals (/my-reports/approvals). Parameterised by data
  * source (hooks passed in as data props) and tab list (which tabs to show).
  *
- * PM Approvals:       tabs = ['escalated','approved','rejected']
+ * PM Approvals:       tabs = ['pending','approved','rejected'] with pendingShowsAll (escalated + direct PM pieces)
  * Pending Approvals:   tabs = ['pending','approved','rejected']
  */
 import { useMemo, useState } from 'react';
@@ -18,7 +18,6 @@ import {
 import { ClarificationChatPopup } from '../../components/ClarificationChatPopup';
 import { DropdownMenu, type DropdownMenuItem } from '../../components/DropdownMenu';
 import { useAuth } from '../../lib/auth';
-import { isReadOnlyPm } from '../../lib/pmReadOnly';
 import {
   CLARIFICATION_BLOCKS_DECISION_REASON, clarificationMenuState, decisionBlockedReason, isBlockingStatus,
 } from '../../lib/clarificationGate';
@@ -198,7 +197,7 @@ function PieceReviewModal({
   // Same rules as the row's kebab menu, from the server's flags (see clarificationMenuState).
   const menu = clarificationMenuState({
     isOwn, blockedByList: clarificationOpen, status: live.data, busy: approveBusy || rejectBusy,
-    readOnlyReviewer: clarificationReadOnly || isReadOnlyPm(user?.role),
+    readOnlyReviewer: clarificationReadOnly,
   });
   const clarificationItem = menu.clarification.find(c => c.kind !== 'loading');
 
@@ -438,7 +437,7 @@ function PieceCard({
   const isOwn = user != null && piece.employeeId === user.id;
   const menu = clarificationMenuState({
     isOwn, blockedByList: clarificationOpen, status: menuOpen && !live.isFetching ? live.data : undefined,
-    readOnlyReviewer: clarificationReadOnly || isReadOnlyPm(user?.role),
+    readOnlyReviewer: clarificationReadOnly,
   });
   // Approve / Reject only exist for pieces still awaiting a decision.
   const actionable = piece.status === 'PENDING' && (tab === 'pending' || tab === 'escalated');
@@ -630,6 +629,9 @@ export interface ApprovalsPageProps {
   rejectBusy: boolean;
   /** Ordered list of tabs to show. */
   tabs: ApprovalsTab[];
+  /** The Pending tab lists every pending piece (PM Approvals: escalated pieces, labelled "Escalated" on
+   *  the row, plus direct PM pieces for projects with no Team Lead) instead of splitting them. */
+  pendingShowsAll?: boolean;
   /** Sort the list opens with. Defaults to oldest-first (the PM escalation queue's order); the
    *  Reporting Manager page passes 'latest' so the newest submissions are on top. */
   defaultSort?: SortMode;
@@ -652,7 +654,7 @@ export default function ApprovalsPage({
   pendingLoading, approvedLoading, rejectedLoading,
   pendingError, onRefetch,
   onApprove, onReject, approveBusy, rejectBusy,
-  tabs, showTlFilter, showProjectFilter, clarificationReadOnly = false, defaultSort = 'oldest',
+  tabs, pendingShowsAll = false, showTlFilter, showProjectFilter, clarificationReadOnly = false, defaultSort = 'oldest',
 }: ApprovalsPageProps) {
   const { show } = useToast();
   const refreshClarification = useRefreshClarification();
@@ -684,9 +686,9 @@ export default function ApprovalsPage({
   // 'escalated' bucket. When 'pending' is present (RM Approvals), split normally.
   const hasPendingTab = tabs.includes('pending');
   const [escalatedPieces, plainPendingPieces] = useMemo(() => {
-    const { escalated, plain } = splitPendingPieces(pendingPieces ?? [], hasPendingTab);
+    const { escalated, plain } = splitPendingPieces(pendingPieces ?? [], hasPendingTab, pendingShowsAll);
     return [escalated, plain];
-  }, [pendingPieces, hasPendingTab]);
+  }, [pendingPieces, hasPendingTab, pendingShowsAll]);
 
   const baseList: ApprovalPieceDto[] = useMemo(() => {
     if (tab === 'pending')   return plainPendingPieces;
@@ -793,7 +795,9 @@ export default function ApprovalsPage({
   }
 
   function emptyBody(t: ApprovalsTab): string {
-    if (t === 'pending')   return 'No entries are waiting on your action.';
+    if (t === 'pending')   return pendingShowsAll
+      ? 'Nothing is waiting on your decision: no escalated entries and no direct project pieces.'
+      : 'No entries are waiting on your action.';
     if (t === 'escalated') return hasPendingTab
       ? 'All Team Leads are acting within SLA. Nothing escalated to you.'
       : 'No project pieces awaiting your decision.';
