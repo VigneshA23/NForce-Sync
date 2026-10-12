@@ -16,7 +16,6 @@ import type { UserResult, ProjectResult } from '../api/search';
 import { toRole } from '../api/auth';
 import { fetchProfile } from '../api/profile';
 import { useUnreadNotificationsCount } from '../api/notifications';
-import { usePendingApprovalsCount } from '../api/approvals';
 import { usePendingPiecesCount } from '../api/approvalPieces';
 import { useMyReportsPendingCount } from '../api/myReports';
 import { useTeamLeadSummary } from '../api/teamLead';
@@ -576,8 +575,10 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const isLead = caps.leadsProjectIds.length > 0;
   const isPm   = role === 'pm'   || caps.managesProjectIds.length > 0;
 
-  // Sidebar TL Approvals badge (v1 endpoint, shared with Team Dashboard KPI).
-  const pendingApprovalsCount = usePendingApprovalsCount(isLead);
+  // Sidebar TL Approvals badge. Counts the same list the Approvals page's Pending tab shows (v2 pieces awaiting THIS user as approver), via
+  // the same query key, so the badge can't disagree with the page. The old v1 count was every submitted entry
+  // whose frozen manager is the user — including the ones he handles as a reporting manager on a different page.
+  const pendingApprovalsCount = usePendingPiecesCount(isLead);
   // Sidebar PM Approvals badge — v2 pending pieces (all pending = escalated count for PM).
   const pmPendingCount = usePendingPiecesCount(isPm);
   // Sidebar RM Approvals badge — RM pending pieces.

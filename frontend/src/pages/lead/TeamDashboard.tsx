@@ -513,11 +513,10 @@ export default function TeamDashboard() {
   const { data: blockers, isPending: blockersPending, isFetching: blockersFetching } = useTeamLeadBlockers(range, isToday, false, teamLeadId);
   const { data: trend, isPending: trendPending } = useTeamLeadTrend(anchorDate, 7, teamLeadId);
 
-  // Shared cache with the sidebar badge and Approvals page (see usePendingApprovalsCount's own
-  // doc comment) — scoped to the dashboard's own selected `range` so the "Review approvals"
-  // button and this KPI card reflect only that window. Shell.tsx resolves this same range from
-  // the URL independently (only while the current route is the Team Dashboard) so the sidebar
-  // badge asks the exact same question and can never disagree with what's shown here.
+  // v1 count (submitted entries whose frozen manager is this user), scoped to the dashboard's own
+  // selected `range` so the "Review approvals" button and this KPI card reflect only that window.
+  // NOTE: the sidebar Approvals badge no longer uses this query — it counts the Approvals page's own
+  // v2 pending pieces — so this KPI can still differ from it for a user who is also a reporting manager.
   const pendingApprovalsCount = usePendingApprovalsCount(true, range);
 
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
