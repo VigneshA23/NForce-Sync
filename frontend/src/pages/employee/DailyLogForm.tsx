@@ -24,6 +24,8 @@ import type { EodEntryDto, EodLogLineDto, SaveLogLineRequest } from '../../api/e
 import { DatePicker } from '../../components/DatePicker';
 import { ApprovalStatusLine, HowItWorksPopover, SubmissionWindow } from './dailyLogParts';
 import { useSubmissionWindow } from './useSubmissionWindow';
+import { LegacyLogNotice } from './LegacyLogNotice';
+import { legacyLogOf } from './dailyLogLegacy';
 import { api } from '../../api/client';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -570,12 +572,9 @@ export default function DailyLogForm() {
               </div>
 
               {/* Legacy notice */}
-              {entry?.entryForm==='PLAIN_LOG' && !entry.logLines?.length && (entry.logTotalHours??0)>0 && isEditable && (
-                <div style={{ padding:'12px 14px', borderRadius:8, marginBottom:12, background:'rgba(224,169,59,.08)', border:'1px solid rgba(224,169,59,.2)', fontSize:12, color:'var(--warn)' }}>
-                  Legacy entry format. Add line items below to convert.
-                  {entry.logSummary && <div style={{ marginTop:6, color:'var(--txt-dim)', whiteSpace:'pre-wrap' }}>{entry.logSummary}</div>}
-                </div>
-              )}
+              {/* Editable: the "Legacy entry format" notice. Locked (pending / approved): a read-only block
+                  with the saved summary and hours — read from the entry, since the lines state is empty. */}
+              <LegacyLogNotice entry={entry} isEditable={isEditable} dailyCap={dailyCap} />
 
               {/* Empty state — editable: two clear actions */}
               {lines.length===0 && !isLeave && isEditable && (
@@ -619,7 +618,7 @@ export default function DailyLogForm() {
               )}
 
               {/* Empty state — read-only submitted with no lines */}
-              {lines.length===0 && !isLeave && isReadOnly && (
+              {lines.length===0 && !isLeave && isReadOnly && !legacyLogOf(entry) && (
                 <div style={{ padding:'18px 16px', borderRadius:8, border:'1px solid var(--line)', background:'var(--raised)', color:'var(--txt-dim)', fontSize:13, textAlign:'center' }}>
                   No time breakdown logged for this day.
                 </div>
