@@ -2,6 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, ChevronUp, Download, RefreshCw, Search } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
+import { CurrentMonthNote } from '../../components/CurrentMonthNote';
+import { ReportRangePresets, RangeDayCount } from '../../components/ReportRangePresets';
+import { EodReportKpis } from '../../components/EodReportKpis';
+import type { ReportRangePreset } from '../../lib/dateRange';
+import { initialReportRange, showsCurrentMonthNote } from '../../lib/reportDefaultRange';
+import { useReportPreset } from '../../lib/useReportPreset';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { FilterSelect } from '../../components/FilterSelect';
 import { TimeAdjustmentBadge } from '../../components/TimeAdjustmentBadge';
@@ -137,12 +143,12 @@ function filterId(v: string): number | undefined {
   return raw == null ? undefined : Number(raw);
 }
 
-// Dates start blank on purpose: the report covers whatever range the user asks for, and
-// pre-filling month-to-date silently decided that for them. The report simply waits until both
-// ends are chosen.
+// The report starts on the current month up to today (lib/reportDefaultRange.ts). Clearing a date
+// still blanks it, and the report then waits until both ends are chosen again.
 function defaultFilters(): Filters {
+  const { from, to } = initialReportRange();
   return {
-    from: '', to: '',
+    from, to,
     projectId: '', client: '', employeeQuery: '',
   };
 }
@@ -245,13 +251,14 @@ function EmployeeSearch({ query, onQueryChange, matches, onPick }: {
 }
 
 function FilterBar({
-  filters, onChange, onReset, summary, format, onFormatChange, onDownloadAll, downloadingAll,
-  employeeMatches, onPickEmployee,
+  filters, onChange, onReset, format, onFormatChange, onDownloadAll, downloadingAll,
+  employeeMatches, onPickEmployee, preset, onPresetSelect,
 }: {
+  preset: ReportRangePreset;
+  onPresetSelect: (preset: ReportRangePreset) => void;
   filters: Filters;
   onChange: (next: Filters) => void;
   onReset: () => void;
-  summary: { employeeCount: number; entryCount: number; totalHours: number } | undefined;
   format: ExportFormat;
   onFormatChange: (f: ExportFormat) => void;
   onDownloadAll: () => void;
@@ -294,6 +301,7 @@ function FilterBar({
 
   return (
     <Card style={{ padding: '14px 16px', marginBottom: 16 }}>
+      <ReportRangePresets active={preset} onSelect={onPresetSelect} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>From *</FieldLabel>
@@ -302,7 +310,10 @@ function FilterBar({
           <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} quickNav clearable />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>To *</FieldLabel>
+          <span style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+            <FieldLabel>To *</FieldLabel>
+            <RangeDayCount from={filters.from} to={filters.to} />
+          </span>
           {/* Capped at today for the same reason as From — there are no EODs for days
               that have not happened yet. */}
           <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} quickNav clearable />
@@ -345,12 +356,8 @@ function FilterBar({
           />
         </label>
       </div>
+      {showsCurrentMonthNote({ from: filters.from, to: filters.to }) && <CurrentMonthNote />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-mut)' }}>
-          <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{summary?.employeeCount ?? 0}</span> employees ·{' '}
-          <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{summary?.entryCount ?? 0}</span> EOD entries ·{' '}
-          <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{hrs(summary?.totalHours ?? 0)}</span> hrs in range
-        </div>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', border: '1px solid var(--line2)', borderRadius: 8, overflow: 'hidden' }}>
           {EXPORT_FORMATS.map(f => (
@@ -807,7 +814,20 @@ function TeamFlow({
 // ── main ───────────────────────────────────────────────────────────────────────
 
 export default function LeadEodByEmployeeReport() {
-  const [filters, setFilters] = useState<Filters>(defaultFilters());
+  const [filters, setFilters] = useState<Filters>(() => defaultFilters());
+  // Preset pills: picking one sets From/To; editing either date by hand makes Custom active; Reset
+  // goes back to This month. Changing any other filter leaves the pill as it was (useReportPreset).
+  const { preset, onPresetSelect, noteRangeEdit, reset } = useReportPreset(
+    ({ from, to }) => setFilters(f => ({ ...f, from, to })),
+  );
+  function handleFilterChange(next: Filters) {
+    noteRangeEdit(filters, next);
+    setFilters(next);
+  }
+  function handleReset() {
+    reset();
+    setFilters(defaultFilters());
+  }
   const [flow, setFlow] = useState<'roster' | 'team'>('roster');
   const [format, setFormat] = useState<ExportFormat>('EXCEL');
   const [exportingKey, setExportingKey] = useState<string | null>(null);
@@ -889,11 +909,15 @@ export default function LeadEodByEmployeeReport() {
       </div>
 
       <FilterBar
-        filters={filters} onChange={setFilters} onReset={() => setFilters(defaultFilters())} summary={data}
+        filters={filters} onChange={handleFilterChange} onReset={handleReset}
+        preset={preset} onPresetSelect={onPresetSelect}
         format={format} onFormatChange={setFormat}
         onDownloadAll={() => runExport('all')} downloadingAll={exportingKey === 'all'}
         employeeMatches={employeeMatches} onPickEmployee={pickEmployee}
       />
+
+      {/* "—" until a full range has produced a response, so a cleared date never reads as zero. */}
+      <EodReportKpis summary={hasRange ? data : undefined} loading={hasRange && isLoading} />
 
       {!hasRange ? (
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>

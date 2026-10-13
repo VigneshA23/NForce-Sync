@@ -3,6 +3,11 @@ import { api } from './client';
 import type { ApprovalPieceDto } from './approvalPieces';
 import type { EodEntryDto } from './eod';
 import type { MemberEodStatus, MemberEodStatusDto, DateRange } from './teamLead';
+import type { ProjectOptionDto } from './projectDashboard';
+import {
+  downloadBlob, filenameFromResponse,
+  type EodByEmployeeExportParams, type EodByEmployeeFilterParams, type EodByEmployeeReportDto,
+} from './reports';
 
 /** Why a reportee has no report to show: deadline passed / draft or today-not-yet / leave. */
 export type MemberEodEmptyState = 'MISSING' | 'NOT_SUBMITTED' | 'ON_LEAVE';
@@ -109,4 +114,43 @@ export function useMyReportsRejectPiece() {
       qc.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
+}
+
+// ── Reports (EOD by employee) ──────────────────────────────────────────────────
+// My Reporting Team > Reports: the EOD report for the caller's direct reports. The backend decides who is
+// in it (current active reports, plus anyone with entries under the caller in the range) and answers 403 to
+// a caller with no direct reports or an employeeId outside the team — nothing here narrows it.
+
+export interface RmReportFiltersDto {
+  projects: ProjectOptionDto[];
+  clients: string[];
+}
+
+export function useRmReportFilters() {
+  return useQuery({
+    queryKey: ['my-reports', 'reports', 'filters'],
+    queryFn: () => api.get<RmReportFiltersDto>('/my-reports/eod-by-employee/filters').then(r => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useRmEodByEmployeeReport(filters: EodByEmployeeFilterParams, enabled = true) {
+  return useQuery({
+    queryKey: ['my-reports', 'reports', 'eod-by-employee', filters],
+    queryFn: () =>
+      api.get<EodByEmployeeReportDto>('/my-reports/eod-by-employee', { params: filters }).then(r => r.data),
+    placeholderData: prev => prev,
+    enabled,
+  });
+}
+
+export async function exportRmEodByEmployee(params: EodByEmployeeExportParams): Promise<void> {
+  const { employeeIds, ...rest } = params;
+  const response = await api.get('/my-reports/eod-by-employee/export', {
+    params: { ...rest, employeeIds: employeeIds?.length ? employeeIds.join(',') : undefined },
+    responseType: 'blob',
+  });
+  const extension = params.format === 'EXCEL' ? 'xlsx' : params.format.toLowerCase();
+  const filename = filenameFromResponse(response.headers['content-disposition'], `reporting-team-eod.${extension}`);
+  downloadBlob(response.data as Blob, filename);
 }

@@ -4,9 +4,10 @@ import { ChevronDown, ChevronRight, ChevronUp, Download, RefreshCw, Search, User
 import { DatePicker } from '../../components/DatePicker';
 import { CurrentMonthNote } from '../../components/CurrentMonthNote';
 import { ReportRangePresets, RangeDayCount } from '../../components/ReportRangePresets';
-import { resolveReportPreset, type ReportRangePreset } from '../../lib/dateRange';
+import type { ReportRangePreset } from '../../lib/dateRange';
 import { EodReportKpis } from '../../components/EodReportKpis';
 import { initialReportRange, showsCurrentMonthNote } from '../../lib/reportDefaultRange';
+import { useReportPreset } from '../../lib/useReportPreset';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { FilterSelect } from '../../components/FilterSelect';
 import { TimeAdjustmentBadge } from '../../components/TimeAdjustmentBadge';
@@ -14,9 +15,9 @@ import { RequiredHoursBadge } from '../../components/RequiredHoursBadge';
 import { Pagination } from '../../components/Pagination';
 import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
-import { useProjectDashboardFilters } from '../../api/projectDashboard';
+import { PM_REPORT_SOURCE, type EodReportSource } from '../reports/eodReportSources';
 import { getDayDefaults } from '../../api/eod';
-import { exportEodByEmployee, useEodByEmployeeReport, type EodByEmployeeRowDto, type EodByEmployeeEntryDto, type ExportFormat } from '../../api/reports';
+import type { EodByEmployeeRowDto, EodByEmployeeEntryDto, ExportFormat } from '../../api/reports';
 
 // Standard Working Hours is a singleton Business Rules value, not date-varying — one fetch
 // (any date) covers the Required Hrs badge for every day in the report.
@@ -141,13 +142,10 @@ function filterId(v: string): number | undefined {
   return raw == null ? undefined : Number(raw);
 }
 
-// Dates start blank on purpose: the report covers whatever range the user asks for, and
-// pre-filling month-to-date silently decided that for them. The report simply waits until both
-// ends are chosen. The Super Admin EOD Reports page opts in (`defaultToCurrentMonth`) to start on
-// the current month up to today instead — see lib/reportDefaultRange.ts. Pages that do not opt in
-// (the PM's own Reports) keep the blank start.
-function defaultFilters(defaultToCurrentMonth = false): Filters {
-  const { from, to } = initialReportRange(defaultToCurrentMonth);
+// The report starts on the current month up to today (lib/reportDefaultRange.ts). Clearing a date
+// still blanks it, and the report then waits until both ends are chosen again.
+function defaultFilters(): Filters {
+  const { from, to } = initialReportRange();
   return {
     from, to,
     projectId: '', client: '', teamManagerId: '',
@@ -254,18 +252,15 @@ function EmployeeSearch({ query, onQueryChange, matches, onPick }: {
 }
 
 function FilterBar({
-  filters, onChange, onReset, summary, format, onFormatChange, onDownloadAll, downloadingAll,
-  employeeMatches, onPickEmployee, defaultToCurrentMonth, preset, onPresetSelect,
+  filters, onChange, onReset, format, onFormatChange, onDownloadAll, downloadingAll,
+  employeeMatches, onPickEmployee, preset, onPresetSelect, source,
 }: {
-  /** Opted in (Super Admin EOD Reports): enables the helper note, the preset buttons, the day count
-   *  and the KPI cards (rendered by the page) in place of the one-line summary. */
-  defaultToCurrentMonth: boolean;
+  source: EodReportSource;
   preset: ReportRangePreset;
   onPresetSelect: (preset: ReportRangePreset) => void;
   filters: Filters;
   onChange: (next: Filters) => void;
   onReset: () => void;
-  summary: { employeeCount: number; entryCount: number; totalHours: number } | undefined;
   format: ExportFormat;
   onFormatChange: (f: ExportFormat) => void;
   onDownloadAll: () => void;
@@ -274,7 +269,7 @@ function FilterBar({
   employeeMatches: EodByEmployeeRowDto[];
   onPickEmployee: (employeeId: number) => void;
 }) {
-  const { data: filterOptions } = useProjectDashboardFilters();
+  const filterOptions = source.useFilterOptions();
 
   function set<K extends keyof Filters>(key: K, value: Filters[K]) {
     // Project is dependent on Client — a Client change (including clearing it) invalidates
@@ -308,7 +303,7 @@ function FilterBar({
 
   return (
     <Card style={{ padding: '14px 16px', marginBottom: 16 }}>
-      {defaultToCurrentMonth && <ReportRangePresets active={preset} onSelect={onPresetSelect} />}
+      <ReportRangePresets active={preset} onSelect={onPresetSelect} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>From *</FieldLabel>
@@ -319,7 +314,7 @@ function FilterBar({
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
             <FieldLabel>To *</FieldLabel>
-            {defaultToCurrentMonth && <RangeDayCount from={filters.from} to={filters.to} />}
+            <RangeDayCount from={filters.from} to={filters.to} />
           </span>
           {/* Capped at today for the same reason as From — there are no EODs for days
               that have not happened yet. */}
@@ -353,6 +348,7 @@ function FilterBar({
             {projectsForClient.map(p => <option style={OPTION_STYLE} key={p.id} value={p.id}>{p.name}</option>)}
           </FilterSelect>
         </label>
+        {source.showTeamLeadFilter && (
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Team Lead</FieldLabel>
           <FilterSelect
@@ -364,6 +360,7 @@ function FilterBar({
             {(filterOptions?.teams ?? []).map(t => <option style={OPTION_STYLE} key={t.managerId} value={t.managerId}>{t.managerName}</option>)}
           </FilterSelect>
         </label>
+        )}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>Employee</FieldLabel>
           <EmployeeSearch
@@ -374,15 +371,8 @@ function FilterBar({
           />
         </label>
       </div>
-      {showsCurrentMonthNote(defaultToCurrentMonth, { from: filters.from, to: filters.to }) && <CurrentMonthNote />}
+      {showsCurrentMonthNote({ from: filters.from, to: filters.to }) && <CurrentMonthNote />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
-        {!defaultToCurrentMonth && (
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-mut)' }}>
-          <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{summary?.employeeCount ?? 0}</span> employees ·{' '}
-          <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{summary?.entryCount ?? 0}</span> EOD entries ·{' '}
-          <span style={{ color: 'var(--brand-bright)', fontWeight: 700 }}>{hrs(summary?.totalHours ?? 0)}</span> hrs in range
-        </div>
-        )}
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', border: '1px solid var(--line2)', borderRadius: 8, overflow: 'hidden' }}>
           {EXPORT_FORMATS.map(f => (
@@ -435,8 +425,10 @@ const ENTRY_TABLE_COLUMNS = '100px 1.1fr 1.4fr 62px';
 const ENTRY_TABLE_MIN_WIDTH = 460;
 
 function RosterFlow({
-  employees, isLoading, onExport, exportingKey, selectedId, setSelectedId,
+  employees, isLoading, onExport, exportingKey, selectedId, setSelectedId, emptyMessage,
 }: {
+  /** Replaces the default "no employees" wording (set by a report source that has its own). */
+  emptyMessage?: string;
   employees: EodByEmployeeRowDto[];
   isLoading: boolean;
   onExport: (key: string, employeeIds?: number[]) => void;
@@ -504,7 +496,7 @@ function RosterFlow({
         {isLoading ? (
           <GlobalLoader fullScreen={false} compact label="Loading employees..." />
         ) : pageRows.length === 0 ? (
-          <div style={{ padding: '32px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>No employees match the current filters.</div>
+          <div style={{ padding: '32px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>{emptyMessage ?? 'No employees match the current filters.'}</div>
         ) : (
           pageRows.map(r => {
             const rowExportKey = `emp-${r.employeeId}`;
@@ -676,8 +668,10 @@ const summaryHeaderCellStyle: React.CSSProperties = {
 };
 
 function TeamFlow({
-  employees, isLoading, onExport, exportingKey,
+  employees, isLoading, onExport, exportingKey, emptyMessage,
 }: {
+  /** Replaces the default "no entries" wording (set by a report source that has its own). */
+  emptyMessage?: string;
   employees: EodByEmployeeRowDto[];
   isLoading: boolean;
   onExport: (key: string, employeeIds?: number[]) => void;
@@ -709,7 +703,7 @@ function TeamFlow({
       {isLoading ? (
         <GlobalLoader fullScreen={false} compact label="Loading entries..." />
       ) : pageRows.length === 0 ? (
-        <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>No EOD entries match these filters. Widen the date range or clear a filter.</div>
+        <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>{emptyMessage ?? 'No EOD entries match these filters. Widen the date range or clear a filter.'}</div>
       ) : (
         // Scrolls vertically through employees and horizontally through the entry
         // columns; the minWidth on each group keeps that employee's summary row
@@ -838,27 +832,21 @@ function TeamFlow({
 
 // ── main ───────────────────────────────────────────────────────────────────────
 
-export default function EodByEmployeeReport({ defaultToCurrentMonth = false }: { defaultToCurrentMonth?: boolean } = {}) {
+export default function EodByEmployeeReport({ source = PM_REPORT_SOURCE }: { source?: EodReportSource } = {}) {
   // Lazy initialiser: the default range is computed from the local clock when the page mounts.
-  const [filters, setFilters] = useState<Filters>(() => defaultFilters(defaultToCurrentMonth));
-  // Preset buttons (Super Admin EOD Reports only, via the same opt-in prop). The active preset is
-  // explicit state: clicking a preset sets From/To; editing either date by hand — or clicking Custom —
-  // makes Custom active and leaves the dates alone; Reset goes back to This month. Changing any other
-  // filter leaves the preset as it was.
-  const [preset, setPreset] = useState<ReportRangePreset>('thisMonth');
+  const [filters, setFilters] = useState<Filters>(() => defaultFilters());
+  // Preset pills: picking one sets From/To; editing either date by hand makes Custom active; Reset
+  // goes back to This month. Changing any other filter leaves the pill as it was (useReportPreset).
+  const { preset, onPresetSelect, noteRangeEdit, reset } = useReportPreset(
+    ({ from, to }) => setFilters(f => ({ ...f, from, to })),
+  );
   function handleFilterChange(next: Filters) {
-    if (next.from !== filters.from || next.to !== filters.to) setPreset('custom');
+    noteRangeEdit(filters, next);
     setFilters(next);
   }
-  function handlePresetSelect(p: ReportRangePreset) {
-    setPreset(p);
-    if (p === 'custom') return;
-    const { from, to } = resolveReportPreset(p);
-    setFilters(f => ({ ...f, from, to }));
-  }
   function handleReset() {
-    setPreset('thisMonth');
-    setFilters(defaultFilters(defaultToCurrentMonth));
+    reset();
+    setFilters(defaultFilters());
   }
 
   const [flow, setFlow] = useState<'roster' | 'team'>('roster');
@@ -869,7 +857,7 @@ export default function EodByEmployeeReport({ defaultToCurrentMonth = false }: {
   // Both ends are required by the endpoint, so nothing is requested until both are picked.
   const hasRange = filters.from !== '' && filters.to !== '';
 
-  const { data, isLoading, isError, refetch } = useEodByEmployeeReport({
+  const { data, isLoading, isError, refetch } = source.useReport({
     from: filters.from,
     to: filters.to,
     projectId: filterId(filters.projectId),
@@ -903,7 +891,7 @@ export default function EodByEmployeeReport({ defaultToCurrentMonth = false }: {
     if (!hasRange) return;
     setExportingKey(key);
     try {
-      await exportEodByEmployee({
+      await source.exportReport({
         from: filters.from,
         to: filters.to,
         projectId: filterId(filters.projectId),
@@ -944,16 +932,15 @@ export default function EodByEmployeeReport({ defaultToCurrentMonth = false }: {
       </div>
 
       <FilterBar
-        filters={filters} onChange={handleFilterChange} onReset={handleReset} summary={data}
-        defaultToCurrentMonth={defaultToCurrentMonth}
-        preset={preset} onPresetSelect={handlePresetSelect}
+        filters={filters} onChange={handleFilterChange} onReset={handleReset} source={source}
+        preset={preset} onPresetSelect={onPresetSelect}
         format={format} onFormatChange={setFormat}
         onDownloadAll={() => runExport('all')} downloadingAll={exportingKey === 'all'}
         employeeMatches={employeeMatches} onPickEmployee={pickEmployee}
       />
 
-      {/* Opt-in only. "—" until a full range has produced a response, so a cleared date never reads as zero. */}
-      {defaultToCurrentMonth && <EodReportKpis summary={hasRange ? data : undefined} />}
+      {/* "—" until a full range has produced a response, so a cleared date never reads as zero. */}
+      <EodReportKpis summary={hasRange ? data : undefined} loading={hasRange && isLoading} />
 
       {!hasRange ? (
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
@@ -971,15 +958,15 @@ export default function EodByEmployeeReport({ defaultToCurrentMonth = false }: {
       ) : flow === 'roster' ? (
         <RosterFlow
           employees={employees} isLoading={isLoading} onExport={runExport} exportingKey={exportingKey}
-          selectedId={selectedId} setSelectedId={setSelectedId}
+          selectedId={selectedId} setSelectedId={setSelectedId} emptyMessage={source.emptyMessage}
         />
       ) : (
-        <TeamFlow employees={employees} isLoading={isLoading} onExport={runExport} exportingKey={exportingKey} />
+        <TeamFlow employees={employees} isLoading={isLoading} onExport={runExport} exportingKey={exportingKey} emptyMessage={source.emptyMessage} />
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 11.5, color: 'var(--txt-dim)' }}>
         <Users size={13} aria-hidden="true" />
-        Scoped to the employees allocated to your projects in this date range.
+        {source.scopeNote}
       </div>
     </div>
   );

@@ -61,6 +61,7 @@ const MyReportsUtilization = lazy(() => import('./pages/my-reports/Utilization')
 const MyReportsApprovals   = lazy(() => import('./pages/my-reports/Approvals'));
 const MyReportsBlockers    = lazy(() => import('./pages/my-reports/Blockers'));
 const MyReportsEodInbox    = lazy(() => import('./pages/my-reports/EodInbox'));
+const MyReportsReports     = lazy(() => import('./pages/my-reports/Reports'));
 
 // Super Admin Reportee Views — Project Manager Views only (Team Lead Views was removed from
 // Super Admin's navigation/access; Team Lead's own navigation/permissions are unaffected).
@@ -264,6 +265,7 @@ function AppRoutes() {
             <Route path="/my-reports/approvals"   element={<MyReportsApprovals />} />
             <Route path="/my-reports/blockers"    element={<MyReportsBlockers />} />
             <Route path="/my-reports/eod-inbox"   element={<MyReportsEodInbox />} />
+            <Route path="/my-reports/reports"     element={<MyReportsReports />} />
 
             {/* ── Shared ─────────────────────────────── */}
             <Route path="/notifications"   element={<Notifications />} />

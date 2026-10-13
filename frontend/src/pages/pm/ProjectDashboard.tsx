@@ -1,15 +1,18 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   FolderKanban, CheckCircle2, PauseCircle, Archive, Gauge,
   AlertTriangle, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown, X,
-  Calendar as CalendarIcon,
 } from 'lucide-react';
 import { KpiCard, ClickableKpi } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { HeroBanner } from '../../components/dashboard/HeroBanner';
 import { Pagination } from '../../components/Pagination';
+import { ReportDateRange } from '../../components/ReportDateRange';
+import type { DateRange, ReportRangePreset } from '../../lib/dateRange';
+import { initialReportRange } from '../../lib/reportDefaultRange';
+import { useReportPreset } from '../../lib/useReportPreset';
 import { useAuth } from '../../lib/auth';
 import { searchUsers } from '../../api/admin';
 import {
@@ -166,419 +169,6 @@ function StatusPill({ color, label }: { color: string; label: string }) {
   );
 }
 
-// ── date range filter ────────────────────────────────────────────────────────
-// DD / MM / YYYY are each their own <input> here, not one text field with a rebuild-the-whole-
-// string mask — a single-field digit mask can't tell "the digits that used to be YYYY" apart
-// from "the digits that used to be MM" once any middle portion is cleared, so clearing one
-// component was sliding the others into its place. Three independently-bounded (maxLength 2/2/4)
-// inputs make that structurally impossible: clearing DD can only ever touch DD's own state.
-// Explicit calendar/leap-year arithmetic (never `new Date()` parsing/normalization), a
-// future-date check for To, and a From <= To check are unchanged, and still funnel through one
-// validation path shared by both manual typing and the calendar picker. Kept local to this page
-// rather than folded into the shared `components/DatePicker.tsx`, since that component is also
-// used by Submit EOD, Admin User Management, and two other PM report pages that this change
-// must not touch.
-
-const MIN_ISO_DATE = '1900-01-01';
-const MAX_ISO_DATE = '2099-12-31';
-const MIN_YEAR = 1900;
-const MAX_YEAR = 2099;
-
-const DDMMYYYY_RE = /^(\d{2})-(\d{2})-(\d{4})$/;
-const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-function isLeapYear(year: number): boolean {
-  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-}
-
-function daysInMonth(month: number, year: number): number {
-  return month === 2 && isLeapYear(year) ? 29 : DAYS_IN_MONTH[month - 1];
-}
-
-/** Strictly parses `DD-MM-YYYY` into `YYYY-MM-DD` by digit-count regex plus arithmetic
- * range/leap-year checks — never by constructing a `Date` and reading back whatever it
- * silently normalized to. Returns `null` for anything that isn't a genuine calendar date. */
-function parseStrictDDMMYYYY(text: string): string | null {
-  const m = DDMMYYYY_RE.exec(text.trim());
-  if (!m) return null;
-  const day = Number(m[1]);
-  const month = Number(m[2]);
-  const year = Number(m[3]);
-  if (month < 1 || month > 12) return null;
-  if (year < MIN_YEAR || year > MAX_YEAR) return null;
-  if (day < 1 || day > daysInMonth(month, year)) return null;
-  return `${m[3]}-${m[2]}-${m[1]}`;
-}
-
-/** One date field's three independent segments, as raw (possibly partial) digit strings. */
-interface DateParts { day: string; month: string; year: string }
-
-const EMPTY_PARTS: DateParts = { day: '', month: '', year: '' };
-
-/** `YYYY-MM-DD` → `{ day, month, year }`, for seeding the three segment inputs from a
- * calendar-picker selection or the parent's committed value. */
-function isoToParts(iso: string): DateParts {
-  if (!iso) return EMPTY_PARTS;
-  const [year, month, day] = iso.split('-');
-  return { day, month, year };
-}
-
-function partsAreEmpty(p: DateParts): boolean {
-  return p.day === '' && p.month === '' && p.year === '';
-}
-
-/** True once every segment has been typed out to its full width — the only point at which a
- * date is complete enough to run calendar validation on; anything short of this is still
- * mid-edit and must be treated as neither valid nor an error. */
-function partsAreComplete(p: DateParts): boolean {
-  return p.day.length === 2 && p.month.length === 2 && p.year.length === 4;
-}
-
-function partsToDDMMYYYY(p: DateParts): string {
-  return `${p.day}-${p.month}-${p.year}`;
-}
-
-// Both sides are always fixed-width, zero-padded `YYYY-MM-DD` by this point, so a plain
-// string comparison is chronologically correct — no Date object, no timezone risk.
-function isRangeValid(from: string, to: string): boolean {
-  if (from === '' || to === '') return true;
-  return from <= to;
-}
-
-/** Today as zero-padded `YYYY-MM-DD`, read from local date parts (never UTC/`toISOString`,
- * which can shift the calendar day depending on the browser's timezone offset). */
-function todayIsoLocal(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${mo}-${day}`;
-}
-
-/** The 1st of the current local month, as `YYYY-MM-DD` — the dashboard's default From date on
- * every fresh login, computed off today's actual local date rather than any fixed month/year. */
-function firstDayOfMonthIsoLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-}
-
-/** Strips everything but digits and caps to `max` — the only transform a segment's own value
- * ever goes through; the native `maxLength` attribute backs this up for paste as well. */
-function digitsOnly(raw: string, max: number): string {
-  return raw.replace(/\D/g, '').slice(0, max);
-}
-
-/** Whether the dashboard should show data at all: 'ready' covers both a fully valid From+To
- * pair and both-empty (falls back to the backend's own default range); 'invalid' — bad
- * format, an incomplete pair, a future To date, or From > To — must never show data, so the
- * page renders a validation notice instead. */
-type DateRangeStatus = 'ready' | 'invalid';
-
-function DateRangeFilter({ from, to, onApply, onStatusChange }: {
-  /** Committed ISO values from the parent — read only to seed this component's own text
-   * state on mount; never written back to directly (only via onApply). */
-  from: string;
-  to: string;
-  onApply: (from: string, to: string) => void;
-  onStatusChange: (status: DateRangeStatus) => void;
-}) {
-  const [fromParts, setFromParts] = useState<DateParts>(() => isoToParts(from));
-  const [toParts, setToParts] = useState<DateParts>(() => isoToParts(to));
-  const [dateError, setDateError] = useState<string | null>(null);
-  const [fromInvalid, setFromInvalid] = useState(false);
-  const [toInvalid, setToInvalid] = useState(false);
-
-  // Focus targets for auto-advance (day → month → year) and backspace-to-previous-segment.
-  const fromGroupRef = useRef<HTMLDivElement>(null);
-  const toGroupRef = useRef<HTMLDivElement>(null);
-  const fromMonthRef = useRef<HTMLInputElement>(null);
-  const fromYearRef = useRef<HTMLInputElement>(null);
-  const fromDayRef = useRef<HTMLInputElement>(null);
-  const toMonthRef = useRef<HTMLInputElement>(null);
-  const toYearRef = useRef<HTMLInputElement>(null);
-  const toDayRef = useRef<HTMLInputElement>(null);
-
-  // The single validation/commit path for BOTH manual typing (via the group blur handlers below)
-  // and the calendar picker (via handlePickerChange). Order: complete? → calendar validity →
-  // both-sides-present → To not in the future → From <= To. Only calls onApply once every step
-  // passes (or both sides are entirely empty); a merely *incomplete* pair (still being typed)
-  // reports 'invalid' silently — no error text — and never falls back to stale data.
-  function evaluate(f: DateParts, t: DateParts) {
-    const fEmpty = partsAreEmpty(f);
-    const tEmpty = partsAreEmpty(t);
-
-    if (fEmpty && tEmpty) {
-      setFromInvalid(false);
-      setToInvalid(false);
-      setDateError(null);
-      onStatusChange('ready');
-      onApply('', '');
-      return;
-    }
-
-    const fComplete = partsAreComplete(f);
-    const tComplete = partsAreComplete(t);
-
-    // Anything short of every segment being fully typed is mid-edit, not a bad date — stay
-    // quiet and simply withhold filtering until it's complete.
-    if ((!fEmpty && !fComplete) || (!tEmpty && !tComplete)) {
-      setFromInvalid(false);
-      setToInvalid(false);
-      setDateError(null);
-      onStatusChange('invalid');
-      return;
-    }
-
-    // Both sides are now either empty or fully typed. One side fully empty while the other is
-    // complete is an incomplete pair — same silent withholding as above.
-    if (fEmpty || tEmpty) {
-      setDateError(null);
-      onStatusChange('invalid');
-      return;
-    }
-
-    const fromIso = parseStrictDDMMYYYY(partsToDDMMYYYY(f));
-    const toIso = parseStrictDDMMYYYY(partsToDDMMYYYY(t));
-    const fromBad = fromIso === null;
-    const toBad = toIso === null;
-    setFromInvalid(fromBad);
-    setToInvalid(toBad);
-
-    if (fromBad || toBad) {
-      setDateError('Invalid date. Please enter a valid date in DD-MM-YYYY format.');
-      onStatusChange('invalid');
-      return;
-    }
-
-    if (toIso! > todayIsoLocal()) {
-      setToInvalid(true);
-      setDateError('To date cannot be a future date.');
-      onStatusChange('invalid');
-      return;
-    }
-
-    if (!isRangeValid(fromIso!, toIso!)) {
-      setDateError('From date cannot be later than To date.');
-      onStatusChange('invalid');
-      return;
-    }
-
-    setDateError(null);
-    onStatusChange('ready');
-    onApply(fromIso!, toIso!);
-  }
-
-  // Zero-pads a single leftover digit (user typed "5" then tabbed/clicked away) so "5" and "05"
-  // behave identically — applied only once the user has actually left the whole DD-MM-YYYY group,
-  // never mid-edit.
-  function padParts(p: DateParts): DateParts {
-    return {
-      day: p.day.length === 1 ? p.day.padStart(2, '0') : p.day,
-      month: p.month.length === 1 ? p.month.padStart(2, '0') : p.month,
-      year: p.year,
-    };
-  }
-
-  // Fires only when focus has left the entire From (or To) group of three segment inputs —
-  // not on every inter-segment blur — so validation runs once per completed edit, exactly when
-  // "a complete date has been entered", rather than while the user is still mid-component.
-  function handleFromGroupBlur(e: React.FocusEvent) {
-    if (fromGroupRef.current?.contains(e.relatedTarget as Node | null)) return;
-    const padded = padParts(fromParts);
-    if (padded.day !== fromParts.day || padded.month !== fromParts.month) setFromParts(padded);
-    evaluate(padded, toParts);
-  }
-
-  function handleToGroupBlur(e: React.FocusEvent) {
-    if (toGroupRef.current?.contains(e.relatedTarget as Node | null)) return;
-    const padded = padParts(toParts);
-    if (padded.day !== toParts.day || padded.month !== toParts.month) setToParts(padded);
-    evaluate(fromParts, padded);
-  }
-
-  // The calendar picker's native <input type="date"> value is browser-guaranteed to be either
-  // empty or a genuine valid date, but it still funnels through the same `evaluate` so a picker
-  // pick and manual entry are validated/committed identically — including the From <= To and
-  // future-To checks. Unlike manual entry, a picker pick is always already complete, so it
-  // evaluates immediately rather than waiting for the group to lose focus.
-  function handlePickerChange(field: 'from' | 'to', e: React.ChangeEvent<HTMLInputElement>) {
-    const parts = isoToParts(e.target.value);
-    if (field === 'from') {
-      setFromParts(parts);
-      evaluate(parts, toParts);
-    } else {
-      setToParts(parts);
-      evaluate(fromParts, parts);
-    }
-  }
-
-  function handleEnter(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') e.currentTarget.blur();
-  }
-
-  /** Backspace on an already-empty segment moves focus (never digits) to the previous segment,
-   * landing the caret at its end so backspacing can continue — a pure focus move, so it can
-   * never pull digits across component boundaries. */
-  function backspaceToPrev(e: React.KeyboardEvent<HTMLInputElement>, current: string, prevRef: React.RefObject<HTMLInputElement | null>) {
-    if (e.key !== 'Backspace' || current !== '') return;
-    const prev = prevRef.current;
-    if (!prev) return;
-    e.preventDefault();
-    prev.focus();
-    prev.setSelectionRange(prev.value.length, prev.value.length);
-  }
-
-  function focusAndSelect(input: HTMLInputElement | null) {
-    input?.focus();
-    input?.select();
-  }
-
-  const segStyle: React.CSSProperties = {
-    border: 'none', background: 'transparent', outline: 'none', color: 'inherit',
-    font: 'inherit', textAlign: 'center', padding: 0, boxSizing: 'border-box', flexShrink: 0,
-  };
-  // Fixed px, not `ch` — `ch` sizes off the current font's digit ('0') advance width, but the
-  // placeholders here are letters ("DD"/"MM"/"YYYY"), which render wider than digits in Inter.
-  // A `2ch`/`4ch` box was clipping its own placeholder text even though the segment held a
-  // "complete" value. These widths are sized to the letter placeholders, the wider case, so the
-  // same box comfortably fits either the placeholder or two/four typed digits.
-  const SEG_WIDTH_DD_MM = 22;
-  const SEG_WIDTH_YYYY = 38;
-  const sepStyle: React.CSSProperties = { color: 'var(--txt-dim)', flexShrink: 0 };
-  // "From" and "To" are different lengths, so a plain inline label left the icon — which was
-  // pinned to a fixed offset from the *container's* right edge — sitting behind a variable
-  // amount of slack: identical container width and identical icon offset still produced a
-  // visibly bigger gap after "To" than after "From", since less label text meant less content
-  // pushing the segments (and the fixed-position icon) toward the right. A fixed-width,
-  // right-aligned label box makes both labels end at the same x position regardless of text
-  // length, so "DD" always starts from the same spot in both fields.
-  const LABEL_WIDTH = 30;
-  const labelStyle: React.CSSProperties = {
-    color: 'var(--txt-dim)', fontSize: 12, width: LABEL_WIDTH, textAlign: 'right', flexShrink: 0,
-  };
-
-  return (
-    <>
-      <div
-        ref={fromGroupRef}
-        onBlur={handleFromGroupBlur}
-        style={{ ...inputStyle, display: 'inline-flex', alignItems: 'center', gap: 4, width: 196, paddingRight: 10, fontWeight: 400 }}
-      >
-        <span style={labelStyle}>From</span>
-        <input
-          ref={fromDayRef}
-          type="text" inputMode="numeric" placeholder="DD" maxLength={2}
-          value={fromParts.day}
-          onChange={e => {
-            const day = digitsOnly(e.target.value, 2);
-            setFromParts(p => ({ ...p, day }));
-            if (day.length === 2) focusAndSelect(fromMonthRef.current);
-          }}
-          onKeyDown={handleEnter}
-          aria-label="From day" aria-invalid={fromInvalid}
-          style={{ ...segStyle, width: SEG_WIDTH_DD_MM }}
-        />
-        <span style={sepStyle}>-</span>
-        <input
-          ref={fromMonthRef}
-          type="text" inputMode="numeric" placeholder="MM" maxLength={2}
-          value={fromParts.month}
-          onChange={e => {
-            const month = digitsOnly(e.target.value, 2);
-            setFromParts(p => ({ ...p, month }));
-            if (month.length === 2) focusAndSelect(fromYearRef.current);
-          }}
-          onKeyDown={e => { backspaceToPrev(e, fromParts.month, fromDayRef); handleEnter(e); }}
-          aria-label="From month" aria-invalid={fromInvalid}
-          style={{ ...segStyle, width: SEG_WIDTH_DD_MM }}
-        />
-        <span style={sepStyle}>-</span>
-        <input
-          ref={fromYearRef}
-          type="text" inputMode="numeric" placeholder="YYYY" maxLength={4}
-          value={fromParts.year}
-          onChange={e => setFromParts(p => ({ ...p, year: digitsOnly(e.target.value, 4) }))}
-          onKeyDown={e => { backspaceToPrev(e, fromParts.year, fromMonthRef); handleEnter(e); }}
-          aria-label="From year" aria-invalid={fromInvalid}
-          style={{ ...segStyle, width: SEG_WIDTH_YYYY }}
-        />
-        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, flexShrink: 0 }}>
-          <CalendarIcon size={13} aria-hidden="true" style={{ color: 'var(--txt-dim)', pointerEvents: 'none' }} />
-          <input
-            type="date" min={MIN_ISO_DATE} max={MAX_ISO_DATE}
-            value={from}
-            onChange={e => handlePickerChange('from', e)}
-            tabIndex={-1}
-            aria-label="Pick From date from calendar"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }}
-          />
-        </div>
-      </div>
-      <span style={{ color: 'var(--txt-dim)', fontSize: 12 }}>→</span>
-      <div
-        ref={toGroupRef}
-        onBlur={handleToGroupBlur}
-        style={{ ...inputStyle, display: 'inline-flex', alignItems: 'center', gap: 4, width: 196, paddingRight: 10, fontWeight: 400 }}
-      >
-        <span style={labelStyle}>To</span>
-        <input
-          ref={toDayRef}
-          type="text" inputMode="numeric" placeholder="DD" maxLength={2}
-          value={toParts.day}
-          onChange={e => {
-            const day = digitsOnly(e.target.value, 2);
-            setToParts(p => ({ ...p, day }));
-            if (day.length === 2) focusAndSelect(toMonthRef.current);
-          }}
-          onKeyDown={handleEnter}
-          aria-label="To day" aria-invalid={toInvalid}
-          style={{ ...segStyle, width: SEG_WIDTH_DD_MM }}
-        />
-        <span style={sepStyle}>-</span>
-        <input
-          ref={toMonthRef}
-          type="text" inputMode="numeric" placeholder="MM" maxLength={2}
-          value={toParts.month}
-          onChange={e => {
-            const month = digitsOnly(e.target.value, 2);
-            setToParts(p => ({ ...p, month }));
-            if (month.length === 2) focusAndSelect(toYearRef.current);
-          }}
-          onKeyDown={e => { backspaceToPrev(e, toParts.month, toDayRef); handleEnter(e); }}
-          aria-label="To month" aria-invalid={toInvalid}
-          style={{ ...segStyle, width: SEG_WIDTH_DD_MM }}
-        />
-        <span style={sepStyle}>-</span>
-        <input
-          ref={toYearRef}
-          type="text" inputMode="numeric" placeholder="YYYY" maxLength={4}
-          value={toParts.year}
-          onChange={e => setToParts(p => ({ ...p, year: digitsOnly(e.target.value, 4) }))}
-          onKeyDown={e => { backspaceToPrev(e, toParts.year, toMonthRef); handleEnter(e); }}
-          aria-label="To year" aria-invalid={toInvalid}
-          style={{ ...segStyle, width: SEG_WIDTH_YYYY }}
-        />
-        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, flexShrink: 0 }}>
-          <CalendarIcon size={13} aria-hidden="true" style={{ color: 'var(--txt-dim)', pointerEvents: 'none' }} />
-          <input
-            type="date" min={MIN_ISO_DATE} max={todayIsoLocal()}
-            value={to}
-            onChange={e => handlePickerChange('to', e)}
-            tabIndex={-1}
-            aria-label="Pick To date from calendar"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }}
-          />
-        </div>
-      </div>
-      {dateError && (
-        <span role="alert" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--risk)' }}>
-          <AlertTriangle size={12} aria-hidden="true" /> {dateError}
-        </span>
-      )}
-    </>
-  );
-}
-
 // ── filter bar ─────────────────────────────────────────────────────────────────
 
 interface Filters {
@@ -613,14 +203,14 @@ function PmScopeSelect({ value, onChange }: { value: string; onChange: (pmId: st
   );
 }
 
-function FilterBar({ filters, onChange, onDateStatusChange, isSuperAdmin }: {
-  filters: Filters; onChange: (next: Filters) => void; onDateStatusChange: (status: DateRangeStatus) => void;
+function FilterBar({ filters, onChange, onClear, preset, onPresetSelect, isSuperAdmin }: {
+  filters: Filters; onChange: (next: Filters) => void; onClear: () => void;
+  preset: ReportRangePreset; onPresetSelect: (preset: ReportRangePreset) => void;
   isSuperAdmin: boolean;
 }) {
   const { data: options } = useProjectDashboardFilters(filters.pmId ? Number(filters.pmId) : undefined);
-  // Bumped on "Clear" to remount DateRangeFilter, resetting its internal text/error state to
-  // match the now-cleared from/to props — simpler than lifting that state up into this bar.
-  const [clearGen, setClearGen] = useState(0);
+  const defaultRange = initialReportRange();
+  const rangeIsDefault = filters.from === defaultRange.from && filters.to === defaultRange.to;
 
   return (
     <Card style={{ padding: '14px 16px', marginBottom: 20 }}>
@@ -672,22 +262,10 @@ function FilterBar({ filters, onChange, onDateStatusChange, isSuperAdmin }: {
           {options?.clients.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
 
-        <DateRangeFilter
-          key={clearGen}
-          from={filters.from}
-          to={filters.to}
-          onApply={(from, to) => onChange({ ...filters, from, to })}
-          onStatusChange={onDateStatusChange}
-        />
-
-        {(filters.projectId || filters.employeeId || filters.teamManagerId || filters.client) && (
+        {(filters.projectId || filters.employeeId || filters.teamManagerId || filters.client || !rangeIsDefault) && (
           <button
             type="button"
-            onClick={() => {
-              onChange({ ...filters, projectId: '', employeeId: '', teamManagerId: '', client: '', from: '', to: '' });
-              onDateStatusChange('ready');
-              setClearGen(g => g + 1);
-            }}
+            onClick={onClear}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
               padding: '8px 10px', background: 'transparent', border: '1px solid var(--line2)',
@@ -697,6 +275,12 @@ function FilterBar({ filters, onChange, onDateStatusChange, isSuperAdmin }: {
             <X size={12} aria-hidden="true" /> Clear
           </button>
         )}
+      </div>
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+        <ReportDateRange
+          range={{ from: filters.from, to: filters.to }} preset={preset} onPresetSelect={onPresetSelect} clearable
+          onRangeChange={next => onChange({ ...filters, ...next })}
+        />
       </div>
     </Card>
   );
@@ -946,17 +530,30 @@ export default function ProjectDashboard() {
   const isSuperAdmin = user!.role === 'superadmin';
   // From/To default to the 1st of the current month through today, computed fresh off the
   // real local date (never a fixed month/year) — and are never persisted to storage, so this
-  // plain useState re-derives that same default on every fresh mount, including the one that
+  // lazy useState re-derives that same default on every fresh mount, including the one that
   // follows a logout/login (the protected route tree unmounts entirely on logout). Any custom
   // dates a user picks live only in this instance's state and vanish with it — the next login,
   // by the same user or a different one, always starts from this computed default again.
-  const [filters, setFilters] = useState<Filters>({
-    from: firstDayOfMonthIsoLocal(), to: todayIsoLocal(),
+  const [filters, setFilters] = useState<Filters>(() => ({
+    ...initialReportRange(),
     projectId: '', employeeId: '', teamManagerId: '', client: '', pmId: '',
-  });
-  // Gates whether the dashboard shows data at all — see DateRangeFilter above. Starts 'ready'
-  // since the initial From+To pair is already a valid, complete range.
-  const [dateFilterStatus, setDateFilterStatus] = useState<DateRangeStatus>('ready');
+  }));
+  // Preset pills: picking one sets From/To; editing either date by hand makes Custom active (useReportPreset).
+  const { preset, onPresetSelect, noteRangeEdit, reset: resetPreset } = useReportPreset(
+    ({ from, to }: DateRange) => setFilters(f => ({ ...f, from, to })),
+  );
+  function handleFilterChange(next: Filters) {
+    noteRangeEdit(filters, next);
+    setFilters(next);
+  }
+  // "Clear" puts everything back to the defaults, including the date range (This month → today).
+  function handleClear() {
+    resetPreset();
+    setFilters(f => ({ ...f, ...initialReportRange(), projectId: '', employeeId: '', teamManagerId: '', client: '' }));
+  }
+  // Both ends are needed to show a range. Clearing one blanks the picker and shows a notice; the
+  // picker caps To at today and bounds From by To, so From > To can't be entered.
+  const rangeValid = filters.from !== '' && filters.to !== '';
 
   const { data, isPending, isError, refetch } = useProjectDashboardSummary({
     from: filters.from || undefined,
@@ -966,7 +563,7 @@ export default function ProjectDashboard() {
     teamManagerId: filters.teamManagerId ? Number(filters.teamManagerId) : undefined,
     client: filters.client || undefined,
     pmId: isSuperAdmin && filters.pmId ? Number(filters.pmId) : undefined,
-  }, dateFilterStatus !== 'invalid');
+  }, rangeValid);
 
   if (isPending) {
     return <GlobalLoader fullScreen={false} />;
@@ -999,9 +596,12 @@ export default function ProjectDashboard() {
         <HeroBanner subtitle="Resource utilization, project health and EOD compliance across your portfolio." />
       </div>
 
-      <FilterBar filters={filters} onChange={setFilters} onDateStatusChange={setDateFilterStatus} isSuperAdmin={isSuperAdmin} />
+      <FilterBar
+        filters={filters} onChange={handleFilterChange} onClear={handleClear}
+        preset={preset} onPresetSelect={onPresetSelect} isSuperAdmin={isSuperAdmin}
+      />
 
-      {dateFilterStatus === 'invalid' ? (
+      {!rangeValid ? (
         <Card style={{ padding: '40px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
             Enter valid From and To dates to view the dashboard for that range.

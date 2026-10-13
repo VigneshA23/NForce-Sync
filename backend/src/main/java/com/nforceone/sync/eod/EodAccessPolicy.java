@@ -7,7 +7,7 @@ import com.nforceone.sync.teamlead.LeadAccessService;
 import org.springframework.stereotype.Component;
 
 @Component
-class EodAccessPolicy {
+public class EodAccessPolicy {
 
     private final LeadAccessService leadAccess;
     private final ReportingScopeService reportingScope;
@@ -15,6 +15,31 @@ class EodAccessPolicy {
     EodAccessPolicy(LeadAccessService leadAccess, ReportingScopeService reportingScope) {
         this.leadAccess = leadAccess;
         this.reportingScope = reportingScope;
+    }
+
+    // ── My Reporting Team > Reports ────────────────────────────────────────────────────────────
+
+    /**
+     * May this user open My Reporting Team > Reports at all? Derived from data, never from a role: yes when
+     * at least one ACTIVE person reports directly to him (the same definition as the sidebar flag).
+     */
+    public boolean mayViewReportingTeamReports(AppUser actor) {
+        return reportingScope.hasDirectReports(actor.getId());
+    }
+
+    /**
+     * The employees the actor may list in My Reporting Team > Reports: his current ACTIVE direct reports,
+     * plus anyone who has entries in the range whose frozen manager snapshot is the actor (a former report,
+     * whose history stays with him). Never himself; empty when he has no direct reports.
+     *
+     * @param snapshotEmployeeIds employees of the entries found for the actor by the manager snapshot
+     */
+    public java.util.Set<Long> reportingTeamReportRoster(AppUser actor, java.util.Collection<Long> snapshotEmployeeIds) {
+        if (!mayViewReportingTeamReports(actor)) return java.util.Set.of();
+        java.util.Set<Long> roster = new java.util.LinkedHashSet<>(reportingScope.directReportIds(actor.getId()));
+        roster.addAll(snapshotEmployeeIds);
+        roster.remove(actor.getId());
+        return roster;
     }
 
     /** How much of an entry the actor may see. LEAD_SCOPED = only the tasks on projects he leads. */

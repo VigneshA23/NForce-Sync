@@ -71,7 +71,7 @@ export function useEodByEmployeeReport(filters: EodByEmployeeFilterParams, enabl
 }
 
 /** Reads the filename off Content-Disposition; falls back to a generic name if the header is missing. */
-function filenameFromResponse(contentDisposition: string | undefined, fallback: string): string {
+export function filenameFromResponse(contentDisposition: string | undefined, fallback: string): string {
   const match = contentDisposition?.match(/filename="?([^";]+)"?/i);
   return match?.[1] ?? fallback;
 }
@@ -88,7 +88,7 @@ export async function exportEodByEmployee(params: EodByEmployeeExportParams): Pr
   downloadBlob(response.data as Blob, filename);
 }
 
-function downloadBlob(blob: Blob, filename: string): void {
+export function downloadBlob(blob: Blob, filename: string): void {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

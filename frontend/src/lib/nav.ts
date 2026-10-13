@@ -223,6 +223,7 @@ const MY_REPORTS_SECTIONS: RoleNav = [
       { key: 'rm-overview',    label: 'Team Overview',         path: '/my-reports/overview',    icon: LayoutDashboard },
       { key: 'rm-eod-status',  label: 'Team EOD Status',       path: '/my-reports/eod-status',  icon: ClipboardList },
       { key: 'rm-utilization', label: 'Team Utilization',      path: '/my-reports/utilization', icon: Activity },
+      { key: 'rm-reports',     label: 'Reports',               path: '/my-reports/reports',     icon: BarChart3 },
       { key: 'rm-approvals',   label: 'Pending Approvals',     path: '/my-reports/approvals',   icon: ClipboardCheck },
       // A lead's own blockers on projects he leads are handled by his reporting manager here; they are
       // excluded from Team Blockers. Shown to everyone with direct reports, leads included.

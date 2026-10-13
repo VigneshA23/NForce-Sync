@@ -1030,3 +1030,12 @@ html[data-high-contrast="true"][data-status-cues="true"][data-theme="light"] {
   .nf-dl-actionbar > div { width: 100%; }
   .nf-dl-actionbar button { flex: 1 1 auto; justify-content: center; }
 }
+
+/* KpiCard loading placeholder */
+@keyframes nf-kpi-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [aria-busy="true"] [role="status"] { animation: none !important; }
+}

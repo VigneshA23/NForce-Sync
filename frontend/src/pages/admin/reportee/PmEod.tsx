@@ -10,7 +10,6 @@ export default function ReporteePmEod() {
       <ReporteeViewBanner label="Project Manager Views: EOD Reports" />
       <ReportsDashboard
         initialTab="eod"
-        defaultToCurrentMonth
         title="EOD Reports"
         subtitle="Employee-wise EOD exports and compliance across all projects"
       />

@@ -67,6 +67,16 @@ public interface EodEntryRepository extends JpaRepository<EodEntry, Long> {
                                                                    @Param("from") LocalDate from,
                                                                    @Param("to") LocalDate to);
 
+    // Entries whose frozen reporting manager (the V57 snapshot, set at submission) is this user, with every
+    // task line fetched — the source for My Reporting Team > Reports, so history stays with whoever managed
+    // the employee at submission. Drafts and missed days carry no snapshot and never appear here.
+    @EntityGraph(attributePaths = {"employee", "tasks", "tasks.project", "tasks.taskCategory"})
+    @Query("SELECT e FROM EodEntry e WHERE e.managerId = :managerId " +
+           "AND e.entryDate BETWEEN :from AND :to")
+    List<EodEntry> findWithTasksByManagerIdAndEntryDateBetween(@Param("managerId") Long managerId,
+                                                                @Param("from") LocalDate from,
+                                                                @Param("to") LocalDate to);
+
     // Pending approvals for a manager — custom JPQL with EntityGraph-equivalent JOIN FETCH.
     // An entry with an open EOD Clarification round stays in this list (does not move anywhere) —
     // ApprovalsRow/EntryRow flags it with a "Clarification Requested" badge instead (see

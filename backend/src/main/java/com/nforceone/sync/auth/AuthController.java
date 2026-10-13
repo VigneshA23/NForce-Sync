@@ -41,6 +41,7 @@ public class AuthController {
     private final ProjectRepository projectRepository;
     private final AllocationRepository allocationRepository;
     private final com.nforceone.sync.project.PmScopeService pmScopeService;
+    private final com.nforceone.sync.reporting.ReportingScopeService reportingScopeService;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtService jwtService,
@@ -51,7 +52,8 @@ public class AuthController {
                           PasswordResetTokenRepository passwordResetTokenRepository,
                           ProjectRepository projectRepository,
                           AllocationRepository allocationRepository,
-                          com.nforceone.sync.project.PmScopeService pmScopeService) {
+                          com.nforceone.sync.project.PmScopeService pmScopeService,
+                          com.nforceone.sync.reporting.ReportingScopeService reportingScopeService) {
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.appUserRepository = appUserRepository;
@@ -62,6 +64,7 @@ public class AuthController {
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
         this.pmScopeService = pmScopeService;
+        this.reportingScopeService = reportingScopeService;
     }
 
     @PostMapping("/login")
@@ -212,7 +215,9 @@ public class AuthController {
                 .stream().filter(p -> p.getStatus() == Project.Status.ACTIVE).toList();
         List<Project> managed = pmScopeService.managedProjects(user.getId())
                 .stream().filter(p -> p.getStatus() == Project.Status.ACTIVE).toList();
-        boolean hasDirectReports = appUserRepository.existsByManagerIdAndDeletedAtIsNull(user.getId());
+        // The sidebar flag uses the one shared ACTIVE-only definition (ReportingScopeService), the same as the
+        // reporting team lists: only ACTIVE people count towards having a My Reporting Team section.
+        boolean hasDirectReports = reportingScopeService.hasDirectReports(user.getId());
         String eodForm = computeEodForm(user);
         return UserDto.from(user, led, managed, hasDirectReports, eodForm);
     }

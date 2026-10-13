@@ -31,13 +31,19 @@ interface KpiProps {
   /** Optional small trend chip under the value, e.g. "+5% vs last week". Only rendered when the
    *  caller has a real number to show — never fabricated. */
   trend?: KpiTrend;
+  /** Shows a placeholder bar instead of `value`, so a tile never flashes 0 before its data arrives. */
+  loading?: boolean;
+  /** Native tooltip on the tile, for a label that needs a qualifier (e.g. "approved entries only"). */
+  title?: string;
   style?: React.CSSProperties;
 }
 
-export function KpiCard({ icon, label, value, accent = 'var(--txt)', trend, style: extraStyle }: KpiProps) {
+export function KpiCard({ icon, label, value, accent = 'var(--txt)', trend, loading = false, title, style: extraStyle }: KpiProps) {
   const [hov, setHov] = useState(false);
   return (
     <div
+      title={title}
+      aria-busy={loading || undefined}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
@@ -95,7 +101,15 @@ export function KpiCard({ icon, label, value, accent = 'var(--txt)', trend, styl
         letterSpacing: '-0.02em', lineHeight: 1,
         fontVariantNumeric: 'tabular-nums', marginBottom: 5,
       }}>
-        {value}
+        {loading ? (
+          <span
+            role="status" aria-label={`Loading ${label}`}
+            style={{
+              display: 'inline-block', width: 56, height: 22, borderRadius: 6, verticalAlign: 'top',
+              background: 'var(--raised2)', animation: 'nf-kpi-pulse 1.2s ease-in-out infinite',
+            }}
+          />
+        ) : value}
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--txt-mut)', fontWeight: 500 }}>{label}</div>
       {trend && (

@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bell, Search, Users } from 'lucide-react';
 import { DatePicker } from '../../components/DatePicker';
+import { CurrentMonthNote } from '../../components/CurrentMonthNote';
+import { ReportRangePresets, RangeDayCount } from '../../components/ReportRangePresets';
+import { MissingEodKpis } from '../../components/MissingEodKpis';
+import type { ReportRangePreset } from '../../lib/dateRange';
+import { initialReportRange, showsCurrentMonthNote } from '../../lib/reportDefaultRange';
+import { useReportPreset } from '../../lib/useReportPreset';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { FilterSelect } from '../../components/FilterSelect';
 import { Pagination } from '../../components/Pagination';
@@ -113,8 +119,9 @@ interface Filters {
 }
 
 function defaultFilters(): Filters {
-  // Blank by design — the user picks the range; see the note in the report component.
-  return { from: '', to: '', projectId: '', employeeQuery: '' };
+  // Starts on the current month up to today (lib/reportDefaultRange.ts).
+  const { from, to } = initialReportRange();
+  return { from, to, projectId: '', employeeQuery: '' };
 }
 
 /**
@@ -217,7 +224,9 @@ function EmployeeSearch({ query, onQueryChange, matches, onPick }: {
   );
 }
 
-function FilterBar({ filters, onChange, onReset, employeeMatches, onPickEmployee }: {
+function FilterBar({ filters, onChange, onReset, employeeMatches, onPickEmployee, preset, onPresetSelect }: {
+  preset: ReportRangePreset;
+  onPresetSelect: (preset: ReportRangePreset) => void;
   filters: Filters;
   onChange: (next: Filters) => void;
   onReset: () => void;
@@ -238,6 +247,7 @@ function FilterBar({ filters, onChange, onReset, employeeMatches, onPickEmployee
 
   return (
     <Card style={{ padding: '14px 16px', marginBottom: 16 }}>
+      <ReportRangePresets active={preset} onSelect={onPresetSelect} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <FieldLabel>From *</FieldLabel>
@@ -246,7 +256,10 @@ function FilterBar({ filters, onChange, onReset, employeeMatches, onPickEmployee
           <DatePicker value={filters.from} onChange={v => set('from', v)} max={maxFrom} inputStyle={inputStyle()} quickNav clearable />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>To *</FieldLabel>
+          <span style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+            <FieldLabel>To *</FieldLabel>
+            <RangeDayCount from={filters.from} to={filters.to} />
+          </span>
           {/* Capped at today for the same reason as From — there are no EODs for days
               that have not happened yet. */}
           <DatePicker value={filters.to} onChange={v => set('to', v)} min={filters.from} max={today} inputStyle={inputStyle()} quickNav clearable />
@@ -272,6 +285,7 @@ function FilterBar({ filters, onChange, onReset, employeeMatches, onPickEmployee
           />
         </label>
       </div>
+      {showsCurrentMonthNote({ from: filters.from, to: filters.to }) && <CurrentMonthNote />}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
         <button
           onClick={onReset}
@@ -489,7 +503,20 @@ const MISSING_TABLE_COLUMNS = '1.6fr 1fr 1fr 90px 160px';
 const MISSING_TABLE_MIN_WIDTH = 780;
 
 export default function LeadMissingEodReport() {
-  const [filters, setFilters] = useState<Filters>(defaultFilters());
+  const [filters, setFilters] = useState<Filters>(() => defaultFilters());
+  // Preset pills: picking one sets From/To; editing either date by hand makes Custom active; Reset
+  // goes back to This month. Changing any other filter leaves the pill as it was (useReportPreset).
+  const { preset, onPresetSelect, noteRangeEdit, reset } = useReportPreset(
+    ({ from, to }) => setFilters(f => ({ ...f, from, to })),
+  );
+  function handleFilterChange(next: Filters) {
+    noteRangeEdit(filters, next);
+    setFilters(next);
+  }
+  function handleReset() {
+    reset();
+    setFilters(defaultFilters());
+  }
   const [page, setPage] = useState(0);
   const [gapsFor, setGapsFor] = useState<MissingEodRowDto | null>(null);
   const [confirmRemindAll, setConfirmRemindAll] = useState(false);
@@ -575,9 +602,13 @@ export default function LeadMissingEodReport() {
       </div>
 
       <FilterBar
-        filters={filters} onChange={setFilters} onReset={() => setFilters(defaultFilters())}
+        filters={filters} onChange={handleFilterChange} onReset={handleReset}
         employeeMatches={employeeMatches} onPickEmployee={pickEmployee}
+        preset={preset} onPresetSelect={onPresetSelect}
       />
+
+      {/* "—" until a full range has produced a response, so a cleared date never reads as zero. */}
+      <MissingEodKpis summary={hasRange ? data : undefined} loading={hasRange && isLoading} />
 
       {!hasRange ? (
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>

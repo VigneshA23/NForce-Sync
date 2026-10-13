@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   TrendingUp, TrendingDown, Activity, RefreshCw, Layers,
-  Calendar, Lightbulb, AlertTriangle, Users, ArrowUp, ArrowDown, Minus,
+  Lightbulb, AlertTriangle, Users, ArrowUp, ArrowDown, Minus,
   CheckCircle2, Award, FolderKanban, X,
 } from 'lucide-react';
 import { UtilBar } from '../../components/UtilBar';
@@ -13,7 +13,10 @@ import { GlobalLoader } from '../../components/GlobalLoader';
 import { SegmentDonut } from '../../components/UtilizationDonut';
 import { Pagination } from '../../components/Pagination';
 import { fmtPct, utilColor, utilState, RULES } from '../../lib/rules';
-import { todayISO, toLocalISODate } from '../../lib/date';
+import { ReportDateRange } from '../../components/ReportDateRange';
+import type { DateRange } from '../../lib/dateRange';
+import { initialReportRange } from '../../lib/reportDefaultRange';
+import { useReportPreset } from '../../lib/useReportPreset';
 import { roundHours } from '../../lib/hoursBreakdown';
 import {
   useProjectDashboardFilters,
@@ -24,26 +27,6 @@ import {
   type UtilizationTrendPointDto,
   type DashboardSummaryCardsDto,
 } from '../../api/projectDashboard';
-
-// ── date range helpers ──────────────────────────────────────────────────────────
-
-function isoMinus(weeks: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - weeks * 7);
-  return toLocalISODate(d);
-}
-
-function firstOfMonth(): string {
-  const d = new Date();
-  return toLocalISODate(new Date(d.getFullYear(), d.getMonth(), 1));
-}
-
-const RANGES = [
-  { label: 'This Month', from: firstOfMonth },
-  { label: '4 W',  from: () => isoMinus(4) },
-  { label: '8 W',  from: () => isoMinus(8) },
-  { label: '3 M',  from: () => isoMinus(13) },
-];
 
 function fmtChartDay(iso: string): string {
   return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -822,65 +805,6 @@ function FormulaPanel() {
   );
 }
 
-// ── calendar range popover ───────────────────────────────────────────────────────
-
-function CalendarRangePopover({ from, to, onApply }: { from: string; to: string; onApply: (from: string, to: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [draftFrom, setDraftFrom] = useState(from);
-  const [draftTo, setDraftTo] = useState(to);
-  const today = todayISO();
-
-  function openPicker() {
-    setDraftFrom(from);
-    setDraftTo(to);
-    setOpen(true);
-  }
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <button
-        onClick={() => (open ? setOpen(false) : openPicker())}
-        aria-label="Custom date range"
-        style={{
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: 34, height: 34, padding: 0, background: 'var(--raised)', border: '1px solid var(--line)',
-          borderRadius: 7, cursor: 'pointer', color: 'var(--txt-mut)', flexShrink: 0,
-        }}
-      >
-        <Calendar size={14} aria-hidden="true" />
-      </button>
-
-      {open && (
-        <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
-          <div className="nf-r-popover" style={{
-            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 240,
-            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
-            boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
-          }}>
-            <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6 }}>From</div>
-            <input
-              type="date" value={draftFrom} max={draftTo} onChange={e => setDraftFrom(e.target.value)}
-              style={{ width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box', marginBottom: 10 }}
-            />
-            <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 6 }}>To</div>
-            <input
-              type="date" value={draftTo} min={draftFrom} max={today} onChange={e => setDraftTo(e.target.value)}
-              style={{ width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box', marginBottom: 12 }}
-            />
-            <button
-              onClick={() => { onApply(draftFrom, draftTo); setOpen(false); }}
-              style={{ width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff', cursor: 'pointer' }}
-            >
-              Apply
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 // ── main ───────────────────────────────────────────────────────────────────────
 
 export default function ProjectsUtilization() {
@@ -893,12 +817,16 @@ export default function ProjectsUtilization() {
     setSearchParams(prev => { prev.delete('status'); return prev; });
   }
 
-  const [rangeIdx, setRangeIdx] = useState(0);
-  const [customRange, setCustomRange] = useState<{ from: string; to: string } | null>(null);
+  // The range is always complete and valid (the pickers can't be cleared or pushed past today), so the
+  // summary never has to wait on a blank date. It starts on the 1st of the month through today.
+  const [range, setRange] = useState<DateRange>(() => initialReportRange());
+  const { preset, onPresetSelect, noteRangeEdit } = useReportPreset(setRange);
+  function handleRangeChange(next: DateRange) {
+    noteRangeEdit(range, next);
+    setRange(next);
+  }
   const [projectId, setProjectId] = useState<number | undefined>(undefined);
-  const today = todayISO();
-  const from  = customRange ? customRange.from : RANGES[rangeIdx].from();
-  const to    = customRange ? customRange.to : today;
+  const { from, to } = range;
 
   const { data: filters } = useProjectDashboardFilters();
 
@@ -999,30 +927,14 @@ export default function ProjectsUtilization() {
               ))}
             </select>
           )}
-
-          {/* Date range tabs */}
-          <div style={{ display: 'flex', gap: 0, background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 7, overflow: 'hidden' }}>
-            {RANGES.map((r, i) => (
-              <button
-                key={r.label}
-                onClick={() => { setCustomRange(null); setRangeIdx(i); }}
-                style={{
-                  padding: '7px 14px', border: 'none', cursor: 'pointer',
-                  fontSize: 12, fontWeight: 500,
-                  background: !customRange && rangeIdx === i ? 'var(--raised2)' : 'none',
-                  color: !customRange && rangeIdx === i ? 'var(--txt)' : 'var(--txt-mut)',
-                  borderRight: i < RANGES.length - 1 ? '1px solid var(--line)' : 'none',
-                  transition: 'color 0.14s, background 0.14s',
-                }}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-
-          <CalendarRangePopover from={from} to={to} onApply={(f, t) => setCustomRange({ from: f, to: t })} />
         </div>
       </div>
+
+      {/* Date range: shared presets + pickers. It sets the page's from/to, which is in the summary's
+          query key, so every change refetches (the header shows "Updating…" meanwhile). */}
+      <Card pad={16} style={{ marginBottom: 16 }}>
+        <ReportDateRange range={range} preset={preset} onPresetSelect={onPresetSelect} onRangeChange={handleRangeChange} />
+      </Card>
 
       {/* Distinct empty state: the portfolio has projects but nobody is allocated to them in this range.
           The backend returns 0% for that case; without this banner it reads as "nothing approved yet". */}
