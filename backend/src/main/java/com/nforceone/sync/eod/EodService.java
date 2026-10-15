@@ -245,7 +245,8 @@ public class EodService {
                     }
                     line.setCategory(category);
                     line.setHours(lineReq.hours());
-                    line.setDescription(lineReq.description().strip());
+                    // A draft may have no description yet (null/blank is stored as ""); submit rejects it.
+                    line.setDescription(lineReq.description() == null ? "" : lineReq.description().strip());
                     line.setSortOrder(lineReq.sortOrder() != null ? lineReq.sortOrder() : order);
                     logLineRepository.save(line);
                     order++;

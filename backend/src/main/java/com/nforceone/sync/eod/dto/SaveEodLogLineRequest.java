@@ -2,7 +2,6 @@ package com.nforceone.sync.eod.dto;
 
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -17,8 +16,10 @@ public record SaveEodLogLineRequest(
         @DecimalMax(value = "24.00", message = "Hours per line cannot exceed 24")
         BigDecimal hours,
 
-        @NotBlank(message = "Description is required for each line")
-        @Size(min = 3, max = 4000, message = "Description must be 3–4000 characters")
+        // Drafts may carry an empty or short description (autosave must not lose a half-typed row).
+        // "Required" and the 3-character minimum are enforced where it matters — on submit, by
+        // PlainLogValidation — so only the upper bound is checked here.
+        @Size(max = 4000, message = "Description must be 4000 characters or fewer")
         String description,
 
         Integer sortOrder
