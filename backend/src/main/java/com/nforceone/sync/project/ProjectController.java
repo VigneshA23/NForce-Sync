@@ -60,7 +60,7 @@ public class ProjectController {
         return projectService.listAssignableLeads();
     }
 
-    /** Users assignable as a project's overseeing PM — active users with the PM role only. */
+    /** Users assignable as a project's overseeing PM — any active user, any role. */
     @GetMapping("/managers")
     @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
     public List<EmployeeRefDto> listAssignableProjectManagers() {

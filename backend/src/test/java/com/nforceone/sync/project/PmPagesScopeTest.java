@@ -347,50 +347,62 @@ class PmPagesScopeTest {
     }
 
     @Test
-    void aPmRoleUserCanLeadAProject_andAnEmployeeRoleUserCanBeAPm_butNotBothOnTheSameProject() {
+    void onlyAnEmployeeCanLeadAProject_anyActiveUserCanBeItsPm_butNotBothOnTheSameProject() {
         com.nforceone.sync.org.ProjectType type = new com.nforceone.sync.org.ProjectType();
         type.setId(1L); type.setActive(true);
         when(projectTypeRepository.findById(1L)).thenReturn(Optional.of(type));
         when(projectRepository.existsByCode(any())).thenReturn(false);
         when(projectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // lead = PM-role user (PM of other projects), PM = EMPLOYEE-role user: both allowed now.
-        projects().create(create(pmA.getId(), dheeraj.getId()));
+        // lead = EMPLOYEE-role user, PM = PM-role user (any active role): allowed.
+        projects().create(create(dheeraj.getId(), pmA.getId()));
+
+        // a PM-role user cannot lead a project — leading is a delivery role, not a management one.
+        ResponseStatusException pmAsLead = assertThrows(ResponseStatusException.class,
+                () -> projects().create(create(pmA.getId(), dheeraj.getId())));
+        assertEquals(HttpStatus.BAD_REQUEST, pmAsLead.getStatusCode());
+
+        // an Admin cannot lead a project either, but CAN oversee one as its PM.
+        ResponseStatusException adminAsLead = assertThrows(ResponseStatusException.class,
+                () -> projects().create(create(admin.getId(), dheeraj.getId())));
+        assertEquals(HttpStatus.BAD_REQUEST, adminAsLead.getStatusCode());
+        projects().create(create(dheeraj.getId(), admin.getId()));
 
         // the same person as both Team Lead and PM of the SAME project: 400.
         ResponseStatusException same = assertThrows(ResponseStatusException.class,
                 () -> projects().create(create(dheeraj.getId(), dheeraj.getId())));
         assertEquals(HttpStatus.BAD_REQUEST, same.getStatusCode());
-
-        // system roles still cannot hold the assignment.
-        ResponseStatusException sys = assertThrows(ResponseStatusException.class,
-                () -> projects().create(create(admin.getId(), dheeraj.getId())));
-        assertEquals(HttpStatus.BAD_REQUEST, sys.getStatusCode());
     }
 
     @Test
-    void assignLead_acceptsAPmRoleUser_butStillNotTheProjectsOwnPm() {
+    void assignLead_rejectsAPmRoleUser_andRejectsTheProjectsOwnPm() {
         projA.setPm(pmA);
         when(projectRepository.findById(projA.getId())).thenReturn(Optional.of(projA));
         when(projectRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(allocationRepository.countActiveByEmployeeIdAndProjectId(anyLong(), anyLong(), any())).thenReturn(1L);
 
-        projects().assignLead(projA.getId(), pmB.getId());                       // a PM of another project: fine
-        assertEquals(pmB.getId(), projA.getLead().getId());
+        ResponseStatusException pmAsLead = assertThrows(ResponseStatusException.class,
+                () -> projects().assignLead(projA.getId(), pmB.getId()));        // a PM-role user: 400
+        assertEquals(HttpStatus.BAD_REQUEST, pmAsLead.getStatusCode());
 
-        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+        ResponseStatusException ownPm = assertThrows(ResponseStatusException.class,
                 () -> projects().assignLead(projA.getId(), pmA.getId()));        // this project's own PM: 400
-        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, ownPm.getStatusCode());
+
+        projects().assignLead(projA.getId(), dheeraj.getId());                  // an EMPLOYEE: fine
+        assertEquals(dheeraj.getId(), projA.getLead().getId());
     }
 
     @Test
-    void assignableLists_offerBothEmployeeAndPmAccounts() {
-        when(userRepository.findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(any(), any()))
-                .thenReturn(List.of(pmA, ravi));
+    void assignableLeads_employeeRoleOnly_assignableManagers_anyActiveRole() {
+        when(userRepository.findByRoleAndStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Role.EMPLOYEE, AppUser.Status.ACTIVE))
+                .thenReturn(List.of(ravi, dheeraj));
+        when(userRepository.findByStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Status.ACTIVE))
+                .thenReturn(List.of(pmA, ravi, admin));
 
         assertThat(projects().listAssignableLeads()).hasSize(2);
-        assertThat(projects().listAssignableProjectManagers()).hasSize(2);
-        verify(userRepository, org.mockito.Mockito.times(2)).findByRoleInAndStatusAndDeletedAtIsNullOrderByFullNameAsc(
-                List.of(AppUser.Role.EMPLOYEE, AppUser.Role.PM), AppUser.Status.ACTIVE);
+        assertThat(projects().listAssignableProjectManagers()).hasSize(3);
+        verify(userRepository).findByRoleAndStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Role.EMPLOYEE, AppUser.Status.ACTIVE);
+        verify(userRepository).findByStatusAndDeletedAtIsNullOrderByFullNameAsc(AppUser.Status.ACTIVE);
     }
 }
