@@ -16,6 +16,7 @@ import type { EodHistoryEntryDto } from '../../api/eod';
 import { formatDate as formatDateDDMMYYYY, formatDateTime } from '../../lib/date';
 import { timeAdjustmentLabel } from '../approvals/shared';
 import { requiredHoursForDay, HALF_LEAVE_LABELS } from '../../lib/requiredHours';
+import { TYPE_LABEL } from './dailyLogStatus';
 import {
   MIN_ISO_DATE, MAX_ISO_DATE, maskDateInput, parseStrictDDMMYYYY, isoToDDMMYYYY,
   isRangeValid, todayIsoLocal,
@@ -89,7 +90,14 @@ function EntryPieceChipsWithFallback({ entryId, status }: { entryId: number; sta
               fontSize: 11, fontWeight: 500, color: m.color, whiteSpace: 'nowrap',
             }}>
               <m.Icon size={10} aria-hidden />
-              {piece.projectName ?? 'Other'}: {m.label}
+              {/* PLAIN_LOG pieces (Daily log) have no projectName — they're routed by approverType
+                  (Reporting Manager, Team Lead, PM, Admin Group) instead of by project. Once
+                  decided, actedByName is whoever actually approved/rejected it — which can differ
+                  from the originally-assigned approverName (a Super Admin override, or the PM an
+                  escalated piece's fallback) — so it takes priority. approverName is the right
+                  fallback only while still PENDING (nobody's acted yet); the role label is the
+                  last resort for pieces with no single named reviewer (ADMIN_GROUP/AUTO_APPROVED). */}
+              {piece.projectName ?? piece.actedByName ?? piece.approverName ?? TYPE_LABEL[piece.approverType] ?? piece.approverType}: {m.label}
             </span>
             {piece.status === 'REJECTED' && piece.comment && (
               <div

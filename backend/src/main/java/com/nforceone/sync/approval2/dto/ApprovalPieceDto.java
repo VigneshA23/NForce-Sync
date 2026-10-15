@@ -19,6 +19,11 @@ public record ApprovalPieceDto(
     String projectName,
     Long approverId,
     String approverName,
+    // Who actually decided this piece — null while PENDING. Distinct from approverName: the
+    // designated approver is frozen at submission time and never changes, but the actual actor can
+    // differ from it (a Super Admin override, or the PM an escalated piece's fallback), so this is
+    // the one field that's never stale about who approved/rejected.
+    String actedByName,
     String approverType,
     String status,
     OffsetDateTime frozenAt,
@@ -48,15 +53,20 @@ public record ApprovalPieceDto(
     public record TaskLineDto(String projectCode, String projectName, String categoryName, BigDecimal hours, String description) {}
 
     public static ApprovalPieceDto from(EodProjectApproval p) {
-        return from(p, List.of(), List.of());
+        return from(p, List.of(), List.of(), null);
     }
 
     public static ApprovalPieceDto from(EodProjectApproval p, List<EodLogLineDto> logLines) {
-        return from(p, logLines, List.of());
+        return from(p, logLines, List.of(), null);
     }
 
     public static ApprovalPieceDto from(EodProjectApproval p, List<EodLogLineDto> logLines,
                                         List<TaskLineDto> taskLines) {
+        return from(p, logLines, taskLines, null);
+    }
+
+    public static ApprovalPieceDto from(EodProjectApproval p, List<EodLogLineDto> logLines,
+                                        List<TaskLineDto> taskLines, String actedByName) {
         EodEntry entry = p.getEodEntry();
         boolean isPlainLog = entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG;
         return new ApprovalPieceDto(
@@ -69,6 +79,7 @@ public record ApprovalPieceDto(
                 p.getProject() != null ? p.getProject().getName() : null,
                 p.getApprover() != null ? p.getApprover().getId() : null,
                 p.getApprover() != null ? p.getApprover().getFullName() : null,
+                actedByName,
                 p.getApproverType().name(),
                 p.getStatus().name(),
                 p.getFrozenAt(),

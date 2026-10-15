@@ -7,7 +7,7 @@ export const PIECE_STATUS: Record<string, { color: string; label: string; Icon: 
   PENDING:  { color: '#4C8DD6', label: 'Pending',  Icon: Clock },
 };
 
-const TYPE_LABEL: Record<string, string> = {
+export const TYPE_LABEL: Record<string, string> = {
   REPORTING_MANAGER: 'Reporting Manager',
   ADMIN_GROUP: 'Admin Group',
   AUTO_APPROVED: 'Auto-approved',

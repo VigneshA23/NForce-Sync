@@ -247,7 +247,7 @@ public class ApprovalPieceService {
                     "Entry approved: " + projectName, body, "/eod/history");
         }
 
-        return ApprovalPieceDto.from(piece, loadLogLines(piece), loadTaskLines(piece));
+        return ApprovalPieceDto.from(piece, loadLogLines(piece), loadTaskLines(piece), actor.getFullName());
     }
 
     public ApprovalPieceDto reject(Long pieceId, String actorEmail, String comment) {
@@ -293,7 +293,7 @@ public class ApprovalPieceService {
                     "Entry rejected: " + projectName, body, "/eod/submit?date=" + entry.getEntryDate());
         }
 
-        return ApprovalPieceDto.from(piece, loadLogLines(piece), loadTaskLines(piece));
+        return ApprovalPieceDto.from(piece, loadLogLines(piece), loadTaskLines(piece), actor.getFullName());
     }
 
     /**
@@ -501,6 +501,20 @@ public class ApprovalPieceService {
                             .add(t));
         }
 
+        // Batch-load each decided piece's actual actor to avoid one query per piece. Only
+        // APPROVED/REJECTED pieces have an action row; PENDING ones correctly stay unmapped (there's
+        // no actor yet — the UI falls back to the designated approverName for those).
+        List<Long> decidedPieceIds = pieces.stream()
+                .filter(p -> p.getStatus() != EodProjectApproval.Status.PENDING)
+                .map(EodProjectApproval::getId)
+                .toList();
+        java.util.Map<Long, String> actedByNameByPieceId = new java.util.HashMap<>();
+        if (!decidedPieceIds.isEmpty()) {
+            // Ordered ascending, so the last write per piece id is the latest action.
+            actionRepository.findByPieceIdInOrderByActedAtAsc(decidedPieceIds)
+                    .forEach(a -> actedByNameByPieceId.put(a.getPiece().getId(), a.getActor().getFullName()));
+        }
+
         return pieces.stream()
                 .map(p -> {
                     EodEntry entry = p.getEodEntry();
@@ -514,7 +528,7 @@ public class ApprovalPieceService {
                             : ApprovalPieceDto.taskLinesFor(
                                     tasksByEntryId.getOrDefault(entry.getId(), List.of()),
                                     projectId);
-                    return ApprovalPieceDto.from(p, lines, taskLines);
+                    return ApprovalPieceDto.from(p, lines, taskLines, actedByNameByPieceId.get(p.getId()));
                 })
                 .toList();
     }

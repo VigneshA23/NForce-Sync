@@ -37,6 +37,22 @@ import { GlobalLoader } from '../components/GlobalLoader';
 import { Pagination } from '../components/Pagination';
 import { DateRangeSelector, type QuickRangeMode } from '../components/DateRangeSelector';
 
+// Pending-tab equivalents of entryProjects/entryCategories — a pending ApprovalPieceDto has no
+// `.tasks` array, so its projects/categories live in taskLines (PROJECT_GROUPED) or logLines
+// (PLAIN_LOG) instead.
+function pieceProjects(p: ApprovalPieceDto): string[] {
+  if (p.taskLines.length) {
+    return [...new Set(p.taskLines.map(t => t.projectName).filter((n): n is string => !!n))];
+  }
+  return p.projectName ? [p.projectName] : [];
+}
+function pieceCategories(p: ApprovalPieceDto): string[] {
+  if (p.taskLines.length) {
+    return [...new Set(p.taskLines.map(t => t.categoryName).filter((c): c is string => !!c))];
+  }
+  return [...new Set(p.logLines.map(l => l.categoryName).filter((c): c is string => !!c))];
+}
+
 // Matches the PM Approvals page's helper of the same name, so the two screens describe the same
 // stretch of inactivity identically.
 function formatInactivity(hoursSince: number | null | undefined): string {
@@ -610,29 +626,52 @@ export default function Approvals() {
   }, [tab, approved, rejected]);
 
   const filteredPieces = useMemo(() => {
+    let list = pendingPieces;
+    if (employeeFilter.size) list = list.filter(p => employeeFilter.has(p.employeeCode));
+    if (projectFilter.size)  list = list.filter(p => pieceProjects(p).some(pr => projectFilter.has(pr)));
+    if (categoryFilter.size) list = list.filter(p => pieceCategories(p).some(c => categoryFilter.has(c)));
     const q = search.trim().toLowerCase();
-    if (!q) return pendingPieces;
-    return pendingPieces.filter(p =>
+    if (q) list = list.filter(p =>
       p.employeeName.toLowerCase().includes(q) ||
       p.employeeCode.toLowerCase().includes(q) ||
       (p.projectName ?? '').toLowerCase().includes(q),
     );
-  }, [pendingPieces, search]);
+    const sorted = [...list];
+    if (sort === 'hours') sorted.sort((a, b) => (b.hoursPending ?? 0) - (a.hoursPending ?? 0));
+    else if (sort === 'name') sorted.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+    else if (sort === 'latest') sorted.sort((a, b) => (b.frozenAt ?? '').localeCompare(a.frozenAt ?? ''));
+    else sorted.sort((a, b) => (a.frozenAt ?? '').localeCompare(b.frozenAt ?? ''));
+    return sorted;
+  }, [pendingPieces, employeeFilter, projectFilter, categoryFilter, search, sort]);
 
   const totalPiecePages = Math.max(1, Math.ceil(filteredPieces.length / PIECES_PAGE_SIZE));
   const piecesPageSafe = Math.min(page, totalPiecePages);
   const piecesPaged = filteredPieces.slice((piecesPageSafe - 1) * PIECES_PAGE_SIZE, piecesPageSafe * PIECES_PAGE_SIZE);
 
-  const allProjects = useMemo(() => [...new Set(baseList.flatMap(entryProjects))].sort(), [baseList]);
-  const allCategories = useMemo(() => [...new Set(baseList.flatMap(entryCategories))].sort(), [baseList]);
+  // The Pending tab's own data (pendingPieces) never lands in baseList (that's approved/rejected
+  // only — see above), so the filter option lists and the employee-code→name lookup have to pull
+  // from pendingPieces while on that tab, or they come back empty despite rows being on screen.
+  const allProjects = useMemo(
+    () => tab === 'pending'
+      ? [...new Set(pendingPieces.flatMap(pieceProjects))].sort()
+      : [...new Set(baseList.flatMap(entryProjects))].sort(),
+    [tab, pendingPieces, baseList],
+  );
+  const allCategories = useMemo(
+    () => tab === 'pending'
+      ? [...new Set(pendingPieces.flatMap(pieceCategories))].sort()
+      : [...new Set(baseList.flatMap(entryCategories))].sort(),
+    [tab, pendingPieces, baseList],
+  );
   // Scoped to whichever employees have entries in the current tab's already-fetched,
   // already-team-scoped list — same source Project/Category derive their options from,
   // so this never needs its own request or a separate "direct reports" lookup.
   const employeeNameByCode = useMemo(() => {
     const byCode = new Map<string, string>();
-    for (const e of baseList) byCode.set(e.employeeCode, e.employeeName);
+    const source: { employeeCode: string; employeeName: string }[] = tab === 'pending' ? pendingPieces : baseList;
+    for (const e of source) byCode.set(e.employeeCode, e.employeeName);
     return byCode;
-  }, [baseList]);
+  }, [tab, pendingPieces, baseList]);
   const allEmployeeCodes = useMemo(
     () => [...employeeNameByCode.keys()].sort((a, b) => employeeNameByCode.get(a)!.localeCompare(employeeNameByCode.get(b)!)),
     [employeeNameByCode],

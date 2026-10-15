@@ -10,4 +10,9 @@ public interface EodProjectApprovalActionRepository extends JpaRepository<EodPro
     List<EodProjectApprovalAction> findByPieceIdOrderByActedAtAsc(Long pieceId);
 
     Optional<EodProjectApprovalAction> findTopByPieceIdOrderByActedAtDesc(Long pieceId);
+
+    /** Batch form of findTopByPieceIdOrderByActedAtDesc — ordered ascending so the caller can fold
+     *  this into a Map<pieceId, action> and have the last write per piece be the latest action,
+     *  without one query per piece. */
+    List<EodProjectApprovalAction> findByPieceIdInOrderByActedAtAsc(List<Long> pieceIds);
 }

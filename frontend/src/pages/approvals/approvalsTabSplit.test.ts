@@ -13,6 +13,7 @@ function makePiece(overrides: Partial<ApprovalPieceDto>): ApprovalPieceDto {
     projectName: null,
     approverId: null,
     approverName: null,
+    actedByName: null,
     approverType: 'LEAD',
     status: 'PENDING',
     frozenAt: '2026-10-01T09:00:00Z',

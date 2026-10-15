@@ -12,6 +12,11 @@ export interface ApprovalPieceDto {
   projectName: string | null;
   approverId: number | null;
   approverName: string | null;
+  /** Who actually decided this piece — null while PENDING. The designated approver (approverName)
+   *  is frozen at submission time and never changes, but the actual actor can differ from it (a
+   *  Super Admin override, or the PM an escalated piece's fallback), so prefer this when showing
+   *  "who approved/rejected this" and fall back to approverName only while still PENDING. */
+  actedByName: string | null;
   approverType: string; // LEAD | REPORTING_MANAGER | PM | ADMIN_GROUP | AUTO_APPROVED
   status: string;       // PENDING | APPROVED | REJECTED
   frozenAt: string;

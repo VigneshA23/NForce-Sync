@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import {
   FolderKanban, Users, Plus, RefreshCw, AlertTriangle, Trash2, Pencil,
-  ArrowUp, ArrowDown, ArrowUpDown,
+  ArrowUp, ArrowDown, ArrowUpDown, X,
 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { Pagination } from '../../components/Pagination';
@@ -432,6 +433,176 @@ function SearchableSelect({ value, onChange, options, placeholder, autoFocus }: 
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Multi-employee version of SearchableSelect — the New Allocation form's "add several employees
+ *  to one project in one go" picker. Already-selected employees drop out of the search results
+ *  (picking them again would just be a no-op) and render as removable chips INSIDE the same
+ *  text-box as the search input (tag-input style, like an email "To:" field) rather than in a
+ *  separate block below it — the field itself is the one place that shows who's picked. */
+function SearchableMultiSelect({ selectedIds, onAdd, onRemove, options, placeholder, disabled }: {
+  selectedIds: number[];
+  onAdd: (id: number) => void;
+  onRemove: (id: number) => void;
+  options: Array<{ id: number; label: string }>;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  // The dropdown is portaled to document.body (see below) — this field sits inside the New
+  // Allocation modal's scrollable, overflow-clipped body, so an absolutely-positioned dropdown
+  // nested in that DOM subtree gets cut off by the ancestor's `overflow`, which is what made the
+  // options list appear to render "behind" the fields below it. Escaping to body and tracking the
+  // box's own screen position (fixed, recomputed on scroll/resize) sidesteps that entirely.
+  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function updateRect() {
+      const r = boxRef.current?.getBoundingClientRect();
+      if (r) setMenuRect({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+    updateRect();
+    window.addEventListener('scroll', updateRect, true);
+    window.addEventListener('resize', updateRect);
+    return () => {
+      window.removeEventListener('scroll', updateRect, true);
+      window.removeEventListener('resize', updateRect);
+    };
+  }, [open]);
+
+  const selected = useMemo(
+    () => selectedIds
+      .map(id => options.find(o => o.id === id))
+      .filter((o): o is { id: number; label: string } => o != null),
+    [selectedIds, options],
+  );
+
+  const available = useMemo(
+    () => options.filter(o => !selectedIds.includes(o.id)),
+    [options, selectedIds],
+  );
+
+  const filtered = useMemo(() => {
+    if (!query) return available;
+    const q = query.toLowerCase();
+    return available.filter(o => o.label.toLowerCase().includes(q));
+  }, [available, query]);
+
+  function handleBlur() {
+    setTimeout(() => setOpen(false), 120);
+  }
+
+  function handleSelect(id: number) {
+    onAdd(id);
+    setQuery('');
+    // Left open on purpose — adding several employees in a row shouldn't need re-clicking
+    // the input after every pick.
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // Backspace on an empty query removes the most recently added chip — the same shorthand
+    // email "To:" fields use, so undoing an accidental click doesn't require reaching for the ×.
+    if (e.key === 'Backspace' && query === '' && selected.length > 0) {
+      onRemove(selected[selected.length - 1].id);
+    }
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div
+        ref={boxRef}
+        onMouseDown={e => {
+          // Clicking anywhere in the box (padding, around a chip) should focus the text input,
+          // not just a direct hit on it — otherwise most of the field does nothing when clicked.
+          if (e.target === inputRef.current) return;
+          e.preventDefault();
+          inputRef.current?.focus();
+        }}
+        style={{
+          ...inputStyle,
+          height: 'auto',
+          minHeight: 38,
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6,
+          cursor: disabled ? 'not-allowed' : 'text',
+          opacity: disabled ? 0.6 : 1,
+        }}
+      >
+        {selected.map(o => (
+          <span
+            key={o.id}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 5px 3px 9px', borderRadius: 13,
+              background: 'var(--raised)', border: '1px solid var(--line2)',
+              fontSize: 12.5, color: 'var(--txt)', whiteSpace: 'nowrap',
+            }}
+          >
+            {o.label}
+            <button
+              type="button"
+              onClick={() => onRemove(o.id)}
+              aria-label={`Remove ${o.label}`}
+              disabled={disabled}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 15, height: 15, borderRadius: '50%', border: 'none',
+                background: 'transparent', color: 'var(--txt-dim)',
+                cursor: disabled ? 'not-allowed' : 'pointer', padding: 0, flexShrink: 0,
+              }}
+            >
+              <X size={11} aria-hidden="true" />
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          style={{
+            flex: '1 0 80px', minWidth: 80, border: 'none', outline: 'none',
+            background: 'transparent', color: 'var(--txt)', fontSize: 13,
+            fontFamily: 'inherit', padding: 0,
+          }}
+          value={query}
+          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          placeholder={selected.length === 0 ? placeholder : undefined}
+          autoComplete="off"
+          disabled={disabled}
+        />
+      </div>
+      {open && !disabled && menuRect && createPortal(
+        <div style={{
+          position: 'fixed', top: menuRect.top, left: menuRect.left, width: menuRect.width,
+          zIndex: 2000,
+          background: 'var(--panel)', border: '1px solid var(--line2)',
+          borderRadius: 6, maxHeight: 200, overflowY: 'auto',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+        }}>
+          {filtered.length > 0 ? filtered.map(o => (
+            <div
+              key={o.id}
+              onMouseDown={e => { e.preventDefault(); handleSelect(o.id); }}
+              style={{ padding: '8px 12px', fontSize: 13, cursor: 'pointer', color: 'var(--txt)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--raised)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              {o.label}
+            </div>
+          )) : (
+            <div style={{ padding: '8px 12px', fontSize: 13, color: 'var(--txt-dim)' }}>
+              {available.length === 0 ? 'All employees added' : 'No matches'}
+            </div>
+          )}
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -999,8 +1170,8 @@ function AllocationModal({ open, onClose, projects }: {
   // With no filter set it is the same cached query, so it costs no extra request.
   const { data: allAllocations } = useAllocations();
   const createMutation = useCreateAllocation();
-  const [employeeId, setEmployeeId] = useState('');
   const [projectId, setProjectId] = useState('');
+  const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [effectiveFrom, setEffectiveFrom] = useState(todayISO);
   const [effectiveTo, setEffectiveTo] = useState('');
   const [allocationPct, setAllocationPct] = useState('');
@@ -1013,27 +1184,6 @@ function AllocationModal({ open, onClose, projects }: {
   const pctNum = allocationPct === '' ? null : Number(allocationPct);
   const badPct = pctNum !== null && !isValidAllocationPct(pctNum);
 
-  // Tells the PM the person is already on this project before they submit. The server repeats the
-  // check and is the authority — this only saves a round trip.
-  const clash = useMemo(() => {
-    if (!employeeId || !projectId || !effectiveFrom || badDateOrder) return null;
-    return (allAllocations ?? []).find(a =>
-      a.employeeId === Number(employeeId)
-      && a.projectId === Number(projectId)
-      && windowsOverlap(a.effectiveFrom, a.effectiveTo, effectiveFrom, effectiveTo || null)) ?? null;
-  }, [allAllocations, employeeId, projectId, effectiveFrom, effectiveTo, badDateOrder]);
-
-  // Sum of this employee's OTHER overlapping allocations (any project) — the "Current Allocation"
-  // the new row would stack on top of. Only meaningful once enough of the form is filled in.
-  const currentAllocationTotal = useMemo(() => {
-    if (!employeeId || !effectiveFrom || badDateOrder) return 0;
-    return overlappingAllocationTotal(allAllocations ?? [], Number(employeeId), effectiveFrom, effectiveTo || null);
-  }, [allAllocations, employeeId, effectiveFrom, effectiveTo, badDateOrder]);
-
-  // Mirrors AllocationService.requireWithinCapacity — advisory here (the server enforces it), but
-  // blocking submission client-side saves a round trip for the by-far most common case.
-  const wouldExceedCapacity = pctNum !== null && currentAllocationTotal + pctNum > 100;
-
   // Only ACTIVE projects are allocatable — you cannot staff someone onto work that is
   // completed, on hold, or inactive. It would also be invisible to them: the EOD Project
   // dropdown filters to ACTIVE, so such an allocation could never be booked against.
@@ -1041,15 +1191,6 @@ function AllocationModal({ open, onClose, projects }: {
     () => projects.filter(p => p.status === 'ACTIVE'),
     [projects],
   );
-
-  const selectedEmployee = useMemo(
-    () => (employees ?? []).find(e => e.id === Number(employeeId)) ?? null,
-    [employees, employeeId],
-  );
-
-  // Any employee can be allocated to any ACTIVE project — the server no longer ties allocation to
-  // the employee's reporting manager (AllocationService has no such rule).
-  const allocatableProjects = activeProjects;
 
   const selectedProject = useMemo(
     () => projects.find(p => p.id === Number(projectId)) ?? null,
@@ -1072,14 +1213,30 @@ function AllocationModal({ open, onClose, projects }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectStartDate]);
 
-  const projectPlaceholder =
-    selectedEmployee == null            ? 'Select an employee first'
-    : allocatableProjects.length === 0  ? 'No active projects available'
-    : 'Select project…';
+  // Tells the PM — per selected employee — whether they're already on this project for an
+  // overlapping window, and what their total allocation would come to. The server repeats both
+  // checks and is the authority; this only saves a round trip for the common case.
+  const employeeChecks = useMemo(() => {
+    if (!projectId || !effectiveFrom || badDateOrder || pctNum === null) return [];
+    return employeeIds.map(id => {
+      const name = (employees ?? []).find(e => e.id === id)?.fullName ?? `Employee #${id}`;
+      const clash = (allAllocations ?? []).find(a =>
+        a.employeeId === id
+        && a.projectId === Number(projectId)
+        && windowsOverlap(a.effectiveFrom, a.effectiveTo, effectiveFrom, effectiveTo || null)) ?? null;
+      const currentTotal = overlappingAllocationTotal(allAllocations ?? [], id, effectiveFrom, effectiveTo || null);
+      const wouldExceed = currentTotal + pctNum > 100;
+      return { employeeId: id, name, clash, currentTotal, wouldExceed };
+    });
+  }, [employeeIds, employees, allAllocations, projectId, effectiveFrom, effectiveTo, badDateOrder, pctNum]);
+
+  const hasBlockingIssue = employeeChecks.some(c => c.clash != null || c.wouldExceed);
+
+  const employeePlaceholder = selectedProject == null ? 'Select a project first' : 'Search employees…';
 
   function handleClose() {
-    setEmployeeId('');
     setProjectId('');
+    setEmployeeIds([]);
     setEffectiveTo('');
     setAllocationPct('');
     setError(null);
@@ -1090,21 +1247,40 @@ function AllocationModal({ open, onClose, projects }: {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!employeeId || !projectId || !effectiveFrom || badDateOrder || dateFormatInvalid
-      || badEffectiveFromBeforeStart || clash || pctNum === null || badPct || wouldExceedCapacity) return;
+    if (!projectId || employeeIds.length === 0 || !effectiveFrom || badDateOrder || dateFormatInvalid
+      || badEffectiveFromBeforeStart || pctNum === null || badPct || hasBlockingIssue) return;
     setError(null);
-    try {
-      await createMutation.mutateAsync({
-        employeeId: Number(employeeId),
-        projectId: Number(projectId),
-        effectiveFrom,
-        effectiveTo: effectiveTo || null,
-        allocationPct: pctNum,
-      });
-      showToast('success', 'Allocation created');
+    const succeededIds: number[] = [];
+    const failures: string[] = [];
+    // Sequential, not Promise.all: each creation changes the next employee's standing capacity
+    // (overlappingAllocationTotal), so firing them in parallel would let two requests race against
+    // the same stale "current total" and both pass a check that should have failed the second one.
+    for (const id of employeeIds) {
+      try {
+        await createMutation.mutateAsync({
+          employeeId: id,
+          projectId: Number(projectId),
+          effectiveFrom,
+          effectiveTo: effectiveTo || null,
+          allocationPct: pctNum,
+        });
+        succeededIds.push(id);
+      } catch (err) {
+        const name = (employees ?? []).find(e => e.id === id)?.fullName ?? `Employee #${id}`;
+        failures.push(`${name}: ${extractApiError(err, 'Failed to create allocation')}`);
+      }
+    }
+    if (failures.length === 0) {
+      showToast('success', employeeIds.length === 1 ? 'Allocation created' : `${employeeIds.length} allocations created`);
       handleClose();
-    } catch (err) {
-      setError(extractApiError(err, 'Failed to create allocation'));
+    } else {
+      // Leave only the failed employees selected so the PM can fix and retry without re-picking
+      // everyone who already succeeded.
+      if (succeededIds.length > 0) {
+        showToast('success', `${succeededIds.length} allocation(s) created`);
+        setEmployeeIds(ids => ids.filter(id => !succeededIds.includes(id)));
+      }
+      setError(failures.join(' '));
     }
   }
 
@@ -1113,35 +1289,38 @@ function AllocationModal({ open, onClose, projects }: {
       <form onSubmit={handleSubmit} noValidate>
         {error && <ErrorBanner message={error} />}
         <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>Employee *</label>
-          {/* Changing the employee clears the project: the list below is scoped to the employee's
-              manager, so a project picked for the previous one would otherwise stay selected and
-              be submittable — exactly the cross-team allocation this is meant to prevent. */}
-          <SearchableSelect
-            value={employeeId}
-            onChange={id => { setEmployeeId(id); setProjectId(''); }}
-            options={(employees ?? []).map(emp => ({ id: emp.id, label: `${emp.fullName} (${emp.employeeCode})` }))}
-            placeholder="Select employee…"
-            autoFocus
-          />
-        </div>
-
-        <div style={{ marginBottom: 14 }}>
           <label style={labelStyle}>Project *</label>
+          {/* Changing the project clears the employee picks: per-employee clash/capacity checks
+              below are scoped to this project, so selections kept across a project switch would
+              carry stale "already on this project" conclusions from the old one. */}
           <select
             style={inputStyle}
             value={projectId}
-            onChange={e => setProjectId(e.target.value)}
-            disabled={selectedEmployee == null || allocatableProjects.length === 0}
+            onChange={e => { setProjectId(e.target.value); setEmployeeIds([]); }}
+            disabled={activeProjects.length === 0}
           >
-            <option value="">{projectPlaceholder}</option>
-            {allocatableProjects.map(p => (
+            <option value="">{activeProjects.length === 0 ? 'No active projects available' : 'Select project…'}</option>
+            {activeProjects.map(p => (
               <option key={p.id} value={p.id}>{p.code}: {p.name}</option>
             ))}
           </select>
           <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 5 }}>
             All active projects are available to allocate.
           </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Employees *</label>
+          {/* Multiple employees can be staffed onto this one project in a single attempt — pick as
+              many as needed; each gets its own allocation row using the same dates and %. */}
+          <SearchableMultiSelect
+            selectedIds={employeeIds}
+            onAdd={id => setEmployeeIds(ids => [...ids, id])}
+            onRemove={id => setEmployeeIds(ids => ids.filter(existing => existing !== id))}
+            options={(employees ?? []).map(emp => ({ id: emp.id, label: `${emp.fullName} (${emp.employeeCode})` }))}
+            placeholder={employeePlaceholder}
+            disabled={selectedProject == null}
+          />
         </div>
         <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
@@ -1216,34 +1395,52 @@ function AllocationModal({ open, onClose, projects }: {
           )}
         </div>
 
-        {employeeId && effectiveFrom && !badDateOrder && (
-          <AllocationTotalSummary current={currentAllocationTotal} incoming={pctNum ?? 0} />
-        )}
-        {wouldExceedCapacity && (
-          <p style={{ fontSize: 11, color: 'var(--risk)', margin: '0 0 14px' }} role="alert">
-            Cannot allocate {pctNum}%. This employee has only {Math.max(0, 100 - currentAllocationTotal)}%
-            {' '}allocation capacity remaining for this period.
-          </p>
-        )}
-
-        {clash && (
-          <p style={{ fontSize: 11, color: 'var(--risk)', margin: '0 0 14px' }} role="alert">
-            {describeClash(clash)}
-          </p>
+        {employeeChecks.length > 0 && (
+          <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {employeeChecks.map(c => {
+              const problem = c.clash != null || c.wouldExceed;
+              return (
+                <div
+                  key={c.employeeId}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+                    padding: '8px 12px', borderRadius: 7, fontSize: 12,
+                    background: problem ? 'rgba(228,55,61,.08)' : 'var(--raised)',
+                    border: `1px solid ${problem ? 'rgba(228,55,61,.25)' : 'var(--line)'}`,
+                  }}
+                  role={problem ? 'alert' : undefined}
+                >
+                  <span style={{ color: 'var(--txt)', fontWeight: 550, flexShrink: 0 }}>{c.name}</span>
+                  {c.clash ? (
+                    <span style={{ color: 'var(--risk)', textAlign: 'right' }}>{describeClash(c.clash)}</span>
+                  ) : c.wouldExceed ? (
+                    <span style={{ color: 'var(--risk)', textAlign: 'right' }}>
+                      Would total {c.currentTotal + (pctNum ?? 0)}% — only {Math.max(0, 100 - c.currentTotal)}%
+                      {' '}capacity remaining for this period.
+                    </span>
+                  ) : (
+                    <span style={{ color: 'var(--txt-dim)' }}>{c.currentTotal}% → {c.currentTotal + (pctNum ?? 0)}%</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             type="submit"
-            disabled={createMutation.isPending || !employeeId || !projectId
+            disabled={createMutation.isPending || !projectId || employeeIds.length === 0
               || !effectiveFrom || badDateOrder || dateFormatInvalid || badEffectiveFromBeforeStart
-              || clash != null || pctNum === null || badPct || wouldExceedCapacity}
+              || pctNum === null || badPct || hasBlockingIssue}
             style={{
               padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
               color: '#fff', fontSize: 13, fontWeight: 600,
               cursor: createMutation.isPending ? 'not-allowed' : 'pointer',
             }}
           >
-            {createMutation.isPending ? 'Saving…' : 'Create Allocation'}
+            {createMutation.isPending
+              ? 'Saving…'
+              : employeeIds.length > 1 ? `Create ${employeeIds.length} Allocations` : 'Create Allocation'}
           </button>
           <button type="button" onClick={handleClose} style={{
             padding: '9px 16px', background: 'transparent', border: '1px solid var(--line2)',

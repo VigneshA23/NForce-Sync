@@ -68,8 +68,20 @@ const WORK_MODES = [
 // constraint. Super Admin is the only role with an optional manager (everyone else requires one).
 const MANDATORY_MANAGER_ROLES = ['EMPLOYEE', 'PM', 'ADMIN'];
 
-function reportingManagerRoleFilter(_role: string): string | null {
-  return null;
+// Who may be picked as a given role's Reporting Manager. There is no standalone "Team Lead" role —
+// a Team Lead is just an EMPLOYEE (or PM) assigned as a project's lead — so "TL" for an Employee's
+// candidate list means any EMPLOYEE-role account, not a separate lookup of who already leads a
+// project. PM and ADMIN sit above the employee line and report only to a Super Admin; a Super
+// Admin's manager (if any) can only be another Super Admin, never someone they'd outrank.
+const MANAGER_ELIGIBLE_ROLES: Record<string, string[]> = {
+  EMPLOYEE: ['EMPLOYEE', 'PM', 'SUPERADMIN'],
+  PM: ['SUPERADMIN'],
+  ADMIN: ['SUPERADMIN'],
+  SUPERADMIN: ['SUPERADMIN'],
+};
+
+function reportingManagerRoleFilter(role: string): string[] {
+  return MANAGER_ELIGIBLE_ROLES[role] ?? [];
 }
 
 /**
@@ -647,7 +659,8 @@ function AddModal({
   useBodyScrollLock(true);
 
   const managerRequired = MANDATORY_MANAGER_ROLES.includes(form.role);
-  const managers = allUsers.filter(u => u.role === reportingManagerRoleFilter(form.role));
+  const eligibleManagerRoles = reportingManagerRoleFilter(form.role);
+  const managers = allUsers.filter(u => u.status === 'ACTIVE' && eligibleManagerRoles.includes(u.role));
 
   const mutation = useMutation({
     mutationFn: createUser,
@@ -1068,7 +1081,9 @@ function EditModal({
   }, [user?.id]);
 
   const managerRequired = MANDATORY_MANAGER_ROLES.includes(form.role);
-  const managers = allUsers.filter(u => u.role === reportingManagerRoleFilter(form.role) && u.id !== user?.id);
+  const eligibleManagerRoles = reportingManagerRoleFilter(form.role);
+  const managers = allUsers.filter(u =>
+    u.status === 'ACTIVE' && eligibleManagerRoles.includes(u.role) && u.id !== user?.id);
   // Role dropdown offers only the five current roles, plus the user's own role if it's a
   // legacy one (Delivery Manager/Finance Admin/Leadership Viewer) so it still renders correctly
   // — the backend allows keeping that role unchanged but not reassigning it to anyone else.
