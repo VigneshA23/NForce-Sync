@@ -27,15 +27,17 @@ import { useSubmissionWindow } from './useSubmissionWindow';
 import { LegacyLogNotice } from './LegacyLogNotice';
 import { legacyLogOf } from './dailyLogLegacy';
 import { api } from '../../api/client';
+import { extractError } from '../../lib/extractError';
+import {
+  MAX_DESC, QUARTER, descriptionError, draftBlockReason, draftErrorMessage, firstInvalidLine, lineFieldId, lineProblems, type LineField,
+} from './dailyLogValidation';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const AUTOSAVE_MS   = 2000;
 const MAX_TEXT      = 300;
 const MAX_NOTES     = 8000;
-const MIN_DESC      = 3;
-const MAX_DESC      = 4000;
-const QUARTER       = 0.25;
+// MIN_DESC, MAX_DESC and QUARTER live in ./dailyLogValidation (shared with the validator and tests).
 const WORK_LOCS     = ['Office', 'Remote', 'Client Site', 'Field'];
 
 const DAY_TYPES = [
@@ -72,9 +74,8 @@ function entrySignature(date: string, e?: EodEntryDto | null) {
   return e ? `${date}|${e.id}|${e.status}|${new Date(e.updatedAt).getTime()}` : `${date}|none`;
 }
 
-function apiErr(err: unknown) {
-  return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Something went wrong';
-}
+/** Thrown before a draft request is sent when a row has no category (see draftBlockReason). */
+class DraftBlockedError extends Error {}
 
 function editable(entry: EodEntryDto | null | undefined) {
   return !entry || entry.status === 'DRAFT' || entry.status === 'REJECTED';
@@ -158,7 +159,13 @@ export default function DailyLogForm() {
   const [dirty,        setDirty]        = useState(false);
   const [confirming,   setConfirming]   = useState(false);
   const [autosaving,   setAutosaving]   = useState(false);
+  // Why the last autosave did not go through (null = fine). Autosave never toasts, but it must not fail unseen.
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
   const [errors,       setErrors]       = useState<string[]>([]);
+  // Set by a failed submit: only then do empty required fields turn red, so a freshly added row isn't born
+  // in an error state. `focusTarget.n` bumps on every failed attempt so repeating it re-focuses the field.
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [focusTarget, setFocusTarget] = useState<{ key: number; field: LineField; n: number } | null>(null);
 
   const errorRef      = useRef<HTMLDivElement>(null);
   const saveTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -241,6 +248,16 @@ export default function DailyLogForm() {
   }, [entries, loadingEntry, selectedDate, dayDefaults, loadingDD]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (errors.length) errorRef.current?.scrollIntoView({ behavior:'smooth', block:'center' }); }, [errors]);
+
+  // Declared after the banner scroll above so it wins when a line item is the problem: scroll to the first
+  // invalid row and put the cursor in its first invalid control.
+  useEffect(() => {
+    if (!focusTarget) return;
+    const el = document.getElementById(lineFieldId(focusTarget.key, focusTarget.field));
+    if (!el) return;
+    el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    (el as HTMLElement).focus({ preventScroll: true });
+  }, [focusTarget]);
   useEffect(() => { setSP(selectedDate === todayISO() ? {} : { date: selectedDate }, { replace: true }); }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -271,7 +288,7 @@ export default function DailyLogForm() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  function handleDateChange(d: string) { appliedRef.current = null; setSelectedDate(d); setErrors([]); }
+  function handleDateChange(d: string) { appliedRef.current = null; setSelectedDate(d); setErrors([]); setSubmitAttempted(false); setAutosaveError(null); }
 
   function handleDayTypeChange(v: string) {
     setDayType(v); setWeekendWorked(false);
@@ -326,9 +343,7 @@ export default function DailyLogForm() {
     if (isWeekend && lines.length === 0) e.push('Add at least one line item when you worked on a weekend.');
     if (!wLocDisabled && !workLocation)    e.push('Work location is required.');
     if (!isWeekend && !nextDayPlan.trim()) e.push('Next-day plan is required.');
-    if (!isLeave && !isNonWork && lines.some(l =>
-      l.categoryId == null || l.hours < QUARTER || l.hours > 24 ||
-      l.description.trim().length < MIN_DESC || l.description.trim().length > MAX_DESC))
+    if (!isLeave && !isNonWork && firstInvalidLine(lines))
       e.push('Fix all line items before submitting.');
     if (notes.length       > MAX_NOTES) e.push(`Notes must be under ${MAX_NOTES} characters.`);
     if (nextDayPlan.length > MAX_TEXT)  e.push(`Next-day plan must be under ${MAX_TEXT} characters.`);
@@ -339,21 +354,35 @@ export default function DailyLogForm() {
   // ── Mutations ─────────────────────────────────────────────────────────────
 
   const saveMut = useMutation({
-    mutationFn: () => saveDraft(buildReq()),
+    mutationFn: () => {
+      const blocked = draftBlockReason(isLeave || isNonWork || noWorkWeekend ? [] : lines);
+      if (blocked) throw new DraftBlockedError(blocked);
+      return saveDraft(buildReq());
+    },
     onSuccess: (saved) => {
+      setAutosaveError(null);
       setEntryId(saved.id ?? null); setEntryStatus(saved.status);
       appliedRef.current = entrySignature(selectedDate, saved);
       setDirty(false); qc.invalidateQueries({ queryKey: ['eod'] });
       showToast('success', 'Draft saved');
     },
-    onError: (err: unknown) => showToast('error', apiErr(err)),
+    // extractError reads the server's {error, fields}: a rejected draft says which row and why.
+    onError: (err: unknown) => showToast('error',
+      err instanceof DraftBlockedError ? `Can't save draft yet — ${err.message}` : draftErrorMessage(extractError(err))),
   });
 
   const submitMut = useMutation({
     mutationFn: async () => {
       const errs = validate();
-      if (errs.length) { setErrors(errs); throw new Error('validation'); }
+      if (errs.length) {
+        setErrors(errs);
+        setSubmitAttempted(true);
+        const bad = !isLeave && !isNonWork && !noWorkWeekend ? firstInvalidLine(lines) : null;
+        if (bad) setFocusTarget(t => ({ ...bad, n: (t?.n ?? 0) + 1 }));
+        throw new Error('validation');
+      }
       setErrors([]);
+      setSubmitAttempted(false);
       const saved = await saveDraft(buildReq());
       return submitEntry(saved.id);
     },
@@ -364,7 +393,7 @@ export default function DailyLogForm() {
       showToast('success', isLeave || isNonWork ? 'Leave day recorded' : noWorkWeekend ? 'Weekend recorded' : 'Daily log submitted');
     },
     onError: (err: unknown) => {
-      if ((err as Error).message !== 'validation') showToast('error', apiErr(err));
+      if ((err as Error).message !== 'validation') showToast('error', extractError(err));
     },
   });
 
@@ -374,13 +403,16 @@ export default function DailyLogForm() {
     if (!dirty || !isEditable) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
+      const blocked = draftBlockReason(isLeave || isNonWork || noWorkWeekend ? [] : lines);
+      if (blocked) { setAutosaveError(blocked); setDirty(false); return; }
       setAutosaving(true);
       try {
         const saved = await saveDraft(buildReq());
+        setAutosaveError(null);
         setEntryId(saved.id ?? null); setEntryStatus(saved.status);
         appliedRef.current = entrySignature(selectedDate, saved);
         qc.invalidateQueries({ queryKey: ['eod'] });
-      } catch { /* silent */ }
+      } catch (err) { setAutosaveError(draftErrorMessage(extractError(err))); }
       finally { setAutosaving(false); setDirty(false); }
     }, AUTOSAVE_MS);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
@@ -633,6 +665,7 @@ export default function DailyLogForm() {
                     index={idx}
                     categories={categories}
                     isReadOnly={isReadOnly}
+                    showErrors={submitAttempted}
                     onUpdate={patch => updateLine(line.key, patch)}
                     onRemove={() => removeLine(line.key)}
                   />
@@ -715,6 +748,11 @@ export default function DailyLogForm() {
           {isEditable && !confirming && (
             <div className="nf-dl-actionbar" style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8 }}>
               {autosaving && <div style={{ fontSize:12, color:'var(--txt-dim)' }}>Saved just now</div>}
+              {autosaveError && !autosaving && (
+                <div role="status" style={{ fontSize:12, color:'var(--warn)', maxWidth:420, textAlign:'right' }}>
+                  Not auto-saved: {autosaveError}
+                </div>
+              )}
               <div style={{ display:'flex', gap:10 }}>
                 <button
                   onClick={() => saveMut.mutate()}
@@ -767,14 +805,19 @@ export default function DailyLogForm() {
 interface LineRowProps {
   line: LogLine; index: number; categories: TaskCategoryDto[];
   isReadOnly: boolean;
+  /** True after a failed submit: empty required fields then show their error, not just malformed ones. */
+  showErrors: boolean;
   onUpdate: (p: Partial<Omit<LogLine,'key'>>) => void;
   onRemove: () => void;
 }
 
-function LineRow({ line, index, categories, isReadOnly, onUpdate, onRemove }: LineRowProps) {
-  const descLen = line.description.length;
-  const descOk  = descLen >= MIN_DESC && descLen <= MAX_DESC;
-  const hoursOk = line.hours >= QUARTER && line.hours <= 24;
+function LineRow({ line, index, categories, isReadOnly, showErrors, onUpdate, onRemove }: LineRowProps) {
+  const problems = lineProblems(line);
+  const hoursOk  = problems.hours == null;
+  // A description error shows once the user has typed something wrong, or — for an empty field — only after
+  // they tried to submit (so a brand-new row isn't red before the user has done anything).
+  const descError = isReadOnly ? null
+    : (line.description.length > 0 || showErrors) ? descriptionError(line.description) : null;
   const CHIPS   = [0.5, 1, 1.5, 2, 3, 4, 6, 8];
 
   const cellStyle: React.CSSProperties = {
@@ -788,6 +831,7 @@ function LineRow({ line, index, categories, isReadOnly, onUpdate, onRemove }: Li
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', background:'var(--raised)', borderBottom:'1px solid var(--line)' }}>
         <span style={{ fontSize:11, fontWeight:700, color:'var(--txt-dim)', minWidth:16, flexShrink:0 }}>{index+1}</span>
         <select
+          id={lineFieldId(line.key, 'category')}
           value={line.categoryId ?? ''}
           disabled={isReadOnly || categories.length === 0}
           onChange={e => onUpdate({ categoryId: e.target.value ? Number(e.target.value) : null })}
@@ -797,6 +841,7 @@ function LineRow({ line, index, categories, isReadOnly, onUpdate, onRemove }: Li
           {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <input
+          id={lineFieldId(line.key, 'hours')}
           type="number" min={QUARTER} max={24} step={QUARTER}
           value={line.hours} disabled={isReadOnly}
           onChange={e => { const v=round25(parseFloat(e.target.value)||QUARTER); onUpdate({ hours:Math.min(24,Math.max(QUARTER,v)) }); }}
@@ -828,16 +873,24 @@ function LineRow({ line, index, categories, isReadOnly, onUpdate, onRemove }: Li
           </div>
         )}
         <div>
+          {/* The marker lives on a label above the field (not only in the placeholder, which vanishes as soon
+              as the user types). Same red * as Day type, Work location and Next-day plan. */}
+          <label htmlFor={lineFieldId(line.key, 'description')} style={{ display:'block', fontSize:11, fontWeight:500, color:'var(--txt-mut)', letterSpacing:'0.06em', textTransform:'uppercase', marginBottom:5 }}>
+            Description {!isReadOnly && <Req />}
+          </label>
           <input
+            id={lineFieldId(line.key, 'description')}
             type="text"
             placeholder="Describe what you worked on (min 3 chars)"
             value={line.description} disabled={isReadOnly}
             maxLength={MAX_DESC}
+            aria-required="true"
+            aria-invalid={descError ? true : undefined}
             onChange={e => onUpdate({ description:e.target.value })}
-            style={{ ...cellStyle, width:'100%', borderColor:!descOk&&line.description.length>0&&!isReadOnly?'rgba(228,55,61,.4)':'var(--line2)' }}
+            style={{ ...cellStyle, width:'100%', borderColor:descError?'rgba(228,55,61,.6)':'var(--line2)' }}
           />
-          {!descOk && line.description.length>0 && line.description.length<MIN_DESC && (
-            <div style={{ fontSize:11, color:'var(--warn)', marginTop:4 }}>Minimum {MIN_DESC} characters required</div>
+          {descError && (
+            <div role="alert" style={{ fontSize:11, color:showErrors?'var(--risk)':'var(--warn)', marginTop:4 }}>{descError}</div>
           )}
         </div>
       </div>
