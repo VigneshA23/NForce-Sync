@@ -4,6 +4,7 @@ import com.nforceone.sync.auth.AppUser;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 @Entity
@@ -31,6 +32,19 @@ public class Notification {
 
     @Column(length = 500)
     private String link;
+
+    /** Structured pointers for an "Open related page" action; null on types/rows that have none. */
+    @Column(name = "related_employee_id")
+    private Long relatedEmployeeId;
+
+    @Column(name = "related_piece_id")
+    private Long relatedPieceId;
+
+    @Column(name = "related_eod_id")
+    private Long relatedEodId;
+
+    @Column(name = "related_eod_date")
+    private LocalDate relatedEodDate;
 
     @Column(name = "is_read", nullable = false)
     private boolean read = false;

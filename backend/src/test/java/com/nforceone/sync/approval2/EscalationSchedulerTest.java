@@ -112,8 +112,7 @@ class EscalationSchedulerTest {
         verify(pieceRepository).save(piece);
 
         // Two notifications: one to PM, one to lead
-        verify(notificationService, times(2)).send(any(), any(), any(), any(), any());
-        verify(notificationService).send(eq(pm.getId()), eq("ESCALATION_PM_NOTIFIED"), any(), any(), any());
+        verify(notificationService).sendWithRelated(eq(pm.getId()), eq("ESCALATION_PM_NOTIFIED"), any(), any(), any(), any());
         verify(notificationService).send(eq(lead.getId()), eq("ESCALATION_LEAD_NOTIFIED"), any(), any(), any());
 
         // Audit written for escalation
@@ -134,6 +133,7 @@ class EscalationSchedulerTest {
         assertThat(count).isZero();
         verify(pieceRepository, never()).findStaleLeadPiecesForEscalation(any());
         verify(notificationService, never()).send(any(), any(), any(), any(), any());
+        verify(notificationService, never()).sendWithRelated(any(), any(), any(), any(), any(), any());
     }
 
     /**
@@ -161,6 +161,7 @@ class EscalationSchedulerTest {
 
         assertThat(count).isZero();
         verify(notificationService, never()).send(any(), any(), any(), any(), any());
+        verify(notificationService, never()).sendWithRelated(any(), any(), any(), any(), any(), any());
         ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
         verify(auditLogRepository).save(auditCaptor.capture());
         assertThat(auditCaptor.getValue().getAction()).isEqualTo("ESCALATION_SKIPPED_NO_PM");
@@ -178,6 +179,7 @@ class EscalationSchedulerTest {
 
         assertThat(count).isZero();
         verify(notificationService, never()).send(any(), any(), any(), any(), any());
+        verify(notificationService, never()).sendWithRelated(any(), any(), any(), any(), any(), any());
         ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
         verify(auditLogRepository).save(auditCaptor.capture());
         assertThat(auditCaptor.getValue().getAction()).isEqualTo("ESCALATION_SKIPPED_PM_IS_LEAD");
@@ -195,6 +197,7 @@ class EscalationSchedulerTest {
 
         assertThat(count).isZero();
         verify(notificationService, never()).send(any(), any(), any(), any(), any());
+        verify(notificationService, never()).sendWithRelated(any(), any(), any(), any(), any(), any());
         ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
         verify(auditLogRepository).save(auditCaptor.capture());
         assertThat(auditCaptor.getValue().getAction()).isEqualTo("ESCALATION_SKIPPED_PM_IS_EMPLOYEE");
@@ -215,6 +218,7 @@ class EscalationSchedulerTest {
         assertThat(count).isZero();
         verify(pieceRepository, never()).save(any());
         verify(notificationService, never()).send(any(), any(), any(), any(), any());
+        verify(notificationService, never()).sendWithRelated(any(), any(), any(), any(), any(), any());
         verify(auditLogRepository, never()).save(any());
     }
 
@@ -232,6 +236,7 @@ class EscalationSchedulerTest {
 
         assertThat(count).isZero();
         verify(notificationService, never()).send(any(), any(), any(), any(), any());
+        verify(notificationService, never()).sendWithRelated(any(), any(), any(), any(), any(), any());
     }
 
     /**
@@ -243,13 +248,8 @@ class EscalationSchedulerTest {
 
         scheduler.runEscalation(config);
 
-        ArgumentCaptor<String> typeCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<Long> userCaptor  = ArgumentCaptor.forClass(Long.class);
-        verify(notificationService, times(2)).send(userCaptor.capture(), typeCaptor.capture(), any(), any(), any());
-
-        assertThat(typeCaptor.getAllValues()).containsExactlyInAnyOrder(
-                "ESCALATION_PM_NOTIFIED", "ESCALATION_LEAD_NOTIFIED");
-        assertThat(userCaptor.getAllValues()).containsExactlyInAnyOrder(pm.getId(), lead.getId());
+        verify(notificationService).sendWithRelated(eq(pm.getId()), eq("ESCALATION_PM_NOTIFIED"), any(), any(), any(), any());
+        verify(notificationService).send(eq(lead.getId()), eq("ESCALATION_LEAD_NOTIFIED"), any(), any(), any());
     }
 
     /**
@@ -264,8 +264,8 @@ class EscalationSchedulerTest {
 
         assertThat(count).isEqualTo(1);
         // Only one notification (to PM) — no lead to notify
-        verify(notificationService, times(1)).send(any(), any(), any(), any(), any());
-        verify(notificationService).send(eq(pm.getId()), eq("ESCALATION_PM_NOTIFIED"), any(), any(), any());
+        verify(notificationService, never()).send(any(), any(), any(), any(), any());
+        verify(notificationService).sendWithRelated(eq(pm.getId()), eq("ESCALATION_PM_NOTIFIED"), any(), any(), any(), any());
     }
 
     /**
@@ -302,6 +302,7 @@ class EscalationSchedulerTest {
 
         verify(auditLogRepository, never()).save(any());
         verify(notificationService, never()).send(any(), any(), any(), any(), any());
+        verify(notificationService, never()).sendWithRelated(any(), any(), any(), any(), any(), any());
     }
 
     /** The PM is told to act in the PM's Approvals page, not the Team Lead's. */
@@ -311,7 +312,26 @@ class EscalationSchedulerTest {
 
         scheduler.runEscalation(config);
 
-        verify(notificationService).send(eq(pm.getId()), eq("ESCALATION_PM_NOTIFIED"), any(), any(), eq("/projects/approvals"));
+        verify(notificationService).sendWithRelated(eq(pm.getId()), eq("ESCALATION_PM_NOTIFIED"), any(), any(),
+                startsWith("/projects/approvals"), any());
         verify(notificationService).send(eq(lead.getId()), eq("ESCALATION_LEAD_NOTIFIED"), any(), any(), eq("/team/approvals"));
+    }
+
+    /** The PM notification carries the ids the Approvals page needs; the link is built from the same ids. */
+    @Test
+    void pmNotificationCarriesEmployeePieceEodAndDate() {
+        when(pieceRepository.findStaleLeadPiecesForEscalation(any())).thenReturn(List.of(piece));
+
+        scheduler.runEscalation(config);
+
+        ArgumentCaptor<NotificationService.Related> rel = ArgumentCaptor.forClass(NotificationService.Related.class);
+        ArgumentCaptor<String> link = ArgumentCaptor.forClass(String.class);
+        verify(notificationService).sendWithRelated(eq(pm.getId()), eq("ESCALATION_PM_NOTIFIED"), any(), any(),
+                link.capture(), rel.capture());
+        assertThat(rel.getValue().employeeId()).isEqualTo(piece.getEodEntry().getEmployee().getId());
+        assertThat(rel.getValue().pieceId()).isEqualTo(piece.getId());
+        assertThat(rel.getValue().eodDate()).isEqualTo(piece.getEodEntry().getEntryDate());
+        assertThat(link.getValue()).contains("employeeId=" + rel.getValue().employeeId())
+                .contains("highlight=" + piece.getId());
     }
 }

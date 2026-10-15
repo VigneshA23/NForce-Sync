@@ -9,6 +9,12 @@ export interface NotificationDto {
   link: string | null;
   read: boolean;
   createdAt: string;
+  /** Related-record pointers; null on types without a related page and on rows created before they existed. */
+  employeeId?: number | null;
+  pieceId?: number | null;
+  eodId?: number | null;
+  /** yyyy-MM-dd */
+  eodDate?: string | null;
 }
 
 export interface NotificationPage {

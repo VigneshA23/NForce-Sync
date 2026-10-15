@@ -6,7 +6,8 @@
  * PM Approvals:       tabs = ['pending','approved','rejected'] with pendingShowsAll (escalated + direct PM pieces)
  * Pending Approvals:   tabs = ['pending','approved','rejected']
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle, Check, CheckCheck, ChevronDown, ChevronRight,
   MessageCircleQuestion, RefreshCw, Search, X,
@@ -22,6 +23,10 @@ import {
   CLARIFICATION_BLOCKS_DECISION_REASON, clarificationMenuState, decisionBlockedReason, isBlockingStatus,
 } from '../../lib/clarificationGate';
 import { splitPendingPieces } from './approvalsTabSplit';
+import {
+  DEEP_LINK_UNAVAILABLE_NOTE, pageOfPiece, parseApprovalsDeepLink, resolveApprovalsDeepLink,
+} from './approvalsDeepLink';
+import { formatDate } from '../../lib/date';
 export { splitPendingPieces };
 import { FilterDropdown, toggleFilterVal } from '../../components/FilterDropdown';
 import { GlobalLoader } from '../../components/GlobalLoader';
@@ -734,6 +739,49 @@ export default function ApprovalsPage({
   const pageSafe   = Math.min(page, totalPages);
   const paged      = visible.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
 
+  // ── Deep link (?employeeId=&highlight=&date=) ──────────────────────────────
+  // Applied once, after the scoped pending list has loaded. Works on a direct page load as well as on
+  // in-app navigation, because it reads the URL rather than router state.
+  const [searchParams] = useSearchParams();
+  const deepLink = useMemo(() => parseApprovalsDeepLink(searchParams), [searchParams]);
+  const deepLinkApplied = useRef(false);
+  const [deepLinkNote, setDeepLinkNote] = useState<string | null>(null);
+  const [scrollToPieceId, setScrollToPieceId] = useState<number | null>(null);
+  const [highlightPieceId, setHighlightPieceId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!deepLink || deepLinkApplied.current || pendingLoading || pendingError || pendingPieces === undefined) return;
+    deepLinkApplied.current = true;
+    const targetTab: ApprovalsTab = hasPendingTab ? 'pending' : 'escalated';
+    const resolution = resolveApprovalsDeepLink(deepLink, targetTab === 'pending' ? plainPendingPieces : escalatedPieces);
+    if (resolution.status === 'unavailable') {
+      // One neutral note for "already handled" and "not yours" alike; nothing else is changed or revealed.
+      setDeepLinkNote(deepLink.date
+        ? `${DEEP_LINK_UNAVAILABLE_NOTE} (EOD ${formatDate(deepLink.date)})`
+        : DEEP_LINK_UNAVAILABLE_NOTE);
+      return;
+    }
+    setTab(targetTab);
+    setEmployeeFilter(new Set([resolution.piece.employeeCode]));
+    setScrollToPieceId(resolution.piece.id);
+  }, [deepLink, pendingLoading, pendingError, pendingPieces, hasPendingTab, plainPendingPieces, escalatedPieces]);
+
+  // Once the filter has been applied and the list recomputed, jump to the page holding the row, scroll to
+  // it and highlight it briefly.
+  useEffect(() => {
+    if (scrollToPieceId == null || !visible.some(p => p.id === scrollToPieceId)) return;
+    setPage(pageOfPiece(visible, scrollToPieceId, PAGE_SIZE));
+    setHighlightPieceId(scrollToPieceId);
+    setScrollToPieceId(null);
+  }, [scrollToPieceId, visible]);
+
+  useEffect(() => {
+    if (highlightPieceId == null) return;
+    document.getElementById(`piece-${highlightPieceId}`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    const t = window.setTimeout(() => setHighlightPieceId(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [highlightPieceId, page]);
+
   const modalPiece = useMemo(
     () => [...(pendingPieces ?? []), ...(decidedApproved ?? []), ...(decidedRejected ?? [])].find(p => p.id === modalPieceId) ?? null,
     [pendingPieces, decidedApproved, decidedRejected, modalPieceId],
@@ -831,6 +879,19 @@ export default function ApprovalsPage({
         </div>
       </div>
 
+      {deepLinkNote && (
+        <div role="status" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          marginBottom: 14, padding: '10px 14px', borderRadius: 8,
+          background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt-mut)', fontSize: 12.5,
+        }}>
+          <span>{deepLinkNote}</span>
+          <button onClick={() => setDeepLinkNote(null)} aria-label="Dismiss" style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', padding: 0, display: 'flex' }}>
+            <X size={13} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         {tabs.map(t => (
@@ -921,15 +982,24 @@ export default function ApprovalsPage({
       ) : (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           {paged.map(piece => (
-            <PieceCard
+            <div
               key={piece.id}
-              piece={piece}
-              tab={tab}
-              onOpenModal={(mode = 'view') => { setModalMode(mode); setModalPieceId(piece.id); }}
-              clarificationOpen={clarifiedEntryIds.has(piece.eodEntryId)}
-              onOpenChat={openChat}
-              clarificationReadOnly={clarificationReadOnly}
-            />
+              id={`piece-${piece.id}`}
+              style={{
+                outline: highlightPieceId === piece.id ? '2px solid var(--brand-bright)' : '2px solid transparent',
+                outlineOffset: -2,
+                transition: 'outline-color .3s',
+              }}
+            >
+              <PieceCard
+                piece={piece}
+                tab={tab}
+                onOpenModal={(mode = 'view') => { setModalMode(mode); setModalPieceId(piece.id); }}
+                clarificationOpen={clarifiedEntryIds.has(piece.eodEntryId)}
+                onOpenChat={openChat}
+                clarificationReadOnly={clarificationReadOnly}
+              />
+            </div>
           ))}
           <Pagination
             page={pageSafe} totalPages={totalPages} totalItems={visible.length} pageSize={PAGE_SIZE}

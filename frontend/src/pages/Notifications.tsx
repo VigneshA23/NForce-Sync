@@ -18,7 +18,7 @@ import {
 } from '../api/notifications';
 import { formatDate, formatDateTime, formatTime12h, toLocalISODate, todayISO, yesterdayISO } from '../lib/date';
 import { resolveNotificationPriority, type NotificationPriority } from '../lib/notificationPriority';
-import { canOpenNotificationLink } from '../lib/notificationLinks';
+import { markReadOnOpen, resolveRelatedPageHref } from '../lib/notificationLinks';
 import { GlobalLoader } from '../components/GlobalLoader';
 
 // ── Notification metadata ───────────────────────────────────────────────────
@@ -323,7 +323,7 @@ function NotificationListItem({
 
 // ── Detail pane ──────────────────────────────────────────────────────────────
 
-function NotificationDetailPane({ n }: { n: NotificationDto | null }) {
+function NotificationDetailPane({ n, onMarkRead }: { n: NotificationDto | null; onMarkRead: (id: number) => void }) {
   // PM: notifications are informational only here — no "open related page" action, per
   // role-specific request — except the EOD Clarification types (see lib/notificationLinks.ts),
   // because an escalated PM must be able to reach the thread. Every other role keeps the link.
@@ -352,6 +352,7 @@ function NotificationDetailPane({ n }: { n: NotificationDto | null }) {
   const meta = NOTIFICATION_META[n.type] ?? defaultMeta();
   const priorityValue = resolveNotificationPriority(n);
   const priority = PRIORITY_META[priorityValue];
+  const relatedHref = resolveRelatedPageHref(user?.role, n);
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: '26px 30px' }}>
@@ -393,9 +394,10 @@ function NotificationDetailPane({ n }: { n: NotificationDto | null }) {
         {n.message || 'No additional details were provided for this notification.'}
       </p>
 
-      {n.link && canOpenNotificationLink(user?.role, n.type) && (
+      {relatedHref && (
         <Link
-          to={n.link}
+          to={relatedHref}
+          onClick={() => markReadOnOpen(n, onMarkRead)}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '9px 16px', borderRadius: 8,
@@ -694,7 +696,7 @@ export default function Notifications() {
           {/* Detail pane — desktop/tablet only */}
           {isWide && (
             <div className="nf-notif-detail-pane" style={{ borderLeft: '1px solid var(--line)', minWidth: 0 }}>
-              <NotificationDetailPane n={selected} />
+              <NotificationDetailPane n={selected} onMarkRead={(id) => markRead.mutate(id)} />
             </div>
           )}
         </div>

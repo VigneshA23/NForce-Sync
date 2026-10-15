@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Map;
 
@@ -31,7 +32,15 @@ public class NotificationService {
 
     // ── Public trigger API (called from other services) ──────────────────────
 
+    /** Structured pointers to the record a notification is about (all optional). */
+    public record Related(Long employeeId, Long pieceId, Long eodId, LocalDate eodDate) {}
+
     public void send(Long userId, String type, String title, String message, String link) {
+        sendWithRelated(userId, type, title, message, link, null);
+    }
+
+    public void sendWithRelated(Long userId, String type, String title, String message, String link,
+                                Related related) {
         try {
             AppUser user = userRepository.findById(userId).orElse(null);
             if (user == null || user.getDeletedAt() != null) return;
@@ -42,6 +51,12 @@ public class NotificationService {
             n.setTitle(title);
             n.setMessage(message);
             n.setLink(link);
+            if (related != null) {
+                n.setRelatedEmployeeId(related.employeeId());
+                n.setRelatedPieceId(related.pieceId());
+                n.setRelatedEodId(related.eodId());
+                n.setRelatedEodDate(related.eodDate());
+            }
             n.setCreatedAt(OffsetDateTime.now());
             notificationRepository.save(n);
         } catch (Exception ex) {

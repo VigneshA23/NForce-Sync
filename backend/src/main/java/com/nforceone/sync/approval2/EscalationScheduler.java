@@ -5,6 +5,7 @@ import com.nforceone.sync.auth.AuditLog;
 import com.nforceone.sync.auth.AuditLogRepository;
 import com.nforceone.sync.businessrules.BusinessRuleConfig;
 import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
+import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.notification.NotificationDates;
 import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.project.Project;
@@ -141,12 +142,18 @@ public class EscalationScheduler {
         String leadName = lead != null ? lead.getFullName() : "the assigned lead";
 
         // Notify PM
-        notificationService.send(pm.getId(), "ESCALATION_PM_NOTIFIED",
+        // The piece id is the precise key the PM Approvals page highlights; employeeId scopes the filter and
+        // the date is only echoed in the page's "no longer pending" note.
+        EodEntry entry = piece.getEodEntry();
+        notificationService.sendWithRelated(pm.getId(), "ESCALATION_PM_NOTIFIED",
                 "Approval escalated to you",
                 employee.getFullName() + "'s EOD for " + dateLabel
                 + " hasn't been reviewed by " + leadName + " within "
                 + config.getEscalationSlaHours() + "h. Please act on it.",
-                "/projects/approvals");
+                "/projects/approvals?employeeId=" + employee.getId() + "&highlight=" + piece.getId()
+                        + "&date=" + entry.getEntryDate(),
+                new NotificationService.Related(employee.getId(), piece.getId(), entry.getId(),
+                        entry.getEntryDate()));
 
         // Notify lead
         if (lead != null) {

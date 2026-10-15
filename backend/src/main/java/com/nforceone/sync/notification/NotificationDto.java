@@ -1,5 +1,6 @@
 package com.nforceone.sync.notification;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 public record NotificationDto(
@@ -9,7 +10,11 @@ public record NotificationDto(
         String message,
         String link,
         boolean read,
-        OffsetDateTime createdAt
+        OffsetDateTime createdAt,
+        Long employeeId,
+        Long pieceId,
+        Long eodId,
+        LocalDate eodDate
 ) {
     public static NotificationDto from(Notification n) {
         return new NotificationDto(
@@ -19,7 +24,11 @@ public record NotificationDto(
                 n.getMessage(),
                 n.getLink(),
                 n.isRead(),
-                n.getCreatedAt()
+                n.getCreatedAt(),
+                n.getRelatedEmployeeId(),
+                n.getRelatedPieceId(),
+                n.getRelatedEodId(),
+                n.getRelatedEodDate()
         );
     }
 }
