@@ -146,6 +146,32 @@ class EscalationSchedulerTest {
     }
 
     /**
+     * The "within Nh" / "after Nh" wording is built from the configured SLA, not a literal: a notice
+     * that says 48h while the SLA is 1h misleads the reader. Two different SLAs must give two different texts.
+     */
+    @Test
+    void escalationMessages_useConfiguredSlaHours() {
+        for (int sla : new int[] {1, 72}) {
+            reset(notificationService);
+            piece.setEscalatedAt(null);
+            config.setEscalationSlaHours(sla);
+            when(pieceRepository.findStaleLeadPiecesForEscalation(any())).thenReturn(List.of(piece));
+
+            scheduler.runEscalation(config);
+
+            ArgumentCaptor<String> pmMsg = ArgumentCaptor.forClass(String.class);
+            verify(notificationService).sendWithRelated(eq(pm.getId()), eq("ESCALATION_PM_NOTIFIED"), any(),
+                    pmMsg.capture(), any(), any());
+            ArgumentCaptor<String> leadMsg = ArgumentCaptor.forClass(String.class);
+            verify(notificationService).send(eq(lead.getId()), eq("ESCALATION_LEAD_NOTIFIED"), any(),
+                    leadMsg.capture(), any());
+
+            assertThat(pmMsg.getValue()).contains("within " + sla + "h.");
+            assertThat(leadMsg.getValue()).contains("after " + sla + "h.");
+        }
+    }
+
+    /**
      * SLA disabled: escalation_sla_hours is null → no repo query, returns 0.
      */
     @Test
