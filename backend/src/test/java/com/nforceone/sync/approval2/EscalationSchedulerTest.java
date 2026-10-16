@@ -122,6 +122,30 @@ class EscalationSchedulerTest {
     }
 
     /**
+     * The PM escalation notice must carry the structured ids and the full Approvals link: the PM's
+     * "Open related page" button is built from them, and a row saved without them gets no button at all.
+     * Fails if the scheduler ever sends the escalation with a null/partial Related or a bare link.
+     */
+    @Test
+    void pmEscalation_storesRelatedIdsAndFullLink() {
+        when(pieceRepository.findStaleLeadPiecesForEscalation(any())).thenReturn(List.of(piece));
+
+        scheduler.runEscalation(config);
+
+        ArgumentCaptor<String> link = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<NotificationService.Related> related = ArgumentCaptor.forClass(NotificationService.Related.class);
+        verify(notificationService).sendWithRelated(eq(pm.getId()), eq("ESCALATION_PM_NOTIFIED"), any(), any(),
+                link.capture(), related.capture());
+
+        assertThat(related.getValue()).isNotNull();
+        assertThat(related.getValue().employeeId()).isEqualTo(employee.getId());
+        assertThat(related.getValue().pieceId()).isEqualTo(piece.getId());
+        assertThat(related.getValue().eodId()).isEqualTo(entry.getId());
+        assertThat(related.getValue().eodDate()).isEqualTo(entry.getEntryDate());
+        assertThat(link.getValue()).isEqualTo("/projects/approvals?employeeId=30&highlight=1&date=2026-10-04");
+    }
+
+    /**
      * SLA disabled: escalation_sla_hours is null → no repo query, returns 0.
      */
     @Test
