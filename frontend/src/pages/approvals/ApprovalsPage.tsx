@@ -982,15 +982,7 @@ export default function ApprovalsPage({
       ) : (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           {paged.map(piece => (
-            <div
-              key={piece.id}
-              id={`piece-${piece.id}`}
-              style={{
-                outline: highlightPieceId === piece.id ? '2px solid var(--brand-bright)' : '2px solid transparent',
-                outlineOffset: -2,
-                transition: 'outline-color .3s',
-              }}
-            >
+            <div key={piece.id} id={`piece-${piece.id}`}>
               <PieceCard
                 piece={piece}
                 tab={tab}
