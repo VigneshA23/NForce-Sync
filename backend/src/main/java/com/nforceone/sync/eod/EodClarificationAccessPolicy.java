@@ -130,6 +130,61 @@ final class EodClarificationAccessPolicy {
         throw PmReadOnlyPolicy.denial(isProjectPm(actor, entry), "clarifications");
     }
 
+    // ── per-round (per-piece) rules ───────────────────────────────────────────
+    // A round belongs to ONE approval piece (project + lead). The entry-level rules above decide whether
+    // the actor may touch clarifications on this entry at all; these decide which ROUNDS. A legacy round
+    // (no piece) keeps the old entry-wide behaviour.
+
+    /** The round's piece as it stands in the entry's current-cycle pieces, or null when the round has no
+     *  piece or its piece was superseded (a resubmit started a new cycle). */
+    private static EodProjectApproval currentPieceOf(EodClarification round, List<EodProjectApproval> pieces) {
+        if (round.getPiece() == null) return null;
+        return pieces.stream().filter(p -> p.getId().equals(round.getPiece().getId())).findFirst().orElse(null);
+    }
+
+    /** May the actor read this round's thread? Owner, Super Admin and the read-only RM / project PM see every
+     *  round on the entry; a Team Lead (or any other approver) sees only the round on a piece he holds. */
+    static boolean canReadRound(AppUser actor, EodEntry entry, EodClarification round, List<EodProjectApproval> pieces) {
+        if (actor.getRole() == AppUser.Role.SUPERADMIN
+                || isOwningEmployee(actor, entry)
+                || isFrozenRm(actor, entry)
+                || isProjectPm(actor, entry)) {
+            return true;
+        }
+        // A legacy round (no piece) is its opener's alone — NOT every approver on the entry, so another
+        // project's lead can never read a thread that isn't theirs. The employee, Super Admin and the
+        // read-only RM / PM were already let through above, exactly as for a piece-keyed round.
+        if (round.getPiece() == null) return round.getOpenedBy().getId().equals(actor.getId());
+        return isApproverOf(actor, round.getPiece());
+    }
+
+    /** May the actor reply as the reviewing side of / resolve this round? Only the reviewer holding the
+     *  round's own still-pending piece — never the owner, never another project's lead. */
+    static boolean canReviewRound(AppUser actor, EodEntry entry, EodClarification round, List<EodProjectApproval> pieces) {
+        if (isOwningEmployee(actor, entry)) return false;
+        // Legacy round: only its opener, and only while he still holds a pending reviewing piece.
+        if (round.getPiece() == null) {
+            return round.getOpenedBy().getId().equals(actor.getId()) && canReview(actor, entry, pieces);
+        }
+        EodProjectApproval piece = currentPieceOf(round, pieces);
+        return piece != null
+                && piece.getStatus() == EodProjectApproval.Status.PENDING
+                && isReviewerOf(actor, piece);
+    }
+
+    /** May the actor post into this round: the owner (employee side) or the round's own reviewer. */
+    static boolean canReplyRound(AppUser actor, EodEntry entry, EodClarification round, List<EodProjectApproval> pieces) {
+        return isOwningEmployee(actor, entry) || canReviewRound(actor, entry, round, pieces);
+    }
+
+    /** Pieces the actor could open a NEW round on: still pending and held in a reviewing capacity. */
+    static List<EodProjectApproval> openablePieces(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
+        if (isOwningEmployee(actor, entry)) return List.of();
+        return pieces.stream()
+                .filter(p -> p.getStatus() == EodProjectApproval.Status.PENDING && isReviewerOf(actor, p))
+                .toList();
+    }
+
     /** Read: owner, any current approver, frozen RM, project PM, or Super Admin. */
     static void requireCanRead(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
         if (canRead(actor, entry, pieces)) return;

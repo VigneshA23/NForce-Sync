@@ -29,17 +29,14 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * v2 piece approve/reject must honour an open EOD clarification round — the legacy
- * ApprovalService already did, the piece path did not.
+ * v2 piece approve/reject must honour an open EOD clarification round.
  *
- * Rounds are per ENTRY (per-piece scoping is deferred), so the gate is entry-wide: a round open
- * on an entry blocks approve and reject of EVERY piece on that entry, including pieces owned by a
- * different approver than the one who raised the clarification. The entry-wide tests below pin
- * that behaviour so a later per-piece change has to update them deliberately.
+ * Clarification state is per PIECE (one project + one lead): a round blocks approve and reject of ITS OWN
+ * piece only, so the other project's lead keeps full access to theirs — in both directions. A legacy round
+ * (no piece) keeps the old behaviour and blocks every piece of the entry.
  */
 @ExtendWith(MockitoExtension.class)
 class ApprovalPieceClarificationGateTest {
@@ -59,6 +56,7 @@ class ApprovalPieceClarificationGateTest {
 
     private static final String LEAD_A_EMAIL = "lead.a@example.com";
     private static final String LEAD_B_EMAIL = "lead.b@example.com";
+    private static final EodClarification.Status RESOLVED = EodClarification.Status.RESOLVED;
 
     private AppUser leadA;
     private AppUser leadB;
@@ -86,6 +84,11 @@ class ApprovalPieceClarificationGateTest {
         lenient().when(userRepository.findByEmailAndDeletedAtIsNull(LEAD_B_EMAIL)).thenReturn(Optional.of(leadB));
         lenient().when(pieceRepository.findById(1L)).thenReturn(Optional.of(pieceA));
         lenient().when(pieceRepository.findById(2L)).thenReturn(Optional.of(pieceB));
+        lenient().when(pieceRepository.findByEodEntryId(200L)).thenReturn(List.of(pieceA, pieceB));
+        lenient().when(entryRepository.save(any())).thenReturn(entry);
+        // No clarification anywhere unless a test opens one.
+        lenient().when(clarificationRepository.existsByPiece_IdAndStatusNot(any(), any())).thenReturn(false);
+        lenient().when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(any(), any(), any())).thenReturn(false);
     }
 
     private AppUser user(Long id, String name, String email) {
@@ -111,9 +114,9 @@ class ApprovalPieceClarificationGateTest {
         return p;
     }
 
-    private void roundIsOpen(boolean open) {
-        when(clarificationRepository.existsByEodEntryIdAndStatusNot(200L, EodClarification.Status.RESOLVED))
-                .thenReturn(open);
+    /** An open round on exactly this piece (the other piece, and legacy rounds, stay unblocked). */
+    private void roundOpenOnPiece(Long pieceId) {
+        lenient().when(clarificationRepository.existsByPiece_IdAndStatusNot(pieceId, RESOLVED)).thenReturn(true);
     }
 
     private static void assertConflict(ResponseStatusException ex) {
@@ -121,11 +124,11 @@ class ApprovalPieceClarificationGateTest {
         assertTrue(ex.getReason().contains("open clarification"), ex.getReason());
     }
 
-    // ── gate blocks while a round is open ────────────────────────────────────
+    // ── a round blocks its own piece ─────────────────────────────────────────
 
     @Test
-    void approve_whileRoundOpen_gets409_andNothingIsSaved() {
-        roundIsOpen(true);
+    void approve_whileOwnPieceHasOpenRound_gets409_andNothingIsSaved() {
+        roundOpenOnPiece(1L);
 
         assertConflict(assertThrows(ResponseStatusException.class,
                 () -> service.approve(1L, LEAD_A_EMAIL, null)));
@@ -135,8 +138,8 @@ class ApprovalPieceClarificationGateTest {
     }
 
     @Test
-    void reject_whileRoundOpen_gets409_andNothingIsSaved() {
-        roundIsOpen(true);
+    void reject_whileOwnPieceHasOpenRound_gets409_andNothingIsSaved() {
+        roundOpenOnPiece(1L);
 
         assertConflict(assertThrows(ResponseStatusException.class,
                 () -> service.reject(1L, LEAD_A_EMAIL, "needs rework")));
@@ -145,47 +148,175 @@ class ApprovalPieceClarificationGateTest {
         assertEquals(EodProjectApproval.Status.PENDING, pieceA.getStatus());
     }
 
-    // ── entry-wide scope (rounds are per entry; per-piece is deferred) ───────
+    // ── per-piece scope: the OTHER lead is not blocked ───────────────────────
 
     @Test
-    void openRound_blocksApproveAndRejectOfEveryPieceOnTheEntry() {
-        // One round on the entry, however it was raised. Both pieces — owned by two different
-        // approvers — are blocked, for both actions.
-        roundIsOpen(true);
+    void roundOnPieceA_doesNotBlockLeadB_approve() {
+        roundOpenOnPiece(1L);
 
-        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(1L, LEAD_A_EMAIL, null)));
-        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(2L, LEAD_B_EMAIL, null)));
-        assertConflict(assertThrows(ResponseStatusException.class, () -> service.reject(1L, LEAD_A_EMAIL, "no")));
-        assertConflict(assertThrows(ResponseStatusException.class, () -> service.reject(2L, LEAD_B_EMAIL, "no")));
+        service.approve(2L, LEAD_B_EMAIL, null);
 
-        verify(pieceRepository, never()).save(any());
+        assertEquals(EodProjectApproval.Status.APPROVED, pieceB.getStatus());
+        assertEquals(EodProjectApproval.Status.PENDING, pieceA.getStatus());
     }
 
     @Test
-    void gate_isKeyedOnTheEntry_notOnThePiece() {
-        roundIsOpen(true);
+    void roundOnPieceA_doesNotBlockLeadB_reject() {
+        roundOpenOnPiece(1L);
+
+        service.reject(2L, LEAD_B_EMAIL, "not enough detail");
+
+        assertEquals(EodProjectApproval.Status.REJECTED, pieceB.getStatus());
+        // ...while A's own piece is still pending and still blocked.
+        assertEquals(EodProjectApproval.Status.PENDING, pieceA.getStatus());
+    }
+
+    @Test
+    void bothLeadsHaveOpenRounds_eachIsBlockedOnlyOnTheirOwnPiece() {
+        roundOpenOnPiece(1L);
+        roundOpenOnPiece(2L);
+
+        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(1L, LEAD_A_EMAIL, null)));
+        assertConflict(assertThrows(ResponseStatusException.class, () -> service.reject(2L, LEAD_B_EMAIL, "no")));
+
+        // Resolving A's round unblocks A only: B is still blocked.
+        when(clarificationRepository.existsByPiece_IdAndStatusNot(1L, RESOLVED)).thenReturn(false);
+        service.approve(1L, LEAD_A_EMAIL, null);
+        assertEquals(EodProjectApproval.Status.APPROVED, pieceA.getStatus());
+        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(2L, LEAD_B_EMAIL, null)));
+        assertEquals(EodProjectApproval.Status.PENDING, pieceB.getStatus());
+    }
+
+    @Test
+    void threeProjectsOnOneEod_aRoundOnTheMiddleOneBlocksOnlyThatPiece() {
+        AppUser leadC = user(12L, "Lead C", "lead.c@example.com");
+        EodProjectApproval pieceC = piece(3L, leadC, "Project C");
+        lenient().when(userRepository.findByEmailAndDeletedAtIsNull("lead.c@example.com")).thenReturn(Optional.of(leadC));
+        lenient().when(pieceRepository.findById(3L)).thenReturn(Optional.of(pieceC));
+        lenient().when(pieceRepository.findByEodEntryId(200L)).thenReturn(List.of(pieceA, pieceB, pieceC));
+        roundOpenOnPiece(2L);   // only Project B's round
+
+        service.approve(1L, LEAD_A_EMAIL, null);
+        service.reject(3L, "lead.c@example.com", "needs rework");
+        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(2L, LEAD_B_EMAIL, null)));
+        assertConflict(assertThrows(ResponseStatusException.class, () -> service.reject(2L, LEAD_B_EMAIL, "no")));
+
+        assertEquals(EodProjectApproval.Status.APPROVED, pieceA.getStatus());
+        assertEquals(EodProjectApproval.Status.REJECTED, pieceC.getStatus());
+        assertEquals(EodProjectApproval.Status.PENDING, pieceB.getStatus());
+    }
+
+    @Test
+    void gate_isKeyedOnThePiece_withAnEntryLevelCheckOnlyForLegacyRounds() {
+        roundOpenOnPiece(2L);
 
         assertThrows(ResponseStatusException.class, () -> service.approve(2L, LEAD_B_EMAIL, null));
 
-        // The lookup uses the ENTRY id shared by both pieces (200), never a piece id (1 or 2).
-        verify(clarificationRepository).existsByEodEntryIdAndStatusNot(200L, EodClarification.Status.RESOLVED);
-        verify(clarificationRepository, never()).existsByEodEntryIdAndStatusNot(eq(1L), any());
-        verify(clarificationRepository, never()).existsByEodEntryIdAndStatusNot(eq(2L), any());
+        verify(clarificationRepository).existsByPiece_IdAndStatusNot(2L, RESOLVED);
+        // The entry-level lookup is restricted to rounds with no piece (legacy), never "any open round".
+        verify(clarificationRepository, never()).existsByEodEntryIdAndStatusNot(any(), any());
     }
 
+    // ── legacy (null-piece) round blocks only the pieces its OPENER holds ────
+
+    @Test
+    void legacyRoundWithoutAPiece_blocksOnlyTheOpenersPieces_neverAnotherLeads() {
+        // Lead A (id 10) opened a legacy round on the entry.
+        when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(200L, RESOLVED, 10L))
+                .thenReturn(true);
+
+        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(1L, LEAD_A_EMAIL, null)));
+        assertConflict(assertThrows(ResponseStatusException.class, () -> service.reject(1L, LEAD_A_EMAIL, "no")));
+        assertEquals(EodProjectApproval.Status.PENDING, pieceA.getStatus());
+
+        // Lead B is not blocked by a thread they cannot see.
+        service.approve(2L, LEAD_B_EMAIL, null);
+        assertEquals(EodProjectApproval.Status.APPROVED, pieceB.getStatus());
+    }
+
+    @Test
+    void legacyRound_doesNotBlockAPieceThatIsNowEscalatedToAPm_butStillBlocksOnesTheOpenerHolds() {
+        // Lead A opened a legacy round. His piece A has since been escalated to a PM; piece C is still his.
+        AppUser pm = user(30L, "PM P", "pm@example.com");
+        lenient().when(userRepository.findByEmailAndDeletedAtIsNull("pm@example.com")).thenReturn(Optional.of(pm));
+        EodProjectApproval pieceC = piece(3L, leadA, "Project C");
+        lenient().when(pieceRepository.findById(3L)).thenReturn(Optional.of(pieceC));
+        lenient().when(pieceRepository.findByEodEntryId(200L)).thenReturn(List.of(pieceA, pieceB, pieceC));
+        pieceA.setEscalatedTo(pm);
+        when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(200L, RESOLVED, 10L))
+                .thenReturn(true);
+
+        // The escalated piece is not blocked: the PM, and the opener himself, can decide it.
+        service.approve(1L, "pm@example.com", null);
+        assertEquals(EodProjectApproval.Status.APPROVED, pieceA.getStatus());
+
+        // The piece the opener still holds is blocked, as before.
+        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(3L, LEAD_A_EMAIL, null)));
+        assertEquals(EodProjectApproval.Status.PENDING, pieceC.getStatus());
+    }
+
+    @Test
+    void legacyRound_doesNotBlockTheOpenersOwnEscalatedPiece_whenHeActsOnItHimself() {
+        AppUser pm = user(30L, "PM P", "pm@example.com");
+        pieceA.setEscalatedTo(pm);
+        lenient().when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(200L, RESOLVED, 10L))
+                .thenReturn(true);
+
+        service.reject(1L, LEAD_A_EMAIL, "not enough detail");
+
+        assertEquals(EodProjectApproval.Status.REJECTED, pieceA.getStatus());
+        // The escalated piece never even consults the legacy round.
+        verify(clarificationRepository, never())
+                .existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(any(), any(), any());
+    }
+
+    @Test
+    void legacyRoundBlocksAllPendingPiecesOfItsOpener_whenHeHoldsSeveral() {
+        // The opener holds both pieces on the entry (a lead of two projects): both stay blocked.
+        pieceB.setApprover(leadA);
+        when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(200L, RESOLVED, 10L))
+                .thenReturn(true);
+
+        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(1L, LEAD_A_EMAIL, null)));
+        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(2L, LEAD_A_EMAIL, null)));
+        verify(pieceRepository, never()).save(any());
+    }
+
+    // ── a single-project EOD is unchanged ────────────────────────────────────
+
+    @Test
+    void singleProjectEntry_openRoundBlocksItsOnlyPiece_untilResolved() {
+        when(pieceRepository.findByEodEntryId(200L)).thenReturn(List.of(pieceA));
+        roundOpenOnPiece(1L);
+
+        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(1L, LEAD_A_EMAIL, null)));
+
+        when(clarificationRepository.existsByPiece_IdAndStatusNot(1L, RESOLVED)).thenReturn(false);
+        service.approve(1L, LEAD_A_EMAIL, null);
+        assertEquals(EodProjectApproval.Status.APPROVED, pieceA.getStatus());
+    }
 
     // ── gate is open once the round is resolved ──────────────────────────────
 
     @Test
     void approve_afterRoundResolved_succeeds() {
-        roundIsOpen(false);
-        when(pieceRepository.findByEodEntryId(200L)).thenReturn(List.of(pieceA, pieceB));
-        when(entryRepository.save(any())).thenReturn(entry);
-
         service.approve(1L, LEAD_A_EMAIL, null);
 
         assertEquals(EodProjectApproval.Status.APPROVED, pieceA.getStatus());
         verify(pieceRepository).save(pieceA);
+    }
+
+    // ── approving / rejecting one piece never touches another piece's clarification ──
+
+    @Test
+    void approvingOnePiece_neverResolvesOrChangesAnyClarification() {
+        roundOpenOnPiece(1L);
+
+        service.approve(2L, LEAD_B_EMAIL, null);
+
+        verify(clarificationRepository, never()).save(any());
+        verify(clarificationRepository, never()).saveAll(any());
+        verify(clarificationRepository, never()).delete(any());
     }
 
     // ── ordering: authorization still wins over the gate ─────────────────────

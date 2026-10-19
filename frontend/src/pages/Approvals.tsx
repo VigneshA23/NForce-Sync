@@ -19,6 +19,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import { useAuth } from '../lib/auth';
 import {
   CLARIFICATION_BLOCKS_DECISION_REASON, clarificationMenuState, decisionBlockedReason, isBlockingStatus,
+  isPieceClarified,
 } from '../lib/clarificationGate';
 import { FilterDropdown } from '../components/FilterDropdown';
 import { useToast } from '../lib/toast';
@@ -276,7 +277,7 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
   // The row's own status is fetched only while its menu is open (no poll per card) and wins over
   // the batched list once fresh; otherwise the batched list decides. An open round blocks EVERY
   // piece on the entry (rounds are per entry).
-  const live = useClarificationStatusForApprovals(piece.eodEntryId, menuOpen);
+  const live = useClarificationStatusForApprovals(piece.eodEntryId, menuOpen, false, piece.id);
   const liveStatus = menuOpen && !live.isFetching ? live.data : undefined;
   const blocked = liveStatus ? isBlockingStatus(liveStatus.status) : clarificationOpen;
   const blockedReason = decisionBlockedReason(blocked);
@@ -607,7 +608,7 @@ export default function Approvals() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [detailsEntryId, setDetailsEntryId] = useState<number | null>(null);
   // The one chat popup for this page (closable, re-openable; closing resolves nothing).
-  const [chat, setChat] = useState<{ entryId: number; employeeId: number; employeeName: string; entryDate: string } | null>(null);
+  const [chat, setChat] = useState<{ entryId: number; pieceId?: number; employeeId: number; employeeName: string; entryDate: string } | null>(null);
   const [page, setPage] = useState(1);
 
   // A `?highlight=` link — the Team Status table's "Pending" click, or an "EOD submitted"
@@ -896,8 +897,8 @@ export default function Approvals() {
               <PieceCard
                 key={piece.id}
                 piece={piece}
-                clarificationOpen={clarifiedEntryIds.has(piece.eodEntryId)}
-                onOpenChat={p => setChat({ entryId: p.eodEntryId, employeeId: p.employeeId, employeeName: p.employeeName, entryDate: p.entryDate })}
+                clarificationOpen={isPieceClarified(openClarifications, piece.id, piece.eodEntryId)}
+                onOpenChat={p => setChat({ entryId: p.eodEntryId, pieceId: p.id, employeeId: p.employeeId, employeeName: p.employeeName, entryDate: p.entryDate })}
               />
             ))}
             {totalPiecePages > 1 && (
@@ -957,6 +958,7 @@ export default function Approvals() {
       {chat && (
         <ClarificationChatPopup
           entryId={chat.entryId}
+          pieceId={chat.pieceId}
           employeeId={chat.employeeId}
           employeeName={chat.employeeName}
           entryDate={chat.entryDate}

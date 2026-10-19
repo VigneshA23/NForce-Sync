@@ -16,6 +16,22 @@ public interface EodClarificationRepository extends JpaRepository<EodClarificati
 
     boolean existsByEodEntryIdAndStatusNot(Long eodEntryId, EodClarification.Status status);
 
+    // Per-piece clarification state: a round blocks / belongs to ONE approval piece. A legacy round
+    // (no piece) keeps the old per-entry behaviour, so approve/reject checks both of these.
+    boolean existsByPiece_IdAndStatusNot(Long pieceId, EodClarification.Status status);
+
+    boolean existsByEodEntryIdAndPieceIsNullAndStatusNot(Long eodEntryId, EodClarification.Status status);
+
+    // A legacy round (no piece) belongs to its OPENER: it blocks only the pending pieces the opener holds and
+    // only the opener (and the employee / read-only roles) can see it — never another project's lead.
+    boolean existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(
+            Long eodEntryId, EodClarification.Status status, Long openedById);
+
+    // Every round on an entry, newest first, with its piece — the service filters this per viewer
+    // (a lead only ever sees / drives rounds on pieces he holds; the employee sees them all).
+    @EntityGraph(attributePaths = {"piece", "piece.project", "openedBy", "resolvedBy"})
+    List<EodClarification> findByEodEntryIdOrderByOpenedAtDesc(Long eodEntryId);
+
     // Most recent round overall (any status) — the thread endpoints show this one, per the
     // "only the latest round's thread is shown" simplification (older rounds stay in the DB for
     // audit/history but aren't surfaced in v1).
@@ -41,30 +57,32 @@ public interface EodClarificationRepository extends JpaRepository<EodClarificati
     // is NOT enough: those rounds belong to the My Reporting Team inbox (findOpenForReportingManager) and
     // must not leak into this section. A multi-project entry therefore appears for every lead who holds a
     // piece on it, as one shared thread.
-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
+    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
     @Query("""
         SELECT c FROM EodClarification c
         WHERE c.status <> com.nforceone.sync.eod.EodClarification.Status.RESOLVED
           AND c.eodEntry.employee.id <> :userId
-          AND EXISTS (SELECT 1 FROM EodProjectApproval p
-                      WHERE p.eodEntry = c.eodEntry AND p.supersededAt IS NULL
-                        AND ((p.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
-                              AND p.approver.id = :userId)
-                             OR p.escalatedTo.id = :userId))
+          AND ((c.piece IS NULL AND c.openedBy.id = :userId)
+               OR EXISTS (SELECT 1 FROM EodProjectApproval q
+                          WHERE q = c.piece
+                            AND ((q.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
+                                  AND q.approver.id = :userId)
+                                 OR q.escalatedTo.id = :userId)))
         ORDER BY c.openedAt DESC
         """)
     List<EodClarification> findOpenForReviewer(@Param("userId") Long userId);
 
-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
+    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
     @Query("""
         SELECT c FROM EodClarification c
         WHERE c.status = com.nforceone.sync.eod.EodClarification.Status.RESOLVED
           AND c.eodEntry.employee.id <> :userId
-          AND EXISTS (SELECT 1 FROM EodProjectApproval p
-                      WHERE p.eodEntry = c.eodEntry AND p.supersededAt IS NULL
-                        AND ((p.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
-                              AND p.approver.id = :userId)
-                             OR p.escalatedTo.id = :userId))
+          AND ((c.piece IS NULL AND c.openedBy.id = :userId)
+               OR EXISTS (SELECT 1 FROM EodProjectApproval q
+                          WHERE q = c.piece
+                            AND ((q.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
+                                  AND q.approver.id = :userId)
+                                 OR q.escalatedTo.id = :userId)))
         ORDER BY c.resolvedAt DESC
         """)
     List<EodClarification> findResolvedForReviewer(@Param("userId") Long userId);
@@ -72,46 +90,48 @@ public interface EodClarificationRepository extends JpaRepository<EodClarificati
     // REPORTING MANAGER inbox (My Reporting Team section): rounds on entries whose FROZEN manager is the
     // viewer, minus the ones already in his Team Inbox (a user who is both a lead and the RM of the same
     // entry sees it once, in the Team Inbox). Never the viewer's own entry.
-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
+    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
     @Query("""
         SELECT c FROM EodClarification c
         WHERE c.status <> com.nforceone.sync.eod.EodClarification.Status.RESOLVED
           AND c.eodEntry.employee.id <> :userId
           AND c.eodEntry.managerId = :userId
-          AND NOT EXISTS (SELECT 1 FROM EodProjectApproval p
-                          WHERE p.eodEntry = c.eodEntry AND p.supersededAt IS NULL
-                            AND ((p.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
-                                  AND p.approver.id = :userId)
-                                 OR p.escalatedTo.id = :userId))
+          AND NOT ((c.piece IS NULL AND c.openedBy.id = :userId)
+                   OR EXISTS (SELECT 1 FROM EodProjectApproval q
+                              WHERE q = c.piece
+                                AND ((q.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
+                                      AND q.approver.id = :userId)
+                                     OR q.escalatedTo.id = :userId)))
         ORDER BY c.openedAt DESC
         """)
     List<EodClarification> findOpenForReportingManager(@Param("userId") Long userId);
 
-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
+    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
     @Query("""
         SELECT c FROM EodClarification c
         WHERE c.status = com.nforceone.sync.eod.EodClarification.Status.RESOLVED
           AND c.eodEntry.employee.id <> :userId
           AND c.eodEntry.managerId = :userId
-          AND NOT EXISTS (SELECT 1 FROM EodProjectApproval p
-                          WHERE p.eodEntry = c.eodEntry AND p.supersededAt IS NULL
-                            AND ((p.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
-                                  AND p.approver.id = :userId)
-                                 OR p.escalatedTo.id = :userId))
+          AND NOT ((c.piece IS NULL AND c.openedBy.id = :userId)
+                   OR EXISTS (SELECT 1 FROM EodProjectApproval q
+                              WHERE q = c.piece
+                                AND ((q.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
+                                      AND q.approver.id = :userId)
+                                     OR q.escalatedTo.id = :userId)))
         ORDER BY c.resolvedAt DESC
         """)
     List<EodClarification> findResolvedForReportingManager(@Param("userId") Long userId);
 
     // Employee's own EOD Inbox — Open / Resolved tabs, scoped to entries they submitted.
-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
+    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
     List<EodClarification> findByEodEntry_Employee_IdAndStatusNotOrderByOpenedAtDesc(Long employeeId, EodClarification.Status status);
 
-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
+    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
     List<EodClarification> findByEodEntry_Employee_IdAndStatusOrderByResolvedAtDesc(Long employeeId, EodClarification.Status status);
 
     // PM's EOD Inbox — read-only, cross-team, scoped by project ownership (mirrors
     // PmBlockersService: EXISTS over eod_task.project.pm, not the entry's manager).
-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
+    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
     @Query("""
         SELECT c FROM EodClarification c
         WHERE c.status <> com.nforceone.sync.eod.EodClarification.Status.RESOLVED
@@ -121,7 +141,7 @@ public interface EodClarificationRepository extends JpaRepository<EodClarificati
         """)
     List<EodClarification> findOpenByPmId(@Param("pmId") Long pmId);
 
-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
+    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
     @Query("""
         SELECT c FROM EodClarification c
         WHERE c.status = com.nforceone.sync.eod.EodClarification.Status.RESOLVED

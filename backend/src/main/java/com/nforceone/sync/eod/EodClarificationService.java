@@ -94,25 +94,71 @@ public class EodClarificationService {
 
     @Transactional(readOnly = true)
     public EodClarificationStatusDto getStatus(Long entryId, String actingEmail) {
+        return getStatus(entryId, actingEmail, null);
+    }
+
+    /**
+     * Status of ONE round the viewer may see: {@code clarificationId} when given, otherwise the latest round
+     * visible to him. A Team Lead sees only the round on a piece he holds (never another project's); the
+     * employee sees every round on his entry and picks one by id when there are several.
+     */
+    @Transactional(readOnly = true)
+    public EodClarificationStatusDto getStatus(Long entryId, String actingEmail, Long clarificationId) {
         AppUser actor = requireUser(actingEmail);
         EodEntry entry = requireEntry(entryId);
         List<EodProjectApproval> pieces = currentPieces(entryId);
         EodClarificationAccessPolicy.requireCanRead(actor, entry, pieces);
-        // The LATEST round — open, or the most recent RESOLVED one — so a resolved thread stays
+        // The LATEST visible round — open, or the most recent RESOLVED one — so a resolved thread stays
         // readable. A resolved round reports open=false / status=RESOLVED, so every gate that keys
         // off open or isBlockingStatus treats it as "no round blocking".
-        return clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(entryId)
+        return selectVisibleRound(actor, entry, pieces, clarificationId)
+                .map(c -> statusDto(c, actor, entry, pieces))
+                .orElseGet(() -> EodClarificationStatusDto.none(canOpenNewRound(actor, entry, pieces)));
+    }
+
+    /**
+     * Status as it applies to ONE approval piece (the Approvals card / detail modal's own piece): the latest
+     * round the viewer may see that is on that piece (or a legacy entry-wide one) — so a card never reflects
+     * another project's clarification — or none, with {@code canOpen} for the viewer.
+     */
+    @Transactional(readOnly = true)
+    public EodClarificationStatusDto getStatusForPiece(Long entryId, String actingEmail, Long pieceId) {
+        if (pieceId == null) return getStatus(entryId, actingEmail, null);
+        AppUser actor = requireUser(actingEmail);
+        EodEntry entry = requireEntry(entryId);
+        List<EodProjectApproval> pieces = currentPieces(entryId);
+        EodClarificationAccessPolicy.requireCanRead(actor, entry, pieces);
+        // A round applies to this piece when it is keyed on it, or — for a legacy round with no piece — when the
+        // piece is one its opener holds (a legacy round blocks only its opener's own pieces).
+        // "Held by" the opener means the designated approver and NOT escalated to someone else.
+        Long pieceApproverId = pieces.stream().filter(p -> p.getId().equals(pieceId)).findFirst()
+                .map(p -> p.getApprover() == null
+                        || (p.getEscalatedTo() != null && !p.getEscalatedTo().getId().equals(p.getApprover().getId()))
+                        ? null : p.getApprover().getId())
+                .orElse(null);
+        return visibleRounds(actor, entry, pieces).stream()
+                .filter(c -> c.getPiece() != null
+                        ? c.getPiece().getId().equals(pieceId)
+                        : pieceApproverId != null && pieceApproverId.equals(c.getOpenedBy().getId()))
+                .findFirst()
                 .map(c -> statusDto(c, actor, entry, pieces))
                 .orElseGet(() -> EodClarificationStatusDto.none(canOpenNewRound(actor, entry, pieces)));
     }
 
     @Transactional(readOnly = true)
     public List<EodClarificationReplyDto> getThread(Long entryId, String actingEmail) {
+        return getThread(entryId, actingEmail, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EodClarificationReplyDto> getThread(Long entryId, String actingEmail, Long clarificationId) {
         AppUser actor = requireUser(actingEmail);
         EodEntry entry = requireEntry(entryId);
-        EodClarificationAccessPolicy.requireCanRead(actor, entry, currentPieces(entryId));
-        // Only the latest round's thread is shown — see EodClarificationRepository's javadoc.
-        return clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(entryId)
+        List<EodProjectApproval> pieces = currentPieces(entryId);
+        EodClarificationAccessPolicy.requireCanRead(actor, entry, pieces);
+        // Only one round's thread is shown — see EodClarificationRepository's javadoc — and only a round the
+        // viewer may see: a lead can never read another project's thread.
+        return selectVisibleRound(actor, entry, pieces, clarificationId)
                 .map(c -> {
                     List<EodClarificationReply> replies = replyRepository.findByClarificationIdOrderByCreatedAtAsc(c.getId());
                     Map<Long, List<EodClarificationAttachmentDto>> byReplyId = attachmentsByReplyId(replies);
@@ -121,6 +167,80 @@ public class EodClarificationService {
                             .toList();
                 })
                 .orElse(List.of());
+    }
+
+    /** Rounds on this entry the viewer may read, newest first. */
+    private List<EodClarification> visibleRounds(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
+        return clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(entry.getId()).stream()
+                .filter(c -> EodClarificationAccessPolicy.canReadRound(actor, entry, c, pieces))
+                .toList();
+    }
+
+    /** The round a read endpoint should show: {@code clarificationId} when given (404 if it is not on this
+     *  entry, 403 if the viewer may not see it), otherwise the latest visible round. */
+    private java.util.Optional<EodClarification> selectVisibleRound(AppUser actor, EodEntry entry,
+                                                                    List<EodProjectApproval> pieces, Long clarificationId) {
+        if (clarificationId == null) {
+            // Default: an OPEN round first (the employee can have one per project), else the latest resolved one.
+            List<EodClarification> visible = visibleRounds(actor, entry, pieces);
+            return visible.stream().filter(EodClarification::isOpen).findFirst()
+                    .or(() -> visible.stream().findFirst());
+        }
+        EodClarification c = requireRoundOnEntry(entry, clarificationId);
+        if (!EodClarificationAccessPolicy.canReadRound(actor, entry, c, pieces)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        return java.util.Optional.of(c);
+    }
+
+    private EodClarification requireRoundOnEntry(EodEntry entry, Long clarificationId) {
+        return clarificationRepository.findById(clarificationId)
+                .filter(c -> c.getEodEntry().getId().equals(entry.getId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clarification not found"));
+    }
+
+    /**
+     * The OPEN round a write endpoint acts on. With {@code clarificationId}: that round (404 / 403 / 409 as
+     * above). Without it: the employee's latest open round, or a reviewer's latest open round on a piece he
+     * holds — and a reviewer with no open round of his own gets 403 when someone else's is open, never access
+     * to it. {@code asReviewer} (resolve / set status) additionally requires the reviewing capacity on it.
+     */
+    private EodClarification selectOpenRound(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces,
+                                              Long clarificationId, boolean asReviewer) {
+        EodClarification c;
+        if (clarificationId != null) {
+            c = requireRoundOnEntry(entry, clarificationId);
+            if (!EodClarificationAccessPolicy.canReadRound(actor, entry, c, pieces)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+            }
+            if (!c.isOpen()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "No open clarification on this entry");
+            }
+        } else {
+            List<EodClarification> open = clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(entry.getId()).stream()
+                    .filter(EodClarification::isOpen).toList();
+            c = open.stream()
+                    .filter(r -> asReviewer
+                            ? EodClarificationAccessPolicy.canReviewRound(actor, entry, r, pieces)
+                            : EodClarificationAccessPolicy.canReplyRound(actor, entry, r, pieces))
+                    .findFirst()
+                    .orElse(null);
+            if (c == null) {
+                if (open.isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "No open clarification on this entry");
+                }
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "The open clarification on this entry belongs to another project");
+            }
+        }
+        boolean allowed = asReviewer
+                ? EodClarificationAccessPolicy.canReviewRound(actor, entry, c, pieces)
+                : EodClarificationAccessPolicy.canReplyRound(actor, entry, c, pieces);
+        if (!allowed) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You cannot act on another project's clarification");
+        }
+        return c;
     }
 
     /** Opens a new round (Approvals' "Request Clarification" action). {@code message} is optional
@@ -139,6 +259,13 @@ public class EodClarificationService {
      *  (EOD_CLARIFICATION_REQUESTED), not a second "reply" one. */
     public EodClarificationStatusDto open(Long entryId, String actingEmail, String message,
                                            List<MultipartFile> files) {
+        return open(entryId, actingEmail, message, files, null);
+    }
+
+    /** As above, on a specific piece: {@code pieceId} picks which of the opener's own pending pieces the round
+     *  is about (only needed by a lead of two projects on one EOD; otherwise his single piece is used). */
+    public EodClarificationStatusDto open(Long entryId, String actingEmail, String message,
+                                           List<MultipartFile> files, Long pieceId) {
         AppUser lead = requireUser(actingEmail);
         EodEntry entry = requireEntry(entryId);
         List<EodProjectApproval> pieces = currentPieces(entryId);
@@ -156,7 +283,14 @@ public class EodClarificationService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Clarification can only be requested while at least one piece of this entry is pending");
         }
-        if (clarificationRepository.existsByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)) {
+        // The round is about the opener's OWN piece (one project + one lead). Another project's lead can have
+        // a round of his own open at the same time; only a round on THIS piece, or a legacy entry-wide one,
+        // is in the way.
+        EodProjectApproval piece = pieceForNewRound(lead, entry, pieces, pieceId);
+        // (A legacy round with no piece only gets in the way of ITS OWN opener — another lead is unaffected.)
+        if (clarificationRepository.existsByPiece_IdAndStatusNot(piece.getId(), EodClarification.Status.RESOLVED)
+                || clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(
+                        entryId, EodClarification.Status.RESOLVED, lead.getId())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A clarification is already open on this entry");
         }
@@ -168,6 +302,7 @@ public class EodClarificationService {
         EodClarification clarification = new EodClarification();
         clarification.setEodEntry(entry);
         clarification.setOpenedBy(lead);
+        clarification.setPiece(piece);
         // Snapshot only when the opener really was an approver / escalatee at this moment — a
         // Super Admin opening on someone else's behalf leaves it null. Audit/fallback only.
         if (EodClarificationAccessPolicy.isCurrentApprover(lead, pieces)) {
@@ -181,13 +316,34 @@ public class EodClarificationService {
             saveReply(clarification, lead, message, files);
         }
 
+        // Only the employee is told when a round opens — never another project's lead. The text names the project
+        // so the employee knows which lead is asking when two rounds are open.
+        String forProject = piece.getProject() != null ? " (" + piece.getProject().getName() + ")" : "";
         notificationService.send(entry.getEmployee().getId(), "EOD_CLARIFICATION_REQUESTED",
-                "Clarification requested on your EOD entry",
+                "Clarification requested on your EOD entry" + forProject,
                 lead.getFullName() + " requested clarification on your EOD entry for "
-                        + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + ".",
+                        + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + forProject + ".",
                 "/employee/eod-inbox?highlight=" + entry.getId());
 
         return statusDto(clarification, lead, entry, pieces);
+    }
+
+    /** The opener's own still-pending piece the new round attaches to. A lead of two projects on this EOD
+     *  must say which ({@code pieceId}); a piece he does not hold in a reviewing capacity is refused. */
+    private EodProjectApproval pieceForNewRound(AppUser lead, EodEntry entry, List<EodProjectApproval> pieces, Long pieceId) {
+        List<EodProjectApproval> mine = EodClarificationAccessPolicy.openablePieces(lead, entry, pieces);
+        if (pieceId != null) {
+            return mine.stream().filter(p -> p.getId().equals(pieceId)).findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "You can only request clarification on your own project's portion"));
+        }
+        // No explicit piece: the first of his pieces that has no open round yet (usually he has just one).
+        return mine.stream()
+                .filter(p -> !clarificationRepository.existsByPiece_IdAndStatusNot(p.getId(), EodClarification.Status.RESOLVED))
+                .findFirst()
+                .or(() -> mine.stream().findFirst())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Only an approver with a pending review on this entry can manage a clarification on it"));
     }
 
     /** Marks every clarification round against this entry as read by the caller (opening the EOD
@@ -196,11 +352,26 @@ public class EodClarificationService {
      *  row for the same entry opens the exact same latest-round thread (getThread only ever
      *  returns the latest round), so a historical round has no other way to ever be marked read. */
     public void markRead(Long entryId, String actingEmail) {
+        markRead(entryId, actingEmail, null);
+    }
+
+    /** As above, but for ONE round when {@code clarificationId} is given — opening one project's thread must not
+     *  clear the unread dot of another project's. 404 / 403 as for any round the viewer may not see. */
+    public void markRead(Long entryId, String actingEmail, Long clarificationId) {
         AppUser actor = requireUser(actingEmail);
         EodEntry entry = requireEntry(entryId);
-        EodClarificationAccessPolicy.requireCanRead(actor, entry, currentPieces(entryId));
+        List<EodProjectApproval> pieces = currentPieces(entryId);
+        EodClarificationAccessPolicy.requireCanRead(actor, entry, pieces);
 
-        List<EodClarification> rounds = clarificationRepository.findByEodEntryId(entryId);
+        // Only the rounds this viewer may read — a lead marks his own project's rounds, never another's.
+        List<EodClarification> rounds;
+        if (clarificationId != null) {
+            EodClarification one = requireRoundOnEntry(entry, clarificationId);
+            requireCanReadRound(actor, entry, one, pieces);
+            rounds = List.of(one);
+        } else {
+            rounds = visibleRounds(actor, entry, pieces);
+        }
         if (rounds.isEmpty()) return;
 
         // Batched (one SELECT + one JDBC-batched save) rather than a find-then-save round trip per
@@ -240,15 +411,19 @@ public class EodClarificationService {
     }
 
     public EodClarificationReplyDto reply(Long entryId, String actingEmail, String message, List<MultipartFile> files) {
+        return reply(entryId, actingEmail, message, files, null);
+    }
+
+    /** Posts into one round: {@code clarificationId} when given (the employee's pick when two leads asked),
+     *  otherwise the viewer's own open round. A lead can only post in the round on his own piece. */
+    public EodClarificationReplyDto reply(Long entryId, String actingEmail, String message, List<MultipartFile> files,
+                                           Long clarificationId) {
         AppUser actor = requireUser(actingEmail);
         EodEntry entry = requireEntry(entryId);
         List<EodProjectApproval> pieces = currentPieces(entryId);
         EodClarificationAccessPolicy.requireCanReply(actor, entry, pieces);
 
-        EodClarification clarification = clarificationRepository
-                .findByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
-                        "No open clarification on this entry"));
+        EodClarification clarification = selectOpenRound(actor, entry, pieces, clarificationId, false);
 
         EodClarificationReply saved = saveReply(clarification, actor, message, files);
 
@@ -278,14 +453,16 @@ public class EodClarificationService {
                 notificationService.send(recipient.getId(), "EOD_CLARIFICATION_REPLY",
                         "New reply on an EOD clarification",
                         actor.getFullName() + " replied on the clarification for their EOD entry ("
-                                + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + ").",
+                                + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate())
+                                + projectSuffix(clarification) + ").",
                         reviewerInboxLink(recipient, entry, pieces));
             }
         } else {
             notificationService.send(entry.getEmployee().getId(), "EOD_CLARIFICATION_REPLY",
                     actor.getFullName() + " replied to your clarification",
                     actor.getFullName() + " replied on the clarification for your EOD entry ("
-                            + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + ").",
+                            + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate())
+                            + projectSuffix(clarification) + ").",
                     "/employee/eod-inbox?highlight=" + entry.getId());
         }
 
@@ -300,7 +477,9 @@ public class EodClarificationService {
         AppUser actor = requireUser(actingEmail);
         EodClarificationReply reply = requireReply(replyId);
         EodEntry entry = reply.getClarification().getEodEntry();
-        EodClarificationAccessPolicy.requireCanReply(actor, entry, currentPieces(entry.getId()));
+        List<EodProjectApproval> pieces = currentPieces(entry.getId());
+        EodClarificationAccessPolicy.requireCanReply(actor, entry, pieces);
+        requireCanReadRound(actor, entry, reply.getClarification(), pieces);
         requireOwnReply(reply, actor);
         requireClarificationNotResolved(reply.getClarification());
         updateMessage(reply, message);
@@ -310,7 +489,9 @@ public class EodClarificationService {
         AppUser actor = requireUser(actingEmail);
         EodClarificationReply reply = requireReply(replyId);
         EodEntry entry = reply.getClarification().getEodEntry();
-        EodClarificationAccessPolicy.requireCanReply(actor, entry, currentPieces(entry.getId()));
+        List<EodProjectApproval> pieces = currentPieces(entry.getId());
+        EodClarificationAccessPolicy.requireCanReply(actor, entry, pieces);
+        requireCanReadRound(actor, entry, reply.getClarification(), pieces);
         requireOwnReply(reply, actor);
         requireClarificationNotResolved(reply.getClarification());
         deleteReplyInternal(reply);
@@ -327,7 +508,9 @@ public class EodClarificationService {
         EodClarificationReplyAttachment attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attachment not found"));
         EodEntry entry = attachment.getReply().getClarification().getEodEntry();
-        EodClarificationAccessPolicy.requireCanRead(actor, entry, currentPieces(entry.getId()));
+        List<EodProjectApproval> pieces = currentPieces(entry.getId());
+        EodClarificationAccessPolicy.requireCanRead(actor, entry, pieces);
+        requireCanReadRound(actor, entry, attachment.getReply().getClarification(), pieces);
         return attachment;
     }
 
@@ -339,15 +522,18 @@ public class EodClarificationService {
      * "Request Clarification" click opens a fresh round.
      */
     public EodClarificationStatusDto setStatus(Long entryId, String actingEmail, String status) {
+        return setStatus(entryId, actingEmail, status, null);
+    }
+
+    /** Changes / resolves the viewer's own round only. Resolving it unblocks only that piece — another
+     *  project's open round, and every piece's approval state, are untouched. */
+    public EodClarificationStatusDto setStatus(Long entryId, String actingEmail, String status, Long clarificationId) {
         AppUser lead = requireUser(actingEmail);
         EodEntry entry = requireEntry(entryId);
         List<EodProjectApproval> pieces = currentPieces(entryId);
         EodClarificationAccessPolicy.requireCanOpenOrResolve(lead, entry, pieces);
 
-        EodClarification clarification = clarificationRepository
-                .findByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
-                        "No open clarification on this entry"));
+        EodClarification clarification = selectOpenRound(lead, entry, pieces, clarificationId, true);
 
         EodClarification.Status newStatus;
         try {
@@ -369,6 +555,7 @@ public class EodClarificationService {
                     "Clarification resolved",
                     "The clarification on your EOD entry for "
                             + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate())
+                            + projectParen(clarification)
                             + " has been marked resolved. It is back in review.",
                     "/employee/eod-inbox?highlight=" + entry.getId());
         }
@@ -440,18 +627,40 @@ public class EodClarificationService {
                 || entry.getStatus() == EodEntry.Status.PARTIALLY_APPROVED;
     }
 
-    private static boolean canOpenNewRound(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
-        return isOpenableStatus(entry) && EodClarificationAccessPolicy.canReview(actor, entry, pieces);
+    /** May the actor start a round of his own: an openable entry and a pending piece he reviews that has no open
+     *  round yet (his own piece's round — another project's open round is not in the way). */
+    private boolean canOpenNewRound(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
+        if (!isOpenableStatus(entry)) return false;
+        return EodClarificationAccessPolicy.openablePieces(actor, entry, pieces).stream()
+                .anyMatch(p -> !clarificationRepository.existsByPiece_IdAndStatusNot(p.getId(), EodClarification.Status.RESOLVED))
+                && !clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(
+                        entry.getId(), EodClarification.Status.RESOLVED, actor.getId());
     }
 
-    private static EodClarificationStatusDto statusDto(EodClarification c, AppUser actor, EodEntry entry,
-                                                        List<EodProjectApproval> pieces) {
+    private EodClarificationStatusDto statusDto(EodClarification c, AppUser actor, EodEntry entry,
+                                                 List<EodProjectApproval> pieces) {
         boolean open = c.isOpen();
         return EodClarificationStatusDto.from(c,
                 !open && canOpenNewRound(actor, entry, pieces),
-                open && EodClarificationAccessPolicy.canReply(actor, entry, pieces),
-                // Resolving is a reviewer action: the owner can reply but never resolve.
-                open && EodClarificationAccessPolicy.canReview(actor, entry, pieces));
+                open && EodClarificationAccessPolicy.canReplyRound(actor, entry, c, pieces),
+                // Resolving is a reviewer action on the viewer's OWN round: the owner can reply but never resolve.
+                open && EodClarificationAccessPolicy.canReviewRound(actor, entry, c, pieces));
+    }
+
+    private void requireCanReadRound(AppUser actor, EodEntry entry, EodClarification round, List<EodProjectApproval> pieces) {
+        if (!EodClarificationAccessPolicy.canReadRound(actor, entry, round, pieces)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+    }
+
+    /** ", SYNC" — which project's lead the round is about, for use inside an existing parenthesis. */
+    private static String projectSuffix(EodClarification c) {
+        return c.getPiece() != null && c.getPiece().getProject() != null ? ", " + c.getPiece().getProject().getName() : "";
+    }
+
+    /** " (SYNC)" — same, standing alone. */
+    private static String projectParen(EodClarification c) {
+        return c.getPiece() != null && c.getPiece().getProject() != null ? " (" + c.getPiece().getProject().getName() + ")" : "";
     }
 
     /** Who to ping when the employee replies: the approver and escalated-to PM of every PENDING
@@ -460,8 +669,20 @@ public class EodClarificationService {
     private List<AppUser> reviewerRecipients(EodClarification clarification, EodEntry entry,
                                               List<EodProjectApproval> pieces) {
         Map<Long, AppUser> byId = new java.util.LinkedHashMap<>();
+        if (clarification.getPiece() == null) {
+            // A legacy round belongs to its opener alone — never ping another project's lead about a thread
+            // they cannot see.
+            AppUser opener = clarification.getOpenedByApprover() != null
+                    ? clarification.getOpenedByApprover() : clarification.getOpenedBy();
+            if (opener != null && !opener.getId().equals(entry.getEmployee().getId())) {
+                byId.put(opener.getId(), opener);
+            }
+            return new ArrayList<>(byId.values());
+        }
         for (EodProjectApproval p : pieces) {
             if (p.getStatus() != EodProjectApproval.Status.PENDING) continue;
+            // A per-piece round pings only the lead (and escalatee) of ITS piece — never another project's lead.
+            if (clarification.getPiece() != null && !p.getId().equals(clarification.getPiece().getId())) continue;
             if (p.getApprover() != null) byId.putIfAbsent(p.getApprover().getId(), p.getApprover());
             if (p.getEscalatedTo() != null) byId.putIfAbsent(p.getEscalatedTo().getId(), p.getEscalatedTo());
         }

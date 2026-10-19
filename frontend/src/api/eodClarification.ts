@@ -32,6 +32,11 @@ export interface EodClarificationStatusDto {
   /** May resolve the open round — a reviewer only, never the entry's owner. Drives the popup's
    *  Resolve button and the inbox status dropdown; the UI never infers it from role. */
   canResolve: boolean;
+  /** The approval piece (one project + one lead) this round belongs to — a round blocks only its own piece.
+   *  Null for a legacy round, which blocks the whole entry. */
+  pieceId: number | null;
+  /** That piece's project — which project's lead asked. Null for a legacy round. */
+  projectName: string | null;
 }
 
 export interface EodClarificationAttachmentDto {
@@ -74,6 +79,10 @@ export interface EodInboxItemDto {
   lastMessageSenderName: string | null;
   lastMessageSenderRole: 'EMPLOYEE' | 'TEAM_LEAD' | null;
   unread: boolean;
+  /** The approval piece this round belongs to (null for a legacy round) and that piece's project — which
+   *  project's lead asked. Distinct from projectName / projectNames, which describe the entry's tasks. */
+  pieceId: number | null;
+  pieceProjectName: string | null;
 }
 
 const THREAD_POLL_MS = 15_000;
@@ -82,8 +91,11 @@ function basePath(scope: ClarificationScope): string {
   return scope === 'lead' ? '/team-lead' : '/employee';
 }
 
-function statusKey(scope: ClarificationScope, entryId: number | undefined) {
-  return ['eod-clarification-status', scope, entryId] as const;
+// A viewer can have several rounds on one entry (the employee with two leads asking), so a status / thread
+// is cached per round when `clarificationId` is given. The 3-element prefix still matches every variant, so
+// invalidating by (scope, entryId) refreshes them all.
+function statusKey(scope: ClarificationScope, entryId: number | undefined, clarificationId?: number | null) {
+  return ['eod-clarification-status', scope, entryId, clarificationId ?? null] as const;
 }
 
 /** Refetch every cached clarification status and inbox list — used when a 403/409 shows the
@@ -94,25 +106,35 @@ function invalidateClarificationState(qc: QueryClient, entryId?: number) {
   if (entryId != null) qc.invalidateQueries({ queryKey: ['eod-clarification-thread'] });
 }
 
-function threadKey(scope: ClarificationScope, entryId: number | undefined) {
-  return ['eod-clarification-thread', scope, entryId] as const;
+function threadKey(scope: ClarificationScope, entryId: number | undefined, clarificationId?: number | null) {
+  return ['eod-clarification-thread', scope, entryId, clarificationId ?? null] as const;
 }
 
 /** Lightweight header — does this entry currently have an open clarification? Used by
- *  SubmitEOD/EodHistory to gate the edit-lock banner without loading the full thread. */
-export function useClarificationStatus(entryId: number | undefined, scope: ClarificationScope, enabled = true) {
+ *  SubmitEOD/EodHistory to gate the edit-lock banner without loading the full thread.
+ *  `clarificationId` picks one round (the employee's choice when two leads asked); without it the server
+ *  returns the latest round the viewer may see. */
+export function useClarificationStatus(
+  entryId: number | undefined, scope: ClarificationScope, enabled = true, clarificationId?: number | null,
+) {
   return useQuery({
-    queryKey: statusKey(scope, entryId),
-    queryFn: () => api.get<EodClarificationStatusDto>(`${basePath(scope)}/eod/${entryId}/clarification`).then(r => r.data),
+    queryKey: statusKey(scope, entryId, clarificationId),
+    queryFn: () => api.get<EodClarificationStatusDto>(`${basePath(scope)}/eod/${entryId}/clarification`, {
+      params: clarificationId != null ? { clarificationId } : undefined,
+    }).then(r => r.data),
     enabled: enabled && entryId != null,
     refetchInterval: enabled && entryId != null ? THREAD_POLL_MS : false,
   });
 }
 
-export function useClarificationThread(entryId: number | undefined, scope: ClarificationScope, enabled = true) {
+export function useClarificationThread(
+  entryId: number | undefined, scope: ClarificationScope, enabled = true, clarificationId?: number | null,
+) {
   return useQuery({
-    queryKey: threadKey(scope, entryId),
-    queryFn: () => api.get<EodClarificationReplyDto[]>(`${basePath(scope)}/eod/${entryId}/clarification/replies`).then(r => r.data),
+    queryKey: threadKey(scope, entryId, clarificationId),
+    queryFn: () => api.get<EodClarificationReplyDto[]>(`${basePath(scope)}/eod/${entryId}/clarification/replies`, {
+      params: clarificationId != null ? { clarificationId } : undefined,
+    }).then(r => r.data),
     enabled: enabled && entryId != null,
     refetchInterval: enabled && entryId != null ? THREAD_POLL_MS : false,
   });
@@ -120,18 +142,19 @@ export function useClarificationThread(entryId: number | undefined, scope: Clari
 
 // Multipart, not JSON — matches useSendBlockerReply exactly (message + files together), now that
 // clarification replies support attachments too (see EodClarificationService.reply on the backend).
-export function useSendClarificationReply(entryId: number, scope: ClarificationScope) {
+export function useSendClarificationReply(entryId: number, scope: ClarificationScope, clarificationId?: number | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ message, files }: { message: string; files: File[] }) => {
       const form = new FormData();
       form.append('message', message);
       files.forEach(f => form.append('files', f));
+      if (clarificationId != null) form.append('clarificationId', String(clarificationId));
       return api.post<EodClarificationReplyDto>(`${basePath(scope)}/eod/${entryId}/clarification/replies`, form).then(r => r.data);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: threadKey(scope, entryId) });
-      qc.invalidateQueries({ queryKey: statusKey(scope, entryId) });
+      qc.invalidateQueries({ queryKey: ['eod-clarification-thread', scope, entryId] });
+      qc.invalidateQueries({ queryKey: ['eod-clarification-status', scope, entryId] });
       if (scope === 'lead') qc.invalidateQueries({ queryKey: ['eod-inbox'] });
     },
     onError: err => { if (isStaleStateError(err)) invalidateClarificationState(qc, entryId); },
@@ -144,7 +167,7 @@ export function useEditClarificationReply(entryId: number, scope: ClarificationS
   return useMutation({
     mutationFn: ({ replyId, message }: { replyId: number; message: string }) =>
       api.put(`${basePath(scope)}/eod/clarification/replies/${replyId}`, { message }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: threadKey(scope, entryId) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['eod-clarification-thread', scope, entryId] }),
   });
 }
 
@@ -153,7 +176,7 @@ export function useDeleteClarificationReply(entryId: number, scope: Clarificatio
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (replyId: number) => api.delete(`${basePath(scope)}/eod/clarification/replies/${replyId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: threadKey(scope, entryId) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['eod-clarification-thread', scope, entryId] }),
   });
 }
 
@@ -187,14 +210,16 @@ export function useClarificationAttachmentUrl(scope: InboxRole, attachmentId: nu
 export function useOpenClarification() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ entryId }: { entryId: number }) =>
-      api.post<EodClarificationStatusDto>(`/team-lead/eod/${entryId}/clarification`, {}).then(r => r.data),
+    mutationFn: ({ entryId, pieceId }: { entryId: number; pieceId?: number | null }) =>
+      api.post<EodClarificationStatusDto>(`/team-lead/eod/${entryId}/clarification`, {}, {
+        params: pieceId != null ? { pieceId } : undefined,
+      }).then(r => r.data),
     onSuccess: (_data, { entryId }) => {
       qc.invalidateQueries({ queryKey: ['approvals'] });
       qc.invalidateQueries({ queryKey: ['eod-inbox'] });
-      qc.invalidateQueries({ queryKey: statusKey('lead', entryId) });
+      qc.invalidateQueries({ queryKey: ['eod-clarification-status', 'lead', entryId] });
       qc.invalidateQueries({ queryKey: ['eod-clarification-status', 'approvals', entryId] });
-      qc.invalidateQueries({ queryKey: threadKey('lead', entryId) });
+      qc.invalidateQueries({ queryKey: ['eod-clarification-thread', 'lead', entryId] });
     },
     onError: (err, { entryId }) => { if (isStaleStateError(err)) invalidateClarificationState(qc, entryId); },
   });
@@ -207,17 +232,19 @@ export function useOpenClarification() {
 export function useOpenClarificationWithMessage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ entryId, message, files }: { entryId: number; message: string; files: File[] }) => {
+    mutationFn: ({ entryId, message, files, pieceId }: { entryId: number; message: string; files: File[]; pieceId?: number | null }) => {
       const form = new FormData();
       form.append('message', message);
       files.forEach(f => form.append('files', f));
+      // Which of the opener's own pieces the round is about (the card he opened it from).
+      if (pieceId != null) form.append('pieceId', String(pieceId));
       return api.post<EodClarificationStatusDto>(`/team-lead/eod/${entryId}/clarification`, form).then(r => r.data);
     },
     onSuccess: (_data, { entryId }) => {
       qc.invalidateQueries({ queryKey: ['approvals'] });
       qc.invalidateQueries({ queryKey: ['eod-inbox'] });
       qc.invalidateQueries({ queryKey: ['eod-clarification-status'] });
-      qc.invalidateQueries({ queryKey: threadKey('lead', entryId) });
+      qc.invalidateQueries({ queryKey: ['eod-clarification-thread', 'lead', entryId] });
     },
     onError: (err, { entryId }) => { if (isStaleStateError(err)) invalidateClarificationState(qc, entryId); },
   });
@@ -229,17 +256,17 @@ export function useOpenClarificationWithMessage() {
 export function useSetClarificationStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ entryId, status }: { entryId: number; status: ClarificationStatusValue }) =>
-      api.patch<EodClarificationStatusDto>(`/team-lead/eod/${entryId}/clarification/status`, { status }).then(r => r.data),
+    mutationFn: ({ entryId, status, clarificationId }: { entryId: number; status: ClarificationStatusValue; clarificationId?: number | null }) =>
+      api.patch<EodClarificationStatusDto>(`/team-lead/eod/${entryId}/clarification/status`, { status }, {
+        params: clarificationId != null ? { clarificationId } : undefined,
+      }).then(r => r.data),
     onSuccess: (_data, { entryId }) => {
       // Resolving must re-enable Approve/Reject at once: refresh every cached status (reviewer and
       // employee scopes, per-row and popup) and the batched inbox lists the menus read.
       qc.invalidateQueries({ queryKey: ['eod-clarification-status'] });
       qc.invalidateQueries({ queryKey: ['approvals'] });
       qc.invalidateQueries({ queryKey: ['eod-inbox'] });
-      qc.invalidateQueries({ queryKey: threadKey('lead', entryId) });
-      qc.invalidateQueries({ queryKey: statusKey('lead', entryId) });
-      qc.invalidateQueries({ queryKey: ['eod-clarification-status', 'approvals', entryId] });
+      qc.invalidateQueries({ queryKey: ['eod-clarification-thread', 'lead', entryId] });
     },
     onError: (err, { entryId }) => { if (isStaleStateError(err)) invalidateClarificationState(qc, entryId); },
   });
@@ -248,10 +275,15 @@ export function useSetClarificationStatus() {
 /** Backs the Approve/Reject disabled state in the Approvals detail modal — role-agnostic (works
  *  for both a Team Lead and a scoped PM viewing the same entry), since /team-lead/... routes are
  *  role-locked and a PM would 403 calling useClarificationStatus(scope: 'lead') directly. */
-export function useClarificationStatusForApprovals(entryId: number | undefined, enabled = true, poll = false) {
+export function useClarificationStatusForApprovals(
+  entryId: number | undefined, enabled = true, poll = false, pieceId?: number | null,
+) {
   return useQuery({
-    queryKey: ['eod-clarification-status', 'approvals', entryId],
-    queryFn: () => api.get<EodClarificationStatusDto>(`/approvals/${entryId}/clarification-status`).then(r => r.data),
+    // Per piece: a card reflects only its own piece's round (never another project's clarification).
+    queryKey: ['eod-clarification-status', 'approvals', entryId, pieceId ?? null],
+    queryFn: () => api.get<EodClarificationStatusDto>(`/approvals/${entryId}/clarification-status`, {
+      params: pieceId != null ? { pieceId } : undefined,
+    }).then(r => r.data),
     enabled: enabled && entryId != null,
     // Opt-in 15s poll for surfaces that stay open (the inline panel, the review modals), so a
     // round opened or resolved elsewhere flips Approve/Reject without a reload.
@@ -315,6 +347,16 @@ function markReadPath(role: InboxRole, entryId: number): string {
   return role === 'pm' ? `/pm-eod-inbox/${entryId}/read` : `${basePath(role === 'lead' || role === 'rm' ? 'lead' : 'employee')}/eod/${entryId}/clarification/read`;
 }
 
+/** Which round to mark read. An entry can have one round per project, so opening one thread must not clear the
+ *  unread dot of another — pass the round's id. A bare entry id (legacy callers) marks every round the viewer sees. */
+export type MarkReadTarget = number | { entryId: number; clarificationId?: number | null };
+
+function markReadParts(target: MarkReadTarget): { entryId: number; clarificationId: number | null } {
+  return typeof target === 'number'
+    ? { entryId: target, clarificationId: null }
+    : { entryId: target.entryId, clarificationId: target.clarificationId ?? null };
+}
+
 /** Opening a row's conversation panel marks that round read for the viewer — clears the
  *  unread/bold indicator on the row (and the sidebar badge, which reads the same cached list)
  *  without waiting for the next poll. Optimistically flips `unread` on the matching row across
@@ -322,11 +364,20 @@ function markReadPath(role: InboxRole, entryId: number): string {
 export function useMarkClarificationRead(role: InboxRole) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (entryId: number) => api.post(markReadPath(role, entryId), {}),
-    onMutate: (entryId: number) => {
+    mutationFn: (target: MarkReadTarget) => {
+      const { entryId, clarificationId } = markReadParts(target);
+      return api.post(markReadPath(role, entryId), {}, {
+        params: clarificationId != null ? { clarificationId } : undefined,
+      });
+    },
+    onMutate: (target: MarkReadTarget) => {
+      const { entryId, clarificationId } = markReadParts(target);
       for (const open of [true, false]) {
         qc.setQueryData<EodInboxItemDto[]>(inboxKey(role, open), old =>
-          old?.map(item => (item.eodEntryId === entryId ? { ...item, unread: false } : item)));
+          old?.map(item => (
+            item.eodEntryId === entryId && (clarificationId == null || item.clarificationId === clarificationId)
+              ? { ...item, unread: false }
+              : item)));
       }
     },
   });
@@ -334,10 +385,12 @@ export function useMarkClarificationRead(role: InboxRole) {
 
 /** PM's read-only thread view — no reply mutation exists for this scope, matching the backend's
  *  no-write-endpoint-wired-at-all pattern for PmEodInboxController. */
-export function usePmClarificationThread(entryId: number | undefined, enabled = true) {
+export function usePmClarificationThread(entryId: number | undefined, enabled = true, clarificationId?: number | null) {
   return useQuery({
-    queryKey: ['eod-clarification-thread', 'pm', entryId],
-    queryFn: () => api.get<EodClarificationReplyDto[]>(`/pm-eod-inbox/${entryId}/replies`).then(r => r.data),
+    queryKey: ['eod-clarification-thread', 'pm', entryId, clarificationId ?? null],
+    queryFn: () => api.get<EodClarificationReplyDto[]>(`/pm-eod-inbox/${entryId}/replies`, {
+      params: clarificationId != null ? { clarificationId } : undefined,
+    }).then(r => r.data),
     enabled: enabled && entryId != null,
     refetchInterval: enabled && entryId != null ? THREAD_POLL_MS : false,
   });

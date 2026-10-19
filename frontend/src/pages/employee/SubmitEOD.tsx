@@ -1218,7 +1218,7 @@ export default function SubmitEOD() {
               : entryStatus === 'PARTIALLY_APPROVED'
                 ? 'Some projects have been approved. Awaiting review for the remaining projects.'
                 : hasOpenClarification
-                  ? `A reviewer requested clarification on this report — it can't be edited until resolved.`
+                  ? `${clarificationStatus?.projectName ? `The ${clarificationStatus.projectName} reviewer` : 'A reviewer'} requested clarification on this report — it can't be edited until resolved.`
                   : 'This report has been submitted and is awaiting review.'}
           </span>
           {hasOpenClarification && entryId != null && (
@@ -1245,6 +1245,7 @@ export default function SubmitEOD() {
           {chatOpen && entryId != null && currentUser && (
             <ClarificationChatPopup
               entryId={entryId}
+              clarificationId={clarificationStatus?.clarificationId}
               employeeId={currentUser.id}
               employeeName={currentUser.name}
               entryDate={selectedDate}

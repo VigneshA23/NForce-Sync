@@ -156,20 +156,23 @@ public class TeamLeadController {
     }
 
     @GetMapping("/eod/{entryId}/clarification")
-    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId) {
-        return clarificationService.getStatus(entryId, actingEmail());
+    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId,
+            @RequestParam(required = false) Long clarificationId) {
+        return clarificationService.getStatus(entryId, actingEmail(), clarificationId);
     }
 
     @GetMapping("/eod/{entryId}/clarification/replies")
-    public List<EodClarificationReplyDto> getClarificationReplies(@PathVariable Long entryId) {
-        return clarificationService.getThread(entryId, actingEmail());
+    public List<EodClarificationReplyDto> getClarificationReplies(@PathVariable Long entryId,
+            @RequestParam(required = false) Long clarificationId) {
+        return clarificationService.getThread(entryId, actingEmail(), clarificationId);
     }
 
     // Opening the EOD Inbox row's conversation panel — marks the round read for this TL, clearing
     // the unread/bold indicator on the row (see EodClarificationService.markRead).
     @PostMapping("/eod/{entryId}/clarification/read")
-    public void markClarificationRead(@PathVariable Long entryId) {
-        clarificationService.markRead(entryId, actingEmail());
+    public void markClarificationRead(@PathVariable Long entryId,
+            @RequestParam(required = false) Long clarificationId) {
+        clarificationService.markRead(entryId, actingEmail(), clarificationId);
     }
 
     // Opens a new round — the Approvals detail popup's "Request Clarification" action. No message
@@ -180,8 +183,10 @@ public class TeamLeadController {
     @PostMapping("/eod/{entryId}/clarification")
     public EodClarificationStatusDto openClarification(
             @PathVariable Long entryId,
-            @RequestBody(required = false) EodClarificationMessageRequest body) {
-        return clarificationService.open(entryId, actingEmail(), body != null ? body.message() : null);
+            @RequestBody(required = false) EodClarificationMessageRequest body,
+            @RequestParam(required = false) Long pieceId) {
+        return clarificationService.open(entryId, actingEmail(), body != null ? body.message() : null,
+                List.of(), pieceId);
     }
 
     // Opens a round WITH its first message (and optional attachments) in one transaction — the
@@ -192,8 +197,9 @@ public class TeamLeadController {
     public EodClarificationStatusDto openClarificationWithMessage(
             @PathVariable Long entryId,
             @RequestParam(required = false) String message,
-            @RequestParam(required = false) List<MultipartFile> files) {
-        return clarificationService.open(entryId, actingEmail(), message, files);
+            @RequestParam(required = false) List<MultipartFile> files,
+            @RequestParam(required = false) Long pieceId) {
+        return clarificationService.open(entryId, actingEmail(), message, files, pieceId);
     }
 
     // Multipart, not JSON — matches Blockers' postBlockerReply exactly (message + files together),
@@ -202,8 +208,9 @@ public class TeamLeadController {
     public EodClarificationReplyDto postClarificationReply(
             @PathVariable Long entryId,
             @RequestParam(required = false) String message,
-            @RequestParam(required = false) List<MultipartFile> files) {
-        return clarificationService.reply(entryId, actingEmail(), message, files);
+            @RequestParam(required = false) List<MultipartFile> files,
+            @RequestParam(required = false) Long clarificationId) {
+        return clarificationService.reply(entryId, actingEmail(), message, files, clarificationId);
     }
 
     @PutMapping("/eod/clarification/replies/{replyId}")
@@ -230,8 +237,9 @@ public class TeamLeadController {
     @PatchMapping("/eod/{entryId}/clarification/status")
     public EodClarificationStatusDto setClarificationStatus(
             @PathVariable Long entryId,
-            @RequestBody EodClarificationStatusRequest body) {
-        return clarificationService.setStatus(entryId, actingEmail(), body.status());
+            @RequestBody EodClarificationStatusRequest body,
+            @RequestParam(required = false) Long clarificationId) {
+        return clarificationService.setStatus(entryId, actingEmail(), body.status(), clarificationId);
     }
 
     // Reuses the existing Admin Config (business_rule_config) row — this just exposes the

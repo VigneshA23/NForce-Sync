@@ -21,6 +21,7 @@ import { DropdownMenu, type DropdownMenuItem } from '../../components/DropdownMe
 import { useAuth } from '../../lib/auth';
 import {
   CLARIFICATION_BLOCKS_DECISION_REASON, clarificationMenuState, decisionBlockedReason, isBlockingStatus,
+  isPieceClarified,
 } from '../../lib/clarificationGate';
 import { splitPendingPieces } from './approvalsTabSplit';
 import {
@@ -191,7 +192,7 @@ function PieceReviewModal({
   // The modal's own 15s-polled status is authoritative while it is open (so a round opened or
   // resolved elsewhere flips Approve/Reject without a reload); the batched list is the fallback.
   // An open round blocks EVERY project piece on the entry — rounds are per entry.
-  const live = useClarificationStatusForApprovals(piece?.eodEntryId, piece != null, true);
+  const live = useClarificationStatusForApprovals(piece?.eodEntryId, piece != null, true, piece?.id);
   const blocked = live.data ? isBlockingStatus(live.data.status) : clarificationOpen;
   const blockedReason = decisionBlockedReason(blocked);
 
@@ -438,7 +439,7 @@ function PieceCard({
 
   // The row's own status is fetched only while its menu is open (no poll per card); the batched
   // list covers blocking until then.
-  const live = useClarificationStatusForApprovals(piece.eodEntryId, menuOpen);
+  const live = useClarificationStatusForApprovals(piece.eodEntryId, menuOpen, false, piece.id);
   const isOwn = user != null && piece.employeeId === user.id;
   const menu = clarificationMenuState({
     isOwn, blockedByList: clarificationOpen, status: menuOpen && !live.isFetching ? live.data : undefined,
@@ -664,13 +665,10 @@ export default function ApprovalsPage({
   const { show } = useToast();
   const refreshClarification = useRefreshClarification();
 
-  // Which entries have an open round — one batched request for every card, not a poll per card.
-  // The server excludes the viewer's own EOD from this list.
+  // Which rounds are open — one batched request for every card, not a poll per card. The server returns
+  // only rounds on pieces THIS viewer holds (never another project's), and excludes the viewer's own EOD.
+  // A card is blocked by a round on its own piece only — see isPieceClarified.
   const { data: openClarifications } = useEodInbox('lead', true);
-  const clarifiedEntryIds = useMemo(
-    () => new Set((openClarifications ?? []).map(c => c.eodEntryId)),
-    [openClarifications],
-  );
 
   const [tab, setTab]                   = useState<ApprovalsTab>(tabs[0]);
   const [search, setSearch]             = useState('');
@@ -681,9 +679,9 @@ export default function ApprovalsPage({
   const [modalPieceId, setModalPieceId] = useState<number | null>(null);
   const [modalMode, setModalMode] = useState<'view' | 'reject'>('view');
   // The one chat popup for this page (closable, re-openable; closing resolves nothing).
-  const [chat, setChat] = useState<{ entryId: number; employeeId: number; employeeName: string; entryDate: string } | null>(null);
+  const [chat, setChat] = useState<{ entryId: number; pieceId: number; employeeId: number; employeeName: string; entryDate: string } | null>(null);
   function openChat(p: ApprovalPieceDto) {
-    setChat({ entryId: p.eodEntryId, employeeId: p.employeeId, employeeName: p.employeeName, entryDate: p.entryDate });
+    setChat({ entryId: p.eodEntryId, pieceId: p.id, employeeId: p.employeeId, employeeName: p.employeeName, entryDate: p.entryDate });
   }
   const [page, setPage]                 = useState(1);
 
@@ -987,7 +985,7 @@ export default function ApprovalsPage({
                 piece={piece}
                 tab={tab}
                 onOpenModal={(mode = 'view') => { setModalMode(mode); setModalPieceId(piece.id); }}
-                clarificationOpen={clarifiedEntryIds.has(piece.eodEntryId)}
+                clarificationOpen={isPieceClarified(openClarifications, piece.id, piece.eodEntryId)}
                 onOpenChat={openChat}
                 clarificationReadOnly={clarificationReadOnly}
               />
@@ -1011,12 +1009,13 @@ export default function ApprovalsPage({
         onReject={handleReject}
         approveBusy={approveBusy}
         rejectBusy={rejectBusy}
-        clarificationOpen={modalPiece != null && clarifiedEntryIds.has(modalPiece.eodEntryId)}
+        clarificationOpen={modalPiece != null && isPieceClarified(openClarifications, modalPiece.id, modalPiece.eodEntryId)}
       />
 
       {chat && (
         <ClarificationChatPopup
           entryId={chat.entryId}
+          pieceId={chat.pieceId}
           employeeId={chat.employeeId}
           employeeName={chat.employeeName}
           entryDate={chat.entryDate}

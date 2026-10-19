@@ -35,7 +35,11 @@ public record EodInboxItemDto(
         OffsetDateTime lastMessageAt,
         String         lastMessageSenderName,
         String         lastMessageSenderRole,
-        boolean        unread
+        boolean        unread,
+        /** The approval piece this round belongs to (null for a legacy round) and that piece's project —
+         *  which project's lead asked. Distinct from projectName/projectNames, which are the entry's tasks. */
+        Long           pieceId,
+        String         pieceProjectName
 ) {
     /** @param viewerLastReadAt the viewing user's last_read_at for this round (null if never
      *                          opened) — used with lastReply/openedAt to derive `unread`; see
@@ -75,7 +79,9 @@ public record EodInboxItemDto(
                 lastActivityAt,
                 lastReply != null ? lastReply.getSender().getFullName() : null,
                 lastReply != null ? (lastSenderIsEmployee ? "EMPLOYEE" : "TEAM_LEAD") : null,
-                unread
+                unread,
+                c.getPiece() != null ? c.getPiece().getId() : null,
+                c.getPiece() != null && c.getPiece().getProject() != null ? c.getPiece().getProject().getName() : null
         );
     }
 }

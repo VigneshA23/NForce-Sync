@@ -37,6 +37,14 @@ public class EodClarification {
     @JoinColumn(name = "opened_by_approver_id")
     private AppUser openedByApprover;
 
+    // The opener's OWN approval piece (one project + one lead) this round is about — it blocks only that
+    // piece and is visible only to whoever holds it (plus the employee and read-only roles). NULL for a
+    // legacy round (opened before piece_id existed, or ambiguous at backfill), which keeps the old
+    // per-entry behaviour: it blocks every piece of the entry.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "piece_id")
+    private com.nforceone.sync.approval2.EodProjectApproval piece;
+
     @Column(name = "opened_at", nullable = false)
     private OffsetDateTime openedAt;
 

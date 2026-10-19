@@ -22,12 +22,29 @@ export function isBlockingStatus(status: ClarificationStatusValue | null | undef
 }
 
 /**
- * Tooltip for a disabled Approve/Reject. Rounds are per ENTRY (per-piece scoping is deferred), so
- * an open round blocks every project piece on the entry, not only the piece it was raised from.
+ * Tooltip for a disabled Approve/Reject. A round is per PIECE (one project + one lead): it blocks only
+ * its own project's portion, so another project's lead is never blocked by it.
  */
 export const CLARIFICATION_BLOCKS_DECISION_REASON =
-  'This entry has an open clarification (Needs response / Acknowledged). It blocks approving or '
-  + 'rejecting every project piece on the entry until it is resolved.';
+  'Your portion of this EOD has an open clarification (Needs response / Acknowledged). Approve and '
+  + 'reject stay disabled for it until it is resolved.';
+
+/** The slice of an inbox row the per-piece check needs. */
+export interface OpenRoundRef {
+  eodEntryId: number;
+  pieceId: number | null;
+}
+
+/**
+ * Does an open round block THIS approval piece? A round on a piece blocks only that piece; a legacy round
+ * (no pieceId — opened before per-piece rounds existed) blocks every piece of its entry, as it always did.
+ * The list holds only rounds the server let this viewer see, so another project's round never reaches it.
+ */
+export function isPieceClarified(
+  openRounds: readonly OpenRoundRef[] | undefined, pieceId: number, entryId: number,
+): boolean {
+  return (openRounds ?? []).some(r => (r.pieceId != null ? r.pieceId === pieceId : r.eodEntryId === entryId));
+}
 
 /** The tooltip to show on a decision button, or undefined when the button is not blocked. */
 export function decisionBlockedReason(blocked: boolean): string | undefined {

@@ -32,8 +32,15 @@ import { CLARIFICATION_STATUS_META, CLARIFICATION_STATUS_OPTIONS } from '../lib/
  * nothing. Polls every 15s while open. A 403/409 on any action shows the server's message through
  * extractError() and the mutation hooks refresh the status immediately.
  */
-export function ClarificationChatPopup({ entryId, employeeId, employeeName, entryDate, onClose, readOnly = false }: {
+export function ClarificationChatPopup({
+  entryId, pieceId, clarificationId, employeeId, employeeName, entryDate, onClose, readOnly = false,
+}: {
   entryId: number;
+  /** The approval piece (project + lead) the reviewer opened this from — the round is about that piece, and
+   *  the card's status is read for it. Reviewer side only. */
+  pieceId?: number | null;
+  /** The round the employee chose when two leads asked (from the inbox row); omitted = the latest. */
+  clarificationId?: number | null;
   /** Owner of the entry — decides the viewer's side via scopeFor(). */
   employeeId: number;
   employeeName: string;
@@ -48,10 +55,13 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
   const [confirmingResolve, setConfirmingResolve] = useState(false);
 
   const scope = user ? scopeFor(employeeId, user.id) : 'lead';
-  const reviewerQuery = useClarificationStatusForApprovals(entryId, scope === 'lead', true);
-  const employeeQuery = useClarificationStatus(entryId, 'employee', scope === 'employee');
+  const reviewerQuery = useClarificationStatusForApprovals(entryId, scope === 'lead', true, pieceId);
+  const employeeQuery = useClarificationStatus(entryId, 'employee', scope === 'employee', clarificationId);
   const query = scope === 'lead' ? reviewerQuery : employeeQuery;
   const status = query.data;
+  // Every call below targets this one round, so a lead of two projects or an employee with two open
+  // rounds never reads or writes the wrong thread.
+  const threadRoundId = status?.clarificationId ?? clarificationId ?? null;
 
   const openWithMessage = useOpenClarificationWithMessage();
   const setStatus = useSetClarificationStatus();
@@ -60,7 +70,7 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
   // Opening the chat counts as reading it (clears the unread dot in the inboxes).
   const roundId = status?.clarificationId ?? null;
   useEffect(() => {
-    if (roundId != null) markRead.mutate(entryId);
+    if (roundId != null) markRead.mutate({ entryId, clarificationId: roundId });
     // markRead is a fresh object each render; re-marking is only wanted when the round changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entryId, roundId]);
@@ -84,7 +94,7 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
 
   async function changeStatus(next: ClarificationStatusValue) {
     try {
-      await setStatus.mutateAsync({ entryId, status: next });
+      await setStatus.mutateAsync({ entryId, status: next, clarificationId: threadRoundId });
     } catch (err) {
       show(extractError(err), 'error');   // the hook also refreshes the status on 403/409
     }
@@ -92,7 +102,7 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
 
   async function handleResolve() {
     try {
-      await setStatus.mutateAsync({ entryId, status: 'RESOLVED' });
+      await setStatus.mutateAsync({ entryId, status: 'RESOLVED', clarificationId: threadRoundId });
       setConfirmingResolve(false);
     } catch (err) {
       setConfirmingResolve(false);
@@ -120,7 +130,11 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {employeeName}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>EOD entry for {formatDate(entryDate)}</div>
+            <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
+              EOD entry for {formatDate(entryDate)}
+              {/* Which project's lead this round is with — the employee can have one per project. */}
+              {status?.projectName ? ` · ${status.projectName}` : ''}
+            </div>
           </div>
           <button
             type="button"
@@ -160,7 +174,8 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
             marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: 12, color: 'var(--txt-mut)',
             background: 'var(--raised2)', border: '1px solid var(--line2)',
           }}>
-            Resolve this clarification? It unblocks approving or rejecting {employeeName}&apos;s entry and
+            Resolve this clarification? It unblocks approving or rejecting your portion
+            {status?.projectName ? ` (${status.projectName})` : ''} of {employeeName}&apos;s entry and
             notifies them. This cannot be undone.
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
               <button
@@ -199,9 +214,10 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
           <ClarificationThreadView
             entryId={entryId}
             scope={scope}
+            clarificationId={threadRoundId}
             canReply={composerEnabled}
             onSendOverride={canStart
-              ? (message, files) => openWithMessage.mutateAsync({ entryId, message, files })
+              ? (message, files) => openWithMessage.mutateAsync({ entryId, message, files, pieceId })
               : undefined}
             replyToLabel={scope === 'lead' ? (canStart ? `Message ${employeeName}` : `Reply to ${employeeName}`) : 'Reply to your reviewer'}
             visibilityNote={scope === 'lead' ? `Replies are visible to ${employeeName}` : 'Replies are visible to your reviewers'}

@@ -179,21 +179,27 @@ export default function EodHistory() {
   // clarification lives. Own entries only: the reviewer-side lists never contain them, and the panel
   // below is always opened in the employee scope. One batched request flags every row.
   const { data: openRounds } = useEodInbox('employee', true);
-  const clarifiedEntryIds = useMemo(
-    () => new Set((openRounds ?? []).map(r => r.eodEntryId)),
-    [openRounds],
-  );
+  // One entry can have an open round per project (each lead asks separately), so keep every round per entry —
+  // the row shows a button for each, naming the project whose lead asked.
+  const openRoundsByEntry = useMemo(() => {
+    const byEntry = new Map<number, NonNullable<typeof openRounds>>();
+    for (const r of openRounds ?? []) byEntry.set(r.eodEntryId, [...(byEntry.get(r.eodEntryId) ?? []), r]);
+    return byEntry;
+  }, [openRounds]);
   // A ?highlight=<entryId> link (the clarification notifications) opens that entry's thread directly.
   const highlightParam = searchParams.get('highlight');
   const highlightId = highlightParam && Number.isFinite(Number(highlightParam)) ? Number(highlightParam) : null;
   // Derived rather than synced in an effect: a row click sets openedEntryId; a ?highlight= id opens
   // its thread until that same id is dismissed, and a different id in the URL opens again.
   const [openedEntryId, setOpenedEntryId] = useState<number | null>(null);
+  // The round the employee picked when two leads asked (null = the server's default: an open round).
+  const [openedClarificationId, setOpenedClarificationId] = useState<number | null>(null);
   const [dismissedHighlightId, setDismissedHighlightId] = useState<number | null>(null);
   const clarificationEntryId = openedEntryId
     ?? (highlightId != null && highlightId !== dismissedHighlightId ? highlightId : null);
   function closeClarification() {
     setOpenedEntryId(null);
+    setOpenedClarificationId(null);
     setDismissedHighlightId(highlightId);
   }
 
@@ -761,20 +767,22 @@ export default function EodHistory() {
                 {entry.id != null
                   ? <EntryPieceChipsWithFallback entryId={entry.id} status={entry.status} />
                   : <StatusBadge status={entry.status} />}
-                {entry.id != null && clarifiedEntryIds.has(entry.id) && (
+                {entry.id != null && (openRoundsByEntry.get(entry.id) ?? []).map(round => (
                   <button
+                    key={round.clarificationId}
                     type="button"
-                    onClick={e => { e.stopPropagation(); setOpenedEntryId(entry.id!); }}
+                    onClick={e => { e.stopPropagation(); setOpenedEntryId(entry.id!); setOpenedClarificationId(round.clarificationId); }}
                     onKeyDown={e => e.stopPropagation()}
                     style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, padding: '3px 8px',
+                      display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, marginRight: 6, padding: '3px 8px',
                       borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
                       border: '1px solid rgba(224,169,59,.4)', background: 'var(--raised2)', color: 'var(--warn)',
                     }}
                   >
-                    <MessageCircleQuestion size={11} aria-hidden="true" /> Clarification requested
+                    <MessageCircleQuestion size={11} aria-hidden="true" />
+                    {' '}Clarification requested{round.pieceProjectName ? ` · ${round.pieceProjectName}` : ''}
                   </button>
-                )}
+                ))}
               </div>
               <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
                 {entry.submittedAt ? formatDateTime(entry.submittedAt) : '-'}
@@ -805,6 +813,7 @@ export default function EodHistory() {
         return chatEntry && user ? (
           <ClarificationChatPopup
             entryId={chatEntry.id!}
+            clarificationId={openedClarificationId}
             employeeId={user.id}
             employeeName={user.name}
             entryDate={chatEntry.entryDate}

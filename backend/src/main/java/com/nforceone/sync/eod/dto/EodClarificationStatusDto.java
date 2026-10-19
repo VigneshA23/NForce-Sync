@@ -27,10 +27,15 @@ public record EodClarificationStatusDto(
         String         resolvedByName,
         boolean        canOpen,
         boolean        canReply,
-        boolean        canResolve
+        boolean        canResolve,
+        /** The approval piece (one project + one lead) this round belongs to — it blocks only that piece.
+         *  Null for a legacy round, which blocks the whole entry. */
+        Long           pieceId,
+        /** Name of that piece's project, so the employee sees which project's lead asked. Null for legacy rows. */
+        String         projectName
 ) {
     public static EodClarificationStatusDto none(boolean canOpen) {
-        return new EodClarificationStatusDto(null, false, null, null, null, null, null, canOpen, false, false);
+        return new EodClarificationStatusDto(null, false, null, null, null, null, null, canOpen, false, false, null, null);
     }
 
     public static EodClarificationStatusDto from(EodClarification c, boolean canOpen, boolean canReply,
@@ -45,7 +50,9 @@ public record EodClarificationStatusDto(
                 c.getResolvedBy() != null ? c.getResolvedBy().getFullName() : null,
                 canOpen,
                 canReply,
-                canResolve
+                canResolve,
+                c.getPiece() != null ? c.getPiece().getId() : null,
+                c.getPiece() != null && c.getPiece().getProject() != null ? c.getPiece().getProject().getName() : null
         );
     }
 }

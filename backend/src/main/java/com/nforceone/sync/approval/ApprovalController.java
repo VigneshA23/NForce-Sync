@@ -68,8 +68,9 @@ public class ApprovalController {
     // reject calls. Delegates straight to EodClarificationAccessPolicy.requireCanRead, which
     // already covers both a Team Lead and a scoped PM viewing this entry.
     @GetMapping("/{entryId}/clarification-status")
-    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId) {
-        return clarificationService.getStatus(entryId, actingEmail());
+    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId,
+            @RequestParam(required = false) Long pieceId) {
+        return clarificationService.getStatusForPiece(entryId, actingEmail(), pieceId);
     }
 
     @PostMapping("/{entryId}/approve")

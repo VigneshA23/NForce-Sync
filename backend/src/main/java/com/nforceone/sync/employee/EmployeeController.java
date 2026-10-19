@@ -169,20 +169,23 @@ public class EmployeeController {
     // SubmitEOD/EodHistory can gate the edit-lock banner without EodEntryDto knowing anything
     // about clarifications.
     @GetMapping("/eod/{entryId}/clarification")
-    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId) {
-        return clarificationService.getStatus(entryId, actingEmail());
+    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId,
+            @RequestParam(required = false) Long clarificationId) {
+        return clarificationService.getStatus(entryId, actingEmail(), clarificationId);
     }
 
     @GetMapping("/eod/{entryId}/clarification/replies")
-    public List<EodClarificationReplyDto> getClarificationReplies(@PathVariable Long entryId) {
-        return clarificationService.getThread(entryId, actingEmail());
+    public List<EodClarificationReplyDto> getClarificationReplies(@PathVariable Long entryId,
+            @RequestParam(required = false) Long clarificationId) {
+        return clarificationService.getThread(entryId, actingEmail(), clarificationId);
     }
 
     // Opening the EOD Inbox row's conversation panel — marks the round read for this employee,
     // clearing the unread/bold indicator on the row (see EodClarificationService.markRead).
     @PostMapping("/eod/{entryId}/clarification/read")
-    public void markClarificationRead(@PathVariable Long entryId) {
-        clarificationService.markRead(entryId, actingEmail());
+    public void markClarificationRead(@PathVariable Long entryId,
+            @RequestParam(required = false) Long clarificationId) {
+        clarificationService.markRead(entryId, actingEmail(), clarificationId);
     }
 
     // Multipart, not JSON — matches Blockers' postBlockerReply exactly (message + files together),
@@ -191,8 +194,9 @@ public class EmployeeController {
     public EodClarificationReplyDto postClarificationReply(
             @PathVariable Long entryId,
             @RequestParam(required = false) String message,
-            @RequestParam(required = false) List<MultipartFile> files) {
-        return clarificationService.reply(entryId, actingEmail(), message, files);
+            @RequestParam(required = false) List<MultipartFile> files,
+            @RequestParam(required = false) Long clarificationId) {
+        return clarificationService.reply(entryId, actingEmail(), message, files, clarificationId);
     }
 
     @PutMapping("/eod/clarification/replies/{replyId}")

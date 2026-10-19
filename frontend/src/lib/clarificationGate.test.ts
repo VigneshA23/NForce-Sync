@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CLARIFICATION_BLOCKS_DECISION_REASON, clarificationMenuState, decisionBlockedReason, isBlockingStatus,
-  isStaleStateError, scopeFor, type MenuStatus,
+  isPieceClarified, isStaleStateError, scopeFor, type MenuStatus,
 } from './clarificationGate';
 
 describe('scopeFor — which side of the conversation the viewer is on', () => {
@@ -47,24 +47,53 @@ describe('isBlockingStatus — when Approve/Reject must be disabled', () => {
     expect(isBlockingStatus(undefined)).toBe(false);
   });
 
-  it('is entry-wide: the same status blocks every piece, so it takes no piece argument', () => {
-    // Rounds are per entry. The decision is a function of the entry's round status only; two
-    // pieces on one entry therefore always get the same answer.
-    const roundStatus = 'ACKNOWLEDGED' as const;
-    const pieceA = isBlockingStatus(roundStatus);
-    const pieceB = isBlockingStatus(roundStatus);
-    expect(pieceA).toBe(true);
-    expect(pieceB).toBe(true);
+  it('is a function of one round status — which piece it applies to is decided by isPieceClarified', () => {
+    expect(isBlockingStatus('ACKNOWLEDGED')).toBe(true);
+    expect(isBlockingStatus('RESOLVED')).toBe(false);
+  });
+});
+
+describe('isPieceClarified — a round blocks only its own piece', () => {
+  const ARENA_PIECE = 2, SYNC_PIECE = 1, ENTRY = 100;
+
+  it("an ARENA round blocks ARENA's piece and never SYNC's", () => {
+    const rounds = [{ eodEntryId: ENTRY, pieceId: ARENA_PIECE }];
+    expect(isPieceClarified(rounds, ARENA_PIECE, ENTRY)).toBe(true);
+    expect(isPieceClarified(rounds, SYNC_PIECE, ENTRY)).toBe(false);
+  });
+
+  it('both leads with open rounds: each piece is blocked by its own round only', () => {
+    const rounds = [{ eodEntryId: ENTRY, pieceId: ARENA_PIECE }, { eodEntryId: ENTRY, pieceId: SYNC_PIECE }];
+    expect(isPieceClarified(rounds, ARENA_PIECE, ENTRY)).toBe(true);
+    expect(isPieceClarified(rounds, SYNC_PIECE, ENTRY)).toBe(true);
+    // once ARENA's is resolved (gone from the open list), SYNC's still blocks and ARENA's does not
+    const afterResolve = [{ eodEntryId: ENTRY, pieceId: SYNC_PIECE }];
+    expect(isPieceClarified(afterResolve, ARENA_PIECE, ENTRY)).toBe(false);
+    expect(isPieceClarified(afterResolve, SYNC_PIECE, ENTRY)).toBe(true);
+  });
+
+  it('a legacy round (no pieceId) keeps blocking every piece of its entry, and only that entry', () => {
+    const rounds = [{ eodEntryId: ENTRY, pieceId: null }];
+    expect(isPieceClarified(rounds, ARENA_PIECE, ENTRY)).toBe(true);
+    expect(isPieceClarified(rounds, SYNC_PIECE, ENTRY)).toBe(true);
+    expect(isPieceClarified(rounds, SYNC_PIECE, 999)).toBe(false);
+  });
+
+  it('no rounds (or not loaded yet) blocks nothing — a single-project EOD behaves as before', () => {
+    expect(isPieceClarified([], SYNC_PIECE, ENTRY)).toBe(false);
+    expect(isPieceClarified(undefined, SYNC_PIECE, ENTRY)).toBe(false);
+    expect(isPieceClarified([{ eodEntryId: ENTRY, pieceId: SYNC_PIECE }], SYNC_PIECE, ENTRY)).toBe(true);
   });
 });
 
 describe('decisionBlockedReason', () => {
-  it('returns the tooltip only when blocked, and it says every project piece is blocked', () => {
+  it('returns the tooltip only when blocked, and it scopes the block to the viewer\'s own portion', () => {
     expect(decisionBlockedReason(false)).toBeUndefined();
     const reason = decisionBlockedReason(true);
     expect(reason).toBe(CLARIFICATION_BLOCKS_DECISION_REASON);
-    expect(reason).toContain('every project piece');
+    expect(reason).toContain('Your portion');
     expect(reason).toContain('open clarification');
+    expect(reason).not.toContain('every project piece');
   });
 });
 
@@ -103,13 +132,13 @@ describe('clarificationMenuState — kebab menu rules', () => {
     expect(kinds(s)).toEqual(['request']);
   });
 
-  it('NEEDS_RESPONSE and ACKNOWLEDGED disable Approve and Reject with the entry-wide tooltip', () => {
+  it('NEEDS_RESPONSE and ACKNOWLEDGED disable Approve and Reject with the per-portion tooltip', () => {
     for (const status of [open, acknowledged]) {
       const s = clarificationMenuState({ isOwn: false, blockedByList: false, status });
       expect(s.approve.disabled).toBe(true);
       expect(s.reject.disabled).toBe(true);
       expect(s.approve.title).toBe(CLARIFICATION_BLOCKS_DECISION_REASON);
-      expect(s.reject.title).toContain('every project piece');
+      expect(s.reject.title).toContain('Your portion');
       expect(kinds(s)).toEqual(['open-chat']);
       expect(s.clarification[0].label).toBe('Open clarification chat');
     }

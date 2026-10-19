@@ -38,15 +38,17 @@ public class PmEodInboxController {
     // Read-only thread view — a PM can see what was discussed, just not reply (no POST endpoint
     // wired here at all, matching PmBlockersController's omission pattern).
     @GetMapping("/{entryId}/replies")
-    public List<EodClarificationReplyDto> getReplies(@PathVariable Long entryId) {
-        return clarificationService.getThread(entryId, actingEmail());
+    public List<EodClarificationReplyDto> getReplies(@PathVariable Long entryId,
+            @RequestParam(required = false) Long clarificationId) {
+        return clarificationService.getThread(entryId, actingEmail(), clarificationId);
     }
 
     // Opening the EOD Inbox row's conversation panel — marks the round read for this PM (even
     // though they can't reply), clearing the unread/bold indicator on their own copy of the row.
     @PostMapping("/{entryId}/read")
-    public void markRead(@PathVariable Long entryId) {
-        clarificationService.markRead(entryId, actingEmail());
+    public void markRead(@PathVariable Long entryId,
+            @RequestParam(required = false) Long clarificationId) {
+        clarificationService.markRead(entryId, actingEmail(), clarificationId);
     }
 
     // Read-only download — same access check (EodClarificationAccessPolicy.requireCanRead) as

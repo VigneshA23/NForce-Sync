@@ -59,7 +59,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
             <UserIcon size={14} aria-hidden="true" style={{ color: 'var(--txt-dim)', marginTop: 2 }} />
             <div>
               <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>Requested by</div>
-              <div style={{ fontSize: 12.5, color: 'var(--txt)', fontWeight: 600 }}>{item.openedByName}</div>
+              <div style={{ fontSize: 12.5, color: 'var(--txt)', fontWeight: 600 }}>{item.openedByName}{item.pieceProjectName ? ` (${item.pieceProjectName})` : ''}</div>
             </div>
           </div>
         </div>
@@ -82,6 +82,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <ClarificationThreadView
             entryId={item.eodEntryId}
+            clarificationId={item.clarificationId}
             scope="employee"
             replyToLabel="Reply to your reviewer"
             visibilityNote="Replies are visible to your reviewer"
@@ -281,7 +282,7 @@ export default function EmployeeEodInbox() {
               setViewEodEntryId(null);
               setSelectedClarificationId(id => (id === clarificationId ? null : clarificationId));
               const row = allItems.find(i => i.clarificationId === clarificationId);
-              if (row?.unread) markRead.mutate(row.eodEntryId);
+              if (row?.unread) markRead.mutate({ entryId: row.eodEntryId, clarificationId: row.clarificationId });
             }}
           />
         )}

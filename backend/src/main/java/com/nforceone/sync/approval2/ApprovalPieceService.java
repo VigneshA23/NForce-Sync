@@ -352,13 +352,22 @@ public class ApprovalPieceService {
 
     // ── private helpers ──────────────────────────────────────────────────────
 
-    // An open clarification round blocks approve AND reject of EVERY piece on the entry, not just
-    // the piece it was raised from: rounds are per entry (per-piece scoping is deferred — see
-    // docs/role-restructure-plan.md decision 4), so the gate is entry-wide to match. Mirrors the
-    // legacy ApprovalService.requireNoOpenClarification, which the v2 piece path used to bypass.
+    // Clarification state is per piece (one project + one lead): an open round blocks approve/reject of
+    // ITS OWN piece only, so another project's lead keeps full access to theirs. A legacy round (no
+    // piece_id — opened before per-piece rounds existed) keeps the old behaviour and blocks every piece
+    // of the entry. Enforced here, not only by disabling buttons in the UI.
     private void requireNoOpenClarification(EodProjectApproval piece) {
         Long entryId = piece.getEodEntry().getId();
-        if (clarificationRepository.existsByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)) {
+        // A legacy round (no piece) blocks only the pieces its OPENER holds — a lead is never blocked by a
+        // thread they cannot see.
+        // A piece escalated to someone else (a PM) is no longer held by the opener, so it is not blocked either.
+        boolean escalatedAway = piece.getApprover() != null && piece.getEscalatedTo() != null
+                && !piece.getEscalatedTo().getId().equals(piece.getApprover().getId());
+        boolean legacyRoundOnMyPiece = piece.getApprover() != null && !escalatedAway
+                && clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(
+                        entryId, EodClarification.Status.RESOLVED, piece.getApprover().getId());
+        if (clarificationRepository.existsByPiece_IdAndStatusNot(piece.getId(), EodClarification.Status.RESOLVED)
+                || legacyRoundOnMyPiece) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This entry has an open clarification and cannot be approved or rejected until it is resolved");
         }

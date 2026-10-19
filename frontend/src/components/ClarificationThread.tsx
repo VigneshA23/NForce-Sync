@@ -20,9 +20,12 @@ const CLARIFICATION_ROLE_LABELS = { EMPLOYEE: 'Employee', TEAM_LEAD: 'Reviewer',
  * Blockers omits reply entirely rather than disabling a control).
  */
 export function ClarificationThreadView({
-  entryId, scope, replyToLabel, visibilityNote, isLocked, readOnly, canReply, onSendOverride, emptyMessage,
+  entryId, scope, clarificationId, replyToLabel, visibilityNote, isLocked, readOnly, canReply, onSendOverride, emptyMessage,
 }: {
   entryId: number;
+  /** The one round this thread shows / posts into. An entry can have a round per project, so every read and
+   *  post names its round; omitted = the server's default (the viewer's own latest round). */
+  clarificationId?: number | null;
   /** Replaces the default "post a reply into the open round" send — used by the chat popup when
    *  no round is open yet, so the FIRST message opens the round. */
   onSendOverride?: (message: string, files: File[]) => Promise<unknown>;
@@ -40,10 +43,10 @@ export function ClarificationThreadView({
   readOnly?: boolean;
 }) {
   const { user } = useAuth();
-  const writable = useClarificationThread(entryId, scope ?? 'lead', !readOnly && scope != null);
-  const readOnlyQuery = usePmClarificationThread(entryId, !!readOnly);
+  const writable = useClarificationThread(entryId, scope ?? 'lead', !readOnly && scope != null, clarificationId);
+  const readOnlyQuery = usePmClarificationThread(entryId, !!readOnly, clarificationId);
   const { data: messages, isPending } = readOnly ? readOnlyQuery : writable;
-  const sendReply = useSendClarificationReply(entryId, scope ?? 'lead');
+  const sendReply = useSendClarificationReply(entryId, scope ?? 'lead', clarificationId);
   // Harmless to wire up even when readOnly (no request fires unless invoked) — just never
   // passed down to ThreadView below, the same way PM's view never gets an onSend either.
   const editReply = useEditClarificationReply(entryId, scope ?? 'lead');

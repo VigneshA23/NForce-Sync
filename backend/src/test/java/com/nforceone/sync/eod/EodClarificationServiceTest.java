@@ -78,7 +78,8 @@ class EodClarificationServiceTest {
 
         lenient().when(entryRepository.findWithDetailsById(100L)).thenReturn(Optional.of(entry));
         lenient().when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(leadPiece));
-        lenient().when(clarificationRepository.existsByEodEntryIdAndStatusNot(anyLong(), any())).thenReturn(false);
+        lenient().when(clarificationRepository.existsByPiece_IdAndStatusNot(any(), any())).thenReturn(false);
+        lenient().when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(anyLong(), any(), anyLong())).thenReturn(false);
         lenient().when(clarificationRepository.save(any(EodClarification.class))).thenAnswer(i -> {
             EodClarification c = i.getArgument(0);
             if (c.getId() == null) c.setId(500L);
@@ -117,6 +118,7 @@ class EodClarificationServiceTest {
         c.setEodEntry(entry);
         c.setOpenedBy(openedBy);
         c.setOpenedByApprover(openedBy);
+        c.setPiece(leadPiece);
         c.setOpenedAt(OffsetDateTime.now());
         c.setStatus(EodClarification.Status.NEEDS_RESPONSE);
         return c;
@@ -192,8 +194,8 @@ class EodClarificationServiceTest {
     @Test
     void employeeReply_notifiesTheCurrentApprover_notThePreviousOpener() {
         AppUser previousLead = user(8L, "Previous Lead", AppUser.Role.EMPLOYEE);
-        when(clarificationRepository.findByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
-                .thenReturn(Optional.of(openRound(previousLead)));   // round opened by the old approver
+        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
+                .thenReturn(List.of(openRound(previousLead)));   // round opened by the old approver
         // The piece has since moved to `lead`.
 
         service.reply(100L, employee.getEmail(), "Here is the detail", null);
@@ -206,8 +208,8 @@ class EodClarificationServiceTest {
     @Test
     void employeeReply_notifiesLeadAndEscalatedPm_eachWithTheirOwnInboxLink() {
         leadPiece.setEscalatedTo(pm);
-        when(clarificationRepository.findByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
-                .thenReturn(Optional.of(openRound(lead)));
+        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
+                .thenReturn(List.of(openRound(lead)));
 
         service.reply(100L, employee.getEmail(), "Here is the detail", null);
 
@@ -221,8 +223,8 @@ class EodClarificationServiceTest {
     void employeeReply_deduplicatesAnApproverHoldingSeveralPieces() {
         EodProjectApproval second = piece(2L, lead, EodProjectApproval.Status.PENDING);
         when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(leadPiece, second));
-        when(clarificationRepository.findByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
-                .thenReturn(Optional.of(openRound(lead)));
+        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
+                .thenReturn(List.of(openRound(lead)));
 
         service.reply(100L, employee.getEmail(), "Here is the detail", null);
 
@@ -311,8 +313,8 @@ class EodClarificationServiceTest {
         assertFalse(none.canOpen());
         assertFalse(none.canReply());
 
-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L))
-                .thenReturn(Optional.of(openRound(lead)));
+        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
+                .thenReturn(List.of(openRound(lead)));
         EodClarificationStatusDto open = service.getStatus(100L, rm.getEmail());
         assertTrue(open.open());
         assertFalse(open.canOpen());
@@ -324,8 +326,8 @@ class EodClarificationServiceTest {
     void getStatus_approverCanOpenWhenNoRound_andReplyWhenOpen() {
         assertTrue(service.getStatus(100L, lead.getEmail()).canOpen());
 
-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L))
-                .thenReturn(Optional.of(openRound(lead)));
+        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
+                .thenReturn(List.of(openRound(lead)));
         EodClarificationStatusDto open = service.getStatus(100L, lead.getEmail());
         assertFalse(open.canOpen());
         assertTrue(open.canReply());
@@ -336,8 +338,8 @@ class EodClarificationServiceTest {
     void getStatus_owner_canReplyButNeverOpen() {
         assertFalse(service.getStatus(100L, employee.getEmail()).canOpen());
 
-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L))
-                .thenReturn(Optional.of(openRound(lead)));
+        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
+                .thenReturn(List.of(openRound(lead)));
         EodClarificationStatusDto open = service.getStatus(100L, employee.getEmail());
         assertFalse(open.canOpen());
         assertTrue(open.canReply());
@@ -345,8 +347,8 @@ class EodClarificationServiceTest {
 
     @Test
     void getStatus_owner_canReplyButNeverResolve() {
-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L))
-                .thenReturn(Optional.of(openRound(lead)));
+        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
+                .thenReturn(List.of(openRound(lead)));
         EodClarificationStatusDto dto = service.getStatus(100L, employee.getEmail());
         assertTrue(dto.canReply());
         assertFalse(dto.canResolve());
@@ -362,8 +364,8 @@ class EodClarificationServiceTest {
         task.setProject(project);
         entry.getTasks().add(task);
 
-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L))
-                .thenReturn(Optional.of(openRound(lead)));
+        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
+                .thenReturn(List.of(openRound(lead)));
 
         assertTrue(service.getStatus(100L, lead.getEmail()).canResolve());       // pending-piece approver
         assertFalse(service.getStatus(100L, employee.getEmail()).canResolve());  // owner
@@ -388,7 +390,7 @@ class EodClarificationServiceTest {
         resolved.setStatus(EodClarification.Status.RESOLVED);
         resolved.setResolvedAt(OffsetDateTime.now());
         resolved.setResolvedBy(lead);
-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L)).thenReturn(Optional.of(resolved));
+        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L)).thenReturn(List.of(resolved));
 
         EodClarificationStatusDto asReviewer = service.getStatus(100L, lead.getEmail());
         assertEquals(500L, asReviewer.clarificationId());
@@ -438,7 +440,7 @@ class EodClarificationServiceTest {
 
     @Test
     void openWhileARoundIsAlreadyOpen_gets409() {
-        when(clarificationRepository.existsByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
+        when(clarificationRepository.existsByPiece_IdAndStatusNot(1L, EodClarification.Status.RESOLVED))
                 .thenReturn(true);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
@@ -466,7 +468,7 @@ class EodClarificationServiceTest {
         // existsBy… stub is false) and the reviewer may open another.
         EodClarification resolved = openRound(lead);
         resolved.setStatus(EodClarification.Status.RESOLVED);
-        lenient().when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L)).thenReturn(Optional.of(resolved));
+        lenient().when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L)).thenReturn(List.of(resolved));
 
         assertTrue(service.open(100L, lead.getEmail(), "one more question", List.of()).open());
         verify(replyRepository, times(1)).save(any(EodClarificationReply.class));
@@ -522,8 +524,8 @@ class EodClarificationServiceTest {
     @Test
     void pmRole_canStillReadTheStatusAndTheThread_andAllWriteFlagsAreFalse() {
         pmIsEscalatedApproverAndProjectPm();
-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L))
-                .thenReturn(Optional.of(openRound(lead)));
+        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
+                .thenReturn(List.of(openRound(lead)));
         EodClarificationStatusDto dto = service.getStatus(100L, pm.getEmail());
         assertTrue(dto.open());                 // can see that a round exists
         assertFalse(dto.canOpen());
@@ -709,8 +711,8 @@ class EodClarificationServiceTest {
         EodProjectApproval rmPiece = piece(5L, rm, EodProjectApproval.Status.PENDING);
         rmPiece.setApproverType(EodProjectApproval.ApproverType.REPORTING_MANAGER);
         when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(rmPiece));
-        when(clarificationRepository.findByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
-                .thenReturn(Optional.of(openRound(rm)));
+        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
+                .thenReturn(List.of(openRound(rm)));
 
         service.reply(100L, employee.getEmail(), "Here is the detail", null);
 
@@ -724,8 +726,8 @@ class EodClarificationServiceTest {
         EodProjectApproval asRm = piece(7L, lead, EodProjectApproval.Status.PENDING);
         asRm.setApproverType(EodProjectApproval.ApproverType.REPORTING_MANAGER);
         when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(asLead, asRm));
-        when(clarificationRepository.findByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
-                .thenReturn(Optional.of(openRound(lead)));
+        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
+                .thenReturn(List.of(openRound(lead)));
 
         service.reply(100L, employee.getEmail(), "Here is the detail", null);
 

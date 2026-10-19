@@ -74,6 +74,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <ClarificationThreadView
             entryId={item.eodEntryId}
+            clarificationId={item.clarificationId}
             replyToLabel=""
             visibilityNote=""
             readOnly
@@ -271,7 +272,7 @@ export default function PmEodInbox() {
               setViewEodEntryId(null);
               setSelectedClarificationId(id => (id === clarificationId ? null : clarificationId));
               const row = allItems.find(i => i.clarificationId === clarificationId);
-              if (row?.unread) markRead.mutate(row.eodEntryId);
+              if (row?.unread) markRead.mutate({ entryId: row.eodEntryId, clarificationId: row.clarificationId });
             }}
           />
         )}

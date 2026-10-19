@@ -203,8 +203,9 @@ function EodInboxTableRow({ row, index, selected, onClick, capacityLabel }: {
         </div>
       </div>
 
-      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', minWidth: 0 }} title={item.projectName ?? undefined}>
-        <div style={ellipsis}>{item.projectName ?? '—'}</div>
+      {/* The round's own project (which lead asked) when it has one; else the entry's first task project. */}
+      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', minWidth: 0 }} title={item.pieceProjectName ?? item.projectName ?? undefined}>
+        <div style={ellipsis}>{item.pieceProjectName ?? item.projectName ?? '—'}</div>
         {capacityLabel && (
           <span style={{
             display: 'inline-block', marginTop: 3, padding: '1px 7px', borderRadius: 10, fontSize: 10.5, fontWeight: 600,

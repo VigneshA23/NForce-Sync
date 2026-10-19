@@ -43,7 +43,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
   // This inbox also lists rounds the viewer can only READ (e.g. as the entry's reporting manager).
   // The server's canReply flag decides whether the composer and the status dropdown appear; while
   // it is still loading we assume read-only rather than flash controls that would 403.
-  const { data: viewerStatus } = useClarificationStatus(item.eodEntryId, 'lead');
+  const { data: viewerStatus } = useClarificationStatus(item.eodEntryId, 'lead', true, item.clarificationId);
   const canReply = viewerStatus?.canReply === true;
   // Resolving / changing the round's status is reviewer-only (the owner can reply but never resolve).
   const canResolve = viewerStatus?.canResolve === true;
@@ -121,6 +121,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <ClarificationThreadView
             entryId={item.eodEntryId}
+            clarificationId={item.clarificationId}
             scope="lead"
             replyToLabel={`Reply to ${item.employeeName}`}
             visibilityNote={`Replies are visible to ${item.employeeName}`}
@@ -362,7 +363,7 @@ export default function EodInbox({ variant = 'lead' }: { variant?: 'lead' | 'rm'
               setViewEodEntryId(null);
               setSelectedClarificationId(id => (id === clarificationId ? null : clarificationId));
               const row = allItems.find(i => i.clarificationId === clarificationId);
-              if (row?.unread) markRead.mutate(row.eodEntryId);
+              if (row?.unread) markRead.mutate({ entryId: row.eodEntryId, clarificationId: row.clarificationId });
             }}
           />
         )}
