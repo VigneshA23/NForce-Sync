@@ -141,7 +141,7 @@ export const NAV: Record<Role, RoleNav> = {
         { key: 'pm-util',       label: 'Projects Utilization', path: '/projects/utilization',  icon: Activity },
         { key: 'blockers',       label: 'Blockers',             path: '/projects/blockers',      icon: AlertOctagon },
         { key: 'eod-inbox',      label: 'EOD Inbox',            path: '/projects/eod-inbox',     icon: Inbox },
-        { key: 'approvals',      label: 'Approvals',            path: '/projects/approvals',     icon: ClipboardCheck },
+        { key: 'approvals',      label: 'Escalated Approvals',  path: '/projects/approvals',     icon: ClipboardCheck },
         { key: 'reports',        label: 'Reports',              path: '/projects/reports',       icon: BarChart3 },
       ],
     },

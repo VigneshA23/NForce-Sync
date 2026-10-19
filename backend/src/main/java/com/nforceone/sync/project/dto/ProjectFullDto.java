@@ -24,6 +24,12 @@ public record ProjectFullDto(
         LocalDate endDate,
         int allocatedHeadcount
 ) {
+    /** Same project, but with the given dates — e.g. an Employee's allocation window instead of the project's own. */
+    public ProjectFullDto withDates(LocalDate newStartDate, LocalDate newEndDate) {
+        return new ProjectFullDto(id, code, name, client, projectType, projectTypeId, status,
+                leadId, leadName, pmId, pmName, newStartDate, newEndDate, allocatedHeadcount);
+    }
+
     public static ProjectFullDto from(Project p, int allocatedHeadcount) {
         return new ProjectFullDto(
                 p.getId(),

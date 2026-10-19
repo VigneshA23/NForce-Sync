@@ -184,6 +184,11 @@ function EntryRow({
             {(entry.otherProjectsHours ?? 0) > 0 && (
               <Chip tone="neutral" dashed>Other projects: {hrs(Number(entry.otherProjectsHours))}h</Chip>
             )}
+            {(entry.otherProjectStatuses ?? []).map(o => (
+              <Chip key={o.projectName} tone="neutral" dashed>
+                {o.projectName}: {o.status === 'APPROVED' ? 'Approved' : o.status === 'REJECTED' ? 'Rejected' : 'Pending'}
+              </Chip>
+            ))}
             {statusChip}
             {daySummary(entry) && (
               <Chip tone={overtime > 0 ? 'warn' : 'neutral'} dashed={overtime === 0}>

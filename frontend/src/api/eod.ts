@@ -74,6 +74,9 @@ export interface EodEntryDto {
   /** Set only on a Team Lead's scoped view of a shared entry: total hours logged on projects he does not
    *  lead — an aggregate with no names or task details. */
   otherProjectsHours?: number | null;
+  /** Team Lead Approved/Rejected cards only: the other projects' decisions on the same split EOD — read-only
+   *  context (name + status, no task details). */
+  otherProjectStatuses?: { projectName: string; status: string }[] | null;
 }
 
 export interface EodLogLineDto {

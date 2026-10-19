@@ -169,7 +169,21 @@ public class ApprovalPieceService {
         }
         java.util.Set<Long> ledProjects = leadTeamPolicy.ledProjectIds(actor.getId());
         return entryRepository.findByLeadApproverPieceStatus(actor.getId(), status).stream()
-                .map(e -> EodEntryDto.from(e).scopedToProjects(ledProjects))
+                .map(e -> EodEntryDto.from(e).scopedToProjects(ledProjects)
+                        .withLeadDecision(status.name(), otherProjectStatuses(e, actor)))
+                .toList();
+    }
+
+    /**
+     * Status is per project, per lead: the entry's own status is an aggregate (any rejection wins), so a
+     * Team Lead's card shows his own piece's status instead, and the other projects' decisions ride along
+     * as read-only context — project name + status, never task details.
+     */
+    private List<com.nforceone.sync.eod.dto.OtherProjectStatusDto> otherProjectStatuses(EodEntry entry, AppUser viewer) {
+        return pieceRepository.findByEodEntryId(entry.getId()).stream()
+                .filter(p -> p.getProject() != null)
+                .filter(p -> p.getApprover() == null || !p.getApprover().getId().equals(viewer.getId()))
+                .map(p -> new com.nforceone.sync.eod.dto.OtherProjectStatusDto(p.getProject().getName(), p.getStatus().name()))
                 .toList();
     }
 

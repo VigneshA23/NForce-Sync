@@ -2,6 +2,7 @@ package com.nforceone.sync.employee;
 
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.project.Allocation;
 import com.nforceone.sync.project.AllocationRepository;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
@@ -13,7 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Backs the Employee "My Projects" page — the same shape as
@@ -47,11 +52,29 @@ public class EmployeeProjectService {
 
     public List<ProjectFullDto> listMyProjects(String actingEmail, LocalDate onDate) {
         AppUser actor = resolveActor(actingEmail);
+        Map<Long, List<Allocation>> mine = allocationRepository.findByEmployeeId(actor.getId()).stream()
+                .collect(Collectors.groupingBy(a -> a.getProject().getId()));
         return projectRepository.findAllocatedToTeamLeadOnDate(actor.getId(), onDate)
                 .stream()
-                .map(p -> ProjectFullDto.from(p,
-                        (int) allocationRepository.countByProjectIdAndEmployeeRole(p.getId(), AppUser.Role.EMPLOYEE)))
+                .map(p -> {
+                    ProjectFullDto dto = ProjectFullDto.from(p,
+                            (int) allocationRepository.countByProjectIdAndEmployeeRole(p.getId(), AppUser.Role.EMPLOYEE));
+                    // Start/End Date on this page are the Employee's own allocation window, not the project's.
+                    return pickAllocation(mine.getOrDefault(p.getId(), List.of()), onDate)
+                            .map(a -> dto.withDates(a.getEffectiveFrom(), a.getEffectiveTo()))
+                            .orElse(dto);
+                })
                 .toList();
+    }
+
+    /** The allocation active on {@code onDate} (latest start wins), else the most recent one. */
+    static Optional<Allocation> pickAllocation(List<Allocation> rows, LocalDate onDate) {
+        Comparator<Allocation> byStart = Comparator.comparing(Allocation::getEffectiveFrom);
+        return rows.stream()
+                .filter(a -> !a.getEffectiveFrom().isAfter(onDate)
+                        && (a.getEffectiveTo() == null || !a.getEffectiveTo().isBefore(onDate)))
+                .max(byStart)
+                .or(() -> rows.stream().max(byStart));
     }
 
     /**

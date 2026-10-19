@@ -691,7 +691,7 @@ public class EodService {
                 null, null, null, List.of(), List.of(),
                 null, null, null, null, null, null, null, null, null, null,
                 // PLAIN_LOG fields — synthetic rows are always PROJECT_GROUPED context
-                EodEntry.EntryForm.PROJECT_GROUPED.name(), null, null, null, null, null, List.of(), false, null);
+                EodEntry.EntryForm.PROJECT_GROUPED.name(), null, null, null, null, null, List.of(), false, null, null);
     }
 
     @Transactional(readOnly = true)

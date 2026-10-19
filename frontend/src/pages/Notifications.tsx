@@ -5,7 +5,7 @@ import {
   Bell, CheckCheck, Loader2, AlertCircle, Check,
   UserPlus, KeyRound, ClipboardCheck, XCircle, RefreshCcw, Info, Clock,
   AlertTriangle, FolderKanban, CalendarDays, MessageSquare, Users, Megaphone,
-  Search, RefreshCw, Inbox, ArrowUpRight, MessageCircleQuestion,
+  Search, Inbox, ArrowUpRight, MessageCircleQuestion,
 } from 'lucide-react';
 import { Pagination } from '../components/Pagination';
 import { useAuth } from '../lib/auth';
@@ -451,7 +451,7 @@ export default function Notifications() {
   const qc = useQueryClient();
   const isWide = useIsWide(900);
 
-  const { data, isLoading, isFetching, error } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['notifications', 'list', page],
     queryFn: () => fetchNotifications(page, PAGE_SIZE),
     // staleTime: 0 so arriving on this page (refetchOnMount) or tabbing back to it
@@ -504,10 +504,6 @@ export default function Notifications() {
     if (isWide) setSelectedId(n.id);
   }
 
-  function handleRefresh() {
-    qc.invalidateQueries({ queryKey: ['notifications'] });
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }} className="nf-notif-page">
 
@@ -541,23 +537,6 @@ export default function Notifications() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <button
-            onClick={handleRefresh}
-            disabled={isFetching}
-            aria-label="Refresh notifications"
-            title="Refresh"
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 34, height: 34, background: 'transparent',
-              border: '1px solid var(--line)', borderRadius: 8,
-              cursor: isFetching ? 'default' : 'pointer', color: 'var(--txt-mut)',
-            }}
-            onMouseEnter={(e) => { if (!isFetching) { e.currentTarget.style.borderColor = 'var(--brand-bright)'; e.currentTarget.style.color = 'var(--txt)'; } }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--txt-mut)'; }}
-          >
-            <RefreshCw size={14} style={isFetching ? { animation: 'spin 1s linear infinite' } : undefined} />
-          </button>
-
           {unread > 0 && (
             <button
               onClick={() => markAll.mutate()}

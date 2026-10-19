@@ -53,7 +53,7 @@ const PAGE_TARGETS: Partial<Record<string, Partial<Record<Role, { route: string;
     // Employee entry covers team leads (EMPLOYEE role who leads a project). Non-leads
     // navigated here will see an empty approvals page — acceptable; the route is valid.
     employee: { route: "/team/approvals", label: "Approvals" },
-    pm: { route: "/projects/approvals", label: "Approvals" },
+    pm: { route: "/projects/approvals", label: "Escalated Approvals" },
   },
   reports: {
     employee: { route: "/team/reports", label: "Reports" },

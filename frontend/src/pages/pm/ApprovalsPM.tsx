@@ -16,7 +16,8 @@ export default function ApprovalsPM() {
 
   return (
     <ApprovalsPage
-      title="Approvals"
+      title="Escalated Approvals"
+      defaultSort="latest"
       subtitle="Pieces awaiting your decision — Team Lead escalations and projects with no Team Lead"
       pendingPieces={pending}
       decidedApproved={approved}

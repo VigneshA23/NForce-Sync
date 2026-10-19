@@ -57,7 +57,10 @@ public record EodEntryDto(
         Boolean          weekendWorked,
         // Set ONLY on the Team Lead's scoped view of an entry that has tasks on other projects: the total
         // hours of those tasks, with no project names or details. Null everywhere else.
-        BigDecimal       otherProjectsHours
+        BigDecimal       otherProjectsHours,
+        // Set ONLY on a Team Lead's Approved/Rejected card: the decision on each of the other projects the
+        // entry was split across (name + status only). Null everywhere else.
+        List<OtherProjectStatusDto> otherProjectStatuses
 ) {
     /**
      * The Team Lead's view of an entry: only the tasks on projects he leads (plus tasks with no project,
@@ -80,7 +83,20 @@ public record EodEntryDto(
                 remarks, submittedAt, createdAt, updatedAt, mine, attachments, reviewerComment, escalated,
                 tlInactivityHours, tlName, tlId, undertimeHours, isResubmission, decidedByName, decidedByRole,
                 decidedAt, entryForm, logSummary, logTotalHours, logNotes, logApproverName, logApproverType,
-                logLines, weekendWorked, other);
+                logLines, weekendWorked, other, otherProjectStatuses);
+    }
+
+    /**
+     * The viewing Team Lead's own decision, replacing the entry's aggregate status (where any rejection
+     * wins), plus the other projects' decisions as read-only context.
+     */
+    public EodEntryDto withLeadDecision(String leadStatus, List<OtherProjectStatusDto> others) {
+        return new EodEntryDto(id, employeeId, employeeName, employeeCode, entryDate, leadStatus, dayType,
+                timeAdjustmentType, timeAdjustmentMinutes, isOvertime, overtimeHours, workLocation, nextDayPlan,
+                remarks, submittedAt, createdAt, updatedAt, tasks, attachments, reviewerComment, escalated,
+                tlInactivityHours, tlName, tlId, undertimeHours, isResubmission, decidedByName, decidedByRole,
+                decidedAt, entryForm, logSummary, logTotalHours, logNotes, logApproverName, logApproverType,
+                logLines, weekendWorked, otherProjectsHours, others);
     }
 
     // Default factory — no reviewer comment (used in approval flow, saveDraft, submit)
@@ -156,6 +172,7 @@ public record EodEntryDto(
                 null, // logApproverType
                 logLines != null ? logLines : List.of(),
                 Boolean.TRUE.equals(e.getWeekendWorked()),
+                null,
                 null
         );
     }
