@@ -15,6 +15,7 @@ import {
 } from '../api/eodClarification';
 import { ClarificationChatPopup } from '../components/ClarificationChatPopup';
 import { DropdownMenu, type DropdownMenuItem } from '../components/DropdownMenu';
+import { ReviewButton } from '../components/ReviewButton';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { useAuth } from '../lib/auth';
 import {
@@ -207,16 +208,7 @@ function EntryRow({
             this explicit Review button (not a whole-card click, which risked opening the modal
             on an accidental tap anywhere in the row). */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-          <button
-            onClick={onOpenDetails}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
-              padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-              background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff', cursor: 'pointer',
-            }}
-          >
-            Review
-          </button>
+          <ReviewButton onClick={onOpenDetails} />
           <button
             onClick={onToggleExpand}
             title="View audit trail"
@@ -458,7 +450,8 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
           {!rejecting && (
             <DropdownMenu
               items={menuItems}
-              ariaLabel={`Actions for ${piece.employeeName}`}
+              ariaLabel={`Review ${piece.employeeName}`}
+              trigger="review"
               open={menuOpen}
               onOpenChange={setMenuOpen}
             />

@@ -2,6 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MoreVertical } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { ReviewButton } from './ReviewButton';
 
 export interface DropdownMenuItem {
   key: string;
@@ -33,6 +34,8 @@ interface DropdownMenuProps {
   keyboardNav?: boolean;
   /** Optional native tooltip for the trigger button. */
   triggerTitle?: string;
+  /** Trigger look: the default 3-dot kebab, or the brand "Review" button with a chevron. */
+  trigger?: 'kebab' | 'review';
 }
 
 const MENU_GAP = 4;
@@ -54,7 +57,7 @@ interface MenuPosition {
  * corner wrapper) and isn't limited to a low ancestor z-index/stacking context.
  * It also flips to open upward when there isn't enough room below the trigger.
  */
-export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', open: openProp, onOpenChange, keyboardNav = false, triggerTitle }: DropdownMenuProps) {
+export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', open: openProp, onOpenChange, keyboardNav = false, triggerTitle, trigger = 'kebab' }: DropdownMenuProps) {
   const isControlled = openProp !== undefined && onOpenChange !== undefined;
   const [openState, setOpenState] = useState(false);
   const open = isControlled ? openProp : openState;
@@ -145,6 +148,17 @@ export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', op
 
   return (
     <>
+      {trigger === 'review' ? (
+        <ReviewButton
+          ref={triggerRef}
+          showChevron
+          aria-label={ariaLabel}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          title={triggerTitle}
+          onClick={() => setOpen(!open)}
+        />
+      ) : (
       <button
         ref={triggerRef}
         type="button"
@@ -162,6 +176,7 @@ export function DropdownMenu({ items, align = 'right', ariaLabel = 'Actions', op
       >
         <MoreVertical size={16} aria-hidden="true" />
       </button>
+      )}
 
       {open && createPortal(
         <div
