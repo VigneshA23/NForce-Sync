@@ -18,6 +18,13 @@ export interface CutoffStatus {
   cutoffNextDay: boolean;
   /** The server's clock (local date-time, same zone as cutoffTime) when this was computed. */
   serverNow?: string | null;
+  /** The cutoff as an absolute instant (ISO-8601 with offset). Null when there is no deadline. Preferred over
+   *  cutoffTime/serverNow, which are zone-less wall-clock values. */
+  cutoffAt?: string | null;
+  /** The server's clock as an absolute instant (ISO-8601 with offset) — the countdown anchor. */
+  serverNowInstant?: string | null;
+  /** IANA id of the business zone, e.g. "Asia/Kolkata". The "Closes 2:30 AM" label is formatted in it. */
+  zone?: string | null;
 }
 
 export interface QuickStats {

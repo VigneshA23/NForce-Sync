@@ -31,6 +31,7 @@ export function SubmissionWindow({ state, editable }: { state: WindowState; edit
         title={`Submit before ${state.closesAt}${state.nextDay ? ' (next day)' : ' today'} to be on time`}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 20,
+          flex: '0 1 auto', minWidth: 0, maxWidth: '100%',
           fontSize: 12, fontWeight: 500, fontVariantNumeric: 'tabular-nums',
           color: state.urgent ? '#E0A93B' : 'var(--txt-mut)',
           background: tone ? `${tone}.08)` : 'var(--raised2)',
@@ -76,7 +77,7 @@ export function SubmissionWindow({ state, editable }: { state: WindowState; edit
 export function ApprovalStatusLine({ pieces }: { pieces: ApprovalPieceDto[] }) {
   if (!pieces.length) {
     return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--txt-dim)' }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flex: '0 1 auto', minWidth: 0, maxWidth: '100%', fontSize: 12, color: 'var(--txt-dim)' }}>
         <Clock size={12} aria-hidden />Your reviewer is assigned when you submit.
       </span>
     );

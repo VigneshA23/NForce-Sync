@@ -1,6 +1,7 @@
 package com.nforceone.sync.employee;
 
 import com.nforceone.sync.auth.AppUser;
+import com.nforceone.sync.config.BusinessClock;
 import com.nforceone.sync.config.Futures;
 import com.nforceone.sync.businessrules.BusinessRuleConfig;
 import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
@@ -50,6 +51,7 @@ public class EmployeeService {
     private final BusinessRuleConfigRepository configRepository;
     private final AllocationRepository      allocationRepository;
     private final Executor                  dashboardQueryExecutor;
+    private final BusinessClock             businessClock;
 
     private static final long BUSINESS_RULE_CONFIG_ID = 1L;
 
@@ -61,7 +63,8 @@ public class EmployeeService {
                            HolidayRepository holidayRepository,
                            BusinessRuleConfigRepository configRepository,
                            AllocationRepository allocationRepository,
-                           Executor dashboardQueryExecutor) {
+                           Executor dashboardQueryExecutor,
+                           BusinessClock businessClock) {
         this.entryRepository  = entryRepository;
         this.taskRepository   = taskRepository;
         this.snapshotRepository = snapshotRepository;
@@ -71,11 +74,12 @@ public class EmployeeService {
         this.configRepository = configRepository;
         this.allocationRepository = allocationRepository;
         this.dashboardQueryExecutor = dashboardQueryExecutor;
+        this.businessClock = businessClock;
     }
 
     public DashboardSummaryDto getDashboardSummary(AppUser employee, LocalDate calendarFrom, LocalDate calendarTo) {
         Long employeeId = employee.getId();
-        LocalDate today = LocalDate.now();
+        LocalDate today = businessClock.today();
 
         LocalDate weekStart = today.with(DayOfWeek.MONDAY);
         LocalDate monthStart = today.withDayOfMonth(1);
@@ -204,18 +208,30 @@ public class EmployeeService {
         Optional<EodEntry> todayEntry = entryRepository.findByEmployeeIdAndEntryDate(employee.getId(), today);
         String status = todayEntry.map(e -> e.getStatus().name()).orElse(null);
 
-        ShiftDefinition shift = shiftFor(employee.getShiftId());
+        return cutoffStatus(today, status, shiftFor(employee.getShiftId()), businessClock);
+    }
+
+    /**
+     * Pure part of {@link #buildCutoffStatus}. The shift's wall-clock cutoff and "now" are both read in the
+     * business zone, so their difference is right whatever zone the JVM runs in; {@code cutoffAt} and
+     * {@code serverNowInstant} carry the same two values as absolute instants for the client to count down on.
+     */
+    static DashboardSummaryDto.CutoffStatus cutoffStatus(LocalDate today, String status, ShiftDefinition shift,
+                                                         BusinessClock clock) {
+        LocalDateTime serverNow = clock.now();
+        String zone = clock.zone().getId();
         LocalDateTime cutoffAt = shift == null ? null : ShiftSchedule.cutoffAt(shift, today);
         if (cutoffAt == null) {
-            return new DashboardSummaryDto.CutoffStatus(today, status, false, null, false, LocalDateTime.now());
+            return new DashboardSummaryDto.CutoffStatus(today, status, false, null, false, serverNow,
+                    null, clock.nowOffset(), zone);
         }
 
-        LocalDateTime serverNow = LocalDateTime.now();
         boolean cutoffPassed = serverNow.isAfter(cutoffAt);
         // Still reported as time-of-day + "is it tomorrow", because that is what the banner
         // renders; the difference is that it is now derived from a real instant.
         return new DashboardSummaryDto.CutoffStatus(today, status, cutoffPassed,
-                cutoffAt.toLocalTime(), cutoffAt.toLocalDate().isAfter(today), serverNow);
+                cutoffAt.toLocalTime(), cutoffAt.toLocalDate().isAfter(today), serverNow,
+                clock.toOffset(cutoffAt), clock.nowOffset(), zone);
     }
 
     /** The given shift id's definition, or null when the employee has none assigned.
@@ -372,7 +388,7 @@ public class EmployeeService {
     }
 
     private List<DashboardSummaryDto.CalendarDay> buildCalendarData(Long employeeId, LocalDate gridStart, LocalDate gridEnd) {
-        LocalDate realToday = LocalDate.now();
+        LocalDate realToday = businessClock.today();
 
         // Lightweight projection: only entryDate/status are read below, so this skips the
         // tasks/project/category join that the full-entity fetch would otherwise always pay for.

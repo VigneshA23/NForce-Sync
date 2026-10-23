@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeSubmissionWindow } from './useSubmissionWindow';
 import { pieceText } from './dailyLogStatus';
 import type { CutoffStatus } from '../../api/employee';
@@ -50,6 +50,54 @@ describe('submission window (counted from the server clock)', () => {
 
   it('timer remainder is exposed so the hook can stop at the exact close', () => {
     expect(computeSubmissionWindow(base, FETCHED, FETCHED, true).remainingMs).toBe(90 * 60_000);
+  });
+});
+
+// The exact moment from the deployed-vs-local bug: 6:15 PM IST on 23 Oct, cutoff 2:30 AM IST the next day.
+// The wall-clock fields below are what a UTC server used to send (serverNow 12:45); the instants are what it
+// sends now. Only the instants may drive the countdown, so the answer cannot depend on either machine's zone.
+const instants: CutoffStatus = {
+  today: '2026-10-23', entryStatus: null, cutoffPassed: false,
+  cutoffTime: '02:30:00', cutoffNextDay: true, serverNow: '2026-10-23T12:45:00',
+  cutoffAt: '2026-10-24T02:30:00+05:30', serverNowInstant: '2026-10-23T18:15:00+05:30', zone: 'Asia/Kolkata',
+};
+
+describe('submission window (absolute instants, business zone)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('6:15 PM IST reads 8h 15m left and labels the close as 2:30 AM (next day)', () => {
+    expect(computeSubmissionWindow(instants, FETCHED, FETCHED, true).state)
+      .toEqual({ kind: 'open', minutesLeft: 495, urgent: false, closesAt: '2:30 AM', nextDay: true });
+  });
+
+  it('is the same instant whichever offset the server writes it in (UTC vs IST)', () => {
+    const utc = { ...instants, cutoffAt: '2026-10-23T21:00:00Z', serverNowInstant: '2026-10-23T12:45:00Z' };
+    expect(computeSubmissionWindow(utc, FETCHED, FETCHED, true).state)
+      .toEqual(computeSubmissionWindow(instants, FETCHED, FETCHED, true).state);
+  });
+
+  it('ticks forward from Date.now() relative to the fetch, not from the browser wall clock', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));   // a browser clock that is years off
+    const fetchedAt = Date.now();
+    vi.setSystemTime(fetchedAt + 15 * 60_000);            // 15 minutes later
+    expect(computeSubmissionWindow(instants, fetchedAt, Date.now(), true).state)
+      .toMatchObject({ kind: 'open', minutesLeft: 480 });
+  });
+
+  it('closes at the cutoff instant', () => {
+    expect(computeSubmissionWindow({ ...instants, serverNowInstant: '2026-10-24T02:31:00+05:30' }, FETCHED, FETCHED, true).state)
+      .toEqual({ kind: 'closed', closesAt: '2:30 AM' });
+  });
+
+  it('formats the label in the API zone, not the browser zone', () => {
+    const ny = { ...instants, zone: 'America/New_York' };   // 21:00 UTC is 5:00 PM there (EDT)
+    expect(computeSubmissionWindow(ny, FETCHED, FETCHED, true).state).toMatchObject({ closesAt: '5:00 PM' });
+  });
+
+  it('falls back to the wall-clock fields when the server does not send instants', () => {
+    const legacy = { ...instants, cutoffAt: null, serverNowInstant: null, serverNow: '2026-10-23T18:15:00' };
+    expect(computeSubmissionWindow(legacy, FETCHED, FETCHED, true).state).toMatchObject({ minutesLeft: 495, closesAt: '2:30 AM' });
   });
 });
 

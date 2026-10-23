@@ -24,7 +24,16 @@ public record DashboardSummaryDto(
             boolean cutoffNextDay,
             /** The server's clock when this was computed (same zone as {@code cutoffTime}), so the UI can count
              *  down to the cutoff from SERVER time instead of trusting the browser's clock. */
-            java.time.LocalDateTime serverNow
+            java.time.LocalDateTime serverNow,
+            /** The cutoff as an absolute instant (ISO-8601 with offset), or null when there is no cutoff. Unlike
+             *  {@code cutoffTime} it does not depend on any zone assumption, so the countdown is the same on
+             *  every host. */
+            java.time.OffsetDateTime cutoffAt,
+            /** The server's clock as an absolute instant (ISO-8601 with offset); the countdown anchor. */
+            java.time.OffsetDateTime serverNowInstant,
+            /** IANA id of the business zone the wall-clock fields above are expressed in, e.g. "Asia/Kolkata".
+             *  The client formats "Closes 2:30 AM" in this zone, not the browser's. */
+            String zone
     ) {}
 
     public record QuickStats(

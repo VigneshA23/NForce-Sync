@@ -15,6 +15,19 @@ const MINUTE = 60_000;
  *  operands of every subtraction below are parsed the same way, so the zone cancels out. */
 const parseLocal = (s: string) => new Date(s).getTime();
 
+/** An instant as a 12-hour clock in an explicit IANA zone ("2:30 AM"), never the browser's zone. Falls back to the
+ *  server's own time-of-day string if the runtime rejects the zone id. */
+function formatClockInZone(ms: number, timeZone: string, fallbackHhmm: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit', hour12: true })
+      .formatToParts(new Date(ms));
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+    return `${get('hour')}:${get('minute')} ${get('dayPeriod').toUpperCase()}`;
+  } catch {
+    return formatTime12h(fallbackHhmm);
+  }
+}
+
 /**
  * Time left to submit on time, counted from the SERVER's clock: the cutoff and `serverNow` both come from the
  * shift-based computation on the server, and only the time elapsed since that response (a duration, which
@@ -31,12 +44,24 @@ const parseLocal = (s: string) => new Date(s).getTime();
 export function computeSubmissionWindow(cutoff: CutoffStatus | undefined, fetchedAt: number, nowMs: number, active: boolean): { state: WindowState; remainingMs: number } {
   const none = { state: { kind: 'none' } as WindowState, remainingMs: 0 };
   if (!active || !cutoff?.cutoffTime) return none;
-  const cutoffMs = parseLocal(`${cutoff.today}T${cutoff.cutoffTime}`) + (cutoff.cutoffNextDay ? 24 * 60 * MINUTE : 0);
+  // Absolute instants (with offset) when the server sends them: no zone assumption anywhere, so the countdown
+  // is identical whatever zone the server or the browser runs in. The zone-less pair is only a fallback for an
+  // older server that does not send them yet.
+  const cutoffInstantMs = cutoff.cutoffAt ? Date.parse(cutoff.cutoffAt) : NaN;
+  const nowInstantMs = cutoff.serverNowInstant ? Date.parse(cutoff.serverNowInstant) : NaN;
+  const useInstants = !Number.isNaN(cutoffInstantMs) && !Number.isNaN(nowInstantMs);
+  const cutoffMs = useInstants
+    ? cutoffInstantMs
+    : parseLocal(`${cutoff.today}T${cutoff.cutoffTime}`) + (cutoff.cutoffNextDay ? 24 * 60 * MINUTE : 0);
   if (Number.isNaN(cutoffMs)) return none;
-  // serverNow is the anchor. A response without it (should not happen) falls back to the browser clock.
-  const serverNowMs = cutoff.serverNow ? parseLocal(cutoff.serverNow) + Math.max(0, nowMs - fetchedAt) : nowMs;
+  // The server's "now" is the anchor, plus only the time elapsed since the response (a duration). A response
+  // without it (should not happen) falls back to the browser clock.
+  const anchorMs = useInstants ? nowInstantMs : cutoff.serverNow ? parseLocal(cutoff.serverNow) : null;
+  const serverNowMs = anchorMs === null ? nowMs : anchorMs + Math.max(0, nowMs - fetchedAt);
   const remainingMs = cutoffMs - serverNowMs;
-  const closesAt = formatTime12h(cutoff.cutoffTime);
+  const closesAt = useInstants && cutoff.zone
+    ? formatClockInZone(cutoffMs, cutoff.zone, cutoff.cutoffTime)
+    : formatTime12h(cutoff.cutoffTime);
   if (cutoff.cutoffPassed || remainingMs <= 0) return { state: { kind: 'closed', closesAt }, remainingMs };
   const minutesLeft = Math.max(0, Math.floor(remainingMs / MINUTE));
   return { state: { kind: 'open', minutesLeft, urgent: minutesLeft < 60, closesAt, nextDay: cutoff.cutoffNextDay }, remainingMs };

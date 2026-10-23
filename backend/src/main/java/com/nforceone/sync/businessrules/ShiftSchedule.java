@@ -2,9 +2,11 @@ package com.nforceone.sync.businessrules;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 
 /**
  * The single definition of how a shift's times map onto real instants.
@@ -60,5 +62,15 @@ public final class ShiftSchedule {
         if (hours == null) return null;
         long seconds = hours.multiply(BigDecimal.valueOf(3600)).longValue();
         return endAt(shift, workDate).plus(Duration.ofSeconds(seconds));
+    }
+
+    /**
+     * {@link #cutoffAt} as an absolute instant. The shift's wall-clock times are read in {@code zone} (the
+     * business zone today; a per-employee or per-shift zone later), never the JVM default, so the result is
+     * the same on every host. Null when the shift has no cutoff.
+     */
+    public static Instant cutoffInstant(ShiftDefinition shift, LocalDate workDate, ZoneId zone) {
+        LocalDateTime local = cutoffAt(shift, workDate);
+        return local == null ? null : local.atZone(zone).toInstant();
     }
 }

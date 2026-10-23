@@ -502,7 +502,7 @@ export default function DailyLogForm() {
 
       {/* Status strip: who reviews it and where it stands, plus the submission window (a chip while open, a
           banner once closed). Replaces the Approval and Submission-window cards. */}
-      <div style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-start', gap:'10px 16px', marginBottom:20 }}>
+      <div style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-start', gap:'10px 16px', marginBottom:20, minWidth:0 }}>
         <ApprovalStatusLine pieces={pieces} />
         <SubmissionWindow state={windowState} editable={isEditable} />
       </div>
