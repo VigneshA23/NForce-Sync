@@ -80,7 +80,7 @@ class RmEodByEmployeeReportServiceTest {
             return roster;
         });
         service = new RmEodByEmployeeReportService(appUserRepository, allocationRepository, eodEntryRepository,
-                designationRepository, shiftRepository, accessPolicy);
+                designationRepository, shiftRepository, accessPolicy, new com.nforceone.sync.config.BusinessClock(com.nforceone.sync.config.BusinessClock.DEFAULT_ZONE));
     }
 
     private static AppUser user(Long id, String name) {

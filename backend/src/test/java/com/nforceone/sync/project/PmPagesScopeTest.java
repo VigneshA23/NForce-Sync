@@ -165,7 +165,7 @@ class PmPagesScopeTest {
 
     private EodByEmployeeReportService reports() {
         return new EodByEmployeeReportService(userRepository, projectRepository, allocationRepository,
-                entryRepository, designationRepository, shiftRepository, scope);
+                entryRepository, designationRepository, shiftRepository, scope, new com.nforceone.sync.config.BusinessClock(com.nforceone.sync.config.BusinessClock.DEFAULT_ZONE));
     }
 
     @Test
@@ -211,7 +211,7 @@ class PmPagesScopeTest {
     void missingEodReminder_forAnEmployeeOutsideThePmsScope_is403_andNothingIsSent() {
         MissingEodReportService missing = new MissingEodReportService(userRepository, projectRepository,
                 allocationRepository, entryRepository, holidayRepository, configRepository, designationRepository,
-                notificationService, shiftRepository, scope);
+                notificationService, shiftRepository, scope, new com.nforceone.sync.config.BusinessClock(com.nforceone.sync.config.BusinessClock.DEFAULT_ZONE));
 
         BusinessRuleConfig config = new BusinessRuleConfig();
         config.setAtRiskMissingPct(new BigDecimal("30"));

@@ -9,6 +9,7 @@ import com.nforceone.sync.businessrules.HolidayRepository;
 import com.nforceone.sync.businessrules.ShiftDefinition;
 import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
 import com.nforceone.sync.businessrules.ShiftSchedule;
+import com.nforceone.sync.config.BusinessClock;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
@@ -62,6 +63,7 @@ public class TeamMissingEodReportService {
     private final NotificationService notificationService;
     private final ShiftDefinitionRepository shiftRepository;
     private final ProjectRepository projectRepository;
+    private final BusinessClock businessClock;
 
     public TeamMissingEodReportService(AppUserRepository appUserRepository,
                                         AllocationRepository allocationRepository,
@@ -72,7 +74,9 @@ public class TeamMissingEodReportService {
                                         NotificationService notificationService,
                                         ShiftDefinitionRepository shiftRepository,
                                         ProjectRepository projectRepository,
-                                        com.nforceone.sync.teamlead.LeadTeamPolicy leadTeamPolicy) {
+                                        com.nforceone.sync.teamlead.LeadTeamPolicy leadTeamPolicy,
+                                        BusinessClock businessClock) {
+        this.businessClock = businessClock;
         this.leadTeamPolicy = leadTeamPolicy;
         this.appUserRepository = appUserRepository;
         this.allocationRepository = allocationRepository;
@@ -91,9 +95,7 @@ public class TeamMissingEodReportService {
      * (shift end + configured cutoff hours) has passed, so today is not remindable until then.
      */
     private boolean isPastDue(LocalDate date, ShiftDefinition shift, LocalDateTime now) {
-        LocalDateTime cutoffAt = shift == null ? null : ShiftSchedule.cutoffAt(shift, date);
-        if (cutoffAt == null) return date.isBefore(now.toLocalDate());
-        return now.isAfter(cutoffAt);
+        return ShiftSchedule.isPastDue(date, shift, now);
     }
 
     public MissingEodReportDto getReport(String actingEmail, LocalDate from, LocalDate to,
@@ -165,7 +167,7 @@ public class TeamMissingEodReportService {
         Map<Long, Designation> designationsById = new HashMap<>();
         int totalMissingDays = 0;
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = businessClock.now();
         Map<Long, ShiftDefinition> shiftsById = new HashMap<>();
 
         for (Long empId : filteredEmployeeIds) {

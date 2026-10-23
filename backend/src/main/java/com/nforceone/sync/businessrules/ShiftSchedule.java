@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 
 /**
@@ -62,6 +63,32 @@ public final class ShiftSchedule {
         if (hours == null) return null;
         long seconds = hours.multiply(BigDecimal.valueOf(3600)).longValue();
         return endAt(shift, workDate).plus(Duration.ofSeconds(seconds));
+    }
+
+    /**
+     * Whether the EOD for {@code date} is overdue at {@code now}. Both are business-zone wall-clock values (see
+     * {@code BusinessClock}). The single rule behind the Submit EOD missing-day scan and every Missing EOD report,
+     * so they cannot disagree about the same employee at the same moment.
+     *
+     * <p>With no shift or no cutoff configured there is no deadline to have missed, so only dates strictly before
+     * today count.
+     */
+    public static boolean isPastDue(LocalDate date, ShiftDefinition shift, LocalDateTime now) {
+        LocalDateTime cutoffAt = shift == null ? null : cutoffAt(shift, date);
+        if (cutoffAt == null) return date.isBefore(now.toLocalDate());
+        return now.isAfter(cutoffAt);
+    }
+
+    /**
+     * Whether an entry for {@code entryDate} submitted at {@code submittedAt} missed its shift's cutoff. Compares
+     * instants: the stored timestamp is an absolute moment, so it is not first squeezed into a wall-clock value in
+     * whatever zone the JVM happened to load it in. False when there is no shift or no cutoff.
+     */
+    public static boolean isSubmittedLate(ShiftDefinition shift, LocalDate entryDate,
+                                          OffsetDateTime submittedAt, ZoneId zone) {
+        if (submittedAt == null || shift == null) return false;
+        Instant cutoff = cutoffInstant(shift, entryDate, zone);
+        return cutoff != null && submittedAt.toInstant().isAfter(cutoff);
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.nforceone.sync.reports;
 
+import com.nforceone.sync.config.BusinessClock;
 import com.nforceone.sync.reports.dto.EodByEmployeeReportDto;
 import com.nforceone.sync.reports.dto.EodByEmployeeRowDto;
 import com.nforceone.sync.reports.dto.TeamReportFiltersDto;
@@ -34,8 +35,11 @@ public class RmReportsController {
 
     private final RmEodByEmployeeReportService reportService;
     private final ReportExportService reportExportService;
+    private final BusinessClock businessClock;
 
-    public RmReportsController(RmEodByEmployeeReportService reportService, ReportExportService reportExportService) {
+    public RmReportsController(RmEodByEmployeeReportService reportService, ReportExportService reportExportService,
+                               BusinessClock businessClock) {
+        this.businessClock = businessClock;
         this.reportService = reportService;
         this.reportExportService = reportExportService;
     }
@@ -118,11 +122,11 @@ public class RmReportsController {
     }
 
     private LocalDate effectiveFrom(LocalDate from) {
-        return from != null ? from : LocalDate.now().withDayOfMonth(1);
+        return from != null ? from : businessClock.today().withDayOfMonth(1);
     }
 
     private LocalDate effectiveTo(LocalDate to) {
-        return to != null ? to : LocalDate.now();
+        return to != null ? to : businessClock.today();
     }
 
     private String actingEmail() {

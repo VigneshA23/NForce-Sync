@@ -725,9 +725,7 @@ public class EodService {
 
     /** Identical to the helper in the Missing EOD report services — see the note there. */
     private boolean isPastDue(LocalDate date, ShiftDefinition shift, LocalDateTime now) {
-        LocalDateTime cutoffAt = shift == null ? null : ShiftSchedule.cutoffAt(shift, date);
-        if (cutoffAt == null) return date.isBefore(now.toLocalDate());
-        return now.isAfter(cutoffAt);
+        return ShiftSchedule.isPastDue(date, shift, now);
     }
 
     /** Placeholder row: a null id marks it as synthetic — there is nothing to open or edit. */

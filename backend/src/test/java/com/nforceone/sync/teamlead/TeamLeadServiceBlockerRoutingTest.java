@@ -76,7 +76,7 @@ class TeamLeadServiceBlockerRoutingTest {
         // actionRepo, designationRepo, replyRepo, notificationService, allocationRepo, projectRepo, executor
         service = new TeamLeadService(userRepository, null, taskRepository, holidayRepository, configRepository, utilizationService,
                 null, null, replyRepository, notificationService, allocationRepository, projectRepository,
-                new LeadTeamPolicy(allocationRepository, projectRepository, null), (Executor) Runnable::run);
+                new LeadTeamPolicy(allocationRepository, projectRepository, null), (Executor) Runnable::run, new com.nforceone.sync.config.BusinessClock(com.nforceone.sync.config.BusinessClock.DEFAULT_ZONE));
 
         lead      = user(1L, "Vignesh Lead");
         otherLead = user(2L, "Other Lead");
@@ -165,6 +165,26 @@ class TeamLeadServiceBlockerRoutingTest {
         verify(taskRepository).findBlockedForProjectLead(eq(lead.getId()), eq(SUNDAY), eq(TODAY),
                 argThat(from -> from.toLocalDate().equals(SUNDAY)),
                 argThat(to -> to.toLocalDate().equals(TODAY.plusDays(1)) && to.toLocalTime().equals(java.time.LocalTime.MIDNIGHT)));
+    }
+
+    @Test
+    void list_dayBoundsAreBusinessZoneMidnights_whateverTheJvmZone() {
+        java.util.TimeZone original = java.util.TimeZone.getDefault();
+        try {
+            for (String jvmZone : List.of("UTC", "Asia/Kolkata", "America/Los_Angeles")) {
+                java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone(jvmZone));
+                clearInvocations(taskRepository);
+
+                service.getBlockers(SUNDAY, TODAY, lead.getEmail(), true, null);
+
+                // Sunday 00:00 IST is Saturday 18:30 UTC; the end bound is Tuesday 00:00 IST == Monday 18:30 UTC.
+                verify(taskRepository).findBlockedForProjectLead(eq(lead.getId()), eq(SUNDAY), eq(TODAY),
+                        argThat(from -> from.toInstant().equals(java.time.Instant.parse("2026-10-10T18:30:00Z"))),
+                        argThat(to -> to.toInstant().equals(java.time.Instant.parse("2026-10-12T18:30:00Z"))));
+            }
+        } finally {
+            java.util.TimeZone.setDefault(original);
+        }
     }
 
     @Test

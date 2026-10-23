@@ -64,7 +64,7 @@ class TeamLeadServiceBlockerRmTest {
     void setUp() {
         service = new TeamLeadService(userRepository, null, taskRepository, null, null, null,
                 null, null, replyRepository, notificationService, null, projectRepository,
-                new LeadTeamPolicy(null, null, null), (Executor) Runnable::run);
+                new LeadTeamPolicy(null, null, null), (Executor) Runnable::run, new com.nforceone.sync.config.BusinessClock(com.nforceone.sync.config.BusinessClock.DEFAULT_ZONE));
 
         vignesh = user(1L, "Vignesh A");
         dheeraj = user(2L, "Dheeraj S");

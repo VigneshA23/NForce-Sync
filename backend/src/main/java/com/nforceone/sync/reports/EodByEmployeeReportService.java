@@ -5,6 +5,7 @@ import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.businessrules.ShiftDefinition;
 import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
 import com.nforceone.sync.businessrules.ShiftSchedule;
+import com.nforceone.sync.config.BusinessClock;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
@@ -57,6 +58,7 @@ public class EodByEmployeeReportService {
     private final DesignationRepository designationRepository;
     private final ShiftDefinitionRepository shiftRepository;
     private final PmScopeService pmScopeService;
+    private final BusinessClock businessClock;
 
     public EodByEmployeeReportService(AppUserRepository appUserRepository,
                                        ProjectRepository projectRepository,
@@ -64,7 +66,9 @@ public class EodByEmployeeReportService {
                                        EodEntryRepository eodEntryRepository,
                                        DesignationRepository designationRepository,
                                        ShiftDefinitionRepository shiftRepository,
-                                       PmScopeService pmScopeService) {
+                                       PmScopeService pmScopeService,
+                                       BusinessClock businessClock) {
+        this.businessClock = businessClock;
         this.appUserRepository = appUserRepository;
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
@@ -239,10 +243,7 @@ public class EodByEmployeeReportService {
      * to have missed.
      */
     private boolean isLate(EodEntry entry, ShiftDefinition shift) {
-        if (entry.getSubmittedAt() == null || shift == null) return false;
-        LocalDateTime cutoffAt = ShiftSchedule.cutoffAt(shift, entry.getEntryDate());
-        if (cutoffAt == null) return false;
-        return entry.getSubmittedAt().toLocalDateTime().isAfter(cutoffAt);
+        return ShiftSchedule.isSubmittedLate(shift, entry.getEntryDate(), entry.getSubmittedAt(), businessClock.zone());
     }
 
     private AppUser requirePm(String actingEmail) {

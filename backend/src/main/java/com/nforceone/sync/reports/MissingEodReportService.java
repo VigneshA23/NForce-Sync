@@ -9,6 +9,7 @@ import com.nforceone.sync.businessrules.HolidayRepository;
 import com.nforceone.sync.businessrules.ShiftDefinition;
 import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
 import com.nforceone.sync.businessrules.ShiftSchedule;
+import com.nforceone.sync.config.BusinessClock;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
@@ -62,6 +63,7 @@ public class MissingEodReportService {
     private final BusinessRuleConfigRepository configRepository;
     private final DesignationRepository designationRepository;
     private final NotificationService notificationService;
+    private final BusinessClock businessClock;
     private final ShiftDefinitionRepository shiftRepository;
     private final PmScopeService pmScopeService;
 
@@ -74,7 +76,9 @@ public class MissingEodReportService {
                                     DesignationRepository designationRepository,
                                     NotificationService notificationService,
                                     ShiftDefinitionRepository shiftRepository,
-                                    PmScopeService pmScopeService) {
+                                    PmScopeService pmScopeService,
+                                    BusinessClock businessClock) {
+        this.businessClock = businessClock;
         this.appUserRepository = appUserRepository;
         this.projectRepository = projectRepository;
         this.allocationRepository = allocationRepository;
@@ -99,9 +103,7 @@ public class MissingEodReportService {
      * strictly before today count — which is the behaviour this report had for past days already.
      */
     private boolean isPastDue(LocalDate date, ShiftDefinition shift, LocalDateTime now) {
-        LocalDateTime cutoffAt = shift == null ? null : ShiftSchedule.cutoffAt(shift, date);
-        if (cutoffAt == null) return date.isBefore(now.toLocalDate());
-        return now.isAfter(cutoffAt);
+        return ShiftSchedule.isPastDue(date, shift, now);
     }
 
     public MissingEodReportDto getReport(String actingEmail, LocalDate from, LocalDate to,
@@ -172,7 +174,7 @@ public class MissingEodReportService {
         Map<Long, Designation> designationsById = new HashMap<>();
         int totalMissingDays = 0;
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = businessClock.now();
         Map<Long, ShiftDefinition> shiftsById = new HashMap<>();
 
         for (Long empId : employeeIds) {

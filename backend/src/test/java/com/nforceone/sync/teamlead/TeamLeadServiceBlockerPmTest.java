@@ -42,7 +42,7 @@ class TeamLeadServiceBlockerPmTest {
     @BeforeEach
     void setUp() {
         service = new TeamLeadService(userRepository, null, taskRepository, null, null, null, null, null, replyRepository, null,
-                null, projectRepository, new LeadTeamPolicy(null, null, null), (Executor) Runnable::run);
+                null, projectRepository, new LeadTeamPolicy(null, null, null), (Executor) Runnable::run, new com.nforceone.sync.config.BusinessClock(com.nforceone.sync.config.BusinessClock.DEFAULT_ZONE));
         pm = new AppUser();
         pm.setId(7L);
         pm.setFullName("Surya T");

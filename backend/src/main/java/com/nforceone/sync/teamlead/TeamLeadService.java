@@ -5,6 +5,7 @@ import com.nforceone.sync.approval.ApprovalActionRepository;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.PmReadOnlyPolicy;
 import com.nforceone.sync.auth.AppUserRepository;
+import com.nforceone.sync.config.BusinessClock;
 import com.nforceone.sync.businessrules.BusinessRuleConfig;
 import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.businessrules.Holiday;
@@ -84,6 +85,7 @@ public class TeamLeadService {
     private final ProjectRepository            projectRepository;
     private final LeadTeamPolicy               leadTeamPolicy;
     private final Executor                     dashboardQueryExecutor;
+    private final BusinessClock                businessClock;
 
     public TeamLeadService(AppUserRepository userRepository,
                             EodEntryRepository entryRepository,
@@ -98,7 +100,9 @@ public class TeamLeadService {
                             AllocationRepository allocationRepository,
                             ProjectRepository projectRepository,
                             LeadTeamPolicy leadTeamPolicy,
-                            Executor dashboardQueryExecutor) {
+                            Executor dashboardQueryExecutor,
+                            BusinessClock businessClock) {
+        this.businessClock = businessClock;
         this.leadTeamPolicy = leadTeamPolicy;
         this.userRepository    = userRepository;
         this.entryRepository   = entryRepository;
@@ -318,14 +322,14 @@ public class TeamLeadService {
 
     /** A lead's OWN blockers on projects he leads, for his frozen reporting manager. */
     private BlockerScope reportingManagerBlockerScope(Long managerId) {
-        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        java.time.ZoneId zone = businessClock.zone();
         return (from, to) -> taskRepository.findBlockedForReportingManager(managerId, from, to,
                 from.atStartOfDay(zone).toOffsetDateTime(),
                 to.plusDays(1).atStartOfDay(zone).toOffsetDateTime());
     }
 
     private BlockerScope leadBlockerScope(Long leadId) {
-        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        java.time.ZoneId zone = businessClock.zone();
         return (from, to) -> taskRepository.findBlockedForProjectLead(leadId, from, to,
                 from.atStartOfDay(zone).toOffsetDateTime(),
                 to.plusDays(1).atStartOfDay(zone).toOffsetDateTime());
