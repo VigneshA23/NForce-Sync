@@ -101,6 +101,7 @@ public class EodService {
     private final com.nforceone.sync.project.AllocationRepository allocationRepository;
     private final AuditLogRepository auditLogRepository;
     private final EodLogLineRepository logLineRepository;
+    private final BenchModePolicy benchModePolicy;
 
     public EodService(EodEntryRepository entryRepository,
                       EodTaskRepository taskRepository,
@@ -119,7 +120,9 @@ public class EodService {
                       LeadAccessService leadAccess,
                       com.nforceone.sync.project.AllocationRepository allocationRepository,
                       AuditLogRepository auditLogRepository,
-                      EodLogLineRepository logLineRepository) {
+                      EodLogLineRepository logLineRepository,
+                      BenchModePolicy benchModePolicy) {
+        this.benchModePolicy   = benchModePolicy;
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
         this.userRepository    = userRepository;
@@ -163,9 +166,15 @@ public class EodService {
             // entryForm is decided at draft creation and never changes.
             // Validate that the requested form matches what the server would assign.
             if (request.entryForm() != null) {
-                validateFormAssignment(request.entryForm(), employee);
+                validateFormAssignment(request.entryForm(), employee, request.entryDate());
                 entry.setEntryForm(request.entryForm());
+            } else if (employee.getRole() == AppUser.Role.EMPLOYEE) {
+                // Older clients send no entryForm and get the PROJECT_GROUPED default. An EMPLOYEE on the
+                // bench must not slip through that way, so the default is validated like an explicit one.
+                validateFormAssignment(EodEntry.EntryForm.PROJECT_GROUPED, employee, request.entryDate());
             }
+            // Frozen with entryForm: judged on the ENTRY DATE, never recomputed (see BenchModePolicy).
+            entry.setBenchMode(benchModePolicy.isBenchMode(employee, request.entryDate()));
         } else {
             if (!entry.isEditable()) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -235,9 +244,10 @@ public class EodService {
                     com.nforceone.sync.project.TaskCategory category = categoryRepository.findById(lineReq.categoryId())
                             .orElseThrow(() -> new ResponseStatusException(
                                     HttpStatus.NOT_FOUND, "Task category not found: " + lineReq.categoryId()));
-                    if (!"MANAGEMENT".equals(category.getScope())) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                "Category \"" + category.getName() + "\" is not a daily log category (scope=MANAGEMENT)");
+                    // BENCH for a bench-mode entry (frozen at creation), MANAGEMENT for everyone else.
+                    String scopeError = BenchModePolicy.scopeMismatch(category, Boolean.TRUE.equals(savedPlain.getBenchMode()));
+                    if (scopeError != null) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, scopeError);
                     }
                     if (!Boolean.TRUE.equals(category.getActive())) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -891,17 +901,26 @@ public class EodService {
     /**
      * Verifies that the form the caller requested matches what the server would assign.
      * <ul>
-     *   <li>EMPLOYEE must use PROJECT_GROUPED — they always have tasks to log.
+     *   <li>EMPLOYEE on the bench on the ENTRY DATE (see {@link BenchModePolicy}) must use PLAIN_LOG.
+     *   <li>EMPLOYEE with an active project allocation on the entry date must use PROJECT_GROUPED.
      *   <li>Non-EMPLOYEE with no active allocation today must use PLAIN_LOG.
      *   <li>Non-EMPLOYEE with an active allocation may use PROJECT_GROUPED.
      * </ul>
      * Called only at draft-creation time (entryForm is immutable after that).
      */
-    private void validateFormAssignment(EodEntry.EntryForm requested, AppUser employee) {
+    private void validateFormAssignment(EodEntry.EntryForm requested, AppUser employee, LocalDate entryDate) {
         if (employee.getRole() == AppUser.Role.EMPLOYEE) {
-            if (requested == EodEntry.EntryForm.PLAIN_LOG) {
+            boolean bench = benchModePolicy.isBenchMode(employee, entryDate);
+            String date = entryDate.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+            if (bench && requested == EodEntry.EntryForm.PROJECT_GROUPED) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Employees must use the project-grouped EOD form, not daily log");
+                        "This date (" + date + ") falls in a period when you were on the bench "
+                                + "(no active project allocation). Use the Daily Log form for this date.");
+            }
+            if (!bench && requested == EodEntry.EntryForm.PLAIN_LOG) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "This date (" + date + ") falls in a period when you were on a project. "
+                                + "Use the Submit EOD form for this date.");
             }
             return;
         }
@@ -924,6 +943,14 @@ public class EodService {
      */
     private void validatePlainLog(EodEntry entry) {
         List<EodLogLine> lines = logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(entry.getId());
+        // Same scope rule as saveDraft, re-checked here so it cannot be bypassed by submitting lines that
+        // were saved under another mode. Scope only: a category deactivated since the save does not block.
+        for (EodLogLine line : lines) {
+            String scopeError = BenchModePolicy.scopeMismatch(line.getCategory(), Boolean.TRUE.equals(entry.getBenchMode()));
+            if (scopeError != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, scopeError);
+            }
+        }
         String error;
         if (!lines.isEmpty()) {
             // V110+ path: convert persisted lines to SaveEodLogLineRequest for stateless validation.

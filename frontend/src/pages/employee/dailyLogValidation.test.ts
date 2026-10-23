@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  descriptionError, draftBlockReason, draftErrorMessage, firstInvalidLine, lineProblems, type LineFields,
+  clearedCategoriesNotice, descriptionError, draftBlockReason, draftErrorMessage, firstInvalidLine, lineProblems,
+  noCategoriesMessage, staleCategoryRows, type LineFields,
 } from './dailyLogValidation';
 
 const line = (over: Partial<LineFields> = {}): LineFields =>
@@ -63,5 +64,35 @@ describe('draftBlockReason — a row with no category cannot be stored, and the 
     const lines = [line(), line({ key: 2, categoryId: null }), line({ key: 3, categoryId: null })];
     expect(draftBlockReason(lines)).toBe('Row 2 has no category — pick one so the draft can be saved.');
     expect(lines).toHaveLength(3);
+  });
+});
+
+describe('stale category handling — the server picks the list per date, so carried-over categories are cleared', () => {
+  it('flags only rows whose category is not in the allowed list', () => {
+    const lines = [line({ key: 1, categoryId: 5 }), line({ key: 2, categoryId: 9 }), line({ key: 3, categoryId: null })];
+    expect(staleCategoryRows(lines, [5, 6])).toEqual([1]);
+  });
+
+  it('a row with no category yet is not stale, and an empty allowed list makes every chosen category stale', () => {
+    expect(staleCategoryRows([line({ categoryId: null })], [])).toEqual([]);
+    expect(staleCategoryRows([line({ key: 1, categoryId: 5 }), line({ key: 2, categoryId: 6 })], [])).toEqual([0, 1]);
+  });
+
+  it('notice names the row(s), one or several, and is null when nothing was cleared', () => {
+    expect(clearedCategoriesNotice([])).toBeNull();
+    expect(clearedCategoriesNotice([1])).toBe("Row 2's category isn't available for this date, so it was cleared. Pick one from the list.");
+    expect(clearedCategoriesNotice([0, 2])).toBe("Rows 1, 3's categories aren't available for this date, so they were cleared. Pick one from the list.");
+  });
+});
+
+describe('noCategoriesMessage', () => {
+  it('bench mode points at the administrator, not Org Masters', () => {
+    expect(noCategoriesMessage(true)).toEqual({
+      lead: 'No Bench Log categories are configured. Please contact your administrator.',
+    });
+  });
+  it('every other role keeps the existing Org Masters wording', () => {
+    const m = noCategoriesMessage(false);
+    expect(m.lead + m.admin + m.tail).toBe('No categories configured. Go to Org Masters → Task Categories and add categories with scope "Management".');
   });
 });

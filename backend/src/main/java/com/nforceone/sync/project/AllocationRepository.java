@@ -174,6 +174,20 @@ public interface AllocationRepository extends JpaRepository<Allocation, Long> {
     Set<Long> findEmployeeIdsAllocatedOn(@Param("employeeIds") List<Long> employeeIds,
                                          @Param("date") LocalDate date);
 
+    /**
+     * Is this employee on an ACTIVE project on {@code date}? The effective-dated test of
+     * {@link #findEmployeeIdsAllocatedOn} (both ends inclusive, null end = open-ended) plus
+     * {@code project.status = ACTIVE}: an allocation to an INACTIVE, COMPLETED or ON_HOLD project
+     * does not count. Backs BenchModePolicy; the older query is left as-is for its other callers.
+     */
+    @Query("SELECT COUNT(a) > 0 FROM Allocation a " +
+           "WHERE a.employee.id = :employeeId " +
+           "AND a.project.status = com.nforceone.sync.project.Project.Status.ACTIVE " +
+           "AND a.effectiveFrom <= :date " +
+           "AND (a.effectiveTo IS NULL OR a.effectiveTo >= :date)")
+    boolean existsActiveProjectAllocationOn(@Param("employeeId") Long employeeId,
+                                            @Param("date") LocalDate date);
+
     @Query("SELECT COUNT(a) FROM Allocation a WHERE a.employee.id = :userId AND a.project.id = :projectId " +
            "AND a.effectiveFrom <= :today AND (a.effectiveTo IS NULL OR a.effectiveTo >= :today)")
     long countActiveByEmployeeIdAndProjectId(@Param("userId") Long userId,

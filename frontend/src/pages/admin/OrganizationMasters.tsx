@@ -12,8 +12,9 @@ import {
 import type {
   DepartmentDto, DesignationDto, OrgLocationDto,
   ProjectTypeDto, CreateProjectTypePayload,
-  TaskCategoryAdminDto,
+  TaskCategoryAdminDto, TaskCategoryScope,
 } from '../../api/admin';
+import { categoryScopeLabel, initialAddScope, productiveLocked } from './categoryScope';
 import { Modal } from '../../components/Modal';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { Pagination } from '../../components/Pagination';
@@ -1142,10 +1143,10 @@ const CATEGORY_ROW_HEIGHT = 53;
 function TaskCategoriesTab() {
   const qc = useQueryClient();
   const { show: toast } = useToast();
-  const [scopeFilter, setScopeFilter] = useState<'ALL' | 'EMPLOYEE' | 'MANAGEMENT'>('ALL');
+  const [scopeFilter, setScopeFilter] = useState<'ALL' | TaskCategoryScope>('ALL');
   const [addOpen, setAddOpen] = useState(false);
   const [addName, setAddName] = useState('');
-  const [addScope, setAddScope] = useState<'EMPLOYEE' | 'MANAGEMENT'>('MANAGEMENT');
+  const [addScope, setAddScope] = useState<TaskCategoryScope>('MANAGEMENT');
   const [addProductive, setAddProductive] = useState(true);
   const [addError, setAddError] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
@@ -1210,18 +1211,18 @@ function TaskCategoriesTab() {
       {/* toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 4 }}>
-          {(['ALL', 'EMPLOYEE', 'MANAGEMENT'] as const).map(s => (
+          {(['ALL', 'EMPLOYEE', 'MANAGEMENT', 'BENCH'] as const).map(s => (
             <button key={s} onClick={() => { setScopeFilter(s); setPage(1); }} style={{
               padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
               border: '1px solid var(--line)',
               background: scopeFilter === s ? 'var(--brand)' : 'var(--raised2)',
               color: scopeFilter === s ? '#fff' : 'var(--txt)',
               cursor: 'pointer',
-            }}>{s === 'ALL' ? 'All' : s === 'EMPLOYEE' ? 'Employee' : 'Daily Log'}</button>
+            }}>{s === 'ALL' ? 'All' : categoryScopeLabel(s)}</button>
           ))}
         </div>
         <div style={{ marginLeft: 'auto' }}>
-          <button onClick={() => { setAddOpen(true); setAddError(null); }} style={{
+          <button onClick={() => { setAddOpen(true); setAddError(null); setAddScope(initialAddScope(scopeFilter, addScope)); }} style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '7px 14px', borderRadius: 7, fontSize: 13, fontWeight: 600,
             background: 'var(--brand)', border: 'none', color: '#fff', cursor: 'pointer',
@@ -1283,10 +1284,12 @@ function TaskCategoriesTab() {
                 <td style={tdStyle}>
                   <span style={{
                     fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                    background: cat.scope === 'MANAGEMENT' ? 'rgba(99,102,241,0.12)' : 'rgba(14,165,233,0.12)',
-                    color: cat.scope === 'MANAGEMENT' ? 'var(--info)' : 'var(--brand)',
+                    background: cat.scope === 'MANAGEMENT' ? 'rgba(99,102,241,0.12)'
+                      : cat.scope === 'BENCH' ? 'rgba(47,182,124,0.12)' : 'rgba(14,165,233,0.12)',
+                    color: cat.scope === 'MANAGEMENT' ? 'var(--info)'
+                      : cat.scope === 'BENCH' ? 'var(--ok)' : 'var(--brand)',
                   }}>
-                    {cat.scope === 'MANAGEMENT' ? 'Daily Log' : 'Employee'}
+                    {categoryScopeLabel(cat.scope)}
                   </span>
                 </td>
                 <td style={{ ...tdStyle, fontSize: 12, color: 'var(--txt-dim)' }}>
@@ -1344,15 +1347,27 @@ function TaskCategoriesTab() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-mut)', display: 'block', marginBottom: 5 }}>Scope</label>
-              <select value={addScope} onChange={e => setAddScope(e.target.value as 'EMPLOYEE' | 'MANAGEMENT')}
+              <select value={addScope} onChange={e => setAddScope(e.target.value as TaskCategoryScope)}
                 style={inputStyle}>
                 <option value="EMPLOYEE">Employee (Submit EOD)</option>
                 <option value="MANAGEMENT">Daily Log</option>
+                <option value="BENCH">Bench Log</option>
               </select>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={addProductive} onChange={e => setAddProductive(e.target.checked)} id="addProd" />
-              <label htmlFor="addProd" style={{ fontSize: 13, color: 'var(--txt)', cursor: 'pointer' }}>Productive</label>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* Bench Log categories are always non-productive: the box is locked off (the server enforces it too). */}
+                <input type="checkbox" checked={productiveLocked(addScope) ? false : addProductive}
+                  disabled={productiveLocked(addScope)} onChange={e => setAddProductive(e.target.checked)} id="addProd" />
+                <label htmlFor="addProd" style={{ fontSize: 13, color: 'var(--txt)', cursor: productiveLocked(addScope) ? 'default' : 'pointer' }}>
+                  {productiveLocked(addScope) ? 'Non-productive' : 'Productive'}
+                </label>
+              </div>
+              {productiveLocked(addScope) && (
+                <div style={{ fontSize: 12, color: 'var(--txt-dim)', marginTop: 4 }}>
+                  Bench Log categories are always non-productive, so their hours count as bench time.
+                </div>
+              )}
             </div>
             {addError && <ErrorBanner message={addError} />}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -1361,7 +1376,7 @@ function TaskCategoriesTab() {
                 Cancel
               </button>
               <button
-                onClick={() => createMut.mutate({ name: addName, scope: addScope, isProductive: addProductive })}
+                onClick={() => createMut.mutate({ name: addName, scope: addScope, isProductive: productiveLocked(addScope) ? false : addProductive })}
                 disabled={createMut.isPending || !addName.trim()}
                 style={{ padding: '8px 16px', borderRadius: 7, border: 'none', background: 'var(--brand)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                 {createMut.isPending ? 'Adding…' : 'Add'}

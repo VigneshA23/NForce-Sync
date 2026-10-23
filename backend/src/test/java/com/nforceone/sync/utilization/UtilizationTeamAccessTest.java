@@ -62,7 +62,7 @@ class UtilizationTeamAccessTest {
     void setUp() {
         service = new UtilizationService(entryRepository, userRepository, snapshotRepository, holidayRepository,
                 new LeadTeamPolicy(allocationRepository, projectRepository, pieceRepository), pieceRepository,
-                pmScopeService);
+                pmScopeService, null);
 
         leadA = user(1L, AppUser.Role.EMPLOYEE, "a"); leadB = user(2L, AppUser.Role.EMPLOYEE, "b");
         akhila = user(3L, AppUser.Role.EMPLOYEE, "akhila"); stranger = user(4L, AppUser.Role.EMPLOYEE, "x");

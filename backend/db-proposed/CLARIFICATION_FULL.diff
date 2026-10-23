@@ -1,0 +1,2959 @@
+diff --git a/backend/src/main/java/com/nforceone/sync/approval/ApprovalController.java b/backend/src/main/java/com/nforceone/sync/approval/ApprovalController.java
+index dc7a925..aa2180a 100644
+--- a/backend/src/main/java/com/nforceone/sync/approval/ApprovalController.java
++++ b/backend/src/main/java/com/nforceone/sync/approval/ApprovalController.java
+@@ -68,8 +68,9 @@ public class ApprovalController {
+     // reject calls. Delegates straight to EodClarificationAccessPolicy.requireCanRead, which
+     // already covers both a Team Lead and a scoped PM viewing this entry.
+     @GetMapping("/{entryId}/clarification-status")
+-    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId) {
+-        return clarificationService.getStatus(entryId, actingEmail());
++    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId,
++            @RequestParam(required = false) Long pieceId) {
++        return clarificationService.getStatusForPiece(entryId, actingEmail(), pieceId);
+     }
+ 
+     @PostMapping("/{entryId}/approve")
+diff --git a/backend/src/main/java/com/nforceone/sync/approval2/ApprovalPieceService.java b/backend/src/main/java/com/nforceone/sync/approval2/ApprovalPieceService.java
+index 6dc891b..d8d15cf 100644
+--- a/backend/src/main/java/com/nforceone/sync/approval2/ApprovalPieceService.java
++++ b/backend/src/main/java/com/nforceone/sync/approval2/ApprovalPieceService.java
+@@ -352,13 +352,22 @@ public class ApprovalPieceService {
+ 
+     // ── private helpers ──────────────────────────────────────────────────────
+ 
+-    // An open clarification round blocks approve AND reject of EVERY piece on the entry, not just
+-    // the piece it was raised from: rounds are per entry (per-piece scoping is deferred — see
+-    // docs/role-restructure-plan.md decision 4), so the gate is entry-wide to match. Mirrors the
+-    // legacy ApprovalService.requireNoOpenClarification, which the v2 piece path used to bypass.
++    // Clarification state is per piece (one project + one lead): an open round blocks approve/reject of
++    // ITS OWN piece only, so another project's lead keeps full access to theirs. A legacy round (no
++    // piece_id — opened before per-piece rounds existed) keeps the old behaviour and blocks every piece
++    // of the entry. Enforced here, not only by disabling buttons in the UI.
+     private void requireNoOpenClarification(EodProjectApproval piece) {
+         Long entryId = piece.getEodEntry().getId();
+-        if (clarificationRepository.existsByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)) {
++        // A legacy round (no piece) blocks only the pieces its OPENER holds — a lead is never blocked by a
++        // thread they cannot see.
++        // A piece escalated to someone else (a PM) is no longer held by the opener, so it is not blocked either.
++        boolean escalatedAway = piece.getApprover() != null && piece.getEscalatedTo() != null
++                && !piece.getEscalatedTo().getId().equals(piece.getApprover().getId());
++        boolean legacyRoundOnMyPiece = piece.getApprover() != null && !escalatedAway
++                && clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(
++                        entryId, EodClarification.Status.RESOLVED, piece.getApprover().getId());
++        if (clarificationRepository.existsByPiece_IdAndStatusNot(piece.getId(), EodClarification.Status.RESOLVED)
++                || legacyRoundOnMyPiece) {
+             throw new ResponseStatusException(HttpStatus.CONFLICT,
+                     "This entry has an open clarification and cannot be approved or rejected until it is resolved");
+         }
+diff --git a/backend/src/main/java/com/nforceone/sync/employee/EmployeeController.java b/backend/src/main/java/com/nforceone/sync/employee/EmployeeController.java
+index fa1b471..baff7a6 100644
+--- a/backend/src/main/java/com/nforceone/sync/employee/EmployeeController.java
++++ b/backend/src/main/java/com/nforceone/sync/employee/EmployeeController.java
+@@ -169,20 +169,23 @@ public class EmployeeController {
+     // SubmitEOD/EodHistory can gate the edit-lock banner without EodEntryDto knowing anything
+     // about clarifications.
+     @GetMapping("/eod/{entryId}/clarification")
+-    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId) {
+-        return clarificationService.getStatus(entryId, actingEmail());
++    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId,
++            @RequestParam(required = false) Long clarificationId) {
++        return clarificationService.getStatus(entryId, actingEmail(), clarificationId);
+     }
+ 
+     @GetMapping("/eod/{entryId}/clarification/replies")
+-    public List<EodClarificationReplyDto> getClarificationReplies(@PathVariable Long entryId) {
+-        return clarificationService.getThread(entryId, actingEmail());
++    public List<EodClarificationReplyDto> getClarificationReplies(@PathVariable Long entryId,
++            @RequestParam(required = false) Long clarificationId) {
++        return clarificationService.getThread(entryId, actingEmail(), clarificationId);
+     }
+ 
+     // Opening the EOD Inbox row's conversation panel — marks the round read for this employee,
+     // clearing the unread/bold indicator on the row (see EodClarificationService.markRead).
+     @PostMapping("/eod/{entryId}/clarification/read")
+-    public void markClarificationRead(@PathVariable Long entryId) {
+-        clarificationService.markRead(entryId, actingEmail());
++    public void markClarificationRead(@PathVariable Long entryId,
++            @RequestParam(required = false) Long clarificationId) {
++        clarificationService.markRead(entryId, actingEmail(), clarificationId);
+     }
+ 
+     // Multipart, not JSON — matches Blockers' postBlockerReply exactly (message + files together),
+@@ -191,8 +194,9 @@ public class EmployeeController {
+     public EodClarificationReplyDto postClarificationReply(
+             @PathVariable Long entryId,
+             @RequestParam(required = false) String message,
+-            @RequestParam(required = false) List<MultipartFile> files) {
+-        return clarificationService.reply(entryId, actingEmail(), message, files);
++            @RequestParam(required = false) List<MultipartFile> files,
++            @RequestParam(required = false) Long clarificationId) {
++        return clarificationService.reply(entryId, actingEmail(), message, files, clarificationId);
+     }
+ 
+     @PutMapping("/eod/clarification/replies/{replyId}")
+diff --git a/backend/src/main/java/com/nforceone/sync/eod/EodClarification.java b/backend/src/main/java/com/nforceone/sync/eod/EodClarification.java
+index e15ae21..f043dae 100644
+--- a/backend/src/main/java/com/nforceone/sync/eod/EodClarification.java
++++ b/backend/src/main/java/com/nforceone/sync/eod/EodClarification.java
+@@ -37,6 +37,14 @@ public class EodClarification {
+     @JoinColumn(name = "opened_by_approver_id")
+     private AppUser openedByApprover;
+ 
++    // The opener's OWN approval piece (one project + one lead) this round is about — it blocks only that
++    // piece and is visible only to whoever holds it (plus the employee and read-only roles). NULL for a
++    // legacy round (opened before piece_id existed, or ambiguous at backfill), which keeps the old
++    // per-entry behaviour: it blocks every piece of the entry.
++    @ManyToOne(fetch = FetchType.LAZY)
++    @JoinColumn(name = "piece_id")
++    private com.nforceone.sync.approval2.EodProjectApproval piece;
++
+     @Column(name = "opened_at", nullable = false)
+     private OffsetDateTime openedAt;
+ 
+diff --git a/backend/src/main/java/com/nforceone/sync/eod/EodClarificationAccessPolicy.java b/backend/src/main/java/com/nforceone/sync/eod/EodClarificationAccessPolicy.java
+index 2bf1ac4..28cde2a 100644
+--- a/backend/src/main/java/com/nforceone/sync/eod/EodClarificationAccessPolicy.java
++++ b/backend/src/main/java/com/nforceone/sync/eod/EodClarificationAccessPolicy.java
+@@ -130,6 +130,61 @@ final class EodClarificationAccessPolicy {
+         throw PmReadOnlyPolicy.denial(isProjectPm(actor, entry), "clarifications");
+     }
+ 
++    // ── per-round (per-piece) rules ───────────────────────────────────────────
++    // A round belongs to ONE approval piece (project + lead). The entry-level rules above decide whether
++    // the actor may touch clarifications on this entry at all; these decide which ROUNDS. A legacy round
++    // (no piece) keeps the old entry-wide behaviour.
++
++    /** The round's piece as it stands in the entry's current-cycle pieces, or null when the round has no
++     *  piece or its piece was superseded (a resubmit started a new cycle). */
++    private static EodProjectApproval currentPieceOf(EodClarification round, List<EodProjectApproval> pieces) {
++        if (round.getPiece() == null) return null;
++        return pieces.stream().filter(p -> p.getId().equals(round.getPiece().getId())).findFirst().orElse(null);
++    }
++
++    /** May the actor read this round's thread? Owner, Super Admin and the read-only RM / project PM see every
++     *  round on the entry; a Team Lead (or any other approver) sees only the round on a piece he holds. */
++    static boolean canReadRound(AppUser actor, EodEntry entry, EodClarification round, List<EodProjectApproval> pieces) {
++        if (actor.getRole() == AppUser.Role.SUPERADMIN
++                || isOwningEmployee(actor, entry)
++                || isFrozenRm(actor, entry)
++                || isProjectPm(actor, entry)) {
++            return true;
++        }
++        // A legacy round (no piece) is its opener's alone — NOT every approver on the entry, so another
++        // project's lead can never read a thread that isn't theirs. The employee, Super Admin and the
++        // read-only RM / PM were already let through above, exactly as for a piece-keyed round.
++        if (round.getPiece() == null) return round.getOpenedBy().getId().equals(actor.getId());
++        return isApproverOf(actor, round.getPiece());
++    }
++
++    /** May the actor reply as the reviewing side of / resolve this round? Only the reviewer holding the
++     *  round's own still-pending piece — never the owner, never another project's lead. */
++    static boolean canReviewRound(AppUser actor, EodEntry entry, EodClarification round, List<EodProjectApproval> pieces) {
++        if (isOwningEmployee(actor, entry)) return false;
++        // Legacy round: only its opener, and only while he still holds a pending reviewing piece.
++        if (round.getPiece() == null) {
++            return round.getOpenedBy().getId().equals(actor.getId()) && canReview(actor, entry, pieces);
++        }
++        EodProjectApproval piece = currentPieceOf(round, pieces);
++        return piece != null
++                && piece.getStatus() == EodProjectApproval.Status.PENDING
++                && isReviewerOf(actor, piece);
++    }
++
++    /** May the actor post into this round: the owner (employee side) or the round's own reviewer. */
++    static boolean canReplyRound(AppUser actor, EodEntry entry, EodClarification round, List<EodProjectApproval> pieces) {
++        return isOwningEmployee(actor, entry) || canReviewRound(actor, entry, round, pieces);
++    }
++
++    /** Pieces the actor could open a NEW round on: still pending and held in a reviewing capacity. */
++    static List<EodProjectApproval> openablePieces(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
++        if (isOwningEmployee(actor, entry)) return List.of();
++        return pieces.stream()
++                .filter(p -> p.getStatus() == EodProjectApproval.Status.PENDING && isReviewerOf(actor, p))
++                .toList();
++    }
++
+     /** Read: owner, any current approver, frozen RM, project PM, or Super Admin. */
+     static void requireCanRead(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
+         if (canRead(actor, entry, pieces)) return;
+diff --git a/backend/src/main/java/com/nforceone/sync/eod/EodClarificationRepository.java b/backend/src/main/java/com/nforceone/sync/eod/EodClarificationRepository.java
+index 8882e07..4a8e850 100644
+--- a/backend/src/main/java/com/nforceone/sync/eod/EodClarificationRepository.java
++++ b/backend/src/main/java/com/nforceone/sync/eod/EodClarificationRepository.java
+@@ -16,6 +16,22 @@ public interface EodClarificationRepository extends JpaRepository<EodClarificati
+ 
+     boolean existsByEodEntryIdAndStatusNot(Long eodEntryId, EodClarification.Status status);
+ 
++    // Per-piece clarification state: a round blocks / belongs to ONE approval piece. A legacy round
++    // (no piece) keeps the old per-entry behaviour, so approve/reject checks both of these.
++    boolean existsByPiece_IdAndStatusNot(Long pieceId, EodClarification.Status status);
++
++    boolean existsByEodEntryIdAndPieceIsNullAndStatusNot(Long eodEntryId, EodClarification.Status status);
++
++    // A legacy round (no piece) belongs to its OPENER: it blocks only the pending pieces the opener holds and
++    // only the opener (and the employee / read-only roles) can see it — never another project's lead.
++    boolean existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(
++            Long eodEntryId, EodClarification.Status status, Long openedById);
++
++    // Every round on an entry, newest first, with its piece — the service filters this per viewer
++    // (a lead only ever sees / drives rounds on pieces he holds; the employee sees them all).
++    @EntityGraph(attributePaths = {"piece", "piece.project", "openedBy", "resolvedBy"})
++    List<EodClarification> findByEodEntryIdOrderByOpenedAtDesc(Long eodEntryId);
++
+     // Most recent round overall (any status) — the thread endpoints show this one, per the
+     // "only the latest round's thread is shown" simplification (older rounds stay in the DB for
+     // audit/history but aren't surfaced in v1).
+@@ -41,30 +57,32 @@ public interface EodClarificationRepository extends JpaRepository<EodClarificati
+     // is NOT enough: those rounds belong to the My Reporting Team inbox (findOpenForReportingManager) and
+     // must not leak into this section. A multi-project entry therefore appears for every lead who holds a
+     // piece on it, as one shared thread.
+-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
++    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
+     @Query("""
+         SELECT c FROM EodClarification c
+         WHERE c.status <> com.nforceone.sync.eod.EodClarification.Status.RESOLVED
+           AND c.eodEntry.employee.id <> :userId
+-          AND EXISTS (SELECT 1 FROM EodProjectApproval p
+-                      WHERE p.eodEntry = c.eodEntry AND p.supersededAt IS NULL
+-                        AND ((p.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
+-                              AND p.approver.id = :userId)
+-                             OR p.escalatedTo.id = :userId))
++          AND ((c.piece IS NULL AND c.openedBy.id = :userId)
++               OR EXISTS (SELECT 1 FROM EodProjectApproval q
++                          WHERE q = c.piece
++                            AND ((q.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
++                                  AND q.approver.id = :userId)
++                                 OR q.escalatedTo.id = :userId)))
+         ORDER BY c.openedAt DESC
+         """)
+     List<EodClarification> findOpenForReviewer(@Param("userId") Long userId);
+ 
+-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
++    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
+     @Query("""
+         SELECT c FROM EodClarification c
+         WHERE c.status = com.nforceone.sync.eod.EodClarification.Status.RESOLVED
+           AND c.eodEntry.employee.id <> :userId
+-          AND EXISTS (SELECT 1 FROM EodProjectApproval p
+-                      WHERE p.eodEntry = c.eodEntry AND p.supersededAt IS NULL
+-                        AND ((p.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
+-                              AND p.approver.id = :userId)
+-                             OR p.escalatedTo.id = :userId))
++          AND ((c.piece IS NULL AND c.openedBy.id = :userId)
++               OR EXISTS (SELECT 1 FROM EodProjectApproval q
++                          WHERE q = c.piece
++                            AND ((q.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
++                                  AND q.approver.id = :userId)
++                                 OR q.escalatedTo.id = :userId)))
+         ORDER BY c.resolvedAt DESC
+         """)
+     List<EodClarification> findResolvedForReviewer(@Param("userId") Long userId);
+@@ -72,46 +90,48 @@ public interface EodClarificationRepository extends JpaRepository<EodClarificati
+     // REPORTING MANAGER inbox (My Reporting Team section): rounds on entries whose FROZEN manager is the
+     // viewer, minus the ones already in his Team Inbox (a user who is both a lead and the RM of the same
+     // entry sees it once, in the Team Inbox). Never the viewer's own entry.
+-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
++    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
+     @Query("""
+         SELECT c FROM EodClarification c
+         WHERE c.status <> com.nforceone.sync.eod.EodClarification.Status.RESOLVED
+           AND c.eodEntry.employee.id <> :userId
+           AND c.eodEntry.managerId = :userId
+-          AND NOT EXISTS (SELECT 1 FROM EodProjectApproval p
+-                          WHERE p.eodEntry = c.eodEntry AND p.supersededAt IS NULL
+-                            AND ((p.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
+-                                  AND p.approver.id = :userId)
+-                                 OR p.escalatedTo.id = :userId))
++          AND NOT ((c.piece IS NULL AND c.openedBy.id = :userId)
++                   OR EXISTS (SELECT 1 FROM EodProjectApproval q
++                              WHERE q = c.piece
++                                AND ((q.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
++                                      AND q.approver.id = :userId)
++                                     OR q.escalatedTo.id = :userId)))
+         ORDER BY c.openedAt DESC
+         """)
+     List<EodClarification> findOpenForReportingManager(@Param("userId") Long userId);
+ 
+-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
++    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
+     @Query("""
+         SELECT c FROM EodClarification c
+         WHERE c.status = com.nforceone.sync.eod.EodClarification.Status.RESOLVED
+           AND c.eodEntry.employee.id <> :userId
+           AND c.eodEntry.managerId = :userId
+-          AND NOT EXISTS (SELECT 1 FROM EodProjectApproval p
+-                          WHERE p.eodEntry = c.eodEntry AND p.supersededAt IS NULL
+-                            AND ((p.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
+-                                  AND p.approver.id = :userId)
+-                                 OR p.escalatedTo.id = :userId))
++          AND NOT ((c.piece IS NULL AND c.openedBy.id = :userId)
++                   OR EXISTS (SELECT 1 FROM EodProjectApproval q
++                              WHERE q = c.piece
++                                AND ((q.approverType = com.nforceone.sync.approval2.EodProjectApproval.ApproverType.LEAD
++                                      AND q.approver.id = :userId)
++                                     OR q.escalatedTo.id = :userId)))
+         ORDER BY c.resolvedAt DESC
+         """)
+     List<EodClarification> findResolvedForReportingManager(@Param("userId") Long userId);
+ 
+     // Employee's own EOD Inbox — Open / Resolved tabs, scoped to entries they submitted.
+-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
++    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
+     List<EodClarification> findByEodEntry_Employee_IdAndStatusNotOrderByOpenedAtDesc(Long employeeId, EodClarification.Status status);
+ 
+-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
++    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
+     List<EodClarification> findByEodEntry_Employee_IdAndStatusOrderByResolvedAtDesc(Long employeeId, EodClarification.Status status);
+ 
+     // PM's EOD Inbox — read-only, cross-team, scoped by project ownership (mirrors
+     // PmBlockersService: EXISTS over eod_task.project.pm, not the entry's manager).
+-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
++    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
+     @Query("""
+         SELECT c FROM EodClarification c
+         WHERE c.status <> com.nforceone.sync.eod.EodClarification.Status.RESOLVED
+@@ -121,7 +141,7 @@ public interface EodClarificationRepository extends JpaRepository<EodClarificati
+         """)
+     List<EodClarification> findOpenByPmId(@Param("pmId") Long pmId);
+ 
+-    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy"})
++    @EntityGraph(attributePaths = {"eodEntry", "eodEntry.employee", "openedBy", "resolvedBy", "piece", "piece.project"})
+     @Query("""
+         SELECT c FROM EodClarification c
+         WHERE c.status = com.nforceone.sync.eod.EodClarification.Status.RESOLVED
+diff --git a/backend/src/main/java/com/nforceone/sync/eod/EodClarificationService.java b/backend/src/main/java/com/nforceone/sync/eod/EodClarificationService.java
+index ec6f3f9..b5e6184 100644
+--- a/backend/src/main/java/com/nforceone/sync/eod/EodClarificationService.java
++++ b/backend/src/main/java/com/nforceone/sync/eod/EodClarificationService.java
+@@ -94,25 +94,71 @@ public class EodClarificationService {
+ 
+     @Transactional(readOnly = true)
+     public EodClarificationStatusDto getStatus(Long entryId, String actingEmail) {
++        return getStatus(entryId, actingEmail, null);
++    }
++
++    /**
++     * Status of ONE round the viewer may see: {@code clarificationId} when given, otherwise the latest round
++     * visible to him. A Team Lead sees only the round on a piece he holds (never another project's); the
++     * employee sees every round on his entry and picks one by id when there are several.
++     */
++    @Transactional(readOnly = true)
++    public EodClarificationStatusDto getStatus(Long entryId, String actingEmail, Long clarificationId) {
+         AppUser actor = requireUser(actingEmail);
+         EodEntry entry = requireEntry(entryId);
+         List<EodProjectApproval> pieces = currentPieces(entryId);
+         EodClarificationAccessPolicy.requireCanRead(actor, entry, pieces);
+-        // The LATEST round — open, or the most recent RESOLVED one — so a resolved thread stays
++        // The LATEST visible round — open, or the most recent RESOLVED one — so a resolved thread stays
+         // readable. A resolved round reports open=false / status=RESOLVED, so every gate that keys
+         // off open or isBlockingStatus treats it as "no round blocking".
+-        return clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(entryId)
++        return selectVisibleRound(actor, entry, pieces, clarificationId)
++                .map(c -> statusDto(c, actor, entry, pieces))
++                .orElseGet(() -> EodClarificationStatusDto.none(canOpenNewRound(actor, entry, pieces)));
++    }
++
++    /**
++     * Status as it applies to ONE approval piece (the Approvals card / detail modal's own piece): the latest
++     * round the viewer may see that is on that piece (or a legacy entry-wide one) — so a card never reflects
++     * another project's clarification — or none, with {@code canOpen} for the viewer.
++     */
++    @Transactional(readOnly = true)
++    public EodClarificationStatusDto getStatusForPiece(Long entryId, String actingEmail, Long pieceId) {
++        if (pieceId == null) return getStatus(entryId, actingEmail, null);
++        AppUser actor = requireUser(actingEmail);
++        EodEntry entry = requireEntry(entryId);
++        List<EodProjectApproval> pieces = currentPieces(entryId);
++        EodClarificationAccessPolicy.requireCanRead(actor, entry, pieces);
++        // A round applies to this piece when it is keyed on it, or — for a legacy round with no piece — when the
++        // piece is one its opener holds (a legacy round blocks only its opener's own pieces).
++        // "Held by" the opener means the designated approver and NOT escalated to someone else.
++        Long pieceApproverId = pieces.stream().filter(p -> p.getId().equals(pieceId)).findFirst()
++                .map(p -> p.getApprover() == null
++                        || (p.getEscalatedTo() != null && !p.getEscalatedTo().getId().equals(p.getApprover().getId()))
++                        ? null : p.getApprover().getId())
++                .orElse(null);
++        return visibleRounds(actor, entry, pieces).stream()
++                .filter(c -> c.getPiece() != null
++                        ? c.getPiece().getId().equals(pieceId)
++                        : pieceApproverId != null && pieceApproverId.equals(c.getOpenedBy().getId()))
++                .findFirst()
+                 .map(c -> statusDto(c, actor, entry, pieces))
+                 .orElseGet(() -> EodClarificationStatusDto.none(canOpenNewRound(actor, entry, pieces)));
+     }
+ 
+     @Transactional(readOnly = true)
+     public List<EodClarificationReplyDto> getThread(Long entryId, String actingEmail) {
++        return getThread(entryId, actingEmail, null);
++    }
++
++    @Transactional(readOnly = true)
++    public List<EodClarificationReplyDto> getThread(Long entryId, String actingEmail, Long clarificationId) {
+         AppUser actor = requireUser(actingEmail);
+         EodEntry entry = requireEntry(entryId);
+-        EodClarificationAccessPolicy.requireCanRead(actor, entry, currentPieces(entryId));
+-        // Only the latest round's thread is shown — see EodClarificationRepository's javadoc.
+-        return clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(entryId)
++        List<EodProjectApproval> pieces = currentPieces(entryId);
++        EodClarificationAccessPolicy.requireCanRead(actor, entry, pieces);
++        // Only one round's thread is shown — see EodClarificationRepository's javadoc — and only a round the
++        // viewer may see: a lead can never read another project's thread.
++        return selectVisibleRound(actor, entry, pieces, clarificationId)
+                 .map(c -> {
+                     List<EodClarificationReply> replies = replyRepository.findByClarificationIdOrderByCreatedAtAsc(c.getId());
+                     Map<Long, List<EodClarificationAttachmentDto>> byReplyId = attachmentsByReplyId(replies);
+@@ -123,6 +169,80 @@ public class EodClarificationService {
+                 .orElse(List.of());
+     }
+ 
++    /** Rounds on this entry the viewer may read, newest first. */
++    private List<EodClarification> visibleRounds(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
++        return clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(entry.getId()).stream()
++                .filter(c -> EodClarificationAccessPolicy.canReadRound(actor, entry, c, pieces))
++                .toList();
++    }
++
++    /** The round a read endpoint should show: {@code clarificationId} when given (404 if it is not on this
++     *  entry, 403 if the viewer may not see it), otherwise the latest visible round. */
++    private java.util.Optional<EodClarification> selectVisibleRound(AppUser actor, EodEntry entry,
++                                                                    List<EodProjectApproval> pieces, Long clarificationId) {
++        if (clarificationId == null) {
++            // Default: an OPEN round first (the employee can have one per project), else the latest resolved one.
++            List<EodClarification> visible = visibleRounds(actor, entry, pieces);
++            return visible.stream().filter(EodClarification::isOpen).findFirst()
++                    .or(() -> visible.stream().findFirst());
++        }
++        EodClarification c = requireRoundOnEntry(entry, clarificationId);
++        if (!EodClarificationAccessPolicy.canReadRound(actor, entry, c, pieces)) {
++            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
++        }
++        return java.util.Optional.of(c);
++    }
++
++    private EodClarification requireRoundOnEntry(EodEntry entry, Long clarificationId) {
++        return clarificationRepository.findById(clarificationId)
++                .filter(c -> c.getEodEntry().getId().equals(entry.getId()))
++                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clarification not found"));
++    }
++
++    /**
++     * The OPEN round a write endpoint acts on. With {@code clarificationId}: that round (404 / 403 / 409 as
++     * above). Without it: the employee's latest open round, or a reviewer's latest open round on a piece he
++     * holds — and a reviewer with no open round of his own gets 403 when someone else's is open, never access
++     * to it. {@code asReviewer} (resolve / set status) additionally requires the reviewing capacity on it.
++     */
++    private EodClarification selectOpenRound(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces,
++                                              Long clarificationId, boolean asReviewer) {
++        EodClarification c;
++        if (clarificationId != null) {
++            c = requireRoundOnEntry(entry, clarificationId);
++            if (!EodClarificationAccessPolicy.canReadRound(actor, entry, c, pieces)) {
++                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
++            }
++            if (!c.isOpen()) {
++                throw new ResponseStatusException(HttpStatus.CONFLICT, "No open clarification on this entry");
++            }
++        } else {
++            List<EodClarification> open = clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(entry.getId()).stream()
++                    .filter(EodClarification::isOpen).toList();
++            c = open.stream()
++                    .filter(r -> asReviewer
++                            ? EodClarificationAccessPolicy.canReviewRound(actor, entry, r, pieces)
++                            : EodClarificationAccessPolicy.canReplyRound(actor, entry, r, pieces))
++                    .findFirst()
++                    .orElse(null);
++            if (c == null) {
++                if (open.isEmpty()) {
++                    throw new ResponseStatusException(HttpStatus.CONFLICT, "No open clarification on this entry");
++                }
++                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
++                        "The open clarification on this entry belongs to another project");
++            }
++        }
++        boolean allowed = asReviewer
++                ? EodClarificationAccessPolicy.canReviewRound(actor, entry, c, pieces)
++                : EodClarificationAccessPolicy.canReplyRound(actor, entry, c, pieces);
++        if (!allowed) {
++            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
++                    "You cannot act on another project's clarification");
++        }
++        return c;
++    }
++
+     /** Opens a new round (Approvals' "Request Clarification" action). {@code message} is optional
+      *  — the button opens an empty round and the TL is navigated to EOD Inbox to type the actual
+      *  question there, same as opening a Blocker conversation doesn't require a first message
+@@ -139,6 +259,13 @@ public class EodClarificationService {
+      *  (EOD_CLARIFICATION_REQUESTED), not a second "reply" one. */
+     public EodClarificationStatusDto open(Long entryId, String actingEmail, String message,
+                                            List<MultipartFile> files) {
++        return open(entryId, actingEmail, message, files, null);
++    }
++
++    /** As above, on a specific piece: {@code pieceId} picks which of the opener's own pending pieces the round
++     *  is about (only needed by a lead of two projects on one EOD; otherwise his single piece is used). */
++    public EodClarificationStatusDto open(Long entryId, String actingEmail, String message,
++                                           List<MultipartFile> files, Long pieceId) {
+         AppUser lead = requireUser(actingEmail);
+         EodEntry entry = requireEntry(entryId);
+         List<EodProjectApproval> pieces = currentPieces(entryId);
+@@ -156,7 +283,14 @@ public class EodClarificationService {
+             throw new ResponseStatusException(HttpStatus.CONFLICT,
+                     "Clarification can only be requested while at least one piece of this entry is pending");
+         }
+-        if (clarificationRepository.existsByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)) {
++        // The round is about the opener's OWN piece (one project + one lead). Another project's lead can have
++        // a round of his own open at the same time; only a round on THIS piece, or a legacy entry-wide one,
++        // is in the way.
++        EodProjectApproval piece = pieceForNewRound(lead, entry, pieces, pieceId);
++        // (A legacy round with no piece only gets in the way of ITS OWN opener — another lead is unaffected.)
++        if (clarificationRepository.existsByPiece_IdAndStatusNot(piece.getId(), EodClarification.Status.RESOLVED)
++                || clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(
++                        entryId, EodClarification.Status.RESOLVED, lead.getId())) {
+             throw new ResponseStatusException(HttpStatus.CONFLICT,
+                     "A clarification is already open on this entry");
+         }
+@@ -168,6 +302,7 @@ public class EodClarificationService {
+         EodClarification clarification = new EodClarification();
+         clarification.setEodEntry(entry);
+         clarification.setOpenedBy(lead);
++        clarification.setPiece(piece);
+         // Snapshot only when the opener really was an approver / escalatee at this moment — a
+         // Super Admin opening on someone else's behalf leaves it null. Audit/fallback only.
+         if (EodClarificationAccessPolicy.isCurrentApprover(lead, pieces)) {
+@@ -181,26 +316,62 @@ public class EodClarificationService {
+             saveReply(clarification, lead, message, files);
+         }
+ 
++        // Only the employee is told when a round opens — never another project's lead. The text names the project
++        // so the employee knows which lead is asking when two rounds are open.
++        String forProject = piece.getProject() != null ? " (" + piece.getProject().getName() + ")" : "";
+         notificationService.send(entry.getEmployee().getId(), "EOD_CLARIFICATION_REQUESTED",
+-                "Clarification requested on your EOD entry",
++                "Clarification requested on your EOD entry" + forProject,
+                 lead.getFullName() + " requested clarification on your EOD entry for "
+-                        + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + ".",
++                        + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + forProject + ".",
+                 "/employee/eod-inbox?highlight=" + entry.getId());
+ 
+         return statusDto(clarification, lead, entry, pieces);
+     }
+ 
++    /** The opener's own still-pending piece the new round attaches to. A lead of two projects on this EOD
++     *  must say which ({@code pieceId}); a piece he does not hold in a reviewing capacity is refused. */
++    private EodProjectApproval pieceForNewRound(AppUser lead, EodEntry entry, List<EodProjectApproval> pieces, Long pieceId) {
++        List<EodProjectApproval> mine = EodClarificationAccessPolicy.openablePieces(lead, entry, pieces);
++        if (pieceId != null) {
++            return mine.stream().filter(p -> p.getId().equals(pieceId)).findFirst()
++                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
++                            "You can only request clarification on your own project's portion"));
++        }
++        // No explicit piece: the first of his pieces that has no open round yet (usually he has just one).
++        return mine.stream()
++                .filter(p -> !clarificationRepository.existsByPiece_IdAndStatusNot(p.getId(), EodClarification.Status.RESOLVED))
++                .findFirst()
++                .or(() -> mine.stream().findFirst())
++                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
++                        "Only an approver with a pending review on this entry can manage a clarification on it"));
++    }
++
+     /** Marks every clarification round against this entry as read by the caller (opening the EOD
+      *  Inbox row's conversation panel) — same read-access check as getThread(). All of an entry's
+      *  rounds, not just the latest: the EOD Inbox list shows each round as its own row, but every
+      *  row for the same entry opens the exact same latest-round thread (getThread only ever
+      *  returns the latest round), so a historical round has no other way to ever be marked read. */
+     public void markRead(Long entryId, String actingEmail) {
++        markRead(entryId, actingEmail, null);
++    }
++
++    /** As above, but for ONE round when {@code clarificationId} is given — opening one project's thread must not
++     *  clear the unread dot of another project's. 404 / 403 as for any round the viewer may not see. */
++    public void markRead(Long entryId, String actingEmail, Long clarificationId) {
+         AppUser actor = requireUser(actingEmail);
+         EodEntry entry = requireEntry(entryId);
+-        EodClarificationAccessPolicy.requireCanRead(actor, entry, currentPieces(entryId));
++        List<EodProjectApproval> pieces = currentPieces(entryId);
++        EodClarificationAccessPolicy.requireCanRead(actor, entry, pieces);
+ 
+-        List<EodClarification> rounds = clarificationRepository.findByEodEntryId(entryId);
++        // Only the rounds this viewer may read — a lead marks his own project's rounds, never another's.
++        List<EodClarification> rounds;
++        if (clarificationId != null) {
++            EodClarification one = requireRoundOnEntry(entry, clarificationId);
++            requireCanReadRound(actor, entry, one, pieces);
++            rounds = List.of(one);
++        } else {
++            rounds = visibleRounds(actor, entry, pieces);
++        }
+         if (rounds.isEmpty()) return;
+ 
+         // Batched (one SELECT + one JDBC-batched save) rather than a find-then-save round trip per
+@@ -240,15 +411,19 @@ public class EodClarificationService {
+     }
+ 
+     public EodClarificationReplyDto reply(Long entryId, String actingEmail, String message, List<MultipartFile> files) {
++        return reply(entryId, actingEmail, message, files, null);
++    }
++
++    /** Posts into one round: {@code clarificationId} when given (the employee's pick when two leads asked),
++     *  otherwise the viewer's own open round. A lead can only post in the round on his own piece. */
++    public EodClarificationReplyDto reply(Long entryId, String actingEmail, String message, List<MultipartFile> files,
++                                           Long clarificationId) {
+         AppUser actor = requireUser(actingEmail);
+         EodEntry entry = requireEntry(entryId);
+         List<EodProjectApproval> pieces = currentPieces(entryId);
+         EodClarificationAccessPolicy.requireCanReply(actor, entry, pieces);
+ 
+-        EodClarification clarification = clarificationRepository
+-                .findByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)
+-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+-                        "No open clarification on this entry"));
++        EodClarification clarification = selectOpenRound(actor, entry, pieces, clarificationId, false);
+ 
+         EodClarificationReply saved = saveReply(clarification, actor, message, files);
+ 
+@@ -278,14 +453,16 @@ public class EodClarificationService {
+                 notificationService.send(recipient.getId(), "EOD_CLARIFICATION_REPLY",
+                         "New reply on an EOD clarification",
+                         actor.getFullName() + " replied on the clarification for their EOD entry ("
+-                                + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + ").",
++                                + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate())
++                                + projectSuffix(clarification) + ").",
+                         reviewerInboxLink(recipient, entry, pieces));
+             }
+         } else {
+             notificationService.send(entry.getEmployee().getId(), "EOD_CLARIFICATION_REPLY",
+                     actor.getFullName() + " replied to your clarification",
+                     actor.getFullName() + " replied on the clarification for your EOD entry ("
+-                            + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate()) + ").",
++                            + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate())
++                            + projectSuffix(clarification) + ").",
+                     "/employee/eod-inbox?highlight=" + entry.getId());
+         }
+ 
+@@ -300,7 +477,9 @@ public class EodClarificationService {
+         AppUser actor = requireUser(actingEmail);
+         EodClarificationReply reply = requireReply(replyId);
+         EodEntry entry = reply.getClarification().getEodEntry();
+-        EodClarificationAccessPolicy.requireCanReply(actor, entry, currentPieces(entry.getId()));
++        List<EodProjectApproval> pieces = currentPieces(entry.getId());
++        EodClarificationAccessPolicy.requireCanReply(actor, entry, pieces);
++        requireCanReadRound(actor, entry, reply.getClarification(), pieces);
+         requireOwnReply(reply, actor);
+         requireClarificationNotResolved(reply.getClarification());
+         updateMessage(reply, message);
+@@ -310,7 +489,9 @@ public class EodClarificationService {
+         AppUser actor = requireUser(actingEmail);
+         EodClarificationReply reply = requireReply(replyId);
+         EodEntry entry = reply.getClarification().getEodEntry();
+-        EodClarificationAccessPolicy.requireCanReply(actor, entry, currentPieces(entry.getId()));
++        List<EodProjectApproval> pieces = currentPieces(entry.getId());
++        EodClarificationAccessPolicy.requireCanReply(actor, entry, pieces);
++        requireCanReadRound(actor, entry, reply.getClarification(), pieces);
+         requireOwnReply(reply, actor);
+         requireClarificationNotResolved(reply.getClarification());
+         deleteReplyInternal(reply);
+@@ -327,7 +508,9 @@ public class EodClarificationService {
+         EodClarificationReplyAttachment attachment = attachmentRepository.findById(attachmentId)
+                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attachment not found"));
+         EodEntry entry = attachment.getReply().getClarification().getEodEntry();
+-        EodClarificationAccessPolicy.requireCanRead(actor, entry, currentPieces(entry.getId()));
++        List<EodProjectApproval> pieces = currentPieces(entry.getId());
++        EodClarificationAccessPolicy.requireCanRead(actor, entry, pieces);
++        requireCanReadRound(actor, entry, attachment.getReply().getClarification(), pieces);
+         return attachment;
+     }
+ 
+@@ -339,15 +522,18 @@ public class EodClarificationService {
+      * "Request Clarification" click opens a fresh round.
+      */
+     public EodClarificationStatusDto setStatus(Long entryId, String actingEmail, String status) {
++        return setStatus(entryId, actingEmail, status, null);
++    }
++
++    /** Changes / resolves the viewer's own round only. Resolving it unblocks only that piece — another
++     *  project's open round, and every piece's approval state, are untouched. */
++    public EodClarificationStatusDto setStatus(Long entryId, String actingEmail, String status, Long clarificationId) {
+         AppUser lead = requireUser(actingEmail);
+         EodEntry entry = requireEntry(entryId);
+         List<EodProjectApproval> pieces = currentPieces(entryId);
+         EodClarificationAccessPolicy.requireCanOpenOrResolve(lead, entry, pieces);
+ 
+-        EodClarification clarification = clarificationRepository
+-                .findByEodEntryIdAndStatusNot(entryId, EodClarification.Status.RESOLVED)
+-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+-                        "No open clarification on this entry"));
++        EodClarification clarification = selectOpenRound(lead, entry, pieces, clarificationId, true);
+ 
+         EodClarification.Status newStatus;
+         try {
+@@ -369,6 +555,7 @@ public class EodClarificationService {
+                     "Clarification resolved",
+                     "The clarification on your EOD entry for "
+                             + com.nforceone.sync.notification.NotificationDates.format(entry.getEntryDate())
++                            + projectParen(clarification)
+                             + " has been marked resolved. It is back in review.",
+                     "/employee/eod-inbox?highlight=" + entry.getId());
+         }
+@@ -440,18 +627,40 @@ public class EodClarificationService {
+                 || entry.getStatus() == EodEntry.Status.PARTIALLY_APPROVED;
+     }
+ 
+-    private static boolean canOpenNewRound(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
+-        return isOpenableStatus(entry) && EodClarificationAccessPolicy.canReview(actor, entry, pieces);
++    /** May the actor start a round of his own: an openable entry and a pending piece he reviews that has no open
++     *  round yet (his own piece's round — another project's open round is not in the way). */
++    private boolean canOpenNewRound(AppUser actor, EodEntry entry, List<EodProjectApproval> pieces) {
++        if (!isOpenableStatus(entry)) return false;
++        return EodClarificationAccessPolicy.openablePieces(actor, entry, pieces).stream()
++                .anyMatch(p -> !clarificationRepository.existsByPiece_IdAndStatusNot(p.getId(), EodClarification.Status.RESOLVED))
++                && !clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(
++                        entry.getId(), EodClarification.Status.RESOLVED, actor.getId());
+     }
+ 
+-    private static EodClarificationStatusDto statusDto(EodClarification c, AppUser actor, EodEntry entry,
+-                                                        List<EodProjectApproval> pieces) {
++    private EodClarificationStatusDto statusDto(EodClarification c, AppUser actor, EodEntry entry,
++                                                 List<EodProjectApproval> pieces) {
+         boolean open = c.isOpen();
+         return EodClarificationStatusDto.from(c,
+                 !open && canOpenNewRound(actor, entry, pieces),
+-                open && EodClarificationAccessPolicy.canReply(actor, entry, pieces),
+-                // Resolving is a reviewer action: the owner can reply but never resolve.
+-                open && EodClarificationAccessPolicy.canReview(actor, entry, pieces));
++                open && EodClarificationAccessPolicy.canReplyRound(actor, entry, c, pieces),
++                // Resolving is a reviewer action on the viewer's OWN round: the owner can reply but never resolve.
++                open && EodClarificationAccessPolicy.canReviewRound(actor, entry, c, pieces));
++    }
++
++    private void requireCanReadRound(AppUser actor, EodEntry entry, EodClarification round, List<EodProjectApproval> pieces) {
++        if (!EodClarificationAccessPolicy.canReadRound(actor, entry, round, pieces)) {
++            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
++        }
++    }
++
++    /** ", SYNC" — which project's lead the round is about, for use inside an existing parenthesis. */
++    private static String projectSuffix(EodClarification c) {
++        return c.getPiece() != null && c.getPiece().getProject() != null ? ", " + c.getPiece().getProject().getName() : "";
++    }
++
++    /** " (SYNC)" — same, standing alone. */
++    private static String projectParen(EodClarification c) {
++        return c.getPiece() != null && c.getPiece().getProject() != null ? " (" + c.getPiece().getProject().getName() + ")" : "";
+     }
+ 
+     /** Who to ping when the employee replies: the approver and escalated-to PM of every PENDING
+@@ -460,8 +669,20 @@ public class EodClarificationService {
+     private List<AppUser> reviewerRecipients(EodClarification clarification, EodEntry entry,
+                                               List<EodProjectApproval> pieces) {
+         Map<Long, AppUser> byId = new java.util.LinkedHashMap<>();
++        if (clarification.getPiece() == null) {
++            // A legacy round belongs to its opener alone — never ping another project's lead about a thread
++            // they cannot see.
++            AppUser opener = clarification.getOpenedByApprover() != null
++                    ? clarification.getOpenedByApprover() : clarification.getOpenedBy();
++            if (opener != null && !opener.getId().equals(entry.getEmployee().getId())) {
++                byId.put(opener.getId(), opener);
++            }
++            return new ArrayList<>(byId.values());
++        }
+         for (EodProjectApproval p : pieces) {
+             if (p.getStatus() != EodProjectApproval.Status.PENDING) continue;
++            // A per-piece round pings only the lead (and escalatee) of ITS piece — never another project's lead.
++            if (clarification.getPiece() != null && !p.getId().equals(clarification.getPiece().getId())) continue;
+             if (p.getApprover() != null) byId.putIfAbsent(p.getApprover().getId(), p.getApprover());
+             if (p.getEscalatedTo() != null) byId.putIfAbsent(p.getEscalatedTo().getId(), p.getEscalatedTo());
+         }
+diff --git a/backend/src/main/java/com/nforceone/sync/eod/dto/EodClarificationStatusDto.java b/backend/src/main/java/com/nforceone/sync/eod/dto/EodClarificationStatusDto.java
+index 656029c..46e68f2 100644
+--- a/backend/src/main/java/com/nforceone/sync/eod/dto/EodClarificationStatusDto.java
++++ b/backend/src/main/java/com/nforceone/sync/eod/dto/EodClarificationStatusDto.java
+@@ -27,10 +27,15 @@ public record EodClarificationStatusDto(
+         String         resolvedByName,
+         boolean        canOpen,
+         boolean        canReply,
+-        boolean        canResolve
++        boolean        canResolve,
++        /** The approval piece (one project + one lead) this round belongs to — it blocks only that piece.
++         *  Null for a legacy round, which blocks the whole entry. */
++        Long           pieceId,
++        /** Name of that piece's project, so the employee sees which project's lead asked. Null for legacy rows. */
++        String         projectName
+ ) {
+     public static EodClarificationStatusDto none(boolean canOpen) {
+-        return new EodClarificationStatusDto(null, false, null, null, null, null, null, canOpen, false, false);
++        return new EodClarificationStatusDto(null, false, null, null, null, null, null, canOpen, false, false, null, null);
+     }
+ 
+     public static EodClarificationStatusDto from(EodClarification c, boolean canOpen, boolean canReply,
+@@ -45,7 +50,9 @@ public record EodClarificationStatusDto(
+                 c.getResolvedBy() != null ? c.getResolvedBy().getFullName() : null,
+                 canOpen,
+                 canReply,
+-                canResolve
++                canResolve,
++                c.getPiece() != null ? c.getPiece().getId() : null,
++                c.getPiece() != null && c.getPiece().getProject() != null ? c.getPiece().getProject().getName() : null
+         );
+     }
+ }
+diff --git a/backend/src/main/java/com/nforceone/sync/eod/dto/EodInboxItemDto.java b/backend/src/main/java/com/nforceone/sync/eod/dto/EodInboxItemDto.java
+index 718e48f..44671c1 100644
+--- a/backend/src/main/java/com/nforceone/sync/eod/dto/EodInboxItemDto.java
++++ b/backend/src/main/java/com/nforceone/sync/eod/dto/EodInboxItemDto.java
+@@ -35,7 +35,11 @@ public record EodInboxItemDto(
+         OffsetDateTime lastMessageAt,
+         String         lastMessageSenderName,
+         String         lastMessageSenderRole,
+-        boolean        unread
++        boolean        unread,
++        /** The approval piece this round belongs to (null for a legacy round) and that piece's project —
++         *  which project's lead asked. Distinct from projectName/projectNames, which are the entry's tasks. */
++        Long           pieceId,
++        String         pieceProjectName
+ ) {
+     /** @param viewerLastReadAt the viewing user's last_read_at for this round (null if never
+      *                          opened) — used with lastReply/openedAt to derive `unread`; see
+@@ -75,7 +79,9 @@ public record EodInboxItemDto(
+                 lastActivityAt,
+                 lastReply != null ? lastReply.getSender().getFullName() : null,
+                 lastReply != null ? (lastSenderIsEmployee ? "EMPLOYEE" : "TEAM_LEAD") : null,
+-                unread
++                unread,
++                c.getPiece() != null ? c.getPiece().getId() : null,
++                c.getPiece() != null && c.getPiece().getProject() != null ? c.getPiece().getProject().getName() : null
+         );
+     }
+ }
+diff --git a/backend/src/main/java/com/nforceone/sync/pmblockers/PmEodInboxController.java b/backend/src/main/java/com/nforceone/sync/pmblockers/PmEodInboxController.java
+index 3c6d609..f6756b6 100644
+--- a/backend/src/main/java/com/nforceone/sync/pmblockers/PmEodInboxController.java
++++ b/backend/src/main/java/com/nforceone/sync/pmblockers/PmEodInboxController.java
+@@ -38,15 +38,17 @@ public class PmEodInboxController {
+     // Read-only thread view — a PM can see what was discussed, just not reply (no POST endpoint
+     // wired here at all, matching PmBlockersController's omission pattern).
+     @GetMapping("/{entryId}/replies")
+-    public List<EodClarificationReplyDto> getReplies(@PathVariable Long entryId) {
+-        return clarificationService.getThread(entryId, actingEmail());
++    public List<EodClarificationReplyDto> getReplies(@PathVariable Long entryId,
++            @RequestParam(required = false) Long clarificationId) {
++        return clarificationService.getThread(entryId, actingEmail(), clarificationId);
+     }
+ 
+     // Opening the EOD Inbox row's conversation panel — marks the round read for this PM (even
+     // though they can't reply), clearing the unread/bold indicator on their own copy of the row.
+     @PostMapping("/{entryId}/read")
+-    public void markRead(@PathVariable Long entryId) {
+-        clarificationService.markRead(entryId, actingEmail());
++    public void markRead(@PathVariable Long entryId,
++            @RequestParam(required = false) Long clarificationId) {
++        clarificationService.markRead(entryId, actingEmail(), clarificationId);
+     }
+ 
+     // Read-only download — same access check (EodClarificationAccessPolicy.requireCanRead) as
+diff --git a/backend/src/main/java/com/nforceone/sync/teamlead/TeamLeadController.java b/backend/src/main/java/com/nforceone/sync/teamlead/TeamLeadController.java
+index 3984dec..6c58215 100644
+--- a/backend/src/main/java/com/nforceone/sync/teamlead/TeamLeadController.java
++++ b/backend/src/main/java/com/nforceone/sync/teamlead/TeamLeadController.java
+@@ -156,20 +156,23 @@ public class TeamLeadController {
+     }
+ 
+     @GetMapping("/eod/{entryId}/clarification")
+-    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId) {
+-        return clarificationService.getStatus(entryId, actingEmail());
++    public EodClarificationStatusDto getClarificationStatus(@PathVariable Long entryId,
++            @RequestParam(required = false) Long clarificationId) {
++        return clarificationService.getStatus(entryId, actingEmail(), clarificationId);
+     }
+ 
+     @GetMapping("/eod/{entryId}/clarification/replies")
+-    public List<EodClarificationReplyDto> getClarificationReplies(@PathVariable Long entryId) {
+-        return clarificationService.getThread(entryId, actingEmail());
++    public List<EodClarificationReplyDto> getClarificationReplies(@PathVariable Long entryId,
++            @RequestParam(required = false) Long clarificationId) {
++        return clarificationService.getThread(entryId, actingEmail(), clarificationId);
+     }
+ 
+     // Opening the EOD Inbox row's conversation panel — marks the round read for this TL, clearing
+     // the unread/bold indicator on the row (see EodClarificationService.markRead).
+     @PostMapping("/eod/{entryId}/clarification/read")
+-    public void markClarificationRead(@PathVariable Long entryId) {
+-        clarificationService.markRead(entryId, actingEmail());
++    public void markClarificationRead(@PathVariable Long entryId,
++            @RequestParam(required = false) Long clarificationId) {
++        clarificationService.markRead(entryId, actingEmail(), clarificationId);
+     }
+ 
+     // Opens a new round — the Approvals detail popup's "Request Clarification" action. No message
+@@ -180,8 +183,10 @@ public class TeamLeadController {
+     @PostMapping("/eod/{entryId}/clarification")
+     public EodClarificationStatusDto openClarification(
+             @PathVariable Long entryId,
+-            @RequestBody(required = false) EodClarificationMessageRequest body) {
+-        return clarificationService.open(entryId, actingEmail(), body != null ? body.message() : null);
++            @RequestBody(required = false) EodClarificationMessageRequest body,
++            @RequestParam(required = false) Long pieceId) {
++        return clarificationService.open(entryId, actingEmail(), body != null ? body.message() : null,
++                List.of(), pieceId);
+     }
+ 
+     // Opens a round WITH its first message (and optional attachments) in one transaction — the
+@@ -192,8 +197,9 @@ public class TeamLeadController {
+     public EodClarificationStatusDto openClarificationWithMessage(
+             @PathVariable Long entryId,
+             @RequestParam(required = false) String message,
+-            @RequestParam(required = false) List<MultipartFile> files) {
+-        return clarificationService.open(entryId, actingEmail(), message, files);
++            @RequestParam(required = false) List<MultipartFile> files,
++            @RequestParam(required = false) Long pieceId) {
++        return clarificationService.open(entryId, actingEmail(), message, files, pieceId);
+     }
+ 
+     // Multipart, not JSON — matches Blockers' postBlockerReply exactly (message + files together),
+@@ -202,8 +208,9 @@ public class TeamLeadController {
+     public EodClarificationReplyDto postClarificationReply(
+             @PathVariable Long entryId,
+             @RequestParam(required = false) String message,
+-            @RequestParam(required = false) List<MultipartFile> files) {
+-        return clarificationService.reply(entryId, actingEmail(), message, files);
++            @RequestParam(required = false) List<MultipartFile> files,
++            @RequestParam(required = false) Long clarificationId) {
++        return clarificationService.reply(entryId, actingEmail(), message, files, clarificationId);
+     }
+ 
+     @PutMapping("/eod/clarification/replies/{replyId}")
+@@ -230,8 +237,9 @@ public class TeamLeadController {
+     @PatchMapping("/eod/{entryId}/clarification/status")
+     public EodClarificationStatusDto setClarificationStatus(
+             @PathVariable Long entryId,
+-            @RequestBody EodClarificationStatusRequest body) {
+-        return clarificationService.setStatus(entryId, actingEmail(), body.status());
++            @RequestBody EodClarificationStatusRequest body,
++            @RequestParam(required = false) Long clarificationId) {
++        return clarificationService.setStatus(entryId, actingEmail(), body.status(), clarificationId);
+     }
+ 
+     // Reuses the existing Admin Config (business_rule_config) row — this just exposes the
+diff --git a/backend/src/test/java/com/nforceone/sync/approval2/ApprovalPieceClarificationGateTest.java b/backend/src/test/java/com/nforceone/sync/approval2/ApprovalPieceClarificationGateTest.java
+index e297d6e..bece4ec 100644
+--- a/backend/src/test/java/com/nforceone/sync/approval2/ApprovalPieceClarificationGateTest.java
++++ b/backend/src/test/java/com/nforceone/sync/approval2/ApprovalPieceClarificationGateTest.java
+@@ -29,17 +29,14 @@ import java.util.Optional;
+ 
+ import static org.junit.jupiter.api.Assertions.*;
+ import static org.mockito.ArgumentMatchers.any;
+-import static org.mockito.ArgumentMatchers.eq;
+ import static org.mockito.Mockito.*;
+ 
+ /**
+- * v2 piece approve/reject must honour an open EOD clarification round — the legacy
+- * ApprovalService already did, the piece path did not.
++ * v2 piece approve/reject must honour an open EOD clarification round.
+  *
+- * Rounds are per ENTRY (per-piece scoping is deferred), so the gate is entry-wide: a round open
+- * on an entry blocks approve and reject of EVERY piece on that entry, including pieces owned by a
+- * different approver than the one who raised the clarification. The entry-wide tests below pin
+- * that behaviour so a later per-piece change has to update them deliberately.
++ * Clarification state is per PIECE (one project + one lead): a round blocks approve and reject of ITS OWN
++ * piece only, so the other project's lead keeps full access to theirs — in both directions. A legacy round
++ * (no piece) keeps the old behaviour and blocks every piece of the entry.
+  */
+ @ExtendWith(MockitoExtension.class)
+ class ApprovalPieceClarificationGateTest {
+@@ -59,6 +56,7 @@ class ApprovalPieceClarificationGateTest {
+ 
+     private static final String LEAD_A_EMAIL = "lead.a@example.com";
+     private static final String LEAD_B_EMAIL = "lead.b@example.com";
++    private static final EodClarification.Status RESOLVED = EodClarification.Status.RESOLVED;
+ 
+     private AppUser leadA;
+     private AppUser leadB;
+@@ -86,6 +84,11 @@ class ApprovalPieceClarificationGateTest {
+         lenient().when(userRepository.findByEmailAndDeletedAtIsNull(LEAD_B_EMAIL)).thenReturn(Optional.of(leadB));
+         lenient().when(pieceRepository.findById(1L)).thenReturn(Optional.of(pieceA));
+         lenient().when(pieceRepository.findById(2L)).thenReturn(Optional.of(pieceB));
++        lenient().when(pieceRepository.findByEodEntryId(200L)).thenReturn(List.of(pieceA, pieceB));
++        lenient().when(entryRepository.save(any())).thenReturn(entry);
++        // No clarification anywhere unless a test opens one.
++        lenient().when(clarificationRepository.existsByPiece_IdAndStatusNot(any(), any())).thenReturn(false);
++        lenient().when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(any(), any(), any())).thenReturn(false);
+     }
+ 
+     private AppUser user(Long id, String name, String email) {
+@@ -111,9 +114,9 @@ class ApprovalPieceClarificationGateTest {
+         return p;
+     }
+ 
+-    private void roundIsOpen(boolean open) {
+-        when(clarificationRepository.existsByEodEntryIdAndStatusNot(200L, EodClarification.Status.RESOLVED))
+-                .thenReturn(open);
++    /** An open round on exactly this piece (the other piece, and legacy rounds, stay unblocked). */
++    private void roundOpenOnPiece(Long pieceId) {
++        lenient().when(clarificationRepository.existsByPiece_IdAndStatusNot(pieceId, RESOLVED)).thenReturn(true);
+     }
+ 
+     private static void assertConflict(ResponseStatusException ex) {
+@@ -121,11 +124,11 @@ class ApprovalPieceClarificationGateTest {
+         assertTrue(ex.getReason().contains("open clarification"), ex.getReason());
+     }
+ 
+-    // ── gate blocks while a round is open ────────────────────────────────────
++    // ── a round blocks its own piece ─────────────────────────────────────────
+ 
+     @Test
+-    void approve_whileRoundOpen_gets409_andNothingIsSaved() {
+-        roundIsOpen(true);
++    void approve_whileOwnPieceHasOpenRound_gets409_andNothingIsSaved() {
++        roundOpenOnPiece(1L);
+ 
+         assertConflict(assertThrows(ResponseStatusException.class,
+                 () -> service.approve(1L, LEAD_A_EMAIL, null)));
+@@ -135,8 +138,8 @@ class ApprovalPieceClarificationGateTest {
+     }
+ 
+     @Test
+-    void reject_whileRoundOpen_gets409_andNothingIsSaved() {
+-        roundIsOpen(true);
++    void reject_whileOwnPieceHasOpenRound_gets409_andNothingIsSaved() {
++        roundOpenOnPiece(1L);
+ 
+         assertConflict(assertThrows(ResponseStatusException.class,
+                 () -> service.reject(1L, LEAD_A_EMAIL, "needs rework")));
+@@ -145,49 +148,177 @@ class ApprovalPieceClarificationGateTest {
+         assertEquals(EodProjectApproval.Status.PENDING, pieceA.getStatus());
+     }
+ 
+-    // ── entry-wide scope (rounds are per entry; per-piece is deferred) ───────
++    // ── per-piece scope: the OTHER lead is not blocked ───────────────────────
+ 
+     @Test
+-    void openRound_blocksApproveAndRejectOfEveryPieceOnTheEntry() {
+-        // One round on the entry, however it was raised. Both pieces — owned by two different
+-        // approvers — are blocked, for both actions.
+-        roundIsOpen(true);
++    void roundOnPieceA_doesNotBlockLeadB_approve() {
++        roundOpenOnPiece(1L);
++
++        service.approve(2L, LEAD_B_EMAIL, null);
++
++        assertEquals(EodProjectApproval.Status.APPROVED, pieceB.getStatus());
++        assertEquals(EodProjectApproval.Status.PENDING, pieceA.getStatus());
++    }
++
++    @Test
++    void roundOnPieceA_doesNotBlockLeadB_reject() {
++        roundOpenOnPiece(1L);
++
++        service.reject(2L, LEAD_B_EMAIL, "not enough detail");
++
++        assertEquals(EodProjectApproval.Status.REJECTED, pieceB.getStatus());
++        // ...while A's own piece is still pending and still blocked.
++        assertEquals(EodProjectApproval.Status.PENDING, pieceA.getStatus());
++    }
++
++    @Test
++    void bothLeadsHaveOpenRounds_eachIsBlockedOnlyOnTheirOwnPiece() {
++        roundOpenOnPiece(1L);
++        roundOpenOnPiece(2L);
+ 
+         assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(1L, LEAD_A_EMAIL, null)));
++        assertConflict(assertThrows(ResponseStatusException.class, () -> service.reject(2L, LEAD_B_EMAIL, "no")));
++
++        // Resolving A's round unblocks A only: B is still blocked.
++        when(clarificationRepository.existsByPiece_IdAndStatusNot(1L, RESOLVED)).thenReturn(false);
++        service.approve(1L, LEAD_A_EMAIL, null);
++        assertEquals(EodProjectApproval.Status.APPROVED, pieceA.getStatus());
++        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(2L, LEAD_B_EMAIL, null)));
++        assertEquals(EodProjectApproval.Status.PENDING, pieceB.getStatus());
++    }
++
++    @Test
++    void threeProjectsOnOneEod_aRoundOnTheMiddleOneBlocksOnlyThatPiece() {
++        AppUser leadC = user(12L, "Lead C", "lead.c@example.com");
++        EodProjectApproval pieceC = piece(3L, leadC, "Project C");
++        lenient().when(userRepository.findByEmailAndDeletedAtIsNull("lead.c@example.com")).thenReturn(Optional.of(leadC));
++        lenient().when(pieceRepository.findById(3L)).thenReturn(Optional.of(pieceC));
++        lenient().when(pieceRepository.findByEodEntryId(200L)).thenReturn(List.of(pieceA, pieceB, pieceC));
++        roundOpenOnPiece(2L);   // only Project B's round
++
++        service.approve(1L, LEAD_A_EMAIL, null);
++        service.reject(3L, "lead.c@example.com", "needs rework");
+         assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(2L, LEAD_B_EMAIL, null)));
+-        assertConflict(assertThrows(ResponseStatusException.class, () -> service.reject(1L, LEAD_A_EMAIL, "no")));
+         assertConflict(assertThrows(ResponseStatusException.class, () -> service.reject(2L, LEAD_B_EMAIL, "no")));
+ 
+-        verify(pieceRepository, never()).save(any());
++        assertEquals(EodProjectApproval.Status.APPROVED, pieceA.getStatus());
++        assertEquals(EodProjectApproval.Status.REJECTED, pieceC.getStatus());
++        assertEquals(EodProjectApproval.Status.PENDING, pieceB.getStatus());
+     }
+ 
+     @Test
+-    void gate_isKeyedOnTheEntry_notOnThePiece() {
+-        roundIsOpen(true);
++    void gate_isKeyedOnThePiece_withAnEntryLevelCheckOnlyForLegacyRounds() {
++        roundOpenOnPiece(2L);
+ 
+         assertThrows(ResponseStatusException.class, () -> service.approve(2L, LEAD_B_EMAIL, null));
+ 
+-        // The lookup uses the ENTRY id shared by both pieces (200), never a piece id (1 or 2).
+-        verify(clarificationRepository).existsByEodEntryIdAndStatusNot(200L, EodClarification.Status.RESOLVED);
+-        verify(clarificationRepository, never()).existsByEodEntryIdAndStatusNot(eq(1L), any());
+-        verify(clarificationRepository, never()).existsByEodEntryIdAndStatusNot(eq(2L), any());
++        verify(clarificationRepository).existsByPiece_IdAndStatusNot(2L, RESOLVED);
++        // The entry-level lookup is restricted to rounds with no piece (legacy), never "any open round".
++        verify(clarificationRepository, never()).existsByEodEntryIdAndStatusNot(any(), any());
+     }
+ 
++    // ── legacy (null-piece) round blocks only the pieces its OPENER holds ────
++
++    @Test
++    void legacyRoundWithoutAPiece_blocksOnlyTheOpenersPieces_neverAnotherLeads() {
++        // Lead A (id 10) opened a legacy round on the entry.
++        when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(200L, RESOLVED, 10L))
++                .thenReturn(true);
++
++        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(1L, LEAD_A_EMAIL, null)));
++        assertConflict(assertThrows(ResponseStatusException.class, () -> service.reject(1L, LEAD_A_EMAIL, "no")));
++        assertEquals(EodProjectApproval.Status.PENDING, pieceA.getStatus());
++
++        // Lead B is not blocked by a thread they cannot see.
++        service.approve(2L, LEAD_B_EMAIL, null);
++        assertEquals(EodProjectApproval.Status.APPROVED, pieceB.getStatus());
++    }
++
++    @Test
++    void legacyRound_doesNotBlockAPieceThatIsNowEscalatedToAPm_butStillBlocksOnesTheOpenerHolds() {
++        // Lead A opened a legacy round. His piece A has since been escalated to a PM; piece C is still his.
++        AppUser pm = user(30L, "PM P", "pm@example.com");
++        lenient().when(userRepository.findByEmailAndDeletedAtIsNull("pm@example.com")).thenReturn(Optional.of(pm));
++        EodProjectApproval pieceC = piece(3L, leadA, "Project C");
++        lenient().when(pieceRepository.findById(3L)).thenReturn(Optional.of(pieceC));
++        lenient().when(pieceRepository.findByEodEntryId(200L)).thenReturn(List.of(pieceA, pieceB, pieceC));
++        pieceA.setEscalatedTo(pm);
++        when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(200L, RESOLVED, 10L))
++                .thenReturn(true);
++
++        // The escalated piece is not blocked: the PM, and the opener himself, can decide it.
++        service.approve(1L, "pm@example.com", null);
++        assertEquals(EodProjectApproval.Status.APPROVED, pieceA.getStatus());
++
++        // The piece the opener still holds is blocked, as before.
++        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(3L, LEAD_A_EMAIL, null)));
++        assertEquals(EodProjectApproval.Status.PENDING, pieceC.getStatus());
++    }
++
++    @Test
++    void legacyRound_doesNotBlockTheOpenersOwnEscalatedPiece_whenHeActsOnItHimself() {
++        AppUser pm = user(30L, "PM P", "pm@example.com");
++        pieceA.setEscalatedTo(pm);
++        lenient().when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(200L, RESOLVED, 10L))
++                .thenReturn(true);
++
++        service.reject(1L, LEAD_A_EMAIL, "not enough detail");
++
++        assertEquals(EodProjectApproval.Status.REJECTED, pieceA.getStatus());
++        // The escalated piece never even consults the legacy round.
++        verify(clarificationRepository, never())
++                .existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(any(), any(), any());
++    }
++
++    @Test
++    void legacyRoundBlocksAllPendingPiecesOfItsOpener_whenHeHoldsSeveral() {
++        // The opener holds both pieces on the entry (a lead of two projects): both stay blocked.
++        pieceB.setApprover(leadA);
++        when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(200L, RESOLVED, 10L))
++                .thenReturn(true);
++
++        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(1L, LEAD_A_EMAIL, null)));
++        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(2L, LEAD_A_EMAIL, null)));
++        verify(pieceRepository, never()).save(any());
++    }
++
++    // ── a single-project EOD is unchanged ────────────────────────────────────
++
++    @Test
++    void singleProjectEntry_openRoundBlocksItsOnlyPiece_untilResolved() {
++        when(pieceRepository.findByEodEntryId(200L)).thenReturn(List.of(pieceA));
++        roundOpenOnPiece(1L);
++
++        assertConflict(assertThrows(ResponseStatusException.class, () -> service.approve(1L, LEAD_A_EMAIL, null)));
++
++        when(clarificationRepository.existsByPiece_IdAndStatusNot(1L, RESOLVED)).thenReturn(false);
++        service.approve(1L, LEAD_A_EMAIL, null);
++        assertEquals(EodProjectApproval.Status.APPROVED, pieceA.getStatus());
++    }
+ 
+     // ── gate is open once the round is resolved ──────────────────────────────
+ 
+     @Test
+     void approve_afterRoundResolved_succeeds() {
+-        roundIsOpen(false);
+-        when(pieceRepository.findByEodEntryId(200L)).thenReturn(List.of(pieceA, pieceB));
+-        when(entryRepository.save(any())).thenReturn(entry);
+-
+         service.approve(1L, LEAD_A_EMAIL, null);
+ 
+         assertEquals(EodProjectApproval.Status.APPROVED, pieceA.getStatus());
+         verify(pieceRepository).save(pieceA);
+     }
+ 
++    // ── approving / rejecting one piece never touches another piece's clarification ──
++
++    @Test
++    void approvingOnePiece_neverResolvesOrChangesAnyClarification() {
++        roundOpenOnPiece(1L);
++
++        service.approve(2L, LEAD_B_EMAIL, null);
++
++        verify(clarificationRepository, never()).save(any());
++        verify(clarificationRepository, never()).saveAll(any());
++        verify(clarificationRepository, never()).delete(any());
++    }
++
+     // ── ordering: authorization still wins over the gate ─────────────────────
+ 
+     @Test
+diff --git a/backend/src/test/java/com/nforceone/sync/eod/EodClarificationServiceTest.java b/backend/src/test/java/com/nforceone/sync/eod/EodClarificationServiceTest.java
+index 7f69e97..5ae06dc 100644
+--- a/backend/src/test/java/com/nforceone/sync/eod/EodClarificationServiceTest.java
++++ b/backend/src/test/java/com/nforceone/sync/eod/EodClarificationServiceTest.java
+@@ -78,7 +78,8 @@ class EodClarificationServiceTest {
+ 
+         lenient().when(entryRepository.findWithDetailsById(100L)).thenReturn(Optional.of(entry));
+         lenient().when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(leadPiece));
+-        lenient().when(clarificationRepository.existsByEodEntryIdAndStatusNot(anyLong(), any())).thenReturn(false);
++        lenient().when(clarificationRepository.existsByPiece_IdAndStatusNot(any(), any())).thenReturn(false);
++        lenient().when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(anyLong(), any(), anyLong())).thenReturn(false);
+         lenient().when(clarificationRepository.save(any(EodClarification.class))).thenAnswer(i -> {
+             EodClarification c = i.getArgument(0);
+             if (c.getId() == null) c.setId(500L);
+@@ -117,6 +118,7 @@ class EodClarificationServiceTest {
+         c.setEodEntry(entry);
+         c.setOpenedBy(openedBy);
+         c.setOpenedByApprover(openedBy);
++        c.setPiece(leadPiece);
+         c.setOpenedAt(OffsetDateTime.now());
+         c.setStatus(EodClarification.Status.NEEDS_RESPONSE);
+         return c;
+@@ -192,8 +194,8 @@ class EodClarificationServiceTest {
+     @Test
+     void employeeReply_notifiesTheCurrentApprover_notThePreviousOpener() {
+         AppUser previousLead = user(8L, "Previous Lead", AppUser.Role.EMPLOYEE);
+-        when(clarificationRepository.findByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
+-                .thenReturn(Optional.of(openRound(previousLead)));   // round opened by the old approver
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
++                .thenReturn(List.of(openRound(previousLead)));   // round opened by the old approver
+         // The piece has since moved to `lead`.
+ 
+         service.reply(100L, employee.getEmail(), "Here is the detail", null);
+@@ -206,8 +208,8 @@ class EodClarificationServiceTest {
+     @Test
+     void employeeReply_notifiesLeadAndEscalatedPm_eachWithTheirOwnInboxLink() {
+         leadPiece.setEscalatedTo(pm);
+-        when(clarificationRepository.findByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
+-                .thenReturn(Optional.of(openRound(lead)));
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
++                .thenReturn(List.of(openRound(lead)));
+ 
+         service.reply(100L, employee.getEmail(), "Here is the detail", null);
+ 
+@@ -221,8 +223,8 @@ class EodClarificationServiceTest {
+     void employeeReply_deduplicatesAnApproverHoldingSeveralPieces() {
+         EodProjectApproval second = piece(2L, lead, EodProjectApproval.Status.PENDING);
+         when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(leadPiece, second));
+-        when(clarificationRepository.findByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
+-                .thenReturn(Optional.of(openRound(lead)));
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
++                .thenReturn(List.of(openRound(lead)));
+ 
+         service.reply(100L, employee.getEmail(), "Here is the detail", null);
+ 
+@@ -311,8 +313,8 @@ class EodClarificationServiceTest {
+         assertFalse(none.canOpen());
+         assertFalse(none.canReply());
+ 
+-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L))
+-                .thenReturn(Optional.of(openRound(lead)));
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
++                .thenReturn(List.of(openRound(lead)));
+         EodClarificationStatusDto open = service.getStatus(100L, rm.getEmail());
+         assertTrue(open.open());
+         assertFalse(open.canOpen());
+@@ -324,8 +326,8 @@ class EodClarificationServiceTest {
+     void getStatus_approverCanOpenWhenNoRound_andReplyWhenOpen() {
+         assertTrue(service.getStatus(100L, lead.getEmail()).canOpen());
+ 
+-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L))
+-                .thenReturn(Optional.of(openRound(lead)));
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
++                .thenReturn(List.of(openRound(lead)));
+         EodClarificationStatusDto open = service.getStatus(100L, lead.getEmail());
+         assertFalse(open.canOpen());
+         assertTrue(open.canReply());
+@@ -336,8 +338,8 @@ class EodClarificationServiceTest {
+     void getStatus_owner_canReplyButNeverOpen() {
+         assertFalse(service.getStatus(100L, employee.getEmail()).canOpen());
+ 
+-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L))
+-                .thenReturn(Optional.of(openRound(lead)));
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
++                .thenReturn(List.of(openRound(lead)));
+         EodClarificationStatusDto open = service.getStatus(100L, employee.getEmail());
+         assertFalse(open.canOpen());
+         assertTrue(open.canReply());
+@@ -345,8 +347,8 @@ class EodClarificationServiceTest {
+ 
+     @Test
+     void getStatus_owner_canReplyButNeverResolve() {
+-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L))
+-                .thenReturn(Optional.of(openRound(lead)));
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
++                .thenReturn(List.of(openRound(lead)));
+         EodClarificationStatusDto dto = service.getStatus(100L, employee.getEmail());
+         assertTrue(dto.canReply());
+         assertFalse(dto.canResolve());
+@@ -362,8 +364,8 @@ class EodClarificationServiceTest {
+         task.setProject(project);
+         entry.getTasks().add(task);
+ 
+-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L))
+-                .thenReturn(Optional.of(openRound(lead)));
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
++                .thenReturn(List.of(openRound(lead)));
+ 
+         assertTrue(service.getStatus(100L, lead.getEmail()).canResolve());       // pending-piece approver
+         assertFalse(service.getStatus(100L, employee.getEmail()).canResolve());  // owner
+@@ -388,7 +390,7 @@ class EodClarificationServiceTest {
+         resolved.setStatus(EodClarification.Status.RESOLVED);
+         resolved.setResolvedAt(OffsetDateTime.now());
+         resolved.setResolvedBy(lead);
+-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L)).thenReturn(Optional.of(resolved));
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L)).thenReturn(List.of(resolved));
+ 
+         EodClarificationStatusDto asReviewer = service.getStatus(100L, lead.getEmail());
+         assertEquals(500L, asReviewer.clarificationId());
+@@ -438,7 +440,7 @@ class EodClarificationServiceTest {
+ 
+     @Test
+     void openWhileARoundIsAlreadyOpen_gets409() {
+-        when(clarificationRepository.existsByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
++        when(clarificationRepository.existsByPiece_IdAndStatusNot(1L, EodClarification.Status.RESOLVED))
+                 .thenReturn(true);
+ 
+         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+@@ -466,7 +468,7 @@ class EodClarificationServiceTest {
+         // existsBy… stub is false) and the reviewer may open another.
+         EodClarification resolved = openRound(lead);
+         resolved.setStatus(EodClarification.Status.RESOLVED);
+-        lenient().when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L)).thenReturn(Optional.of(resolved));
++        lenient().when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L)).thenReturn(List.of(resolved));
+ 
+         assertTrue(service.open(100L, lead.getEmail(), "one more question", List.of()).open());
+         verify(replyRepository, times(1)).save(any(EodClarificationReply.class));
+@@ -522,8 +524,8 @@ class EodClarificationServiceTest {
+     @Test
+     void pmRole_canStillReadTheStatusAndTheThread_andAllWriteFlagsAreFalse() {
+         pmIsEscalatedApproverAndProjectPm();
+-        when(clarificationRepository.findFirstByEodEntryIdOrderByOpenedAtDesc(100L))
+-                .thenReturn(Optional.of(openRound(lead)));
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
++                .thenReturn(List.of(openRound(lead)));
+         EodClarificationStatusDto dto = service.getStatus(100L, pm.getEmail());
+         assertTrue(dto.open());                 // can see that a round exists
+         assertFalse(dto.canOpen());
+@@ -709,8 +711,8 @@ class EodClarificationServiceTest {
+         EodProjectApproval rmPiece = piece(5L, rm, EodProjectApproval.Status.PENDING);
+         rmPiece.setApproverType(EodProjectApproval.ApproverType.REPORTING_MANAGER);
+         when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(rmPiece));
+-        when(clarificationRepository.findByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
+-                .thenReturn(Optional.of(openRound(rm)));
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
++                .thenReturn(List.of(openRound(rm)));
+ 
+         service.reply(100L, employee.getEmail(), "Here is the detail", null);
+ 
+@@ -724,8 +726,8 @@ class EodClarificationServiceTest {
+         EodProjectApproval asRm = piece(7L, lead, EodProjectApproval.Status.PENDING);
+         asRm.setApproverType(EodProjectApproval.ApproverType.REPORTING_MANAGER);
+         when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(asLead, asRm));
+-        when(clarificationRepository.findByEodEntryIdAndStatusNot(100L, EodClarification.Status.RESOLVED))
+-                .thenReturn(Optional.of(openRound(lead)));
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L))
++                .thenReturn(List.of(openRound(lead)));
+ 
+         service.reply(100L, employee.getEmail(), "Here is the detail", null);
+ 
+diff --git a/frontend/src/api/eodClarification.ts b/frontend/src/api/eodClarification.ts
+index 3ac4024..70cfe03 100644
+--- a/frontend/src/api/eodClarification.ts
++++ b/frontend/src/api/eodClarification.ts
+@@ -32,6 +32,11 @@ export interface EodClarificationStatusDto {
+   /** May resolve the open round — a reviewer only, never the entry's owner. Drives the popup's
+    *  Resolve button and the inbox status dropdown; the UI never infers it from role. */
+   canResolve: boolean;
++  /** The approval piece (one project + one lead) this round belongs to — a round blocks only its own piece.
++   *  Null for a legacy round, which blocks the whole entry. */
++  pieceId: number | null;
++  /** That piece's project — which project's lead asked. Null for a legacy round. */
++  projectName: string | null;
+ }
+ 
+ export interface EodClarificationAttachmentDto {
+@@ -74,6 +79,10 @@ export interface EodInboxItemDto {
+   lastMessageSenderName: string | null;
+   lastMessageSenderRole: 'EMPLOYEE' | 'TEAM_LEAD' | null;
+   unread: boolean;
++  /** The approval piece this round belongs to (null for a legacy round) and that piece's project — which
++   *  project's lead asked. Distinct from projectName / projectNames, which describe the entry's tasks. */
++  pieceId: number | null;
++  pieceProjectName: string | null;
+ }
+ 
+ const THREAD_POLL_MS = 15_000;
+@@ -82,8 +91,11 @@ function basePath(scope: ClarificationScope): string {
+   return scope === 'lead' ? '/team-lead' : '/employee';
+ }
+ 
+-function statusKey(scope: ClarificationScope, entryId: number | undefined) {
+-  return ['eod-clarification-status', scope, entryId] as const;
++// A viewer can have several rounds on one entry (the employee with two leads asking), so a status / thread
++// is cached per round when `clarificationId` is given. The 3-element prefix still matches every variant, so
++// invalidating by (scope, entryId) refreshes them all.
++function statusKey(scope: ClarificationScope, entryId: number | undefined, clarificationId?: number | null) {
++  return ['eod-clarification-status', scope, entryId, clarificationId ?? null] as const;
+ }
+ 
+ /** Refetch every cached clarification status and inbox list — used when a 403/409 shows the
+@@ -94,25 +106,35 @@ function invalidateClarificationState(qc: QueryClient, entryId?: number) {
+   if (entryId != null) qc.invalidateQueries({ queryKey: ['eod-clarification-thread'] });
+ }
+ 
+-function threadKey(scope: ClarificationScope, entryId: number | undefined) {
+-  return ['eod-clarification-thread', scope, entryId] as const;
++function threadKey(scope: ClarificationScope, entryId: number | undefined, clarificationId?: number | null) {
++  return ['eod-clarification-thread', scope, entryId, clarificationId ?? null] as const;
+ }
+ 
+ /** Lightweight header — does this entry currently have an open clarification? Used by
+- *  SubmitEOD/EodHistory to gate the edit-lock banner without loading the full thread. */
+-export function useClarificationStatus(entryId: number | undefined, scope: ClarificationScope, enabled = true) {
++ *  SubmitEOD/EodHistory to gate the edit-lock banner without loading the full thread.
++ *  `clarificationId` picks one round (the employee's choice when two leads asked); without it the server
++ *  returns the latest round the viewer may see. */
++export function useClarificationStatus(
++  entryId: number | undefined, scope: ClarificationScope, enabled = true, clarificationId?: number | null,
++) {
+   return useQuery({
+-    queryKey: statusKey(scope, entryId),
+-    queryFn: () => api.get<EodClarificationStatusDto>(`${basePath(scope)}/eod/${entryId}/clarification`).then(r => r.data),
++    queryKey: statusKey(scope, entryId, clarificationId),
++    queryFn: () => api.get<EodClarificationStatusDto>(`${basePath(scope)}/eod/${entryId}/clarification`, {
++      params: clarificationId != null ? { clarificationId } : undefined,
++    }).then(r => r.data),
+     enabled: enabled && entryId != null,
+     refetchInterval: enabled && entryId != null ? THREAD_POLL_MS : false,
+   });
+ }
+ 
+-export function useClarificationThread(entryId: number | undefined, scope: ClarificationScope, enabled = true) {
++export function useClarificationThread(
++  entryId: number | undefined, scope: ClarificationScope, enabled = true, clarificationId?: number | null,
++) {
+   return useQuery({
+-    queryKey: threadKey(scope, entryId),
+-    queryFn: () => api.get<EodClarificationReplyDto[]>(`${basePath(scope)}/eod/${entryId}/clarification/replies`).then(r => r.data),
++    queryKey: threadKey(scope, entryId, clarificationId),
++    queryFn: () => api.get<EodClarificationReplyDto[]>(`${basePath(scope)}/eod/${entryId}/clarification/replies`, {
++      params: clarificationId != null ? { clarificationId } : undefined,
++    }).then(r => r.data),
+     enabled: enabled && entryId != null,
+     refetchInterval: enabled && entryId != null ? THREAD_POLL_MS : false,
+   });
+@@ -120,18 +142,19 @@ export function useClarificationThread(entryId: number | undefined, scope: Clari
+ 
+ // Multipart, not JSON — matches useSendBlockerReply exactly (message + files together), now that
+ // clarification replies support attachments too (see EodClarificationService.reply on the backend).
+-export function useSendClarificationReply(entryId: number, scope: ClarificationScope) {
++export function useSendClarificationReply(entryId: number, scope: ClarificationScope, clarificationId?: number | null) {
+   const qc = useQueryClient();
+   return useMutation({
+     mutationFn: ({ message, files }: { message: string; files: File[] }) => {
+       const form = new FormData();
+       form.append('message', message);
+       files.forEach(f => form.append('files', f));
++      if (clarificationId != null) form.append('clarificationId', String(clarificationId));
+       return api.post<EodClarificationReplyDto>(`${basePath(scope)}/eod/${entryId}/clarification/replies`, form).then(r => r.data);
+     },
+     onSuccess: () => {
+-      qc.invalidateQueries({ queryKey: threadKey(scope, entryId) });
+-      qc.invalidateQueries({ queryKey: statusKey(scope, entryId) });
++      qc.invalidateQueries({ queryKey: ['eod-clarification-thread', scope, entryId] });
++      qc.invalidateQueries({ queryKey: ['eod-clarification-status', scope, entryId] });
+       if (scope === 'lead') qc.invalidateQueries({ queryKey: ['eod-inbox'] });
+     },
+     onError: err => { if (isStaleStateError(err)) invalidateClarificationState(qc, entryId); },
+@@ -144,7 +167,7 @@ export function useEditClarificationReply(entryId: number, scope: ClarificationS
+   return useMutation({
+     mutationFn: ({ replyId, message }: { replyId: number; message: string }) =>
+       api.put(`${basePath(scope)}/eod/clarification/replies/${replyId}`, { message }),
+-    onSuccess: () => qc.invalidateQueries({ queryKey: threadKey(scope, entryId) }),
++    onSuccess: () => qc.invalidateQueries({ queryKey: ['eod-clarification-thread', scope, entryId] }),
+   });
+ }
+ 
+@@ -153,7 +176,7 @@ export function useDeleteClarificationReply(entryId: number, scope: Clarificatio
+   const qc = useQueryClient();
+   return useMutation({
+     mutationFn: (replyId: number) => api.delete(`${basePath(scope)}/eod/clarification/replies/${replyId}`),
+-    onSuccess: () => qc.invalidateQueries({ queryKey: threadKey(scope, entryId) }),
++    onSuccess: () => qc.invalidateQueries({ queryKey: ['eod-clarification-thread', scope, entryId] }),
+   });
+ }
+ 
+@@ -187,14 +210,16 @@ export function useClarificationAttachmentUrl(scope: InboxRole, attachmentId: nu
+ export function useOpenClarification() {
+   const qc = useQueryClient();
+   return useMutation({
+-    mutationFn: ({ entryId }: { entryId: number }) =>
+-      api.post<EodClarificationStatusDto>(`/team-lead/eod/${entryId}/clarification`, {}).then(r => r.data),
++    mutationFn: ({ entryId, pieceId }: { entryId: number; pieceId?: number | null }) =>
++      api.post<EodClarificationStatusDto>(`/team-lead/eod/${entryId}/clarification`, {}, {
++        params: pieceId != null ? { pieceId } : undefined,
++      }).then(r => r.data),
+     onSuccess: (_data, { entryId }) => {
+       qc.invalidateQueries({ queryKey: ['approvals'] });
+       qc.invalidateQueries({ queryKey: ['eod-inbox'] });
+-      qc.invalidateQueries({ queryKey: statusKey('lead', entryId) });
++      qc.invalidateQueries({ queryKey: ['eod-clarification-status', 'lead', entryId] });
+       qc.invalidateQueries({ queryKey: ['eod-clarification-status', 'approvals', entryId] });
+-      qc.invalidateQueries({ queryKey: threadKey('lead', entryId) });
++      qc.invalidateQueries({ queryKey: ['eod-clarification-thread', 'lead', entryId] });
+     },
+     onError: (err, { entryId }) => { if (isStaleStateError(err)) invalidateClarificationState(qc, entryId); },
+   });
+@@ -207,17 +232,19 @@ export function useOpenClarification() {
+ export function useOpenClarificationWithMessage() {
+   const qc = useQueryClient();
+   return useMutation({
+-    mutationFn: ({ entryId, message, files }: { entryId: number; message: string; files: File[] }) => {
++    mutationFn: ({ entryId, message, files, pieceId }: { entryId: number; message: string; files: File[]; pieceId?: number | null }) => {
+       const form = new FormData();
+       form.append('message', message);
+       files.forEach(f => form.append('files', f));
++      // Which of the opener's own pieces the round is about (the card he opened it from).
++      if (pieceId != null) form.append('pieceId', String(pieceId));
+       return api.post<EodClarificationStatusDto>(`/team-lead/eod/${entryId}/clarification`, form).then(r => r.data);
+     },
+     onSuccess: (_data, { entryId }) => {
+       qc.invalidateQueries({ queryKey: ['approvals'] });
+       qc.invalidateQueries({ queryKey: ['eod-inbox'] });
+       qc.invalidateQueries({ queryKey: ['eod-clarification-status'] });
+-      qc.invalidateQueries({ queryKey: threadKey('lead', entryId) });
++      qc.invalidateQueries({ queryKey: ['eod-clarification-thread', 'lead', entryId] });
+     },
+     onError: (err, { entryId }) => { if (isStaleStateError(err)) invalidateClarificationState(qc, entryId); },
+   });
+@@ -229,17 +256,17 @@ export function useOpenClarificationWithMessage() {
+ export function useSetClarificationStatus() {
+   const qc = useQueryClient();
+   return useMutation({
+-    mutationFn: ({ entryId, status }: { entryId: number; status: ClarificationStatusValue }) =>
+-      api.patch<EodClarificationStatusDto>(`/team-lead/eod/${entryId}/clarification/status`, { status }).then(r => r.data),
++    mutationFn: ({ entryId, status, clarificationId }: { entryId: number; status: ClarificationStatusValue; clarificationId?: number | null }) =>
++      api.patch<EodClarificationStatusDto>(`/team-lead/eod/${entryId}/clarification/status`, { status }, {
++        params: clarificationId != null ? { clarificationId } : undefined,
++      }).then(r => r.data),
+     onSuccess: (_data, { entryId }) => {
+       // Resolving must re-enable Approve/Reject at once: refresh every cached status (reviewer and
+       // employee scopes, per-row and popup) and the batched inbox lists the menus read.
+       qc.invalidateQueries({ queryKey: ['eod-clarification-status'] });
+       qc.invalidateQueries({ queryKey: ['approvals'] });
+       qc.invalidateQueries({ queryKey: ['eod-inbox'] });
+-      qc.invalidateQueries({ queryKey: threadKey('lead', entryId) });
+-      qc.invalidateQueries({ queryKey: statusKey('lead', entryId) });
+-      qc.invalidateQueries({ queryKey: ['eod-clarification-status', 'approvals', entryId] });
++      qc.invalidateQueries({ queryKey: ['eod-clarification-thread', 'lead', entryId] });
+     },
+     onError: (err, { entryId }) => { if (isStaleStateError(err)) invalidateClarificationState(qc, entryId); },
+   });
+@@ -248,10 +275,15 @@ export function useSetClarificationStatus() {
+ /** Backs the Approve/Reject disabled state in the Approvals detail modal — role-agnostic (works
+  *  for both a Team Lead and a scoped PM viewing the same entry), since /team-lead/... routes are
+  *  role-locked and a PM would 403 calling useClarificationStatus(scope: 'lead') directly. */
+-export function useClarificationStatusForApprovals(entryId: number | undefined, enabled = true, poll = false) {
++export function useClarificationStatusForApprovals(
++  entryId: number | undefined, enabled = true, poll = false, pieceId?: number | null,
++) {
+   return useQuery({
+-    queryKey: ['eod-clarification-status', 'approvals', entryId],
+-    queryFn: () => api.get<EodClarificationStatusDto>(`/approvals/${entryId}/clarification-status`).then(r => r.data),
++    // Per piece: a card reflects only its own piece's round (never another project's clarification).
++    queryKey: ['eod-clarification-status', 'approvals', entryId, pieceId ?? null],
++    queryFn: () => api.get<EodClarificationStatusDto>(`/approvals/${entryId}/clarification-status`, {
++      params: pieceId != null ? { pieceId } : undefined,
++    }).then(r => r.data),
+     enabled: enabled && entryId != null,
+     // Opt-in 15s poll for surfaces that stay open (the inline panel, the review modals), so a
+     // round opened or resolved elsewhere flips Approve/Reject without a reload.
+@@ -315,6 +347,16 @@ function markReadPath(role: InboxRole, entryId: number): string {
+   return role === 'pm' ? `/pm-eod-inbox/${entryId}/read` : `${basePath(role === 'lead' || role === 'rm' ? 'lead' : 'employee')}/eod/${entryId}/clarification/read`;
+ }
+ 
++/** Which round to mark read. An entry can have one round per project, so opening one thread must not clear the
++ *  unread dot of another — pass the round's id. A bare entry id (legacy callers) marks every round the viewer sees. */
++export type MarkReadTarget = number | { entryId: number; clarificationId?: number | null };
++
++function markReadParts(target: MarkReadTarget): { entryId: number; clarificationId: number | null } {
++  return typeof target === 'number'
++    ? { entryId: target, clarificationId: null }
++    : { entryId: target.entryId, clarificationId: target.clarificationId ?? null };
++}
++
+ /** Opening a row's conversation panel marks that round read for the viewer — clears the
+  *  unread/bold indicator on the row (and the sidebar badge, which reads the same cached list)
+  *  without waiting for the next poll. Optimistically flips `unread` on the matching row across
+@@ -322,11 +364,20 @@ function markReadPath(role: InboxRole, entryId: number): string {
+ export function useMarkClarificationRead(role: InboxRole) {
+   const qc = useQueryClient();
+   return useMutation({
+-    mutationFn: (entryId: number) => api.post(markReadPath(role, entryId), {}),
+-    onMutate: (entryId: number) => {
++    mutationFn: (target: MarkReadTarget) => {
++      const { entryId, clarificationId } = markReadParts(target);
++      return api.post(markReadPath(role, entryId), {}, {
++        params: clarificationId != null ? { clarificationId } : undefined,
++      });
++    },
++    onMutate: (target: MarkReadTarget) => {
++      const { entryId, clarificationId } = markReadParts(target);
+       for (const open of [true, false]) {
+         qc.setQueryData<EodInboxItemDto[]>(inboxKey(role, open), old =>
+-          old?.map(item => (item.eodEntryId === entryId ? { ...item, unread: false } : item)));
++          old?.map(item => (
++            item.eodEntryId === entryId && (clarificationId == null || item.clarificationId === clarificationId)
++              ? { ...item, unread: false }
++              : item)));
+       }
+     },
+   });
+@@ -334,10 +385,12 @@ export function useMarkClarificationRead(role: InboxRole) {
+ 
+ /** PM's read-only thread view — no reply mutation exists for this scope, matching the backend's
+  *  no-write-endpoint-wired-at-all pattern for PmEodInboxController. */
+-export function usePmClarificationThread(entryId: number | undefined, enabled = true) {
++export function usePmClarificationThread(entryId: number | undefined, enabled = true, clarificationId?: number | null) {
+   return useQuery({
+-    queryKey: ['eod-clarification-thread', 'pm', entryId],
+-    queryFn: () => api.get<EodClarificationReplyDto[]>(`/pm-eod-inbox/${entryId}/replies`).then(r => r.data),
++    queryKey: ['eod-clarification-thread', 'pm', entryId, clarificationId ?? null],
++    queryFn: () => api.get<EodClarificationReplyDto[]>(`/pm-eod-inbox/${entryId}/replies`, {
++      params: clarificationId != null ? { clarificationId } : undefined,
++    }).then(r => r.data),
+     enabled: enabled && entryId != null,
+     refetchInterval: enabled && entryId != null ? THREAD_POLL_MS : false,
+   });
+diff --git a/frontend/src/components/ClarificationChatPopup.tsx b/frontend/src/components/ClarificationChatPopup.tsx
+index fd13e18..a979db3 100644
+--- a/frontend/src/components/ClarificationChatPopup.tsx
++++ b/frontend/src/components/ClarificationChatPopup.tsx
+@@ -32,8 +32,15 @@ import { CLARIFICATION_STATUS_META, CLARIFICATION_STATUS_OPTIONS } from '../lib/
+  * nothing. Polls every 15s while open. A 403/409 on any action shows the server's message through
+  * extractError() and the mutation hooks refresh the status immediately.
+  */
+-export function ClarificationChatPopup({ entryId, employeeId, employeeName, entryDate, onClose, readOnly = false }: {
++export function ClarificationChatPopup({
++  entryId, pieceId, clarificationId, employeeId, employeeName, entryDate, onClose, readOnly = false,
++}: {
+   entryId: number;
++  /** The approval piece (project + lead) the reviewer opened this from — the round is about that piece, and
++   *  the card's status is read for it. Reviewer side only. */
++  pieceId?: number | null;
++  /** The round the employee chose when two leads asked (from the inbox row); omitted = the latest. */
++  clarificationId?: number | null;
+   /** Owner of the entry — decides the viewer's side via scopeFor(). */
+   employeeId: number;
+   employeeName: string;
+@@ -48,10 +55,13 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
+   const [confirmingResolve, setConfirmingResolve] = useState(false);
+ 
+   const scope = user ? scopeFor(employeeId, user.id) : 'lead';
+-  const reviewerQuery = useClarificationStatusForApprovals(entryId, scope === 'lead', true);
+-  const employeeQuery = useClarificationStatus(entryId, 'employee', scope === 'employee');
++  const reviewerQuery = useClarificationStatusForApprovals(entryId, scope === 'lead', true, pieceId);
++  const employeeQuery = useClarificationStatus(entryId, 'employee', scope === 'employee', clarificationId);
+   const query = scope === 'lead' ? reviewerQuery : employeeQuery;
+   const status = query.data;
++  // Every call below targets this one round, so a lead of two projects or an employee with two open
++  // rounds never reads or writes the wrong thread.
++  const threadRoundId = status?.clarificationId ?? clarificationId ?? null;
+ 
+   const openWithMessage = useOpenClarificationWithMessage();
+   const setStatus = useSetClarificationStatus();
+@@ -60,7 +70,7 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
+   // Opening the chat counts as reading it (clears the unread dot in the inboxes).
+   const roundId = status?.clarificationId ?? null;
+   useEffect(() => {
+-    if (roundId != null) markRead.mutate(entryId);
++    if (roundId != null) markRead.mutate({ entryId, clarificationId: roundId });
+     // markRead is a fresh object each render; re-marking is only wanted when the round changes.
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [entryId, roundId]);
+@@ -84,7 +94,7 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
+ 
+   async function changeStatus(next: ClarificationStatusValue) {
+     try {
+-      await setStatus.mutateAsync({ entryId, status: next });
++      await setStatus.mutateAsync({ entryId, status: next, clarificationId: threadRoundId });
+     } catch (err) {
+       show(extractError(err), 'error');   // the hook also refreshes the status on 403/409
+     }
+@@ -92,7 +102,7 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
+ 
+   async function handleResolve() {
+     try {
+-      await setStatus.mutateAsync({ entryId, status: 'RESOLVED' });
++      await setStatus.mutateAsync({ entryId, status: 'RESOLVED', clarificationId: threadRoundId });
+       setConfirmingResolve(false);
+     } catch (err) {
+       setConfirmingResolve(false);
+@@ -120,7 +130,11 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
+             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+               {employeeName}
+             </div>
+-            <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>EOD entry for {formatDate(entryDate)}</div>
++            <div style={{ fontSize: 12, color: 'var(--txt-mut)' }}>
++              EOD entry for {formatDate(entryDate)}
++              {/* Which project's lead this round is with — the employee can have one per project. */}
++              {status?.projectName ? ` · ${status.projectName}` : ''}
++            </div>
+           </div>
+           <button
+             type="button"
+@@ -160,7 +174,8 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
+             marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: 12, color: 'var(--txt-mut)',
+             background: 'var(--raised2)', border: '1px solid var(--line2)',
+           }}>
+-            Resolve this clarification? It unblocks approving or rejecting {employeeName}&apos;s entry and
++            Resolve this clarification? It unblocks approving or rejecting your portion
++            {status?.projectName ? ` (${status.projectName})` : ''} of {employeeName}&apos;s entry and
+             notifies them. This cannot be undone.
+             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+               <button
+@@ -199,9 +214,10 @@ export function ClarificationChatPopup({ entryId, employeeId, employeeName, entr
+           <ClarificationThreadView
+             entryId={entryId}
+             scope={scope}
++            clarificationId={threadRoundId}
+             canReply={composerEnabled}
+             onSendOverride={canStart
+-              ? (message, files) => openWithMessage.mutateAsync({ entryId, message, files })
++              ? (message, files) => openWithMessage.mutateAsync({ entryId, message, files, pieceId })
+               : undefined}
+             replyToLabel={scope === 'lead' ? (canStart ? `Message ${employeeName}` : `Reply to ${employeeName}`) : 'Reply to your reviewer'}
+             visibilityNote={scope === 'lead' ? `Replies are visible to ${employeeName}` : 'Replies are visible to your reviewers'}
+diff --git a/frontend/src/components/ClarificationThread.tsx b/frontend/src/components/ClarificationThread.tsx
+index be4417b..3868316 100644
+--- a/frontend/src/components/ClarificationThread.tsx
++++ b/frontend/src/components/ClarificationThread.tsx
+@@ -20,9 +20,12 @@ const CLARIFICATION_ROLE_LABELS = { EMPLOYEE: 'Employee', TEAM_LEAD: 'Reviewer',
+  * Blockers omits reply entirely rather than disabling a control).
+  */
+ export function ClarificationThreadView({
+-  entryId, scope, replyToLabel, visibilityNote, isLocked, readOnly, canReply, onSendOverride, emptyMessage,
++  entryId, scope, clarificationId, replyToLabel, visibilityNote, isLocked, readOnly, canReply, onSendOverride, emptyMessage,
+ }: {
+   entryId: number;
++  /** The one round this thread shows / posts into. An entry can have a round per project, so every read and
++   *  post names its round; omitted = the server's default (the viewer's own latest round). */
++  clarificationId?: number | null;
+   /** Replaces the default "post a reply into the open round" send — used by the chat popup when
+    *  no round is open yet, so the FIRST message opens the round. */
+   onSendOverride?: (message: string, files: File[]) => Promise<unknown>;
+@@ -40,10 +43,10 @@ export function ClarificationThreadView({
+   readOnly?: boolean;
+ }) {
+   const { user } = useAuth();
+-  const writable = useClarificationThread(entryId, scope ?? 'lead', !readOnly && scope != null);
+-  const readOnlyQuery = usePmClarificationThread(entryId, !!readOnly);
++  const writable = useClarificationThread(entryId, scope ?? 'lead', !readOnly && scope != null, clarificationId);
++  const readOnlyQuery = usePmClarificationThread(entryId, !!readOnly, clarificationId);
+   const { data: messages, isPending } = readOnly ? readOnlyQuery : writable;
+-  const sendReply = useSendClarificationReply(entryId, scope ?? 'lead');
++  const sendReply = useSendClarificationReply(entryId, scope ?? 'lead', clarificationId);
+   // Harmless to wire up even when readOnly (no request fires unless invoked) — just never
+   // passed down to ThreadView below, the same way PM's view never gets an onSend either.
+   const editReply = useEditClarificationReply(entryId, scope ?? 'lead');
+diff --git a/frontend/src/components/EodInboxCard.tsx b/frontend/src/components/EodInboxCard.tsx
+index 24f2551..96441d3 100644
+--- a/frontend/src/components/EodInboxCard.tsx
++++ b/frontend/src/components/EodInboxCard.tsx
+@@ -203,8 +203,9 @@ function EodInboxTableRow({ row, index, selected, onClick, capacityLabel }: {
+         </div>
+       </div>
+ 
+-      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', minWidth: 0 }} title={item.projectName ?? undefined}>
+-        <div style={ellipsis}>{item.projectName ?? '—'}</div>
++      {/* The round's own project (which lead asked) when it has one; else the entry's first task project. */}
++      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', minWidth: 0 }} title={item.pieceProjectName ?? item.projectName ?? undefined}>
++        <div style={ellipsis}>{item.pieceProjectName ?? item.projectName ?? '—'}</div>
+         {capacityLabel && (
+           <span style={{
+             display: 'inline-block', marginTop: 3, padding: '1px 7px', borderRadius: 10, fontSize: 10.5, fontWeight: 600,
+diff --git a/frontend/src/lib/clarificationGate.test.ts b/frontend/src/lib/clarificationGate.test.ts
+index 57c774a..616dc2c 100644
+--- a/frontend/src/lib/clarificationGate.test.ts
++++ b/frontend/src/lib/clarificationGate.test.ts
+@@ -1,7 +1,7 @@
+ import { describe, expect, it } from 'vitest';
+ import {
+   CLARIFICATION_BLOCKS_DECISION_REASON, clarificationMenuState, decisionBlockedReason, isBlockingStatus,
+-  isStaleStateError, scopeFor, type MenuStatus,
++  isPieceClarified, isStaleStateError, scopeFor, type MenuStatus,
+ } from './clarificationGate';
+ 
+ describe('scopeFor — which side of the conversation the viewer is on', () => {
+@@ -47,24 +47,53 @@ describe('isBlockingStatus — when Approve/Reject must be disabled', () => {
+     expect(isBlockingStatus(undefined)).toBe(false);
+   });
+ 
+-  it('is entry-wide: the same status blocks every piece, so it takes no piece argument', () => {
+-    // Rounds are per entry. The decision is a function of the entry's round status only; two
+-    // pieces on one entry therefore always get the same answer.
+-    const roundStatus = 'ACKNOWLEDGED' as const;
+-    const pieceA = isBlockingStatus(roundStatus);
+-    const pieceB = isBlockingStatus(roundStatus);
+-    expect(pieceA).toBe(true);
+-    expect(pieceB).toBe(true);
++  it('is a function of one round status — which piece it applies to is decided by isPieceClarified', () => {
++    expect(isBlockingStatus('ACKNOWLEDGED')).toBe(true);
++    expect(isBlockingStatus('RESOLVED')).toBe(false);
++  });
++});
++
++describe('isPieceClarified — a round blocks only its own piece', () => {
++  const ARENA_PIECE = 2, SYNC_PIECE = 1, ENTRY = 100;
++
++  it("an ARENA round blocks ARENA's piece and never SYNC's", () => {
++    const rounds = [{ eodEntryId: ENTRY, pieceId: ARENA_PIECE }];
++    expect(isPieceClarified(rounds, ARENA_PIECE, ENTRY)).toBe(true);
++    expect(isPieceClarified(rounds, SYNC_PIECE, ENTRY)).toBe(false);
++  });
++
++  it('both leads with open rounds: each piece is blocked by its own round only', () => {
++    const rounds = [{ eodEntryId: ENTRY, pieceId: ARENA_PIECE }, { eodEntryId: ENTRY, pieceId: SYNC_PIECE }];
++    expect(isPieceClarified(rounds, ARENA_PIECE, ENTRY)).toBe(true);
++    expect(isPieceClarified(rounds, SYNC_PIECE, ENTRY)).toBe(true);
++    // once ARENA's is resolved (gone from the open list), SYNC's still blocks and ARENA's does not
++    const afterResolve = [{ eodEntryId: ENTRY, pieceId: SYNC_PIECE }];
++    expect(isPieceClarified(afterResolve, ARENA_PIECE, ENTRY)).toBe(false);
++    expect(isPieceClarified(afterResolve, SYNC_PIECE, ENTRY)).toBe(true);
++  });
++
++  it('a legacy round (no pieceId) keeps blocking every piece of its entry, and only that entry', () => {
++    const rounds = [{ eodEntryId: ENTRY, pieceId: null }];
++    expect(isPieceClarified(rounds, ARENA_PIECE, ENTRY)).toBe(true);
++    expect(isPieceClarified(rounds, SYNC_PIECE, ENTRY)).toBe(true);
++    expect(isPieceClarified(rounds, SYNC_PIECE, 999)).toBe(false);
++  });
++
++  it('no rounds (or not loaded yet) blocks nothing — a single-project EOD behaves as before', () => {
++    expect(isPieceClarified([], SYNC_PIECE, ENTRY)).toBe(false);
++    expect(isPieceClarified(undefined, SYNC_PIECE, ENTRY)).toBe(false);
++    expect(isPieceClarified([{ eodEntryId: ENTRY, pieceId: SYNC_PIECE }], SYNC_PIECE, ENTRY)).toBe(true);
+   });
+ });
+ 
+ describe('decisionBlockedReason', () => {
+-  it('returns the tooltip only when blocked, and it says every project piece is blocked', () => {
++  it('returns the tooltip only when blocked, and it scopes the block to the viewer\'s own portion', () => {
+     expect(decisionBlockedReason(false)).toBeUndefined();
+     const reason = decisionBlockedReason(true);
+     expect(reason).toBe(CLARIFICATION_BLOCKS_DECISION_REASON);
+-    expect(reason).toContain('every project piece');
++    expect(reason).toContain('Your portion');
+     expect(reason).toContain('open clarification');
++    expect(reason).not.toContain('every project piece');
+   });
+ });
+ 
+@@ -103,13 +132,13 @@ describe('clarificationMenuState — kebab menu rules', () => {
+     expect(kinds(s)).toEqual(['request']);
+   });
+ 
+-  it('NEEDS_RESPONSE and ACKNOWLEDGED disable Approve and Reject with the entry-wide tooltip', () => {
++  it('NEEDS_RESPONSE and ACKNOWLEDGED disable Approve and Reject with the per-portion tooltip', () => {
+     for (const status of [open, acknowledged]) {
+       const s = clarificationMenuState({ isOwn: false, blockedByList: false, status });
+       expect(s.approve.disabled).toBe(true);
+       expect(s.reject.disabled).toBe(true);
+       expect(s.approve.title).toBe(CLARIFICATION_BLOCKS_DECISION_REASON);
+-      expect(s.reject.title).toContain('every project piece');
++      expect(s.reject.title).toContain('Your portion');
+       expect(kinds(s)).toEqual(['open-chat']);
+       expect(s.clarification[0].label).toBe('Open clarification chat');
+     }
+diff --git a/frontend/src/lib/clarificationGate.ts b/frontend/src/lib/clarificationGate.ts
+index 012d509..e783e18 100644
+--- a/frontend/src/lib/clarificationGate.ts
++++ b/frontend/src/lib/clarificationGate.ts
+@@ -22,12 +22,29 @@ export function isBlockingStatus(status: ClarificationStatusValue | null | undef
+ }
+ 
+ /**
+- * Tooltip for a disabled Approve/Reject. Rounds are per ENTRY (per-piece scoping is deferred), so
+- * an open round blocks every project piece on the entry, not only the piece it was raised from.
++ * Tooltip for a disabled Approve/Reject. A round is per PIECE (one project + one lead): it blocks only
++ * its own project's portion, so another project's lead is never blocked by it.
+  */
+ export const CLARIFICATION_BLOCKS_DECISION_REASON =
+-  'This entry has an open clarification (Needs response / Acknowledged). It blocks approving or '
+-  + 'rejecting every project piece on the entry until it is resolved.';
++  'Your portion of this EOD has an open clarification (Needs response / Acknowledged). Approve and '
++  + 'reject stay disabled for it until it is resolved.';
++
++/** The slice of an inbox row the per-piece check needs. */
++export interface OpenRoundRef {
++  eodEntryId: number;
++  pieceId: number | null;
++}
++
++/**
++ * Does an open round block THIS approval piece? A round on a piece blocks only that piece; a legacy round
++ * (no pieceId — opened before per-piece rounds existed) blocks every piece of its entry, as it always did.
++ * The list holds only rounds the server let this viewer see, so another project's round never reaches it.
++ */
++export function isPieceClarified(
++  openRounds: readonly OpenRoundRef[] | undefined, pieceId: number, entryId: number,
++): boolean {
++  return (openRounds ?? []).some(r => (r.pieceId != null ? r.pieceId === pieceId : r.eodEntryId === entryId));
++}
+ 
+ /** The tooltip to show on a decision button, or undefined when the button is not blocked. */
+ export function decisionBlockedReason(blocked: boolean): string | undefined {
+diff --git a/frontend/src/pages/Approvals.tsx b/frontend/src/pages/Approvals.tsx
+index 40ed82b..7fcf3f5 100644
+--- a/frontend/src/pages/Approvals.tsx
++++ b/frontend/src/pages/Approvals.tsx
+@@ -19,6 +19,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
+ import { useAuth } from '../lib/auth';
+ import {
+   CLARIFICATION_BLOCKS_DECISION_REASON, clarificationMenuState, decisionBlockedReason, isBlockingStatus,
++  isPieceClarified,
+ } from '../lib/clarificationGate';
+ import { FilterDropdown } from '../components/FilterDropdown';
+ import { useToast } from '../lib/toast';
+@@ -276,7 +277,7 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
+   // The row's own status is fetched only while its menu is open (no poll per card) and wins over
+   // the batched list once fresh; otherwise the batched list decides. An open round blocks EVERY
+   // piece on the entry (rounds are per entry).
+-  const live = useClarificationStatusForApprovals(piece.eodEntryId, menuOpen);
++  const live = useClarificationStatusForApprovals(piece.eodEntryId, menuOpen, false, piece.id);
+   const liveStatus = menuOpen && !live.isFetching ? live.data : undefined;
+   const blocked = liveStatus ? isBlockingStatus(liveStatus.status) : clarificationOpen;
+   const blockedReason = decisionBlockedReason(blocked);
+@@ -607,7 +608,7 @@ export default function Approvals() {
+   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+   const [detailsEntryId, setDetailsEntryId] = useState<number | null>(null);
+   // The one chat popup for this page (closable, re-openable; closing resolves nothing).
+-  const [chat, setChat] = useState<{ entryId: number; employeeId: number; employeeName: string; entryDate: string } | null>(null);
++  const [chat, setChat] = useState<{ entryId: number; pieceId?: number; employeeId: number; employeeName: string; entryDate: string } | null>(null);
+   const [page, setPage] = useState(1);
+ 
+   // A `?highlight=` link — the Team Status table's "Pending" click, or an "EOD submitted"
+@@ -896,8 +897,8 @@ export default function Approvals() {
+               <PieceCard
+                 key={piece.id}
+                 piece={piece}
+-                clarificationOpen={clarifiedEntryIds.has(piece.eodEntryId)}
+-                onOpenChat={p => setChat({ entryId: p.eodEntryId, employeeId: p.employeeId, employeeName: p.employeeName, entryDate: p.entryDate })}
++                clarificationOpen={isPieceClarified(openClarifications, piece.id, piece.eodEntryId)}
++                onOpenChat={p => setChat({ entryId: p.eodEntryId, pieceId: p.id, employeeId: p.employeeId, employeeName: p.employeeName, entryDate: p.entryDate })}
+               />
+             ))}
+             {totalPiecePages > 1 && (
+@@ -957,6 +958,7 @@ export default function Approvals() {
+       {chat && (
+         <ClarificationChatPopup
+           entryId={chat.entryId}
++          pieceId={chat.pieceId}
+           employeeId={chat.employeeId}
+           employeeName={chat.employeeName}
+           entryDate={chat.entryDate}
+diff --git a/frontend/src/pages/approvals/ApprovalsPage.tsx b/frontend/src/pages/approvals/ApprovalsPage.tsx
+index 599b079..98ae4e9 100644
+--- a/frontend/src/pages/approvals/ApprovalsPage.tsx
++++ b/frontend/src/pages/approvals/ApprovalsPage.tsx
+@@ -21,6 +21,7 @@ import { DropdownMenu, type DropdownMenuItem } from '../../components/DropdownMe
+ import { useAuth } from '../../lib/auth';
+ import {
+   CLARIFICATION_BLOCKS_DECISION_REASON, clarificationMenuState, decisionBlockedReason, isBlockingStatus,
++  isPieceClarified,
+ } from '../../lib/clarificationGate';
+ import { splitPendingPieces } from './approvalsTabSplit';
+ import {
+@@ -191,7 +192,7 @@ function PieceReviewModal({
+   // The modal's own 15s-polled status is authoritative while it is open (so a round opened or
+   // resolved elsewhere flips Approve/Reject without a reload); the batched list is the fallback.
+   // An open round blocks EVERY project piece on the entry — rounds are per entry.
+-  const live = useClarificationStatusForApprovals(piece?.eodEntryId, piece != null, true);
++  const live = useClarificationStatusForApprovals(piece?.eodEntryId, piece != null, true, piece?.id);
+   const blocked = live.data ? isBlockingStatus(live.data.status) : clarificationOpen;
+   const blockedReason = decisionBlockedReason(blocked);
+ 
+@@ -438,7 +439,7 @@ function PieceCard({
+ 
+   // The row's own status is fetched only while its menu is open (no poll per card); the batched
+   // list covers blocking until then.
+-  const live = useClarificationStatusForApprovals(piece.eodEntryId, menuOpen);
++  const live = useClarificationStatusForApprovals(piece.eodEntryId, menuOpen, false, piece.id);
+   const isOwn = user != null && piece.employeeId === user.id;
+   const menu = clarificationMenuState({
+     isOwn, blockedByList: clarificationOpen, status: menuOpen && !live.isFetching ? live.data : undefined,
+@@ -664,13 +665,10 @@ export default function ApprovalsPage({
+   const { show } = useToast();
+   const refreshClarification = useRefreshClarification();
+ 
+-  // Which entries have an open round — one batched request for every card, not a poll per card.
+-  // The server excludes the viewer's own EOD from this list.
++  // Which rounds are open — one batched request for every card, not a poll per card. The server returns
++  // only rounds on pieces THIS viewer holds (never another project's), and excludes the viewer's own EOD.
++  // A card is blocked by a round on its own piece only — see isPieceClarified.
+   const { data: openClarifications } = useEodInbox('lead', true);
+-  const clarifiedEntryIds = useMemo(
+-    () => new Set((openClarifications ?? []).map(c => c.eodEntryId)),
+-    [openClarifications],
+-  );
+ 
+   const [tab, setTab]                   = useState<ApprovalsTab>(tabs[0]);
+   const [search, setSearch]             = useState('');
+@@ -681,9 +679,9 @@ export default function ApprovalsPage({
+   const [modalPieceId, setModalPieceId] = useState<number | null>(null);
+   const [modalMode, setModalMode] = useState<'view' | 'reject'>('view');
+   // The one chat popup for this page (closable, re-openable; closing resolves nothing).
+-  const [chat, setChat] = useState<{ entryId: number; employeeId: number; employeeName: string; entryDate: string } | null>(null);
++  const [chat, setChat] = useState<{ entryId: number; pieceId: number; employeeId: number; employeeName: string; entryDate: string } | null>(null);
+   function openChat(p: ApprovalPieceDto) {
+-    setChat({ entryId: p.eodEntryId, employeeId: p.employeeId, employeeName: p.employeeName, entryDate: p.entryDate });
++    setChat({ entryId: p.eodEntryId, pieceId: p.id, employeeId: p.employeeId, employeeName: p.employeeName, entryDate: p.entryDate });
+   }
+   const [page, setPage]                 = useState(1);
+ 
+@@ -987,7 +985,7 @@ export default function ApprovalsPage({
+                 piece={piece}
+                 tab={tab}
+                 onOpenModal={(mode = 'view') => { setModalMode(mode); setModalPieceId(piece.id); }}
+-                clarificationOpen={clarifiedEntryIds.has(piece.eodEntryId)}
++                clarificationOpen={isPieceClarified(openClarifications, piece.id, piece.eodEntryId)}
+                 onOpenChat={openChat}
+                 clarificationReadOnly={clarificationReadOnly}
+               />
+@@ -1011,12 +1009,13 @@ export default function ApprovalsPage({
+         onReject={handleReject}
+         approveBusy={approveBusy}
+         rejectBusy={rejectBusy}
+-        clarificationOpen={modalPiece != null && clarifiedEntryIds.has(modalPiece.eodEntryId)}
++        clarificationOpen={modalPiece != null && isPieceClarified(openClarifications, modalPiece.id, modalPiece.eodEntryId)}
+       />
+ 
+       {chat && (
+         <ClarificationChatPopup
+           entryId={chat.entryId}
++          pieceId={chat.pieceId}
+           employeeId={chat.employeeId}
+           employeeName={chat.employeeName}
+           entryDate={chat.entryDate}
+diff --git a/frontend/src/pages/employee/EodHistory.tsx b/frontend/src/pages/employee/EodHistory.tsx
+index 3219856..a17cdc1 100644
+--- a/frontend/src/pages/employee/EodHistory.tsx
++++ b/frontend/src/pages/employee/EodHistory.tsx
+@@ -179,21 +179,27 @@ export default function EodHistory() {
+   // clarification lives. Own entries only: the reviewer-side lists never contain them, and the panel
+   // below is always opened in the employee scope. One batched request flags every row.
+   const { data: openRounds } = useEodInbox('employee', true);
+-  const clarifiedEntryIds = useMemo(
+-    () => new Set((openRounds ?? []).map(r => r.eodEntryId)),
+-    [openRounds],
+-  );
++  // One entry can have an open round per project (each lead asks separately), so keep every round per entry —
++  // the row shows a button for each, naming the project whose lead asked.
++  const openRoundsByEntry = useMemo(() => {
++    const byEntry = new Map<number, NonNullable<typeof openRounds>>();
++    for (const r of openRounds ?? []) byEntry.set(r.eodEntryId, [...(byEntry.get(r.eodEntryId) ?? []), r]);
++    return byEntry;
++  }, [openRounds]);
+   // A ?highlight=<entryId> link (the clarification notifications) opens that entry's thread directly.
+   const highlightParam = searchParams.get('highlight');
+   const highlightId = highlightParam && Number.isFinite(Number(highlightParam)) ? Number(highlightParam) : null;
+   // Derived rather than synced in an effect: a row click sets openedEntryId; a ?highlight= id opens
+   // its thread until that same id is dismissed, and a different id in the URL opens again.
+   const [openedEntryId, setOpenedEntryId] = useState<number | null>(null);
++  // The round the employee picked when two leads asked (null = the server's default: an open round).
++  const [openedClarificationId, setOpenedClarificationId] = useState<number | null>(null);
+   const [dismissedHighlightId, setDismissedHighlightId] = useState<number | null>(null);
+   const clarificationEntryId = openedEntryId
+     ?? (highlightId != null && highlightId !== dismissedHighlightId ? highlightId : null);
+   function closeClarification() {
+     setOpenedEntryId(null);
++    setOpenedClarificationId(null);
+     setDismissedHighlightId(highlightId);
+   }
+ 
+@@ -761,20 +767,22 @@ export default function EodHistory() {
+                 {entry.id != null
+                   ? <EntryPieceChipsWithFallback entryId={entry.id} status={entry.status} />
+                   : <StatusBadge status={entry.status} />}
+-                {entry.id != null && clarifiedEntryIds.has(entry.id) && (
++                {entry.id != null && (openRoundsByEntry.get(entry.id) ?? []).map(round => (
+                   <button
++                    key={round.clarificationId}
+                     type="button"
+-                    onClick={e => { e.stopPropagation(); setOpenedEntryId(entry.id!); }}
++                    onClick={e => { e.stopPropagation(); setOpenedEntryId(entry.id!); setOpenedClarificationId(round.clarificationId); }}
+                     onKeyDown={e => e.stopPropagation()}
+                     style={{
+-                      display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, padding: '3px 8px',
++                      display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, marginRight: 6, padding: '3px 8px',
+                       borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                       border: '1px solid rgba(224,169,59,.4)', background: 'var(--raised2)', color: 'var(--warn)',
+                     }}
+                   >
+-                    <MessageCircleQuestion size={11} aria-hidden="true" /> Clarification requested
++                    <MessageCircleQuestion size={11} aria-hidden="true" />
++                    {' '}Clarification requested{round.pieceProjectName ? ` · ${round.pieceProjectName}` : ''}
+                   </button>
+-                )}
++                ))}
+               </div>
+               <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
+                 {entry.submittedAt ? formatDateTime(entry.submittedAt) : '-'}
+@@ -805,6 +813,7 @@ export default function EodHistory() {
+         return chatEntry && user ? (
+           <ClarificationChatPopup
+             entryId={chatEntry.id!}
++            clarificationId={openedClarificationId}
+             employeeId={user.id}
+             employeeName={user.name}
+             entryDate={chatEntry.entryDate}
+diff --git a/frontend/src/pages/employee/EodInbox.tsx b/frontend/src/pages/employee/EodInbox.tsx
+index 73cbc34..aa6b425 100644
+--- a/frontend/src/pages/employee/EodInbox.tsx
++++ b/frontend/src/pages/employee/EodInbox.tsx
+@@ -59,7 +59,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
+             <UserIcon size={14} aria-hidden="true" style={{ color: 'var(--txt-dim)', marginTop: 2 }} />
+             <div>
+               <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>Requested by</div>
+-              <div style={{ fontSize: 12.5, color: 'var(--txt)', fontWeight: 600 }}>{item.openedByName}</div>
++              <div style={{ fontSize: 12.5, color: 'var(--txt)', fontWeight: 600 }}>{item.openedByName}{item.pieceProjectName ? ` (${item.pieceProjectName})` : ''}</div>
+             </div>
+           </div>
+         </div>
+@@ -82,6 +82,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
+         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+           <ClarificationThreadView
+             entryId={item.eodEntryId}
++            clarificationId={item.clarificationId}
+             scope="employee"
+             replyToLabel="Reply to your reviewer"
+             visibilityNote="Replies are visible to your reviewer"
+@@ -281,7 +282,7 @@ export default function EmployeeEodInbox() {
+               setViewEodEntryId(null);
+               setSelectedClarificationId(id => (id === clarificationId ? null : clarificationId));
+               const row = allItems.find(i => i.clarificationId === clarificationId);
+-              if (row?.unread) markRead.mutate(row.eodEntryId);
++              if (row?.unread) markRead.mutate({ entryId: row.eodEntryId, clarificationId: row.clarificationId });
+             }}
+           />
+         )}
+diff --git a/frontend/src/pages/employee/SubmitEOD.tsx b/frontend/src/pages/employee/SubmitEOD.tsx
+index 2f00ef9..d0af530 100644
+--- a/frontend/src/pages/employee/SubmitEOD.tsx
++++ b/frontend/src/pages/employee/SubmitEOD.tsx
+@@ -1218,7 +1218,7 @@ export default function SubmitEOD() {
+               : entryStatus === 'PARTIALLY_APPROVED'
+                 ? 'Some projects have been approved. Awaiting review for the remaining projects.'
+                 : hasOpenClarification
+-                  ? `A reviewer requested clarification on this report — it can't be edited until resolved.`
++                  ? `${clarificationStatus?.projectName ? `The ${clarificationStatus.projectName} reviewer` : 'A reviewer'} requested clarification on this report — it can't be edited until resolved.`
+                   : 'This report has been submitted and is awaiting review.'}
+           </span>
+           {hasOpenClarification && entryId != null && (
+@@ -1245,6 +1245,7 @@ export default function SubmitEOD() {
+           {chatOpen && entryId != null && currentUser && (
+             <ClarificationChatPopup
+               entryId={entryId}
++              clarificationId={clarificationStatus?.clarificationId}
+               employeeId={currentUser.id}
+               employeeName={currentUser.name}
+               entryDate={selectedDate}
+diff --git a/frontend/src/pages/lead/EodInbox.tsx b/frontend/src/pages/lead/EodInbox.tsx
+index dd4de40..246e637 100644
+--- a/frontend/src/pages/lead/EodInbox.tsx
++++ b/frontend/src/pages/lead/EodInbox.tsx
+@@ -43,7 +43,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
+   // This inbox also lists rounds the viewer can only READ (e.g. as the entry's reporting manager).
+   // The server's canReply flag decides whether the composer and the status dropdown appear; while
+   // it is still loading we assume read-only rather than flash controls that would 403.
+-  const { data: viewerStatus } = useClarificationStatus(item.eodEntryId, 'lead');
++  const { data: viewerStatus } = useClarificationStatus(item.eodEntryId, 'lead', true, item.clarificationId);
+   const canReply = viewerStatus?.canReply === true;
+   // Resolving / changing the round's status is reviewer-only (the owner can reply but never resolve).
+   const canResolve = viewerStatus?.canResolve === true;
+@@ -121,6 +121,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
+         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+           <ClarificationThreadView
+             entryId={item.eodEntryId}
++            clarificationId={item.clarificationId}
+             scope="lead"
+             replyToLabel={`Reply to ${item.employeeName}`}
+             visibilityNote={`Replies are visible to ${item.employeeName}`}
+@@ -362,7 +363,7 @@ export default function EodInbox({ variant = 'lead' }: { variant?: 'lead' | 'rm'
+               setViewEodEntryId(null);
+               setSelectedClarificationId(id => (id === clarificationId ? null : clarificationId));
+               const row = allItems.find(i => i.clarificationId === clarificationId);
+-              if (row?.unread) markRead.mutate(row.eodEntryId);
++              if (row?.unread) markRead.mutate({ entryId: row.eodEntryId, clarificationId: row.clarificationId });
+             }}
+           />
+         )}
+diff --git a/frontend/src/pages/pm/EodInbox.tsx b/frontend/src/pages/pm/EodInbox.tsx
+index 607c5f3..59f434e 100644
+--- a/frontend/src/pages/pm/EodInbox.tsx
++++ b/frontend/src/pages/pm/EodInbox.tsx
+@@ -74,6 +74,7 @@ function DetailPanel({ item, onClose, onViewEod }: { item: EodInboxItemDto; onCl
+         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+           <ClarificationThreadView
+             entryId={item.eodEntryId}
++            clarificationId={item.clarificationId}
+             replyToLabel=""
+             visibilityNote=""
+             readOnly
+@@ -271,7 +272,7 @@ export default function PmEodInbox() {
+               setViewEodEntryId(null);
+               setSelectedClarificationId(id => (id === clarificationId ? null : clarificationId));
+               const row = allItems.find(i => i.clarificationId === clarificationId);
+-              if (row?.unread) markRead.mutate(row.eodEntryId);
++              if (row?.unread) markRead.mutate({ entryId: row.eodEntryId, clarificationId: row.clarificationId });
+             }}
+           />
+         )}
+diff --git a/backend/src/main/resources/db/migration/V115__eod_clarification_piece_id.sql b/backend/src/main/resources/db/migration/V115__eod_clarification_piece_id.sql
+new file mode 100644
+index 0000000..f3a6999
+--- /dev/null
++++ b/backend/src/main/resources/db/migration/V115__eod_clarification_piece_id.sql
+@@ -0,0 +1,40 @@
++-- V115: per-piece EOD clarification rounds.
++--
++-- Step 1 of 2 (additive, backward compatible): a clarification round becomes tied to the opener's own
++-- approval piece (one piece = one project + one lead). Nothing existing is dropped or altered, so the
++-- currently deployed backend keeps working: it ignores the new column and never writes it.
++--
++-- The old per-entry unique index (idx_eod_clarification_open_per_entry) is KEPT here; it is replaced in
++-- V116 only after the backfill below has been verified.
++
++ALTER TABLE eod_clarification
++    ADD COLUMN piece_id BIGINT NULL REFERENCES eod_project_approval(id);
++
++CREATE INDEX idx_eod_clarification_piece ON eod_clarification(piece_id);
++
++-- At most one open round per piece. Legacy rows (piece_id NULL) are not covered by this index and keep
++-- the old per-entry rule.
++CREATE UNIQUE INDEX idx_eod_clarification_open_per_piece
++    ON eod_clarification(piece_id) WHERE status <> 'RESOLVED' AND piece_id IS NOT NULL;
++
++-- Backfill: map a round to the CURRENT-cycle piece its opener holds (as approver or escalated-to) on the
++-- same entry — but only when that is unambiguous (exactly one such piece). A round whose opener holds
++-- several current pieces on the entry (a lead of two projects on one EOD), or none (e.g. a superseded
++-- cycle), keeps piece_id NULL: a "legacy" round that only its opener (and the employee) can use, and that
++-- blocks only the pending pieces its opener still holds.
++WITH candidates AS (
++    SELECT c.id AS clarification_id,
++           p.id AS piece_id,
++           COUNT(*) OVER (PARTITION BY c.id) AS n
++    FROM eod_clarification c
++    JOIN eod_project_approval p
++      ON p.eod_entry_id = c.eod_entry_id
++     AND p.superseded_at IS NULL
++     AND (p.approver_id = c.opened_by_id OR p.escalated_to_id = c.opened_by_id)
++    WHERE c.piece_id IS NULL
++)
++UPDATE eod_clarification c
++SET piece_id = candidates.piece_id
++FROM candidates
++WHERE candidates.clarification_id = c.id
++  AND candidates.n = 1;
+diff --git a/backend/src/test/java/com/nforceone/sync/eod/EodClarificationPerPieceTest.java b/backend/src/test/java/com/nforceone/sync/eod/EodClarificationPerPieceTest.java
+new file mode 100644
+index 0000000..f84cecc
+--- /dev/null
++++ b/backend/src/test/java/com/nforceone/sync/eod/EodClarificationPerPieceTest.java
+@@ -0,0 +1,544 @@
++package com.nforceone.sync.eod;
++
++import com.nforceone.sync.approval2.EodProjectApproval;
++import com.nforceone.sync.approval2.EodProjectApprovalRepository;
++import com.nforceone.sync.auth.AppUser;
++import com.nforceone.sync.auth.AppUserRepository;
++import com.nforceone.sync.eod.dto.EodClarificationReplyDto;
++import com.nforceone.sync.eod.dto.EodClarificationStatusDto;
++import com.nforceone.sync.notification.NotificationService;
++import com.nforceone.sync.project.PmScopeService;
++import com.nforceone.sync.project.Project;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.extension.ExtendWith;
++import org.mockito.ArgumentCaptor;
++import org.mockito.Mock;
++import org.mockito.junit.jupiter.MockitoExtension;
++import org.mockito.junit.jupiter.MockitoSettings;
++import org.mockito.quality.Strictness;
++import org.springframework.http.HttpStatus;
++import org.springframework.web.server.ResponseStatusException;
++
++import java.time.LocalDate;
++import java.time.OffsetDateTime;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Optional;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertThrows;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.ArgumentMatchers.anyLong;
++import static org.mockito.ArgumentMatchers.anyString;
++import static org.mockito.ArgumentMatchers.eq;
++import static org.mockito.Mockito.never;
++import static org.mockito.Mockito.verify;
++import static org.mockito.Mockito.when;
++
++/**
++ * Clarification state is per piece (one project + one lead). An employee on SYNC and ARENA submits one EOD;
++ * each project's lead can open, drive and resolve a round of their own, and neither sees nor touches the
++ * other's. Rounds live in an in-memory list behind the mocked repository so state changes made by the
++ * service (open / resolve) are what the later assertions observe.
++ */
++@ExtendWith(MockitoExtension.class)
++@MockitoSettings(strictness = Strictness.LENIENT)
++class EodClarificationPerPieceTest {
++
++    @Mock EodEntryRepository entryRepository;
++    @Mock EodClarificationRepository clarificationRepository;
++    @Mock EodClarificationReplyRepository replyRepository;
++    @Mock EodClarificationReplyAttachmentRepository attachmentRepository;
++    @Mock EodClarificationReadStateRepository readStateRepository;
++    @Mock EodTaskRepository taskRepository;
++    @Mock AppUserRepository userRepository;
++    @Mock NotificationService notificationService;
++    @Mock PmScopeService pmScopeService;
++    @Mock EodProjectApprovalRepository pieceRepository;
++
++    private static final EodClarification.Status RESOLVED = EodClarification.Status.RESOLVED;
++
++    private EodClarificationService service;
++    private AppUser employee, syncLead, arenaLead;
++    private EodEntry entry;
++    private EodProjectApproval syncPiece, arenaPiece;
++    private final List<EodClarification> rounds = new ArrayList<>();
++    private final List<EodClarificationReply> replies = new ArrayList<>();
++    private long nextId = 500;
++
++    @BeforeEach
++    void setUp() {
++        service = new EodClarificationService(1_000_000L, 10_000_000L, entryRepository, clarificationRepository,
++                replyRepository, attachmentRepository, readStateRepository, taskRepository, userRepository,
++                notificationService, pmScopeService, pieceRepository);
++
++        employee  = user(1L, "Sravani Pilla");
++        syncLead  = user(3L, "Vignesh Appani");
++        arenaLead = user(5L, "Akash T");
++
++        entry = new EodEntry();
++        entry.setId(100L);
++        entry.setEmployee(employee);
++        entry.setEntryDate(LocalDate.of(2026, 10, 9));
++        entry.setStatus(EodEntry.Status.SUBMITTED);
++
++        syncPiece  = piece(1L, syncLead, "SYNC");
++        arenaPiece = piece(2L, arenaLead, "ARENA");
++
++        when(entryRepository.findWithDetailsById(100L)).thenReturn(Optional.of(entry));
++        when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(syncPiece, arenaPiece));
++        for (AppUser u : List.of(employee, syncLead, arenaLead)) {
++            when(userRepository.findByEmailAndDeletedAtIsNull(u.getEmail())).thenReturn(Optional.of(u));
++        }
++
++        when(clarificationRepository.save(any(EodClarification.class))).thenAnswer(i -> {
++            EodClarification c = i.getArgument(0);
++            if (c.getId() == null) {
++                c.setId(nextId++);
++                rounds.add(0, c);
++            }
++            return c;
++        });
++        when(clarificationRepository.findByEodEntryIdOrderByOpenedAtDesc(100L)).thenAnswer(i -> List.copyOf(rounds));
++        when(clarificationRepository.findById(anyLong())).thenAnswer(i ->
++                rounds.stream().filter(c -> c.getId().equals(i.getArgument(0))).findFirst());
++        when(clarificationRepository.existsByPiece_IdAndStatusNot(anyLong(), any())).thenAnswer(i ->
++                rounds.stream().anyMatch(c -> c.getPiece() != null && c.getPiece().getId().equals(i.getArgument(0))
++                        && c.getStatus() != RESOLVED));
++        when(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(anyLong(), any(), anyLong())).thenAnswer(i ->
++                rounds.stream().anyMatch(c -> c.getPiece() == null && c.getStatus() != RESOLVED
++                        && c.getOpenedBy().getId().equals(i.getArgument(2))));
++        when(replyRepository.save(any(EodClarificationReply.class))).thenAnswer(i -> {
++            EodClarificationReply r = i.getArgument(0);
++            r.setId(nextId++);
++            replies.add(r);
++            return r;
++        });
++        when(replyRepository.findByClarificationIdOrderByCreatedAtAsc(anyLong())).thenAnswer(i ->
++                replies.stream().filter(r -> r.getClarification().getId().equals(i.getArgument(0))).toList());
++    }
++
++    private AppUser user(Long id, String name) {
++        AppUser u = new AppUser();
++        u.setId(id); u.setFullName(name); u.setRole(AppUser.Role.EMPLOYEE);
++        u.setEmail(name.toLowerCase().replace(" ", ".") + "@example.com");
++        return u;
++    }
++
++    private EodProjectApproval piece(Long id, AppUser approver, String projectName) {
++        Project project = new Project();
++        project.setId(100L + id);
++        project.setName(projectName);
++        EodProjectApproval p = new EodProjectApproval();
++        p.setId(id);
++        p.setEodEntry(entry);
++        p.setProject(project);
++        p.setApprover(approver);
++        p.setApproverType(EodProjectApproval.ApproverType.LEAD);
++        p.setStatus(EodProjectApproval.Status.PENDING);
++        return p;
++    }
++
++    private EodClarificationStatusDto open(AppUser lead) {
++        return service.open(100L, lead.getEmail(), null);
++    }
++
++    private EodClarification roundOn(EodProjectApproval piece) {
++        return rounds.stream().filter(c -> c.getPiece() != null && c.getPiece().getId().equals(piece.getId()))
++                .findFirst().orElseThrow();
++    }
++
++    private static HttpStatus statusOf(ResponseStatusException e) {
++        return HttpStatus.valueOf(e.getStatusCode().value());
++    }
++
++    // ── ARENA opens: SYNC is unaffected ──────────────────────────────────────
++
++    @Test
++    void arenaLeadOpens_roundIsTiedToArenasPiece_andSyncLeadSeesNoRoundOrBadge() {
++        EodClarificationStatusDto opened = open(arenaLead);
++
++        assertThat(opened.open()).isTrue();
++        assertThat(opened.pieceId()).isEqualTo(2L);
++        assertThat(opened.projectName()).isEqualTo("ARENA");
++
++        // SYNC's card: no round on SYNC's piece, and SYNC may still open one of their own.
++        EodClarificationStatusDto syncCard = service.getStatusForPiece(100L, syncLead.getEmail(), syncPiece.getId());
++        assertThat(syncCard.open()).isFalse();
++        assertThat(syncCard.clarificationId()).isNull();
++        assertThat(syncCard.canOpen()).isTrue();
++        // ...and SYNC's own status view does not surface ARENA's round at all.
++        assertThat(service.getStatus(100L, syncLead.getEmail()).open()).isFalse();
++    }
++
++    @Test
++    void arenaOpens_onlyTheEmployeeIsNotified_neverSyncsLead() {
++        open(arenaLead);
++
++        verify(notificationService).send(eq(employee.getId()), eq("EOD_CLARIFICATION_REQUESTED"),
++                anyString(), anyString(), anyString());
++        verify(notificationService, never()).send(eq(syncLead.getId()), anyString(), anyString(), anyString(), anyString());
++    }
++
++    // ── blocked until resolved, then unblocked (observed through the gate the approve call reads) ──
++
++    @Test
++    void arenaPieceIsBlockedWhileItsRoundIsOpen_andUnblockedOnceResolved_syncNeverBlocked() {
++        open(arenaLead);
++
++        assertThat(clarificationRepository.existsByPiece_IdAndStatusNot(arenaPiece.getId(), RESOLVED)).isTrue();
++        assertThat(clarificationRepository.existsByPiece_IdAndStatusNot(syncPiece.getId(), RESOLVED)).isFalse();
++
++        service.setStatus(100L, arenaLead.getEmail(), "RESOLVED");
++
++        assertThat(clarificationRepository.existsByPiece_IdAndStatusNot(arenaPiece.getId(), RESOLVED)).isFalse();
++    }
++
++    // ── both leads open at once; resolving one leaves the other ──────────────
++
++    @Test
++    void bothLeadsCanHaveOpenRoundsAtOnce_resolvingOneDoesNotResolveTheOther() {
++        open(arenaLead);
++        open(syncLead);   // must not 409 because ARENA's round is open
++
++        assertThat(rounds).hasSize(2);
++        assertThat(roundOn(syncPiece).isOpen()).isTrue();
++        assertThat(roundOn(arenaPiece).isOpen()).isTrue();
++
++        service.setStatus(100L, arenaLead.getEmail(), "RESOLVED");
++
++        assertThat(roundOn(arenaPiece).getStatus()).isEqualTo(RESOLVED);
++        assertThat(roundOn(syncPiece).getStatus()).isEqualTo(EodClarification.Status.NEEDS_RESPONSE);
++        assertThat(clarificationRepository.existsByPiece_IdAndStatusNot(syncPiece.getId(), RESOLVED)).isTrue();
++    }
++
++    @Test
++    void aSecondRoundOnTheSamePieceIsStillRefused() {
++        open(arenaLead);
++
++        assertEquals(HttpStatus.CONFLICT, statusOf(assertThrows(ResponseStatusException.class, () -> open(arenaLead))));
++    }
++
++    @Test
++    void aLeadCannotOpenARoundOnAnotherLeadsPiece() {
++        ResponseStatusException e = assertThrows(ResponseStatusException.class,
++                () -> service.open(100L, syncLead.getEmail(), null, List.of(), arenaPiece.getId()));
++
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(e));
++        assertThat(rounds).isEmpty();
++    }
++
++    // ── thread isolation ─────────────────────────────────────────────────────
++
++    @Test
++    void eachLeadSeesOnlyTheirOwnThread_andCannotReadOrPostInTheOthers() {
++        open(arenaLead);
++        open(syncLead);
++        Long arenaRound = roundOn(arenaPiece).getId();
++        Long syncRound = roundOn(syncPiece).getId();
++        service.reply(100L, arenaLead.getEmail(), "arena question", null);
++        service.reply(100L, syncLead.getEmail(), "sync question", null);
++
++        // Each lead's default view is their own thread only.
++        assertThat(service.getThread(100L, syncLead.getEmail()))
++                .extracting(EodClarificationReplyDto::message).containsExactly("sync question");
++        assertThat(service.getThread(100L, arenaLead.getEmail()))
++                .extracting(EodClarificationReplyDto::message).containsExactly("arena question");
++
++        // Asking for the other project's thread by id is refused — read, post, status change and mark-read.
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.getThread(100L, syncLead.getEmail(), arenaRound))));
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.getStatus(100L, syncLead.getEmail(), arenaRound))));
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.reply(100L, syncLead.getEmail(), "intruding", null, arenaRound))));
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.setStatus(100L, syncLead.getEmail(), "RESOLVED", arenaRound))));
++        assertThat(roundOn(arenaPiece).isOpen()).isTrue();
++        assertThat(replies).extracting(EodClarificationReply::getMessage)
++                .containsExactlyInAnyOrder("arena question", "sync question");
++
++        service.markRead(100L, syncLead.getEmail());
++        @SuppressWarnings("unchecked")
++        ArgumentCaptor<List<EodClarificationReadState>> saved = ArgumentCaptor.forClass(List.class);
++        verify(readStateRepository).saveAll(saved.capture());
++        assertThat(saved.getValue()).extracting(s -> s.getClarification().getId()).containsExactly(syncRound);
++    }
++
++    @Test
++    void aLeadWithNoRoundOfHisOwn_getsForbiddenNotAccess_whenAnotherProjectsRoundIsOpen() {
++        open(arenaLead);
++
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.reply(100L, syncLead.getEmail(), "hello", null))));
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.setStatus(100L, syncLead.getEmail(), "RESOLVED"))));
++        assertThat(service.getThread(100L, syncLead.getEmail())).isEmpty();
++    }
++
++    @Test
++    void theEmployeeSeesEveryThreadOnTheirOwnEod_andRepliesIntoTheOneTheyPick() {
++        open(arenaLead);
++        open(syncLead);
++        Long arenaRound = roundOn(arenaPiece).getId();
++        Long syncRound = roundOn(syncPiece).getId();
++
++        assertThat(service.getStatus(100L, employee.getEmail(), arenaRound).projectName()).isEqualTo("ARENA");
++        assertThat(service.getStatus(100L, employee.getEmail(), syncRound).projectName()).isEqualTo("SYNC");
++
++        service.reply(100L, employee.getEmail(), "answer for arena", null, arenaRound);
++
++        assertThat(service.getThread(100L, arenaLead.getEmail()))
++                .extracting(EodClarificationReplyDto::message).containsExactly("answer for arena");
++        assertThat(service.getThread(100L, syncLead.getEmail())).isEmpty();
++    }
++
++    @Test
++    void anEmployeeReplyNotifiesOnlyTheLeadWhoAsked_neverTheOtherProjectsLead() {
++        open(arenaLead);
++        open(syncLead);
++
++        service.reply(100L, employee.getEmail(), "answer for arena", null, roundOn(arenaPiece).getId());
++
++        verify(notificationService).send(eq(arenaLead.getId()), eq("EOD_CLARIFICATION_REPLY"),
++                anyString(), anyString(), anyString());
++        verify(notificationService, never()).send(eq(syncLead.getId()), eq("EOD_CLARIFICATION_REPLY"),
++                anyString(), anyString(), anyString());
++    }
++
++    // ── three projects on one EOD, each with its own lead ────────────────────
++
++    @Test
++    void threeProjectsOnOneEod_eachLeadIsIsolated_andResolvingOneLeavesTheOtherTwoOpen() {
++        AppUser pulseLead = user(7L, "Dheeraj S");
++        when(userRepository.findByEmailAndDeletedAtIsNull(pulseLead.getEmail())).thenReturn(Optional.of(pulseLead));
++        EodProjectApproval pulsePiece = piece(3L, pulseLead, "PULSE");
++        when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(syncPiece, arenaPiece, pulsePiece));
++
++        open(syncLead);
++        open(arenaLead);
++        open(pulseLead);
++        assertThat(rounds).hasSize(3);
++        assertThat(rounds).extracting(c -> c.getPiece().getId()).containsExactlyInAnyOrder(1L, 2L, 3L);
++
++        // Each lead sees exactly one round — their own — and cannot reach either of the other two by id.
++        for (var pair : List.of(
++                java.util.Map.entry(syncLead, syncPiece), java.util.Map.entry(arenaLead, arenaPiece),
++                java.util.Map.entry(pulseLead, pulsePiece))) {
++            AppUser lead = pair.getKey();
++            EodClarification own = roundOn(pair.getValue());
++            assertThat(service.getStatus(100L, lead.getEmail()).clarificationId()).isEqualTo(own.getId());
++            for (EodClarification other : rounds) {
++                if (other == own) continue;
++                assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                        () -> service.getThread(100L, lead.getEmail(), other.getId()))));
++                assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                        () -> service.reply(100L, lead.getEmail(), "intruding", null, other.getId()))));
++            }
++        }
++
++        // The employee sees all three, labelled by project.
++        assertThat(rounds.stream().map(c -> service.getStatus(100L, employee.getEmail(), c.getId()).projectName()))
++                .containsExactlyInAnyOrder("SYNC", "ARENA", "PULSE");
++
++        // Resolving the middle project's round leaves the other two open and blocking their own pieces.
++        service.setStatus(100L, arenaLead.getEmail(), "RESOLVED");
++        assertThat(roundOn(arenaPiece).getStatus()).isEqualTo(RESOLVED);
++        assertThat(roundOn(syncPiece).isOpen()).isTrue();
++        assertThat(roundOn(pulsePiece).isOpen()).isTrue();
++        assertThat(clarificationRepository.existsByPiece_IdAndStatusNot(arenaPiece.getId(), RESOLVED)).isFalse();
++        assertThat(clarificationRepository.existsByPiece_IdAndStatusNot(syncPiece.getId(), RESOLVED)).isTrue();
++        assertThat(clarificationRepository.existsByPiece_IdAndStatusNot(pulsePiece.getId(), RESOLVED)).isTrue();
++
++        // An employee reply into the third round pings only the third lead.
++        service.reply(100L, employee.getEmail(), "for pulse", null, roundOn(pulsePiece).getId());
++        verify(notificationService).send(eq(pulseLead.getId()), eq("EOD_CLARIFICATION_REPLY"), anyString(), anyString(), anyString());
++        verify(notificationService, never()).send(eq(syncLead.getId()), eq("EOD_CLARIFICATION_REPLY"), anyString(), anyString(), anyString());
++        verify(notificationService, never()).send(eq(arenaLead.getId()), eq("EOD_CLARIFICATION_REPLY"), anyString(), anyString(), anyString());
++    }
++
++    // ── security: pieceId on open must belong to the requesting lead ─────────
++
++    @Test
++    void openWithAPieceIdThatDoesNotExist_isForbidden_andCreatesNothing() {
++        ResponseStatusException e = assertThrows(ResponseStatusException.class,
++                () -> service.open(100L, syncLead.getEmail(), null, List.of(), 9999L));
++
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(e));
++        assertThat(rounds).isEmpty();
++    }
++
++    @Test
++    void openWithAPieceIdThatIsNoLongerPending_isForbidden() {
++        arenaPiece.setStatus(EodProjectApproval.Status.APPROVED);   // nothing left to clarify on ARENA
++
++        ResponseStatusException e = assertThrows(ResponseStatusException.class,
++                () -> service.open(100L, arenaLead.getEmail(), null, List.of(), arenaPiece.getId()));
++
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(e));
++        assertThat(rounds).isEmpty();
++    }
++
++    @Test
++    void theEmployeeCannotOpenARoundOnTheirOwnEod_evenWithAPieceId() {
++        ResponseStatusException e = assertThrows(ResponseStatusException.class,
++                () -> service.open(100L, employee.getEmail(), null, List.of(), syncPiece.getId()));
++
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(e));
++        assertThat(rounds).isEmpty();
++    }
++
++    @Test
++    void aLeadOfTwoProjects_mayChooseEitherOfHisOwnPieces_butNeverSomeoneElses() {
++        // One lead holds BOTH the SYNC and a second piece; ARENA belongs to another lead.
++        EodProjectApproval secondOfMine = piece(4L, syncLead, "SYNC-API");
++        when(pieceRepository.findByEodEntryId(100L)).thenReturn(List.of(syncPiece, secondOfMine, arenaPiece));
++
++        service.open(100L, syncLead.getEmail(), null, List.of(), secondOfMine.getId());
++        assertThat(rounds).hasSize(1);
++        assertThat(rounds.get(0).getPiece().getId()).isEqualTo(4L);
++
++        // His other own piece is still free for a round of its own.
++        service.open(100L, syncLead.getEmail(), null, List.of(), syncPiece.getId());
++        assertThat(rounds).hasSize(2);
++
++        // ...but ARENA's piece is not his: 403, no third round.
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.open(100L, syncLead.getEmail(), null, List.of(), arenaPiece.getId()))));
++        assertThat(rounds).hasSize(2);
++    }
++
++    // ── mark-read is per round ───────────────────────────────────────────────
++
++    @Test
++    void markingOneRoundRead_leavesTheOtherProjectsRoundUnread() {
++        open(arenaLead);
++        open(syncLead);
++        Long arenaRound = roundOn(arenaPiece).getId();
++
++        service.markRead(100L, employee.getEmail(), arenaRound);
++
++        @SuppressWarnings("unchecked")
++        ArgumentCaptor<List<EodClarificationReadState>> saved = ArgumentCaptor.forClass(List.class);
++        verify(readStateRepository).saveAll(saved.capture());
++        assertThat(saved.getValue()).extracting(s -> s.getClarification().getId()).containsExactly(arenaRound);
++    }
++
++    @Test
++    void aLeadCannotMarkAnotherProjectsRoundRead() {
++        open(arenaLead);
++
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.markRead(100L, syncLead.getEmail(), roundOn(arenaPiece).getId()))));
++        verify(readStateRepository, never()).saveAll(any());
++    }
++
++    // ── legacy round (no piece): its opener's alone ──────────────────────────
++
++    /** A round opened before per-piece rounds existed (piece_id NULL), by the ARENA lead. */
++    private EodClarification legacyRoundBy(AppUser opener) {
++        EodClarification legacy = new EodClarification();
++        legacy.setId(nextId++);
++        legacy.setEodEntry(entry);
++        legacy.setOpenedBy(opener);
++        legacy.setOpenedByApprover(opener);
++        legacy.setOpenedAt(OffsetDateTime.now());
++        legacy.setStatus(EodClarification.Status.NEEDS_RESPONSE);
++        rounds.add(legacy);
++        return legacy;
++    }
++
++    @Test
++    void aLegacyRound_isInvisibleToAnotherLead_cannotBePostedInOrResolved_andDoesNotStopThemOpeningTheirOwn() {
++        EodClarification legacy = legacyRoundBy(arenaLead);
++
++        // The second lead sees nothing: no status, no thread, no inbox-style access by id.
++        EodClarificationStatusDto syncView = service.getStatus(100L, syncLead.getEmail());
++        assertThat(syncView.open()).isFalse();
++        assertThat(syncView.clarificationId()).isNull();
++        assertThat(service.getThread(100L, syncLead.getEmail())).isEmpty();
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.getThread(100L, syncLead.getEmail(), legacy.getId()))));
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.reply(100L, syncLead.getEmail(), "intruding", null, legacy.getId()))));
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.setStatus(100L, syncLead.getEmail(), "RESOLVED", legacy.getId()))));
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.markRead(100L, syncLead.getEmail(), legacy.getId()))));
++        assertThat(legacy.isOpen()).isTrue();
++        assertThat(replies).isEmpty();
++
++        // ...and it does not get in the way of their own round.
++        EodClarificationStatusDto opened = open(syncLead);
++        assertThat(opened.open()).isTrue();
++        assertThat(opened.pieceId()).isEqualTo(1L);
++        // The gate service-side is covered in ApprovalPieceClarificationGateTest: a legacy round blocks only its
++        // opener's pieces, so the second lead's approve/reject is never blocked by it.
++        assertThat(clarificationRepository.existsByEodEntryIdAndPieceIsNullAndStatusNotAndOpenedBy_Id(
++                100L, RESOLVED, syncLead.getId())).isFalse();
++    }
++
++    @Test
++    void aLegacyRound_stillWorksForItsOpenerAndTheEmployee() {
++        EodClarification legacy = legacyRoundBy(arenaLead);
++
++        // Opener: reads, posts, and can resolve.
++        assertThat(service.getStatus(100L, arenaLead.getEmail()).open()).isTrue();
++        service.reply(100L, arenaLead.getEmail(), "what is the status?", null);
++        assertThat(service.getThread(100L, arenaLead.getEmail()))
++                .extracting(EodClarificationReplyDto::message).containsExactly("what is the status?");
++
++        // Employee: reads and answers; the reply pings the opener only, never the other project's lead.
++        assertThat(service.getThread(100L, employee.getEmail(), legacy.getId())).hasSize(1);
++        service.reply(100L, employee.getEmail(), "here you go", null, legacy.getId());
++        verify(notificationService).send(eq(arenaLead.getId()), eq("EOD_CLARIFICATION_REPLY"), anyString(), anyString(), anyString());
++        verify(notificationService, never()).send(eq(syncLead.getId()), eq("EOD_CLARIFICATION_REPLY"), anyString(), anyString(), anyString());
++
++        service.setStatus(100L, arenaLead.getEmail(), "RESOLVED");
++        assertThat(legacy.getStatus()).isEqualTo(RESOLVED);
++    }
++
++    @Test
++    void aLegacyRound_isReadOnlyVisibleToTheFrozenReportingManager_justLikeAPieceKeyedRound() {
++        AppUser rm = user(9L, "Ramesh A");
++        when(userRepository.findByEmailAndDeletedAtIsNull(rm.getEmail())).thenReturn(Optional.of(rm));
++        entry.setManagerId(rm.getId());
++        legacyRoundBy(arenaLead);
++        open(syncLead);   // a piece-keyed round on the same entry
++
++        // The read-only RM sees both kinds of round (as before for piece-keyed rounds), and can act on neither.
++        EodClarificationStatusDto view = service.getStatus(100L, rm.getEmail());
++        assertThat(view.open()).isTrue();
++        assertThat(view.canReply()).isFalse();
++        assertThat(view.canResolve()).isFalse();
++        assertThat(rounds.stream().filter(c -> c.getPiece() == null).map(c ->
++                service.getStatus(100L, rm.getEmail(), c.getId()).clarificationId())).hasSize(1).doesNotContainNull();
++        assertEquals(HttpStatus.FORBIDDEN, statusOf(assertThrows(ResponseStatusException.class,
++                () -> service.reply(100L, rm.getEmail(), "x", null))));
++    }
++
++    @Test
++    void aLegacyRound_appliesToTheOpenersPieces_notToAPieceEscalatedAwayFromHim() {
++        AppUser pm = user(30L, "PM P");
++        legacyRoundBy(arenaLead);
++
++        // The ARENA piece is still the opener's: the legacy round applies to its card.
++        assertThat(service.getStatusForPiece(100L, employee.getEmail(), arenaPiece.getId()).open()).isTrue();
++        // SYNC's piece is another lead's: it never does.
++        assertThat(service.getStatusForPiece(100L, employee.getEmail(), syncPiece.getId()).open()).isFalse();
++
++        // Escalate the ARENA piece to a PM: it is no longer held by the opener, so the round no longer applies.
++        arenaPiece.setEscalatedTo(pm);
++        assertThat(service.getStatusForPiece(100L, employee.getEmail(), arenaPiece.getId()).open()).isFalse();
++    }
++
++    @Test
++    void anOpenersLegacyRound_stopsThatLeadOpeningAnotherPieceRound_butNotAnyoneElse() {
++        legacyRoundBy(arenaLead);
++
++        assertEquals(HttpStatus.CONFLICT, statusOf(assertThrows(ResponseStatusException.class, () -> open(arenaLead))));
++        assertThat(open(syncLead).open()).isTrue();
++    }
++}
+diff --git a/frontend/src/api/eodClarification.rounds.test.tsx b/frontend/src/api/eodClarification.rounds.test.tsx
+new file mode 100644
+index 0000000..a23d113
+--- /dev/null
++++ b/frontend/src/api/eodClarification.rounds.test.tsx
+@@ -0,0 +1,117 @@
++// @vitest-environment jsdom
++/**
++ * One EOD can have a clarification round per project, so every status / thread / mark-read call is keyed and
++ * parameterised by the round (or piece) it is about. Opening card A's chat and then card B's must never show
++ * A's data under B, and posting or marking read must name the right round.
++ */
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import type { ReactNode } from 'react';
++
++const get = vi.fn();
++const post = vi.fn();
++vi.mock('./client', () => ({ api: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a) } }));
++
++import {
++  useClarificationStatus, useClarificationStatusForApprovals, useClarificationThread, useMarkClarificationRead,
++  useSendClarificationReply, type EodInboxItemDto,
++} from './eodClarification';
++
++function wrapper(qc: QueryClient) {
++  return ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
++}
++const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
++
++// The server answers per round / piece, exactly as the real endpoints do.
++beforeEach(() => {
++  get.mockReset();
++  post.mockReset();
++  get.mockImplementation((url: string, config?: { params?: { clarificationId?: number; pieceId?: number } }) => {
++    const p = config?.params ?? {};
++    if (url.endsWith('/replies')) {
++      return Promise.resolve({ data: [{ id: 1, message: `thread of round ${p.clarificationId ?? 'default'}` }] });
++    }
++    return Promise.resolve({ data: { clarificationId: p.clarificationId ?? p.pieceId ?? null, projectName: `P${p.clarificationId ?? p.pieceId}` } });
++  });
++  post.mockResolvedValue({ data: {} });
++});
++afterEach(cleanup);
++
++describe('thread cache is keyed by round', () => {
++  it('opening round A then round B fetches B afresh and never shows A under B', async () => {
++    const qc = newClient();
++    const { result, rerender } = renderHook(
++      ({ id }: { id: number }) => useClarificationThread(100, 'employee', true, id),
++      { wrapper: wrapper(qc), initialProps: { id: 7 } },
++    );
++    await waitFor(() => expect(result.current.data).toBeDefined());
++    expect(result.current.data?.[0].message).toBe('thread of round 7');
++
++    rerender({ id: 8 });
++    // The moment B is selected there is no stale A data under it...
++    expect(result.current.data).toBeUndefined();
++    await waitFor(() => expect(result.current.data).toBeDefined());
++    expect(result.current.data?.[0].message).toBe('thread of round 8');
++
++    // ...and each round has its own request carrying its own id.
++    const sent = get.mock.calls.map(c => (c[1] as { params?: { clarificationId?: number } }).params?.clarificationId);
++    expect(sent).toEqual([7, 8]);
++    // Going back to A serves A's own cache, not B's.
++    rerender({ id: 7 });
++    expect(result.current.data?.[0].message).toBe('thread of round 7');
++  });
++});
++
++describe('status cache is keyed by round / piece', () => {
++  it('employee status for round A and round B are separate entries', async () => {
++    const qc = newClient();
++    const { result, rerender } = renderHook(
++      ({ id }: { id: number }) => useClarificationStatus(100, 'employee', true, id),
++      { wrapper: wrapper(qc), initialProps: { id: 7 } },
++    );
++    await waitFor(() => expect(result.current.data?.projectName).toBe('P7'));
++    rerender({ id: 8 });
++    expect(result.current.data).toBeUndefined();
++    await waitFor(() => expect(result.current.data?.projectName).toBe('P8'));
++  });
++
++  it("an Approvals card reads only its own piece's status (card A then card B)", async () => {
++    const qc = newClient();
++    const { result, rerender } = renderHook(
++      ({ piece }: { piece: number }) => useClarificationStatusForApprovals(100, true, false, piece),
++      { wrapper: wrapper(qc), initialProps: { piece: 1 } },
++    );
++    await waitFor(() => expect(result.current.data?.projectName).toBe('P1'));
++    rerender({ piece: 2 });
++    expect(result.current.data).toBeUndefined();
++    await waitFor(() => expect(result.current.data?.projectName).toBe('P2'));
++    expect(get.mock.calls.map(c => (c[1] as { params?: { pieceId?: number } }).params?.pieceId)).toEqual([1, 2]);
++  });
++});
++
++describe('writes name their round', () => {
++  it('a reply is posted with the chosen round id', async () => {
++    const qc = newClient();
++    const { result } = renderHook(() => useSendClarificationReply(100, 'employee', 8), { wrapper: wrapper(qc) });
++    await act(async () => { await result.current.mutateAsync({ message: 'hi', files: [] }); });
++
++    const form = post.mock.calls[0][1] as FormData;
++    expect(form.get('clarificationId')).toBe('8');
++    expect(form.get('message')).toBe('hi');
++  });
++
++  it('marking one round read clears only that round\'s unread dot, and tells the server which round', async () => {
++    const qc = newClient();
++    const row = (clarificationId: number): EodInboxItemDto => ({ clarificationId, eodEntryId: 100, unread: true } as EodInboxItemDto);
++    qc.setQueryData(['eod-inbox', 'employee', true], [row(7), row(8)]);
++    const { result } = renderHook(() => useMarkClarificationRead('employee'), { wrapper: wrapper(qc) });
++
++    await act(async () => { await result.current.mutateAsync({ entryId: 100, clarificationId: 7 }); });
++
++    const rows = qc.getQueryData<EodInboxItemDto[]>(['eod-inbox', 'employee', true])!;
++    expect(rows.find(r => r.clarificationId === 7)!.unread).toBe(false);
++    expect(rows.find(r => r.clarificationId === 8)!.unread).toBe(true);
++    expect(post.mock.calls[0][2]).toEqual({ params: { clarificationId: 7 } });
++  });
++});

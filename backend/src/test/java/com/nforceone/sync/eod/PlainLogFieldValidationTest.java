@@ -76,7 +76,7 @@ class PlainLogFieldValidationTest {
                 attachmentService, notificationService,
                 new ApprovalPieceRouter(), projectApprovalRepository,
                 accessPolicy, leadAccessService,
-                allocationRepository, auditLogRepository, logLineRepository);
+                allocationRepository, auditLogRepository, logLineRepository, org.mockito.Mockito.mock(BenchModePolicy.class));
 
         // Success-path tests reach attachmentService after validation; return empty maps.
         lenient().when(attachmentService.loadForEntries(any()))

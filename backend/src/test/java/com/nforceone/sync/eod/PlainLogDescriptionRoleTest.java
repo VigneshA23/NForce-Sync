@@ -5,7 +5,9 @@ import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.auth.AuthController;
 import com.nforceone.sync.eod.dto.SaveEodRequest;
 import com.nforceone.sync.project.AllocationRepository;
+import com.nforceone.sync.project.ProjectRepository;
 import com.nforceone.sync.project.TaskCategory;
+import com.nforceone.sync.reporting.ReportingScopeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,14 +47,19 @@ class PlainLogDescriptionRoleTest {
     @Mock AppUserRepository userRepository;
     @Mock EodLogLineRepository logLineRepository;
     @Mock AllocationRepository allocationRepository;
+    @Mock ReportingScopeService reportingScope;
+    @Mock ProjectRepository projectRepository;
 
     private EodService service;
+    private BenchModePolicy benchPolicy;
 
     @BeforeEach
     void setUp() {
+        // Real policy over mocked repositories: the form-routing tests below must exercise the real rule.
+        benchPolicy = new BenchModePolicy(allocationRepository, reportingScope, projectRepository);
         service = new EodService(entryRepository, null, userRepository, null, null, null,
                 null, null, null, null, null, null, null, null, null, allocationRepository,
-                null, logLineRepository);
+                null, logLineRepository, benchPolicy);
     }
 
     // ── users ─────────────────────────────────────────────────────────────────
@@ -102,6 +109,7 @@ class PlainLogDescriptionRoleTest {
     private void persistedLine(String description) {
         TaskCategory c = new TaskCategory();
         c.setId(5L);
+        c.setScope("MANAGEMENT"); // a Daily Log category — submit now checks scope against the entry's bench_mode
         EodLogLine line = new EodLogLine();
         line.setCategory(c);
         line.setHours(new BigDecimal("2.00"));
@@ -166,13 +174,15 @@ class PlainLogDescriptionRoleTest {
 
     private String eodFormFor(AppUser u) {
         AuthController auth = new AuthController(null, null, null, null, null, null, null, null,
-                allocationRepository, null, null);
+                allocationRepository, null, null, benchPolicy);
         return ReflectionTestUtils.invokeMethod(auth, "computeEodForm", u);
     }
 
     private void allocatedToday(boolean allocated) {
         when(allocationRepository.findEmployeeIdsAllocatedOn(anyList(), any()))
                 .thenReturn(allocated ? Set.of(1L, 2L, 3L) : Set.of());
+        // BenchModePolicy (EMPLOYEE role) asks the ACTIVE-project variant of the same question.
+        when(allocationRepository.existsActiveProjectAllocationOn(any(), any())).thenReturn(allocated);
     }
 
     @Test
@@ -201,6 +211,7 @@ class PlainLogDescriptionRoleTest {
         AppUser employeeWhoManagesSomeone = withManager(user(4L, AppUser.Role.EMPLOYEE));
         AppUser report = user(51L, AppUser.Role.EMPLOYEE);
         report.setManager(employeeWhoManagesSomeone);
+        when(reportingScope.hasDirectReports(4L)).thenReturn(true);
         allocatedToday(false);
         assertEquals("PROJECT_GROUPED", eodFormFor(employeeWhoManagesSomeone));
         allocatedToday(true);
@@ -208,10 +219,28 @@ class PlainLogDescriptionRoleTest {
     }
 
     @Test
-    void backendRejectsADailyLogDraftFromAnEmployee_evenOneWithDirectReports() {
+    void employeeWithoutAnActiveProjectAllocation_getsDailyLog_andAnAllocatedOneGetsTheProjectForm() {
+        AppUser employee = withManager(user(7L, AppUser.Role.EMPLOYEE));
+        allocatedToday(false);
+        assertEquals("PLAIN_LOG", eodFormFor(employee));
+        allocatedToday(true);
+        assertEquals("PROJECT_GROUPED", eodFormFor(employee));
+    }
+
+    @Test
+    void employeeWhoLeadsAnActiveProject_isNeverOnTheBench() {
+        AppUser lead = withManager(user(8L, AppUser.Role.EMPLOYEE));
+        when(projectRepository.existsByLeadIdAndStatus(8L, com.nforceone.sync.project.Project.Status.ACTIVE)).thenReturn(true);
+        allocatedToday(false);
+        assertEquals("PROJECT_GROUPED", eodFormFor(lead));
+    }
+
+    @Test
+    void backendRejectsADailyLogDraftFromAnEmployeeOnAProject_evenOneWithDirectReports() {
         AppUser employeeWhoManagesSomeone = withManager(user(4L, AppUser.Role.EMPLOYEE));
         AppUser report = user(51L, AppUser.Role.EMPLOYEE);
         report.setManager(employeeWhoManagesSomeone);
+        when(reportingScope.hasDirectReports(4L)).thenReturn(true);
         when(userRepository.findByEmailAndDeletedAtIsNull(anyString())).thenReturn(Optional.of(employeeWhoManagesSomeone));
         when(entryRepository.findByEmployeeIdAndEntryDate(any(), any())).thenReturn(Optional.empty());
 
@@ -221,6 +250,6 @@ class PlainLogDescriptionRoleTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> service.saveDraft(req, "e@y.z"));
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
-        assertTrue(ex.getReason().contains("project-grouped"));
+        assertTrue(ex.getReason().contains("Submit EOD form"), ex.getReason());
     }
 }

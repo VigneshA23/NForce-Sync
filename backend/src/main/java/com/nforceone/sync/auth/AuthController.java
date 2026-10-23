@@ -40,6 +40,7 @@ public class AuthController {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final ProjectRepository projectRepository;
     private final AllocationRepository allocationRepository;
+    private final com.nforceone.sync.eod.BenchModePolicy benchModePolicy;
     private final com.nforceone.sync.project.PmScopeService pmScopeService;
     private final com.nforceone.sync.reporting.ReportingScopeService reportingScopeService;
 
@@ -53,7 +54,9 @@ public class AuthController {
                           ProjectRepository projectRepository,
                           AllocationRepository allocationRepository,
                           com.nforceone.sync.project.PmScopeService pmScopeService,
-                          com.nforceone.sync.reporting.ReportingScopeService reportingScopeService) {
+                          com.nforceone.sync.reporting.ReportingScopeService reportingScopeService,
+                          com.nforceone.sync.eod.BenchModePolicy benchModePolicy) {
+        this.benchModePolicy = benchModePolicy;
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.appUserRepository = appUserRepository;
@@ -244,14 +247,16 @@ public class AuthController {
 
     /**
      * Determines which EOD submission form this user should use.
-     * - EMPLOYEE always gets PROJECT_GROUPED (task-based form).
-     * - Any role with an active project allocation today gets PROJECT_GROUPED.
+     * - EMPLOYEE with an active project allocation today gets PROJECT_GROUPED (task-based form); an EMPLOYEE
+     *   on the bench (no allocation on an ACTIVE project today — BenchModePolicy) gets PLAIN_LOG, the Daily Log.
+     *   Checked before the manager test below; every employee has a manager anyway (UserService requires one).
+     * - Any other role with an active project allocation today gets PROJECT_GROUPED.
      * - Any role with a reporting manager but no active allocation gets PLAIN_LOG (daily summary).
      * - No reporting manager (top-level SuperAdmin) → null (no EOD submission).
      */
     private String computeEodForm(AppUser user) {
         if (user.getRole() == AppUser.Role.EMPLOYEE) {
-            return "PROJECT_GROUPED";
+            return benchModePolicy.isBenchMode(user, java.time.LocalDate.now()) ? "PLAIN_LOG" : "PROJECT_GROUPED";
         }
         if (user.getManager() == null) {
             return null;

@@ -1,5 +1,6 @@
 /**
- * Daily Log — PLAIN_LOG EOD form for PM / Admin / SuperAdmin roles.
+ * Daily Log — PLAIN_LOG EOD form for PM / Admin / SuperAdmin roles, and for an EMPLOYEE with no active
+ * project allocation (the bench). The category list is chosen by the server from the caller and entry date.
  *
  * Design matches SubmitEOD.tsx exactly: same inputStyle (var(--line2), borderRadius 6),
  * same Label primitive, same section spacing (marginTop 24/28), same button style.
@@ -7,7 +8,7 @@
  * cards live on as: a submission-window chip/banner + an approval status line under the header, and a
  * "How it works" popover beside the title (dailyLogParts.tsx).
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -29,7 +30,8 @@ import { legacyLogOf } from './dailyLogLegacy';
 import { api } from '../../api/client';
 import { extractError } from '../../lib/extractError';
 import {
-  MAX_DESC, QUARTER, descriptionError, draftBlockReason, draftErrorMessage, firstInvalidLine, lineFieldId, lineProblems, type LineField,
+  MAX_DESC, QUARTER, clearedCategoriesNotice, descriptionError, draftBlockReason, draftErrorMessage, firstInvalidLine,
+  lineFieldId, lineProblems, noCategoriesMessage, staleCategoryRows, type LineField,
 } from './dailyLogValidation';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -151,7 +153,7 @@ export default function DailyLogForm() {
   const [workLocation, setWorkLocation] = useState('');
   const [nextDayPlan,  setNextDayPlan]  = useState('');
   const [remarks,      setRemarks]      = useState('');
-  const [lines,        setLines]        = useState<LogLine[]>([]);
+  const [rawLines,     setLines]        = useState<LogLine[]>([]);
   const [notes,        setNotes]        = useState('');
   const [isLeave,      setIsLeave]      = useState(false);
   // Weekend only: "I worked on this day". Off (default) = no-work weekend, no line items; reset on date change.
@@ -191,10 +193,15 @@ export default function DailyLogForm() {
     enabled:  !!user,
   });
 
-  const { data: categories = [] } = useQuery<TaskCategoryDto[]>({
-    queryKey: ['task-categories', 'MANAGEMENT'],
-    queryFn:  () => api.get<TaskCategoryDto[]>('/task-categories?scope=MANAGEMENT').then(r => r.data),
-    staleTime: 5 * 60_000,
+  // The backend chooses the list from who you are and the entry date (Bench Log categories for an employee
+  // with no active project that day, the Daily Log categories for everyone else) — the client never picks a
+  // scope. Keyed by date, so it refetches when the date changes; `categoriesReady` is false until the new
+  // date's list has arrived, so the stale-category check below never runs against an empty placeholder.
+  const { data: categories = [], isSuccess: categoriesReady } = useQuery<TaskCategoryDto[]>({
+    queryKey: ['task-categories', 'daily-log', user?.id, selectedDate],
+    queryFn:  () => api.get<TaskCategoryDto[]>('/task-categories/daily-log', { params: { date: selectedDate } }).then(r => r.data),
+    staleTime: 60_000,
+    enabled:  !!user,
   });
 
   const { data: dayDefaults, isLoading: loadingDD } = useQuery({
@@ -213,8 +220,27 @@ export default function DailyLogForm() {
   });
 
   const entry: EodEntryDto | null = entries[0] ?? null;
+
+  // `rawLines` is what the user has typed; `lines` is what everything else reads (render, validation, autosave,
+  // submit). A category the server's list for this date does not contain — e.g. Copy yesterday from a date on
+  // the other side of an allocation change, or one deactivated since the draft was saved — is blanked here, so a
+  // stale category can never be submitted or saved, and the row asks for a new pick. Derived, not an effect:
+  // picking a valid category writes it into rawLines and the row (and the notice) simply stop being stale.
+  // Waits for this date's own list (`categoriesReady`) and leaves read-only entries as filed.
+  const staleRows = useMemo(
+    () => (categoriesReady && editable(entry) ? staleCategoryRows(rawLines, categories.map(c => c.id)) : []),
+    [rawLines, categories, categoriesReady, entry]);
+  const lines = useMemo(
+    () => (staleRows.length === 0 ? rawLines
+      : rawLines.map((l, i) => (staleRows.includes(i) ? { ...l, categoryId: null } : l))),
+    [rawLines, staleRows]);
+  const clearedNotice = clearedCategoriesNotice(staleRows);
   const { data: pieces = [] }     = useEntryPieces(entryId);
   const dailyCap                  = dayDefaults?.workingHoursPerDay ?? 8;
+  // An EMPLOYEE-role user only reaches this form when they have no active project (computeEodForm), so for them
+  // the server's list is the Bench Log set. Used only to word the "no categories" messages — the list itself
+  // always comes from the server, never from this flag.
+  const benchMode                 = user?.role === 'employee';
 
   // ── Populate form ─────────────────────────────────────────────────────────
 
@@ -367,8 +393,13 @@ export default function DailyLogForm() {
       showToast('success', 'Draft saved');
     },
     // extractError reads the server's {error, fields}: a rejected draft says which row and why.
-    onError: (err: unknown) => showToast('error',
-      err instanceof DraftBlockedError ? `Can't save draft yet — ${err.message}` : draftErrorMessage(extractError(err))),
+    // A server rejection (e.g. this date belongs to the other form, or a category not allowed for the date) is
+    // also shown in the banner, because a toast alone is easy to miss for a message that needs acting on.
+    onError: (err: unknown) => {
+      if (err instanceof DraftBlockedError) { showToast('error', `Can't save draft yet — ${err.message}`); return; }
+      const msg = draftErrorMessage(extractError(err));
+      showToast('error', msg); setErrors([msg]);
+    },
   });
 
   const submitMut = useMutation({
@@ -393,7 +424,9 @@ export default function DailyLogForm() {
       showToast('success', isLeave || isNonWork ? 'Leave day recorded' : noWorkWeekend ? 'Weekend recorded' : 'Daily log submitted');
     },
     onError: (err: unknown) => {
-      if ((err as Error).message !== 'validation') showToast('error', extractError(err));
+      if ((err as Error).message === 'validation') return;
+      const msg = extractError(err);
+      showToast('error', msg); setErrors([msg]);
     },
   });
 
@@ -664,6 +697,7 @@ export default function DailyLogForm() {
                     line={line}
                     index={idx}
                     categories={categories}
+                    benchMode={benchMode}
                     isReadOnly={isReadOnly}
                     showErrors={submitAttempted}
                     onUpdate={patch => updateLine(line.key, patch)}
@@ -684,7 +718,18 @@ export default function DailyLogForm() {
               {isEditable && !isLeave && categories.length === 0 && lines.length > 0 && (
                 <div style={{ display:'flex', gap:8, alignItems:'center', padding:'9px 13px', borderRadius:7, marginTop:6, background:'rgba(224,169,59,.08)', border:'1px solid rgba(224,169,59,.25)', fontSize:12, color:'var(--warn)' }}>
                   <AlertTriangle size={13} />
-                  No categories configured. Go to <strong style={{ color:'var(--txt)', marginLeft:3 }}>Org Masters → Task Categories</strong> and add categories with scope "Management".
+                  {noCategoriesMessage(benchMode).lead}
+                  {noCategoriesMessage(benchMode).admin && (
+                    <><strong style={{ color:'var(--txt)', margin:'0 3px' }}>{noCategoriesMessage(benchMode).admin}</strong>{noCategoriesMessage(benchMode).tail}</>
+                  )}
+                </div>
+              )}
+
+              {/* Categories cleared because this date's list no longer allows them */}
+              {isEditable && clearedNotice && (
+                <div role="status" style={{ display:'flex', gap:8, alignItems:'center', padding:'9px 13px', borderRadius:7, marginTop:6, background:'rgba(224,169,59,.08)', border:'1px solid rgba(224,169,59,.25)', fontSize:12, color:'var(--warn)' }}>
+                  <AlertTriangle size={13} />
+                  {clearedNotice}
                 </div>
               )}
 
@@ -804,6 +849,8 @@ export default function DailyLogForm() {
 
 interface LineRowProps {
   line: LogLine; index: number; categories: TaskCategoryDto[];
+  /** Employee on the bench: they have no Org Masters to configure, so the empty placeholder must not point there. */
+  benchMode: boolean;
   isReadOnly: boolean;
   /** True after a failed submit: empty required fields then show their error, not just malformed ones. */
   showErrors: boolean;
@@ -811,7 +858,7 @@ interface LineRowProps {
   onRemove: () => void;
 }
 
-function LineRow({ line, index, categories, isReadOnly, showErrors, onUpdate, onRemove }: LineRowProps) {
+function LineRow({ line, index, categories, benchMode, isReadOnly, showErrors, onUpdate, onRemove }: LineRowProps) {
   const problems = lineProblems(line);
   const hoursOk  = problems.hours == null;
   // A description error shows once the user has typed something wrong, or — for an empty field — only after
@@ -837,7 +884,7 @@ function LineRow({ line, index, categories, isReadOnly, showErrors, onUpdate, on
           onChange={e => onUpdate({ categoryId: e.target.value ? Number(e.target.value) : null })}
           style={{ ...cellStyle, flex:1, cursor:(isReadOnly||categories.length===0)?'default':'pointer', borderColor:line.categoryId==null&&!isReadOnly?'rgba(228,55,61,.4)':'var(--line2)' }}
         >
-          <option value="">{categories.length === 0 ? 'No categories — configure in Org Masters' : 'Select category…'}</option>
+          <option value="">{categories.length === 0 ? (benchMode ? 'No categories available' : 'No categories — configure in Org Masters') : 'Select category…'}</option>
           {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <input

@@ -69,7 +69,7 @@ class PlainLogDraftTest {
     void setUp() {
         service = new EodService(entryRepository, null, userRepository, null, categoryRepository, null,
                 configRepository, null, holidayRepository, attachmentService, null, null, null, null, null,
-                allocationRepository, null, logLineRepository);
+                allocationRepository, null, logLineRepository, org.mockito.Mockito.mock(BenchModePolicy.class));
 
         pm = new AppUser();
         pm.setId(1L);

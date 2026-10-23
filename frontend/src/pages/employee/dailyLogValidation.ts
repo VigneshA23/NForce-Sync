@@ -65,3 +65,33 @@ export function draftBlockReason(lines: LineFields[]): string | null {
   const i = lines.findIndex(l => l.categoryId == null);
   return i < 0 ? null : `Row ${i + 1} has no category — pick one so the draft can be saved.`;
 }
+
+/**
+ * Rows whose category is not in the list the server offered for this entry date. The server picks the list
+ * (Bench Log or Daily Log categories, by who you are and the date), so a category carried over from another
+ * date — Copy yesterday, a draft whose category was since deactivated — may no longer be allowed. Returns the
+ * 0-based row indexes; the form clears those rows' category so a stale one is never submitted.
+ */
+export function staleCategoryRows(lines: LineFields[], allowedCategoryIds: number[]): number[] {
+  const allowed = new Set(allowedCategoryIds);
+  const stale: number[] = [];
+  lines.forEach((l, i) => { if (l.categoryId != null && !allowed.has(l.categoryId)) stale.push(i); });
+  return stale;
+}
+
+/** The inline notice shown after stale categories were cleared; null when nothing was cleared. */
+export function clearedCategoriesNotice(rowIndexes: number[]): string | null {
+  if (rowIndexes.length === 0) return null;
+  const rows = rowIndexes.map(i => i + 1).join(', ');
+  return `${rowIndexes.length === 1 ? `Row ${rows}'s category isn't` : `Rows ${rows}'s categories aren't`} `
+    + 'available for this date, so '
+    + `${rowIndexes.length === 1 ? 'it was' : 'they were'} cleared. Pick one from the list.`;
+}
+
+/** Shown when the server returns no categories for this date. Bench Log users have no Org Masters to go to. */
+export function noCategoriesMessage(benchMode: boolean): { lead: string; admin?: string; tail?: string } {
+  return benchMode
+    ? { lead: 'No Bench Log categories are configured. Please contact your administrator.' }
+    : { lead: 'No categories configured. Go to ', admin: 'Org Masters → Task Categories',
+        tail: ' and add categories with scope "Management".' };
+}

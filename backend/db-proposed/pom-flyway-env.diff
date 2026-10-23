@@ -1,0 +1,35 @@
+PROPOSED CHANGE — NOT APPLIED. For review only. Apply only after the Neon password rotation is confirmed.
+
+Purpose: stop hard-coding the Flyway Maven plugin's database URL, user and password in pom.xml. The three
+values come from environment variables with NO default. If a variable is unset, Maven leaves the literal
+text ${env.NAME} in place, so `mvn flyway:*` fails with an obvious connection error instead of silently
+using any database.
+
+The three removed lines hold real values, so they are shown redacted here — this file must never contain them.
+Only backend/pom.xml lines 123-125 change. application-local.yml is not touched.
+
+--- a/backend/pom.xml
++++ b/backend/pom.xml
+@@ -120,9 +120,9 @@
+ 				<artifactId>flyway-maven-plugin</artifactId>
+ 				<version>12.4.0</version>
+ 				<configuration>
+-					<url>[REDACTED: jdbc url with host and database name]</url>
+-					<user>[REDACTED: database owner user]</user>
+-					<password>[REDACTED: database password]</password>
++					<url>${env.FLYWAY_DB_URL}</url>
++					<user>${env.FLYWAY_DB_USER}</user>
++					<password>${env.FLYWAY_DB_PASSWORD}</password>
+ 					<locations>
+ 						<location>filesystem:src/main/resources/db/migration</location>
+ 					</locations>
+
+Notes
+- The variable names are dedicated (FLYWAY_DB_*), deliberately different from SPRING_DATASOURCE_* (the app) and
+  NEON_BRANCH_* (the branch test), so nothing is picked up by accident.
+- No value, default or fallback appears anywhere in the diff.
+- How it would be applied after your review: a line-based replacement of lines 123-125, guarded by a structural
+  check that those three lines are the <url>, <user> and <password> elements, so a shifted file is refused
+  rather than mis-edited. The old lines are never printed or written to a file.
+- Rotation does not remove the old password from git history (it is on origin/main, origin/dev and other branches).
+  Rotating makes it harmless; a history rewrite is a separate decision.

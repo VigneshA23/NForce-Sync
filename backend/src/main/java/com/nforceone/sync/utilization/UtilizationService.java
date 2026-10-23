@@ -7,7 +7,10 @@ import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.businessrules.Holiday;
 import com.nforceone.sync.businessrules.HolidayRepository;
 import com.nforceone.sync.eod.EodEntry;
+import com.nforceone.sync.eod.BenchModePolicy;
 import com.nforceone.sync.eod.EodEntryRepository;
+import com.nforceone.sync.eod.EodLogLine;
+import com.nforceone.sync.eod.EodLogLineRepository;
 import com.nforceone.sync.eod.EodTask;
 import com.nforceone.sync.project.PmScopeService;
 import com.nforceone.sync.teamlead.LeadTeamPolicy;
@@ -43,6 +46,7 @@ public class UtilizationService {
     private final LeadTeamPolicy                 leadTeamPolicy;
     private final EodProjectApprovalRepository   pieceRepository;
     private final PmScopeService                 pmScopeService;
+    private final EodLogLineRepository           logLineRepository;
 
     public UtilizationService(EodEntryRepository entryRepository,
                                AppUserRepository userRepository,
@@ -50,7 +54,9 @@ public class UtilizationService {
                                HolidayRepository holidayRepository,
                                LeadTeamPolicy leadTeamPolicy,
                                EodProjectApprovalRepository pieceRepository,
-                               PmScopeService pmScopeService) {
+                               PmScopeService pmScopeService,
+                               EodLogLineRepository logLineRepository) {
+        this.logLineRepository  = logLineRepository;
         this.entryRepository    = entryRepository;
         this.userRepository     = userRepository;
         this.snapshotRepository = snapshotRepository;
@@ -111,6 +117,19 @@ public class UtilizationService {
                             && Boolean.TRUE.equals(task.getTaskCategory().getIsProductive());
                     if (productive) approvedProductive = approvedProductive.add(task.getHours());
                     else bench = bench.add(task.getHours());
+                }
+                // V117 Bench Log: an approved bench-mode Daily Log keeps its hours in eod_log_line (no
+                // eod_task rows), so the loop above sees nothing for it. BENCH-scope lines count as BENCH
+                // hours — never productive, whatever the category's flag says. MANAGEMENT lines (PM, Admin,
+                // RM, Lead Daily Logs) are deliberately still uncounted, exactly as before this change.
+                // Each hour is counted once: a bench entry has lines only, so nothing is added twice.
+                if (Boolean.TRUE.equals(entry.getBenchMode())) {
+                    for (EodLogLine line : logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(entry.getId())) {
+                        if (line.getHours() == null || line.getCategory() == null) continue;
+                        if (BenchModePolicy.SCOPE_BENCH.equals(line.getCategory().getScope())) {
+                            bench = bench.add(line.getHours());
+                        }
+                    }
                 }
             }
         }

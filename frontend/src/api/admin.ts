@@ -397,13 +397,16 @@ export interface TaskCategoryAdminDto {
   name: string;
   isProductive: boolean;
   active: boolean;
-  scope: 'EMPLOYEE' | 'MANAGEMENT';
+  // EMPLOYEE = Submit EOD, MANAGEMENT = Daily Log, BENCH = Bench Log (Daily Log for an employee with no active project).
+  scope: TaskCategoryScope;
 }
+
+export type TaskCategoryScope = 'EMPLOYEE' | 'MANAGEMENT' | 'BENCH';
 
 export interface CreateTaskCategoryPayload {
   name: string;
   isProductive: boolean;
-  scope: 'EMPLOYEE' | 'MANAGEMENT';
+  scope: TaskCategoryScope;
 }
 
 export async function listAllCategories(): Promise<TaskCategoryAdminDto[]> {

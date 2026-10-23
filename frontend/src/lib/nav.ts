@@ -386,7 +386,25 @@ export function getNavSections(role: Role, capabilities: ServerUserCapabilities)
     }
   }
 
+  // An EMPLOYEE with no active project (eodForm PLAIN_LOG) files the Daily Log, not the project-grouped EOD,
+  // so the item is named for what the page is. Done here, once, so the sidebar, the breadcrumb (getNavItem)
+  // and Global Search all agree. Every other role/form keeps "Submit EOD" — Admin/PM/RM labels are untouched.
+  if (role === 'employee' && capabilities.eodForm === 'PLAIN_LOG') {
+    sections = relabelEodSubmit(sections, DAILY_LOG_LABEL);
+  }
+
   return sections;
+}
+
+export const DAILY_LOG_LABEL = 'Daily Log';
+
+/** A copy of `sections` with the /eod/submit item renamed; the route is unchanged, so links keep working. */
+function relabelEodSubmit(sections: NavSection[], label: string): NavSection[] {
+  const rename = (item: NavItem): NavItem => (item.path === '/eod/submit' ? { ...item, label } : item);
+  return sections.map(s => ({
+    ...s,
+    items: s.items.map(e => (isNavGroup(e) ? { ...e, children: e.children.map(rename) } : rename(e))),
+  }));
 }
 
 /**

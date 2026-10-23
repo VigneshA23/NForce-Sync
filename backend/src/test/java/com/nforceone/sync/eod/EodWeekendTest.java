@@ -56,7 +56,7 @@ class EodWeekendTest {
         // auditLogRepo, logLineRepo
         service = new EodService(entryRepository, null, userRepository, null, null, null,
                 configRepository, null, holidayRepository, null, null, null, null, null, null, null,
-                null, null);
+                null, null, org.mockito.Mockito.mock(BenchModePolicy.class));
         config = new BusinessRuleConfig();
         config.setWeekendRule(BusinessRuleConfig.WeekendRule.SAT_SUN);
         when(configRepository.findById(1L)).thenReturn(Optional.of(config));

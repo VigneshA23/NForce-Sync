@@ -60,7 +60,7 @@ class EodEntryLeadScopeTest {
         // accessPolicy, leadAccess, allocationRepo, auditLogRepo, logLineRepo
         EodAccessPolicy policy = new EodAccessPolicy(leadAccess, reportingScope);
         service = new EodService(entryRepository, null, userRepository, null, null, null, null, null, null,
-                attachmentService, notificationService, null, null, policy, leadAccess, null, null, null);
+                attachmentService, notificationService, null, null, policy, leadAccess, null, null, null, org.mockito.Mockito.mock(BenchModePolicy.class));
 
         owner = user(1L, AppUser.Role.EMPLOYEE, "Akhila S");
         leadA = user(2L, AppUser.Role.EMPLOYEE, "Lead A");

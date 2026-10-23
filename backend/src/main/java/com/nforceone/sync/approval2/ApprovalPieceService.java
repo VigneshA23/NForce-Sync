@@ -240,9 +240,13 @@ public class ApprovalPieceService {
         EodEntry entry = piece.getEodEntry();
         updateEntryStatus(entry);
 
-        // Decision 8: utilization only for EMPLOYEE role; PLAIN_LOG entries are never counted.
+        // Decision 8: utilization only for EMPLOYEE role; PLAIN_LOG entries are never counted — except a
+        // bench-mode Daily Log (V117), whose approved BENCH-scope lines count as Bench hours. All approve
+        // paths (the piece endpoints and the legacy /api/approvals ones) end up here, so this is the one place.
+        boolean benchDailyLog = entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG
+                && Boolean.TRUE.equals(entry.getBenchMode());
         if (entry.getEmployee().getRole() == AppUser.Role.EMPLOYEE
-                && entry.getEntryForm() != EodEntry.EntryForm.PLAIN_LOG) {
+                && (entry.getEntryForm() != EodEntry.EntryForm.PLAIN_LOG || benchDailyLog)) {
             utilizationService.recomputeForEntry(entry.getId());
         }
 

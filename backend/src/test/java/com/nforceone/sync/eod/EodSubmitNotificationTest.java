@@ -41,7 +41,7 @@ class EodSubmitNotificationTest {
         // notificationService, approvalPieceRouter, projectApprovalRepo,
         // accessPolicy, leadAccess, allocationRepo, auditLogRepo, logLineRepo
         service = new EodService(null, null, null, null, null, null, null, null, null, null,
-                notificationService, null, null, null, null, null, null, null);
+                notificationService, null, null, null, null, null, null, null, org.mockito.Mockito.mock(BenchModePolicy.class));
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

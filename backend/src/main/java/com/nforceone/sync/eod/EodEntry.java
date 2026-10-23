@@ -79,6 +79,13 @@ public class EodEntry {
     @Column(name = "entry_form", nullable = false, length = 20)
     private EntryForm entryForm = EntryForm.PROJECT_GROUPED;
 
+    // V117: true when an EMPLOYEE had no active project allocation on this entry's date at draft
+    // creation. Set once, with entryForm, and never changed — a later allocation (even a backdated
+    // one) does not flip it. Category scope (BENCH vs MANAGEMENT) and bench-hours utilization are
+    // judged against this frozen flag, not against the employee's current allocation.
+    @Column(name = "bench_mode", nullable = false)
+    private Boolean benchMode = Boolean.FALSE;
+
     // Non-null only when entryForm = PLAIN_LOG.
     @Column(name = "log_summary", columnDefinition = "TEXT")
     private String logSummary;

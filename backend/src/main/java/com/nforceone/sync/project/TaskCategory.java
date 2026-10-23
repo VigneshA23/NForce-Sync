@@ -31,4 +31,13 @@ public class TaskCategory {
     // MANAGEMENT: shown in the Daily Log line-item category dropdown.
     @Column(nullable = false, length = 20)
     private String scope = "EMPLOYEE";
+
+    // BENCH (V117): Bench Log categories — shown only to an EMPLOYEE with no active project allocation.
+    // They are never productive: forced here on every insert and update (the DB CHECK
+    // task_category_bench_non_productive_ck is the backstop), whatever a client sent.
+    @PrePersist
+    @PreUpdate
+    void enforceBenchNonProductive() {
+        if ("BENCH".equals(scope)) isProductive = Boolean.FALSE;
+    }
 }
