@@ -15,6 +15,7 @@ import com.nforceone.sync.businessrules.BusinessRuleConfigRepository;
 import com.nforceone.sync.businessrules.ShiftDefinition;
 import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
 import com.nforceone.sync.businessrules.ShiftSchedule;
+import com.nforceone.sync.config.BusinessClock;
 import com.nforceone.sync.eod.dto.TimeAdjustmentContextDto;
 import com.nforceone.sync.eod.dto.BlockedTaskDto;
 import com.nforceone.sync.eod.dto.EodDayDefaultsDto;
@@ -28,6 +29,7 @@ import com.nforceone.sync.project.TaskCategoryRepository;
 import com.nforceone.sync.teamlead.LeadAccessService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -102,7 +104,9 @@ public class EodService {
     private final AuditLogRepository auditLogRepository;
     private final EodLogLineRepository logLineRepository;
     private final BenchModePolicy benchModePolicy;
+    private final BusinessClock businessClock;
 
+    /** Uses the default business zone. Kept so unit tests that build the service by hand need no clock. */
     public EodService(EodEntryRepository entryRepository,
                       EodTaskRepository taskRepository,
                       AppUserRepository userRepository,
@@ -122,6 +126,35 @@ public class EodService {
                       AuditLogRepository auditLogRepository,
                       EodLogLineRepository logLineRepository,
                       BenchModePolicy benchModePolicy) {
+        this(entryRepository, taskRepository, userRepository, projectRepository, categoryRepository,
+                actionRepository, configRepository, shiftRepository, holidayRepository, attachmentService,
+                notificationService, approvalPieceRouter, projectApprovalRepository, accessPolicy, leadAccess,
+                allocationRepository, auditLogRepository, logLineRepository, benchModePolicy,
+                new BusinessClock(BusinessClock.DEFAULT_ZONE));
+    }
+
+    @Autowired
+    public EodService(EodEntryRepository entryRepository,
+                      EodTaskRepository taskRepository,
+                      AppUserRepository userRepository,
+                      ProjectRepository projectRepository,
+                      TaskCategoryRepository categoryRepository,
+                      ApprovalActionRepository actionRepository,
+                      BusinessRuleConfigRepository configRepository,
+                      ShiftDefinitionRepository shiftRepository,
+                      com.nforceone.sync.businessrules.HolidayRepository holidayRepository,
+                      EodAttachmentService attachmentService,
+                      com.nforceone.sync.notification.NotificationService notificationService,
+                      ApprovalPieceRouter approvalPieceRouter,
+                      EodProjectApprovalRepository projectApprovalRepository,
+                      EodAccessPolicy accessPolicy,
+                      LeadAccessService leadAccess,
+                      com.nforceone.sync.project.AllocationRepository allocationRepository,
+                      AuditLogRepository auditLogRepository,
+                      EodLogLineRepository logLineRepository,
+                      BenchModePolicy benchModePolicy,
+                      BusinessClock businessClock) {
+        this.businessClock     = businessClock;
         this.benchModePolicy   = benchModePolicy;
         this.entryRepository   = entryRepository;
         this.taskRepository    = taskRepository;
@@ -143,13 +176,18 @@ public class EodService {
         this.logLineRepository = logLineRepository;
     }
 
-    public EodEntryDto saveDraft(SaveEodRequest request, String actingEmail) {
-        AppUser employee = requireUserByEmail(actingEmail);
-
-        if (request.entryDate().isAfter(LocalDate.now())) {
+    /** "Future" is judged against the business date, not the JVM's — a UTC host is a day behind IST until 05:30. */
+    void requireNotFutureDate(LocalDate entryDate) {
+        if (entryDate.isAfter(businessClock.today())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Cannot log an EOD entry for a future date");
         }
+    }
+
+    public EodEntryDto saveDraft(SaveEodRequest request, String actingEmail) {
+        AppUser employee = requireUserByEmail(actingEmail);
+
+        requireNotFutureDate(request.entryDate());
 
         EodEntry entry = entryRepository
                 .findByEmployeeIdAndEntryDate(employee.getId(), request.entryDate())
@@ -596,9 +634,9 @@ public class EodService {
      * their earliest entry, whichever is later) capped at {@link #MISSING_LOOKBACK_DAYS}, so an old
      * account cannot generate an unbounded list.
      */
-    private List<EodEntryDto> buildMissingDays(AppUser employee, List<EodEntry> entries,
-                                               LocalDate from, LocalDate to) {
-        LocalDateTime now = LocalDateTime.now();
+    List<EodEntryDto> buildMissingDays(AppUser employee, List<EodEntry> entries,
+                                       LocalDate from, LocalDate to) {
+        LocalDateTime now = businessClock.now();
         LocalDate today = now.toLocalDate();
 
         LocalDate windowEnd = to != null ? to : today;
