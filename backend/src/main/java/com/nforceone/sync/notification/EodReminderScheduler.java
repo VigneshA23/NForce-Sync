@@ -8,6 +8,7 @@ import com.nforceone.sync.businessrules.HolidayRepository;
 import com.nforceone.sync.businessrules.ShiftDefinition;
 import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
 import com.nforceone.sync.businessrules.ShiftSchedule;
+import com.nforceone.sync.config.BusinessClock;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import org.slf4j.Logger;
@@ -21,7 +22,6 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
 
@@ -73,6 +73,7 @@ public class EodReminderScheduler {
     private final HolidayRepository holidayRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationService notificationService;
+    private final BusinessClock businessClock;
 
     public EodReminderScheduler(ShiftDefinitionRepository shiftRepository,
                                 AppUserRepository userRepository,
@@ -80,7 +81,9 @@ public class EodReminderScheduler {
                                 BusinessRuleConfigRepository configRepository,
                                 HolidayRepository holidayRepository,
                                 NotificationRepository notificationRepository,
-                                NotificationService notificationService) {
+                                NotificationService notificationService,
+                                BusinessClock businessClock) {
+        this.businessClock = businessClock;
         this.shiftRepository = shiftRepository;
         this.userRepository = userRepository;
         this.entryRepository = entryRepository;
@@ -93,14 +96,17 @@ public class EodReminderScheduler {
     /**
      * Runs on the quarter hour, so a cutoff is acted on within 15 minutes of passing.
      *
-     * <p>Times resolve in the JVM default zone, since shift times are stored zoneless and the
-     * application sets no timezone. For a workforce outside the deployment host's zone the offset
-     * would be wrong by the zone delta — there is no per-shift or per-user zone to correct with.
+     * <p>Shift times are stored zoneless and mean business-zone wall-clock time, so "now" and the
+     * cutoff instant are both resolved through {@link BusinessClock}, not the JVM default zone.
      */
     @Scheduled(cron = "0 */15 * * * *")
     @Transactional
     public void sendDueReminders() {
-        LocalDateTime now = LocalDateTime.now();
+        sendDueReminders(businessClock.now());
+    }
+
+    /** The reminder pass for a given business-zone "now" — package-private so tests can fix the time. */
+    void sendDueReminders(LocalDateTime now) {
         List<ShiftDefinition> shifts = shiftRepository.findAllByOrderByStartTimeAsc().stream()
                 .filter(ShiftDefinition::isActive)
                 .filter(s -> s.getEodCutoffHours() != null)
@@ -120,7 +126,7 @@ public class EodReminderScheduler {
                 // triggered or is too stale to nag about now.
                 if (cutoffAt.isAfter(now) || cutoffAt.isBefore(now.minus(CATCH_UP))) continue;
 
-                OffsetDateTime cutoffInstant = cutoffAt.atZone(ZoneId.systemDefault()).toOffsetDateTime();
+                OffsetDateTime cutoffInstant = businessClock.toOffset(cutoffAt);
                 sent += sendRemindersForDate(workDate, config, cutoffInstant, shift.getName());
             }
         }
