@@ -964,7 +964,7 @@ public class EodService {
         }
         // For non-EMPLOYEE roles check whether an allocation exists today.
         boolean hasAllocation = !allocationRepository
-                .findEmployeeIdsAllocatedOn(List.of(employee.getId()), LocalDate.now())
+                .findEmployeeIdsAllocatedOn(List.of(employee.getId()), businessClock.today())
                 .isEmpty();
         if (!hasAllocation && employee.getManager() != null
                 && requested == EodEntry.EntryForm.PROJECT_GROUPED) {
@@ -1204,7 +1204,7 @@ public class EodService {
         if (shift == null) return TimeAdjustmentContextDto.unassigned();
 
         BusinessRuleConfig config = configRepository.findById(BUSINESS_RULE_CONFIG_ID).orElse(null);
-        LocalDate month = date != null ? date : LocalDate.now();
+        LocalDate month = date != null ? date : businessClock.today();
 
         // Exclude the day being edited, mirroring what validateTimeAdjustment does on submit. Without
         // this the form would count an already-submitted adjustment against its own resubmission and
@@ -1245,7 +1245,7 @@ public class EodService {
     @Transactional(readOnly = true)
     public EodDayDefaultsDto getDayDefaults(LocalDate date, String actingEmail) {
         requireUserByEmail(actingEmail); // enforces authentication, mirrors other endpoints here
-        LocalDate target = date != null ? date : LocalDate.now();
+        LocalDate target = date != null ? date : businessClock.today();
         BigDecimal hoursPerDay = dailyHoursCap();
 
         boolean isHoliday = holidayRepository.existsByHolidayDate(target);
