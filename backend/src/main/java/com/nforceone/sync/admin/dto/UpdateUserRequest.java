@@ -4,6 +4,9 @@ import com.nforceone.sync.auth.AppUser;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import tools.jackson.databind.annotation.JsonDeserialize;
+
+import java.util.Optional;
 
 public record UpdateUserRequest(
 
@@ -26,5 +29,10 @@ public record UpdateUserRequest(
         String employmentType,
         String workMode,
 
-        Long managerId  // null = unassign
+        // Tri-state, so "clear the manager" is distinguishable from "not sent":
+        //   null            (property absent) = leave the existing manager unchanged
+        //   Optional.empty() (JSON null)      = clear the manager
+        //   Optional.of(id)                   = set the manager
+        @JsonDeserialize(using = TriStateLongDeserializer.class)
+        Optional<Long> managerId
 ) {}

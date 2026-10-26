@@ -811,11 +811,18 @@ textarea:-webkit-autofill:focus {
   .eod-inbox-toolbar .nf-fd-icon-only { display: inline-flex; }
 }
 
-@container eod-table (max-width: 640px) {
+@container eod-table (max-width: 1289px) {
   /* Drops Replies and Last Reply rather than letting their content wrap and
      desync row heights — both header and rows read the same --eod-table-cols
-     custom property, so they stay in lockstep without a second table markup. */
-  .eod-inbox-table { --eod-table-cols: 32px 2.4fr 1fr 1.1fr 1.2fr 1fr !important; }
+     custom property, so they stay in lockstep without a second table markup.
+     The variable is set inline on .nf-r-scroll-inner (a descendant of the container,
+     which is the only thing a container query can style), hence the !important.
+     Min width = the full 1290px less Replies, Last Reply and their two 24px gaps;
+     below that the table scrolls horizontally instead of squeezing. */
+  .eod-inbox-table .nf-r-scroll-inner {
+    --eod-table-cols: 60px minmax(220px, 1fr) 160px 150px 130px 140px !important;
+    min-width: 1030px !important;
+  }
   .eod-inbox-table .eod-col-replies,
   .eod-inbox-table .eod-col-lastreply {
     display: none !important;

@@ -14,9 +14,10 @@ import { SegmentDonut } from '../../components/UtilizationDonut';
 import { Pagination } from '../../components/Pagination';
 import { fmtPct, utilColor, utilState, RULES } from '../../lib/rules';
 import { ReportDateRange } from '../../components/ReportDateRange';
-import type { DateRange } from '../../lib/dateRange';
+import type { DateRange, ReportRangePreset } from '../../lib/dateRange';
 import { initialReportRange } from '../../lib/reportDefaultRange';
 import { useReportPreset } from '../../lib/useReportPreset';
+import { useIsSuperAdmin } from '../../lib/useIsSuperAdmin';
 import { roundHours } from '../../lib/hoursBreakdown';
 import {
   useProjectDashboardFilters,
@@ -98,9 +99,7 @@ function MiniSparkline({ values, color, width = 60, height = 20 }: { values: num
 function DeltaChip({ value, suffix = 'pt', goodDirection = 'up' }: {
   value: number | null; suffix?: string; goodDirection?: 'up' | 'down';
 }) {
-  if (value == null) {
-    return <span style={{ fontSize: 10.5, color: 'var(--txt-dim)' }}>vs last month —</span>;
-  }
+  if (value == null) return null;
   const rounded = Math.round(value * 10) / 10;
   const isFlat = rounded === 0;
   const isUp = rounded > 0;
@@ -146,7 +145,7 @@ function KpiTile({
       </div>
       <div style={{ fontSize: 11, color: 'var(--txt-mut)', fontWeight: 500 }}>{label}</div>
       {sub && <div style={{ fontSize: 10, color: 'var(--txt-dim)', marginTop: 4 }}>{sub}</div>}
-      {delta !== undefined && (
+      {delta != null && (
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--line)' }}>
           <DeltaChip value={delta} suffix={deltaSuffix} goodDirection={goodDirection} />
         </div>
@@ -392,6 +391,7 @@ function ProjectTable({ rows }: { rows: ProjectTableRow[] }) {
 const RESOURCE_PAGE_SIZE = 8;
 
 function ResourceTable({ rows }: { rows: ResourceUtilizationRowDto[] }) {
+  const isSuperAdmin = useIsSuperAdmin();
   const [page, setPage] = useState(0);
   const sorted = [...rows].sort((a, b) => b.utilizationPct - a.utilizationPct);
   const total  = sorted.length;
@@ -410,7 +410,7 @@ function ResourceTable({ rows }: { rows: ResourceUtilizationRowDto[] }) {
         fontSize: 10, fontWeight: 700, color: 'var(--txt-dim)',
         textTransform: 'uppercase', letterSpacing: '0.06em',
       }}>
-        <span>Employee</span>
+        <span>{isSuperAdmin ? 'Employee Name' : 'Employee'}</span>
         <span>Project</span>
         <span style={{ textAlign: 'right' }}>Approved</span>
         <span style={{ textAlign: 'right' }}>Available</span>
@@ -825,8 +825,14 @@ export default function ProjectsUtilization() {
     noteRangeEdit(range, next);
     setRange(next);
   }
+  // "Custom" starts from a blank range (not the previous preset's dates); presets repopulate as before.
+  function handlePresetSelect(p: ReportRangePreset) {
+    onPresetSelect(p);
+    if (p === 'custom' && preset !== 'custom') setRange({ from: '', to: '' });
+  }
   const [projectId, setProjectId] = useState<number | undefined>(undefined);
   const { from, to } = range;
+  const rangeIncomplete = from === '' || to === '';
 
   const { data: filters } = useProjectDashboardFilters();
 
@@ -836,15 +842,16 @@ export default function ProjectsUtilization() {
     projectId,
   }), [from, to, projectId]);
 
-  const { data, isPending, isFetching, isError, refetch } = useProjectDashboardSummary(filterParams);
+  // No fetch until a Custom range has both dates.
+  const { data, isPending, isFetching, isError, refetch } = useProjectDashboardSummary(filterParams, !rangeIncomplete);
   // isPending is only true on the very first load; placeholderData keeps the previous range's
   // data on screen while a new range/project fetches, with nothing otherwise distinguishing
   // "settled" from "silently refetching" — which read as the selector not working at all when
   // a wider range's slower query hadn't finished yet. This surfaces that in-flight state.
   const isRefreshing = isFetching && !isPending;
 
-  const fromLabel = new Date(from + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  const toLabel   = new Date(to + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const fmtShort = (iso: string) => new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const rangeLabel = rangeIncomplete ? 'Select a date range' : `${fmtShort(from)} – ${fmtShort(to)}`;
 
   if (isPending) return <GlobalLoader fullScreen={false} />;
 
@@ -904,7 +911,7 @@ export default function ProjectsUtilization() {
             Projects Utilization
           </h1>
           <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-            Only APPROVED hours count · {fromLabel} – {toLabel}
+            Only APPROVED hours count · {rangeLabel}
             {isRefreshing && (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: 'var(--info)' }}>
                 <RefreshCw size={11} className="pm-util-spin" aria-hidden="true" /> Updating…
@@ -933,8 +940,13 @@ export default function ProjectsUtilization() {
       {/* Date range: shared presets + pickers. It sets the page's from/to, which is in the summary's
           query key, so every change refetches (the header shows "Updating…" meanwhile). */}
       <Card pad={16} style={{ marginBottom: 16 }}>
-        <ReportDateRange range={range} preset={preset} onPresetSelect={onPresetSelect} onRangeChange={handleRangeChange} />
+        <ReportDateRange range={range} preset={preset} onPresetSelect={handlePresetSelect} onRangeChange={handleRangeChange} pickFromFirst />
       </Card>
+
+      {rangeIncomplete ? (
+        <Card><EmptyMsg>Select both a from and a to date to view utilization.</EmptyMsg></Card>
+      ) : (
+      <>
 
       {/* Distinct empty state: the portfolio has projects but nobody is allocated to them in this range.
           The backend returns 0% for that case; without this banner it reads as "nothing approved yet". */}
@@ -1058,6 +1070,8 @@ export default function ProjectsUtilization() {
       <div style={{ marginBottom: 16 }}>
         <FormulaPanel />
       </div>
+      </>
+      )}
 
       <style>{`
         .pm-util-spin { animation: pm-util-spin 900ms linear infinite; }

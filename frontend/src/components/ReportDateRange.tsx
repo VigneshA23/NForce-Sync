@@ -27,12 +27,14 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
  * Both ends are capped at today, From is bounded by To, and a date can only be cleared when `clearable`
  * is set — a page that needs a range at all times leaves it off.
  */
-export function ReportDateRange({ range, preset, onPresetSelect, onRangeChange, clearable = false }: {
+export function ReportDateRange({ range, preset, onPresetSelect, onRangeChange, clearable = false, pickFromFirst = false }: {
   range: DateRange;
   preset: ReportRangePreset;
   onPresetSelect: (preset: ReportRangePreset) => void;
   onRangeChange: (next: DateRange) => void;
   clearable?: boolean;
+  /** Opt-in for a page whose Custom preset starts blank: "Select from/to date" placeholders, and To stays disabled until From is picked. */
+  pickFromFirst?: boolean;
 }) {
   const today = todayISO();
   const maxFrom = range.to !== '' ? range.to : today;
@@ -46,6 +48,7 @@ export function ReportDateRange({ range, preset, onPresetSelect, onRangeChange, 
           <DatePicker
             value={range.from} onChange={v => onRangeChange({ from: v, to: range.to })}
             max={maxFrom} inputStyle={inputStyle} quickNav clearable={clearable}
+            placeholder={pickFromFirst ? 'Select from date' : undefined}
           />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -56,6 +59,8 @@ export function ReportDateRange({ range, preset, onPresetSelect, onRangeChange, 
           <DatePicker
             value={range.to} onChange={v => onRangeChange({ from: range.from, to: v })}
             min={range.from} max={today} inputStyle={inputStyle} quickNav clearable={clearable}
+            placeholder={pickFromFirst ? 'Select to date' : undefined}
+            disabled={pickFromFirst && range.from === ''}
           />
         </label>
       </div>

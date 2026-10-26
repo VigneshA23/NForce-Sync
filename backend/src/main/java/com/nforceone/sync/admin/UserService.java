@@ -221,18 +221,27 @@ public class UserService {
         }
 
         AppUser oldManager = user.getManager();
-        AppUser newManager = oldManager; // null managerId on update = keep existing, per decision Phase 8
+        // managerId absent = keep existing; present but null = clear; present with an id = set
+        // (see UpdateUserRequest). Clearing still goes through requireValidReportingManager, so
+        // only a role with an optional manager (Super Admin) can end up without one.
+        AppUser newManager = oldManager;
 
         if (request.managerId() != null) {
-            if (request.managerId().equals(id)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "A user cannot be their own reporting manager");
+            Long requestedManagerId = request.managerId().orElse(null);
+            if (requestedManagerId == null) {
+                requireValidReportingManager(request.role(), null);
+                newManager = null;
+            } else {
+                if (requestedManagerId.equals(id)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "A user cannot be their own reporting manager");
+                }
+                newManager = userRepository.findById(requestedManagerId)
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "Reporting manager not found"));
+                requireNoManagerCycle(id, newManager);
+                requireValidReportingManager(request.role(), newManager);
             }
-            newManager = userRepository.findById(request.managerId())
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "Reporting manager not found"));
-            requireNoManagerCycle(id, newManager);
-            requireValidReportingManager(request.role(), newManager);
         }
         user.setManager(newManager);
 

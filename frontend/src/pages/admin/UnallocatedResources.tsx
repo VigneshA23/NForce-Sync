@@ -1,6 +1,6 @@
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, RefreshCw, Users } from 'lucide-react';
+import { RefreshCw, Users } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { formatDate, toLocalISODate, todayISO } from '../../lib/date';
@@ -20,7 +20,6 @@ const ROLE_LABEL: Record<string, string> = {
  *  Reuses the executive dashboard summary call rather than a new endpoint, since the list is
  *  just the detail behind a count that endpoint already computes. */
 export default function UnallocatedResources() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const from = searchParams.get('from') || firstOfMonthISO();
   const to = searchParams.get('to') || todayISO();
@@ -33,17 +32,6 @@ export default function UnallocatedResources() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate('/admin/executive-dashboard')}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 16,
-          background: 'none', border: 'none', color: 'var(--brand-bright)', fontSize: 13,
-          fontWeight: 600, cursor: 'pointer', padding: 0,
-        }}
-      >
-        <ArrowLeft size={14} aria-hidden="true" /> Back to Executive Dashboard
-      </button>
-
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
           Unallocated Resources
@@ -86,7 +74,7 @@ export default function UnallocatedResources() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                    {['Employee', 'Employee Code', 'Role'].map(h => (
+                    {['Employee Name', 'Employee ID', 'Role'].map(h => (
                       <th key={h} style={{
                         textAlign: 'left', padding: '8px 20px', color: 'var(--txt-dim)', fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em',
                         position: 'sticky', top: 0, zIndex: 1, background: 'var(--panel)',

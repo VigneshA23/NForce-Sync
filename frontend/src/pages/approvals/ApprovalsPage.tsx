@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  AlertTriangle, Check, CheckCheck, ChevronDown, ChevronRight,
+  AlertTriangle, Check, CheckCheck,
   MessageCircleQuestion, RefreshCw, Search, X,
 } from 'lucide-react';
 import type { ApprovalPieceDto } from '../../api/approvalPieces';
@@ -433,7 +433,6 @@ function PieceCard({
   /** View-only clarifications (the PM Approvals page) — see ApprovalsPageProps. */
   clarificationReadOnly: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const { user } = useAuth();
 
@@ -463,7 +462,6 @@ function PieceCard({
   const total        = totalHours(piece);
   const overtime     = total > 8;
 
-  const hasExpandable = piece.logNotes || piece.nextDayPlan || piece.remarks;
   const decidedNote   = piece.actedAt && (tab === 'approved' || tab === 'rejected')
     ? `Decided ${fmtRelative(piece.actedAt)}`
     : null;
@@ -586,26 +584,8 @@ function PieceCard({
             />
           )}
           </div>
-          {hasExpandable && (
-            <button
-              onClick={() => setExpanded(v => !v)}
-              style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
-            >
-              <span style={{ fontSize: 12, fontWeight: 600 }}>Log details</span>
-              {expanded ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
-            </button>
-          )}
         </div>
       </div>
-
-      {/* Expanded log notes */}
-      {expanded && (
-        <div style={{ borderTop: '1px solid var(--line)', padding: '10px 16px 12px', background: 'var(--raised)' }}>
-          {piece.logNotes    && <div style={{ fontSize: 12, color: 'var(--txt-dim)', marginBottom: 4 }}><span style={{ fontWeight: 600, color: 'var(--txt)' }}>Notes: </span>{piece.logNotes}</div>}
-          {piece.nextDayPlan && <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}><span style={{ fontWeight: 600, color: 'var(--txt)' }}>Tomorrow: </span>{piece.nextDayPlan}</div>}
-          {piece.remarks     && <div style={{ fontSize: 12, color: 'var(--txt-dim)', marginTop: 4 }}><span style={{ fontWeight: 600, color: 'var(--txt)' }}>Remarks: </span>{piece.remarks}</div>}
-        </div>
-      )}
     </div>
   );
 }

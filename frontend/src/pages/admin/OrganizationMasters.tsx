@@ -353,6 +353,8 @@ interface OrgTableProps<T extends { id: number; active: boolean }> {
   isError: boolean;
   onRefetch: () => void;
   nameKey: keyof T;
+  /** Header text for the name column (tab-specific). */
+  nameLabel: string;
   onToggle: (item: T) => void;
   isTogglePending: boolean;
   onDelete: (item: T) => void;
@@ -365,7 +367,7 @@ interface OrgTableProps<T extends { id: number; active: boolean }> {
 const ORG_TABLE_PAGE_SIZE = 10;
 
 function OrgTable<T extends { id: number; active: boolean }>({
-  data, isPending, isError, onRefetch, nameKey, onToggle, isTogglePending, onDelete, isDeletePending,
+  data, isPending, isError, onRefetch, nameKey, nameLabel, onToggle, isTogglePending, onDelete, isDeletePending,
   countKey, countLabel,
 }: OrgTableProps<T>) {
   const [page, setPage] = useState(1);
@@ -419,7 +421,7 @@ function OrgTable<T extends { id: number; active: boolean }>({
         <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '620px' } as React.CSSProperties}>
           <thead>
             <tr>
-              <th style={thStyle}>Name / Title</th>
+              <th style={thStyle}>{nameLabel}</th>
               <th style={thStyle}>Status</th>
               {showCount && <th style={thStyle}>{countLabel}</th>}
               <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
@@ -701,6 +703,7 @@ function ProjectTypesTab() {
       </div>
 
       <OrgTable<ProjectTypeDto>
+        nameLabel="Project Type Name"
         data={data}
         isPending={isPending}
         isError={isError}
@@ -828,6 +831,7 @@ function DepartmentsTab() {
       </div>
 
       <OrgTable<DepartmentDto>
+        nameLabel="Department Name"
         data={data}
         isPending={isPending}
         isError={isError}
@@ -958,6 +962,7 @@ function DesignationsTab() {
       </div>
 
       <OrgTable<DesignationDto>
+        nameLabel="Designation Name"
         data={data}
         isPending={isPending}
         isError={isError}
@@ -1086,6 +1091,7 @@ function LocationsTab() {
       </div>
 
       <OrgTable<OrgLocationDto>
+        nameLabel="Location Name"
         data={data}
         isPending={isPending}
         isError={isError}
@@ -1237,7 +1243,7 @@ function TaskCategoriesTab() {
         <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '560px' } as React.CSSProperties}>
           <thead>
             <tr>
-              <th style={thStyle}>Name</th>
+              <th style={thStyle}>Category Name</th>
               <th style={thStyle}>Scope</th>
               <th style={thStyle}>Productive</th>
               <th style={thStyle}>Status</th>

@@ -15,6 +15,7 @@ import { RequiredHoursBadge } from '../../components/RequiredHoursBadge';
 import { Pagination } from '../../components/Pagination';
 import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
+import { useIsSuperAdmin } from '../../lib/useIsSuperAdmin';
 import { PM_REPORT_SOURCE, type EodReportSource } from '../reports/eodReportSources';
 import { getDayDefaults } from '../../api/eod';
 import type { EodByEmployeeRowDto, EodByEmployeeEntryDto, ExportFormat } from '../../api/reports';
@@ -269,6 +270,7 @@ function FilterBar({
   employeeMatches: EodByEmployeeRowDto[];
   onPickEmployee: (employeeId: number) => void;
 }) {
+  const isSuperAdmin = useIsSuperAdmin();
   const filterOptions = source.useFilterOptions();
 
   function set<K extends keyof Filters>(key: K, value: Filters[K]) {
@@ -362,7 +364,7 @@ function FilterBar({
         </label>
         )}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>Employee</FieldLabel>
+          <FieldLabel>{isSuperAdmin ? 'Employee Name' : 'Employee'}</FieldLabel>
           <EmployeeSearch
             query={filters.employeeQuery}
             onQueryChange={v => set('employeeQuery', v)}
@@ -677,6 +679,7 @@ function TeamFlow({
   onExport: (key: string, employeeIds?: number[]) => void;
   exportingKey: string | null;
 }) {
+  const isSuperAdmin = useIsSuperAdmin();
   const [page, setPage] = useState(0);
   // Tracks which employees are expanded — no global show/hide toggle, each row's own caret
   // (see `toggle` below) is the only way in or out, starting collapsed.
@@ -717,7 +720,7 @@ function TeamFlow({
               padding: '8px 16px', borderBottom: '1px solid var(--line)',
               position: 'sticky', top: 0, background: 'var(--panel)', zIndex: 1,
             }}>
-              <div style={summaryHeaderCellStyle}>Employee</div>
+              <div style={summaryHeaderCellStyle}>{isSuperAdmin ? 'Employee Name' : 'Employee'}</div>
               <div style={summaryHeaderCellStyle}>Projects</div>
               <div style={{ ...summaryHeaderCellStyle, textAlign: 'right' }}>Entries</div>
               <div style={{ ...summaryHeaderCellStyle, textAlign: 'right' }}>Hours</div>

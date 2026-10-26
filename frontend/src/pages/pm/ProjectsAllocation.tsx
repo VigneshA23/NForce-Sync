@@ -1839,7 +1839,7 @@ export function AllocationTab({ readOnly = false, teamLeadId }: { readOnly?: boo
         <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '780px' } as React.CSSProperties}>
           <thead>
             <tr>
-              <SortableTh label="Employee" dir={sort?.key === 'employee' ? sort.dir : null}
+              <SortableTh label={readOnly ? 'Employee Name' : 'Employee'} dir={sort?.key === 'employee' ? sort.dir : null}
                 onToggle={() => toggleSort('employee')} />
               <SortableTh label="Project" dir={sort?.key === 'project' ? sort.dir : null}
                 onToggle={() => toggleSort('project')} />

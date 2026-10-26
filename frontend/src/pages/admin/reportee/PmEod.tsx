@@ -1,5 +1,4 @@
 import ReportsDashboard from '../../pm/ReportsDashboard';
-import { ReporteeViewBanner } from '../../../components/ReporteeViewBanner';
 
 /** Super Admin Reportee Views → Project Manager Views → EOD. Reuses the PM Reports page's
  *  "EOD by employee" tab (EodByEmployeeReportService already resolves SUPERADMIN to org-wide
@@ -7,7 +6,6 @@ import { ReporteeViewBanner } from '../../../components/ReporteeViewBanner';
 export default function ReporteePmEod() {
   return (
     <div>
-      <ReporteeViewBanner label="Project Manager Views: EOD Reports" />
       <ReportsDashboard
         initialTab="eod"
         title="EOD Reports"

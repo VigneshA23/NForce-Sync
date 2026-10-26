@@ -143,8 +143,13 @@ export function EodInboxFilterToolbar({
 
 export const EOD_INBOX_PAGE_SIZE = 8;
 
-const EOD_TABLE_COLUMNS = '32px 2.2fr 1fr 1.1fr 1.1fr 0.8fr 1.3fr 1fr';
-const EOD_TABLE_MIN_WIDTH = 1080;
+// Fixed widths for everything but Clarification, which takes the rest (never below 220px): S.No, Clarification,
+// Project, Requested By, Requested On, Replies, Last Reply, Status. Cells never shrink below their column, so
+// content can't spill into a neighbour; a too-narrow container scrolls (nf-r-scroll) or drops Replies/Last Reply
+// (see the eod-table container query in index.css, which carries the matching columns and min width).
+const EOD_TABLE_COLUMNS = '60px minmax(220px, 1fr) 160px 150px 130px 80px 130px 140px';
+const EOD_TABLE_MIN_WIDTH = 1290;
+const EOD_TABLE_COLUMN_GAP = 24;
 
 // One line, no wrap — "21 Sep, 7:38 PM" — instead of the two-line "21 Sept 2026" / "7:38 PM"
 // this used to render via <br/>. The full value is still available via the title attribute.
@@ -177,14 +182,14 @@ function EodInboxTableRow({ row, index, selected, onClick, capacityLabel }: {
     <div
       onClick={onClick}
       style={{
-        display: 'grid', gridTemplateColumns: 'var(--eod-table-cols)', gap: 12,
+        display: 'grid', gridTemplateColumns: 'var(--eod-table-cols)', columnGap: EOD_TABLE_COLUMN_GAP,
         padding: '14px 20px', cursor: 'pointer', alignItems: 'center',
         borderBottom: '1px solid var(--line)',
         background: selected ? 'color-mix(in srgb, var(--warn) 8%, transparent)' : 'transparent',
         borderLeft: selected ? `3px solid ${accentColor}` : '3px solid transparent',
       }}
     >
-      <div style={{ fontSize: 12, color: 'var(--txt-dim)', fontWeight: 600 }}>{index}</div>
+      <div style={{ fontSize: 12, color: 'var(--txt-dim)', fontWeight: 600, minWidth: 0 }}>{index}</div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0 }}>
         <Avatar name={item.employeeName} bg={avatarColor(item.employeeName)} size={30} />
@@ -204,12 +209,12 @@ function EodInboxTableRow({ row, index, selected, onClick, capacityLabel }: {
       </div>
 
       {/* The round's own project (which lead asked) when it has one; else the entry's first task project. */}
-      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', minWidth: 0 }} title={item.pieceProjectName ?? item.projectName ?? undefined}>
-        <div style={ellipsis}>{item.pieceProjectName ?? item.projectName ?? '—'}</div>
+      <div style={{ fontSize: 12.5, color: 'var(--txt-mut)', minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3 }} title={item.pieceProjectName ?? item.projectName ?? undefined}>
+        <div style={{ ...ellipsis, maxWidth: '100%' }}>{item.pieceProjectName ?? item.projectName ?? '—'}</div>
         {capacityLabel && (
-          <span style={{
-            display: 'inline-block', marginTop: 3, padding: '1px 7px', borderRadius: 10, fontSize: 10.5, fontWeight: 600,
-            color: 'var(--info)', whiteSpace: 'nowrap',
+          <span title={capacityLabel} style={{
+            display: 'block', maxWidth: '100%', boxSizing: 'border-box', padding: '1px 7px', borderRadius: 10, fontSize: 10.5, fontWeight: 600,
+            color: 'var(--info)', ...ellipsis,
             background: 'color-mix(in srgb, var(--info) 14%, transparent)',
             border: '1px solid color-mix(in srgb, var(--info) 28%, transparent)',
           }}>{capacityLabel}</span>
@@ -227,7 +232,7 @@ function EodInboxTableRow({ row, index, selected, onClick, capacityLabel }: {
         {fmtOpenedAtCompact(item.openedAt)}
       </div>
 
-      <div className="eod-col-replies" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: 'var(--txt-mut)' }}>
+      <div className="eod-col-replies" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: 'var(--txt-mut)', minWidth: 0 }}>
         <MessageCircle size={13} aria-hidden="true" /> {item.replyCount}
       </div>
 
@@ -243,7 +248,7 @@ function EodInboxTableRow({ row, index, selected, onClick, capacityLabel }: {
               <div style={{ fontSize: 12.5, color: 'var(--txt)', fontWeight: 500, ...ellipsis }} title={item.lastMessageSenderName}>
                 {item.lastMessageSenderName}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--txt-dim)', ...ellipsis }}>{formatRelative(item.lastMessageAt)}</div>
+              <div style={{ fontSize: 11, color: 'var(--txt-dim)', ...ellipsis }} title={item.lastMessageAt ? new Date(item.lastMessageAt).toLocaleString() : undefined}>{formatRelative(item.lastMessageAt)}</div>
             </div>
           </div>
         ) : (
@@ -251,7 +256,7 @@ function EodInboxTableRow({ row, index, selected, onClick, capacityLabel }: {
         )}
       </div>
 
-      <div><StatusBadge status={item.status} meta={CLARIFICATION_STATUS_META} /></div>
+      <div style={{ minWidth: 0 }}><StatusBadge status={item.status} meta={CLARIFICATION_STATUS_META} /></div>
     </div>
   );
 }
@@ -282,13 +287,14 @@ export function EodInboxTable({
     // layout squeezes this table's own box below the width Replies+Last Reply need, those two
     // columns hide (both header and rows, kept in sync via --eod-table-cols) rather than letting
     // their content wrap and blow out row height. nf-r-scroll/-inner is unaffected — it still
-    // handles the true "narrower than min-width" case (viewport < 1024px) via horizontal scroll.
+    // handles the true "narrower than min-width" case via horizontal scroll (the min width is set inline below
+    // so it holds at every viewport, unlike the global <1024px floor).
     <Card style={{ padding: 0, overflow: 'hidden' }} className="eod-inbox-table">
       <div className="nf-r-scroll">
-        <div className="nf-r-scroll-inner" style={{ '--nf-r-min': EOD_TABLE_MIN_WIDTH + 'px', '--eod-table-cols': EOD_TABLE_COLUMNS } as React.CSSProperties}>
+        <div className="nf-r-scroll-inner" style={{ '--nf-r-min': EOD_TABLE_MIN_WIDTH + 'px', '--eod-table-cols': EOD_TABLE_COLUMNS, minWidth: EOD_TABLE_MIN_WIDTH } as React.CSSProperties}>
           <div style={{
-            display: 'grid', gridTemplateColumns: 'var(--eod-table-cols)', gap: 12,
-            padding: '10px 20px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--txt-dim)',
+            display: 'grid', gridTemplateColumns: 'var(--eod-table-cols)', columnGap: EOD_TABLE_COLUMN_GAP,
+            padding: '10px 20px', borderBottom: '1px solid var(--line)', borderLeft: '3px solid transparent', whiteSpace: 'nowrap', fontSize: 10, color: 'var(--txt-dim)',
             fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
           }}>
             <span>S.No</span>

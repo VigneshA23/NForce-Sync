@@ -13,6 +13,7 @@ import { Pagination } from '../../components/Pagination';
 import { Modal } from '../../components/Modal';
 import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
+import { useIsSuperAdmin } from '../../lib/useIsSuperAdmin';
 import { useProjectDashboardFilters } from '../../api/projectDashboard';
 import {
   useMissingEodReport, useRemindAll, useRemindEmployee,
@@ -238,6 +239,7 @@ function FilterBar({ filters, onChange, onReset, employeeMatches, onPickEmployee
   employeeMatches: MissingEodRowDto[];
   onPickEmployee: (row: MissingEodRowDto) => void;
 }) {
+  const isSuperAdmin = useIsSuperAdmin();
   const { data: filterOptions } = useProjectDashboardFilters();
 
   function set<K extends keyof Filters>(key: K, value: Filters[K]) {
@@ -291,7 +293,7 @@ function FilterBar({ filters, onChange, onReset, employeeMatches, onPickEmployee
           </FilterSelect>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <FieldLabel>Employee</FieldLabel>
+          <FieldLabel>{isSuperAdmin ? 'Employee Name' : 'Employee'}</FieldLabel>
           <EmployeeSearch
             query={filters.employeeQuery}
             onQueryChange={v => set('employeeQuery', v)}
@@ -522,6 +524,7 @@ const MISSING_TABLE_COLUMNS = '1.6fr 1fr 1fr 1fr 90px 160px';
 const MISSING_TABLE_MIN_WIDTH = 900;
 
 export default function MissingEodReport() {
+  const isSuperAdmin = useIsSuperAdmin();
   // Own state, separate from the EOD by employee tab; lazily initialised from the local clock.
   const [filters, setFilters] = useState<Filters>(() => defaultFilters());
   // Preset pills: picking one sets From/To; editing either date by hand makes Custom active; Reset
@@ -652,7 +655,7 @@ export default function MissingEodReport() {
           <div className="nf-r-scroll">
           <div className="nf-r-scroll-inner" style={{ '--nf-r-min': MISSING_TABLE_MIN_WIDTH + 'px' } as React.CSSProperties}>
           <div style={{ display: 'grid', gridTemplateColumns: MISSING_TABLE_COLUMNS, padding: '10px 16px', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--txt-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--line)', background: 'var(--raised)' }}>
-            <div>Employee</div><div>Project</div><div>Team Lead</div><div>Missing</div><div>Status</div><div />
+            <div>{isSuperAdmin ? 'Employee Name' : 'Employee'}</div><div>Project</div><div>Team Lead</div><div>Missing</div><div>Status</div><div />
           </div>
           {isLoading ? (
             <GlobalLoader fullScreen={false} compact label="Loading..." />
