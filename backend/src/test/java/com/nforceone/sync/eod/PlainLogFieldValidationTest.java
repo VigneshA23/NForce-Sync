@@ -110,6 +110,7 @@ class PlainLogFieldValidationTest {
         line.setHours(BigDecimal.valueOf(8));
         line.setDescription("Management tasks");
         line.setSortOrder(0);
+        line.setTaskStatus(EodTask.TaskStatus.COMPLETED);
 
         BusinessRuleConfig config = new BusinessRuleConfig();
         config.setNonProjectAutoApproveHours(BigDecimal.valueOf(2));

@@ -19,6 +19,10 @@ export interface ServerUserCapabilities {
   eodForm: 'PROJECT_GROUPED' | 'PLAIN_LOG' | null;
   /** Convenience: true when eodForm is non-null */
   submitsEod: boolean;
+  /** True only for an EMPLOYEE on the bench today (server's BenchModePolicy). Optional for older servers. */
+  benchMode?: boolean;
+  /** The bench Working-day total before any time adjustment — the server's one constant (BenchModePolicy). */
+  benchDailyHours?: number;
 }
 
 export interface ServerUser {

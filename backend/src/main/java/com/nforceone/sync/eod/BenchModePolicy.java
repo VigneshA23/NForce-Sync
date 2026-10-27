@@ -75,6 +75,43 @@ public class BenchModePolicy {
         return !projectRepository.existsByLeadIdAndStatus(employee.getId(), Project.Status.ACTIVE);
     }
 
+    /**
+     * A bench Working day is logged in full: exactly this many hours across all lines (less any time adjustment).
+     * The ONE place the number lives — the Daily Log form reads it from the server (capabilities.benchDailyHours)
+     * rather than keeping its own copy. Deliberately a fixed 8.0, not the configurable Standard Working Hours;
+     * pointing it at the configured value later is a change to this line only.
+     */
+    public static final java.math.BigDecimal BENCH_WORKING_DAY_HOURS = new java.math.BigDecimal("8");
+
+    /**
+     * Null when the lines total exactly {@link #BENCH_WORKING_DAY_HOURS} minus the time adjustment, else the
+     * message to show. So 7.0 with a 1-hour adjustment, and never below 6.0 (an adjustment is capped at 2 hours).
+     * Compared in whole minutes: 8, 8.0 and 8.00 are the same total, and 7.5 + 0.5 is exactly 8. Applies to a
+     * bench-mode Working day only — Leave, Holiday, half-leave and Weekend are the caller's to exclude.
+     *
+     * @param adjustmentMinutes the entry's time adjustment, or null for none
+     */
+    public static String workingDayHoursError(java.math.BigDecimal total, Integer adjustmentMinutes) {
+        java.math.BigDecimal sixty = java.math.BigDecimal.valueOf(60);
+        java.math.BigDecimal t = total == null ? java.math.BigDecimal.ZERO : total;
+        int adj = adjustmentMinutes == null ? 0 : adjustmentMinutes;
+        java.math.BigDecimal requiredMinutes = BENCH_WORKING_DAY_HOURS.multiply(sixty)
+                .subtract(java.math.BigDecimal.valueOf(adj));
+        if (t.multiply(sixty).compareTo(requiredMinutes) == 0) return null;
+        String required = hoursLabel(requiredMinutes.divide(sixty, 4, java.math.RoundingMode.HALF_UP));
+        String current = t.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+        return adj == 0
+                ? "Bench Daily Log must total exactly " + required + " hrs (currently " + current + " hrs)."
+                : "Bench Daily Log must total exactly " + required + " hrs with your time adjustment of "
+                  + adj + " minutes (currently " + current + " hrs).";
+    }
+
+    /** 8 → "8.0", 7.25 → "7.25": one decimal at least, no trailing zeros beyond it. */
+    private static String hoursLabel(java.math.BigDecimal hours) {
+        java.math.BigDecimal s = hours.setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros();
+        return (s.scale() < 1 ? s.setScale(1) : s).toPlainString();
+    }
+
     /** The category scope a Daily Log line must use: BENCH for a bench-mode entry, MANAGEMENT for everyone else. */
     public static String requiredScope(boolean benchMode) {
         return benchMode ? SCOPE_BENCH : SCOPE_DAILY_LOG;

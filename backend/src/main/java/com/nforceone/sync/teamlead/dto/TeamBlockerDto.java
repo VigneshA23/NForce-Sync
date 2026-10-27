@@ -1,7 +1,7 @@
 package com.nforceone.sync.teamlead.dto;
 
 import com.nforceone.sync.eod.BlockerReply;
-import com.nforceone.sync.eod.EodTask;
+import com.nforceone.sync.eod.BlockerSubject;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -39,15 +39,15 @@ public record TeamBlockerDto(
                                             // "OTHER_LEAD_PROJECT": raised on a project someone else leads; null: project has no lead
 ) {
     /** @param threadReplies this task's replies, any order — pass an empty list if none. */
-    public static TeamBlockerDto from(EodTask t, List<BlockerReply> threadReplies) {
-        var entry = t.getEodEntry();
+    public static TeamBlockerDto from(BlockerSubject t, List<BlockerReply> threadReplies) {
+        var entry = t.getBlockerEntry();
         var emp   = entry.getEmployee();
         OffsetDateTime submittedAt = entry.getSubmittedAt();
         long openHours = submittedAt != null
                 ? java.time.Duration.between(submittedAt, OffsetDateTime.now()).toHours()
                 : 0;
 
-        var lead = t.getProject() != null ? t.getProject().getLead() : null;
+        var lead = t.getBlockerProject() != null ? t.getBlockerProject().getLead() : null;
         String raisedOn = lead == null ? null
                 : lead.getId().equals(emp.getId()) ? "OWN_LEAD_PROJECT" : "OTHER_LEAD_PROJECT";
 
@@ -59,17 +59,17 @@ public record TeamBlockerDto(
                 : null;
 
         return new TeamBlockerDto(
-                t.getId(),
+                t.getBlockerKey(),
                 entry.getId(),
                 emp.getId(),
                 emp.getFullName(),
                 emp.getEmployeeCode(),
                 entry.getEntryDate(),
-                t.getProject()      != null ? t.getProject().getCode()     : null,
-                t.getProject()      != null ? t.getProject().getName()      : null,
-                t.getTaskCategory() != null ? t.getTaskCategory().getName() : null,
-                t.getDescription(),
-                t.getHours(),
+                t.getBlockerProject() != null ? t.getBlockerProject().getCode() : null,
+                t.getBlockerProject() != null ? t.getBlockerProject().getName() : null,
+                t.getBlockerCategoryName(),
+                t.getBlockerDescription(),
+                t.getBlockerHours(),
                 t.getBlockerReason(),
                 t.getSupportNeeded(),
                 submittedAt,

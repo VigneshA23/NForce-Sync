@@ -15,6 +15,7 @@ import java.util.List;
 public final class PlainLogValidation {
 
     private static final BigDecimal MAX_HOURS = BigDecimal.valueOf(24);
+    private static final int MAX_BLOCKER_REASON_LEN = 300;   // same cap as a Submit EOD task's blocker reason
     private static final int MIN_DESC_LEN = 3;
     private static final int MAX_DESC_LEN = 4000;
     private static final int MAX_NOTES_LEN = 8000;
@@ -77,6 +78,35 @@ public final class PlainLogValidation {
         }
 
         return validateNotes(notes);
+    }
+
+    /**
+     * Submit-time status rules for line items, the same ones Submit EOD applies to a task: every line needs a
+     * Status (drafts may leave it empty, so this runs on submit only), and a Blocked line needs a reason.
+     * The status itself is an enum, so an unknown value never gets this far (it is rejected while the request is
+     * read). Kept apart from {@link #validate} so the row rules there are unchanged.
+     *
+     * @return error message, or {@code null} when valid
+     */
+    public static String validateStatus(List<SaveEodLogLineRequest> lines) {
+        if (lines == null) return null;
+        int row = 0;
+        for (SaveEodLogLineRequest line : lines) {
+            row++;
+            if (line.taskStatus() == null) {
+                return "Row " + row + ": status is required.";
+            }
+            if (line.taskStatus() == com.nforceone.sync.eod.EodTask.TaskStatus.BLOCKED) {
+                String reason = line.blockerReason() == null ? "" : line.blockerReason().strip();
+                if (reason.isEmpty()) {
+                    return "Row " + row + ": blocker reason is required when status is Blocked.";
+                }
+                if (reason.length() > MAX_BLOCKER_REASON_LEN) {
+                    return "Row " + row + ": blocker reason must be " + MAX_BLOCKER_REASON_LEN + " characters or fewer.";
+                }
+            }
+        }
+        return null;
     }
 
     /**

@@ -354,8 +354,8 @@ export default function MyBlockers() {
     return () => clearInterval(t);
   }, [openTaskId, markReadMutate]);
 
-  // An account on the daily-log form has no project tasks, so it can never raise a blocker: say so rather
-  // than showing a bare "no matches" list.
+  // An account on the daily-log form raises a blocker by marking a line Blocked (it goes to the reporting
+  // manager): when it has none, say how, rather than showing a bare "no matches" list.
   const { user } = useAuth();
   const isPlainLogAccount = user?.capabilities.eodForm === 'PLAIN_LOG';
 
@@ -486,7 +486,7 @@ export default function MyBlockers() {
           {pageItems.length === 0 ? (
             <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>
               {isPlainLogAccount && total === 0
-                ? 'You submit a daily-log EOD, which has no project tasks, so there are no blockers to raise here. Anything your reviewer sends about an EOD arrives in your EOD Inbox.'
+                ? "You have not raised any blockers. Set a Daily Log line's status to Blocked and add a reason to raise one with your reporting manager — their replies appear here."
                 : 'No blockers match these filters.'}
             </div>
           ) : (

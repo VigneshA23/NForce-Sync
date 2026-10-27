@@ -77,6 +77,8 @@ export interface EodEntryDto {
   /** Team Lead Approved/Rejected cards only: the other projects' decisions on the same split EOD — read-only
    *  context (name + status, no task details). */
   otherProjectStatuses?: { projectName: string; status: string }[] | null;
+  /** PLAIN_LOG: the entry's frozen bench mode (employee on the bench when the draft was created). */
+  benchMode?: boolean;
 }
 
 export interface EodLogLineDto {
@@ -86,13 +88,23 @@ export interface EodLogLineDto {
   hours: number;
   description: string;
   sortOrder: number;
+  /** Null on a draft line with none chosen, and on lines from before the Status existed. */
+  taskStatus?: string | null;
+  blockerReason?: string | null;
+  /** True when this line's blocker already has a conversation — the line cannot be removed. */
+  hasBlockerThread?: boolean;
 }
 
 export interface SaveLogLineRequest {
+  /** The saved line this row came from, when known — lets a re-save keep the same row (and its blocker thread). */
+  id?: number | null;
   categoryId: number;
   hours: number;
   description: string;
   sortOrder?: number;
+  /** COMPLETED / IN_PROGRESS / BLOCKED / NOT_STARTED; a draft may leave it null, a submit needs it. */
+  taskStatus?: string | null;
+  blockerReason?: string | null;
 }
 
 export interface SaveTaskRequest {

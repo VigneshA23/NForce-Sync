@@ -43,37 +43,49 @@ public class BlockerConversationService {
 
     private final BlockerReplyRepository replyRepository;
     private final BlockerReplyAttachmentRepository attachmentRepository;
-    private final EodTaskRepository taskRepository;
     private final AppUserRepository userRepository;
     private final NotificationService notificationService;
+    private final BlockerSubjects subjects;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public BlockerConversationService(@Value("${app.eod-attachment.max-file-size-bytes}") long maxFileSizeBytes,
                                        @Value("${app.eod-attachment.max-total-storage-bytes}") long maxTotalStorageBytes,
+                                       BlockerReplyRepository replyRepository,
+                                       BlockerReplyAttachmentRepository attachmentRepository,
+                                       AppUserRepository userRepository,
+                                       NotificationService notificationService,
+                                       BlockerSubjects subjects) {
+        this.maxFileSizeBytes = maxFileSizeBytes;
+        this.maxTotalStorageBytes = maxTotalStorageBytes;
+        this.replyRepository = replyRepository;
+        this.attachmentRepository = attachmentRepository;
+        this.userRepository = userRepository;
+        this.notificationService = notificationService;
+        this.subjects = subjects;
+    }
+
+    /** Task-only wiring (Submit EOD blockers) — kept for callers and tests that predate the Daily Log blockers. */
+    public BlockerConversationService(long maxFileSizeBytes, long maxTotalStorageBytes,
                                        BlockerReplyRepository replyRepository,
                                        BlockerReplyAttachmentRepository attachmentRepository,
                                        EodTaskRepository taskRepository,
                                        AppUserRepository userRepository,
                                        NotificationService notificationService) {
-        this.maxFileSizeBytes = maxFileSizeBytes;
-        this.maxTotalStorageBytes = maxTotalStorageBytes;
-        this.replyRepository = replyRepository;
-        this.attachmentRepository = attachmentRepository;
-        this.taskRepository = taskRepository;
-        this.userRepository = userRepository;
-        this.notificationService = notificationService;
+        this(maxFileSizeBytes, maxTotalStorageBytes, replyRepository, attachmentRepository, userRepository,
+                notificationService, new BlockerSubjects(taskRepository, null, replyRepository));
     }
 
     @Transactional(readOnly = true)
     public List<BlockerReplyDto> getThreadForLead(Long taskId, String actingEmail) {
         AppUser lead = requireUser(actingEmail);
-        EodTask task = requireTask(taskId);
+        BlockerSubject task = subjects.require(taskId);
         requireLeadOwnsTask(task, lead);
         return loadThread(task);
     }
 
     public BlockerReplyDto postReplyAsLead(Long taskId, String actingEmail, String message, List<MultipartFile> files) {
         AppUser lead = requireUser(actingEmail);
-        EodTask task = requireTask(taskId);
+        BlockerSubject task = subjects.require(taskId);
         requireCanWriteAsLead(task, lead);
         requireNotResolved(task);
 
@@ -86,14 +98,14 @@ public class BlockerConversationService {
         if (handlesBlocker(task, lead)) {
             task.setAcknowledgedAt(OffsetDateTime.now());
             task.setAcknowledgedBy(lead);
-            taskRepository.save(task);
+            subjects.save(task);
         }
 
-        AppUser employee = task.getEodEntry().getEmployee();
+        AppUser employee = task.getBlockerEntry().getEmployee();
         notificationService.send(employee.getId(), "BLOCKER_REPLY",
                 lead.getFullName() + " replied to your blocker",
                 lead.getFullName() + " replied to your blocker: \"" + blockerLabel(task) + "\"",
-                "/blockers?highlight=" + task.getId());
+                "/blockers?highlight=" + task.getBlockerKey());
 
         return BlockerReplyDto.from(saved, task, attachmentsFor(saved.getId()));
     }
@@ -101,14 +113,14 @@ public class BlockerConversationService {
     @Transactional(readOnly = true)
     public List<BlockerReplyDto> getThreadForEmployee(Long taskId, String actingEmail) {
         AppUser employee = requireUser(actingEmail);
-        EodTask task = requireTask(taskId);
+        BlockerSubject task = subjects.require(taskId);
         requireEmployeeOwnsTask(task, employee);
         return loadThread(task);
     }
 
     public BlockerReplyDto postReplyAsEmployee(Long taskId, String actingEmail, String message, List<MultipartFile> files) {
         AppUser employee = requireUser(actingEmail);
-        EodTask task = requireTask(taskId);
+        BlockerSubject task = subjects.require(taskId);
         requireEmployeeOwnsTask(task, employee);
         requireNotResolved(task);
 
@@ -117,19 +129,19 @@ public class BlockerConversationService {
         // Last-responder-wins: an employee follow-up re-opens the blocker for the Team Lead.
         task.setAcknowledgedAt(null);
         task.setAcknowledgedBy(null);
-        taskRepository.save(task);
+        subjects.save(task);
 
-        Long leadId = task.getEodEntry().getManagerId();
+        Long leadId = task.getBlockerEntry().getManagerId();
         // The recipient is the entry's frozen reporting manager. A reporting manager reads ALL of his direct
         // reports' blockers on My Reporting Team > Blockers; only a recipient who is also the project's Team
         // Lead works from Team Blockers.
-        com.nforceone.sync.project.Project project = task.getProject();
+        com.nforceone.sync.project.Project project = task.getBlockerProject();
         boolean recipientLeadsProject = project != null && project.getLead() != null
                 && project.getLead().getId().equals(leadId);
         boolean ownLeadBlocker = project != null && project.getLead() != null
                 && project.getLead().getId().equals(employee.getId());
         String link = (ownLeadBlocker || !recipientLeadsProject ? "/my-reports/blockers" : "/team/blockers")
-                + "?highlight=" + task.getId();
+                + "?highlight=" + task.getBlockerKey();
         if (leadId != null) {
             notificationService.send(leadId, "BLOCKER_REPLY",
                     "New reply on a blocker",
@@ -147,36 +159,36 @@ public class BlockerConversationService {
     public void editReplyAsLead(Long replyId, String actingEmail, String message) {
         AppUser lead = requireUser(actingEmail);
         BlockerReply reply = requireReply(replyId);
-        requireCanWriteAsLead(reply.getTask(), lead);
+        requireCanWriteAsLead(reply.getSubject(), lead);
         requireOwnReply(reply, lead);
-        requireNotResolved(reply.getTask());
+        requireNotResolved(reply.getSubject());
         updateMessage(reply, message);
     }
 
     public void deleteReplyAsLead(Long replyId, String actingEmail) {
         AppUser lead = requireUser(actingEmail);
         BlockerReply reply = requireReply(replyId);
-        requireCanWriteAsLead(reply.getTask(), lead);
+        requireCanWriteAsLead(reply.getSubject(), lead);
         requireOwnReply(reply, lead);
-        requireNotResolved(reply.getTask());
+        requireNotResolved(reply.getSubject());
         deleteReplyInternal(reply);
     }
 
     public void editReplyAsEmployee(Long replyId, String actingEmail, String message) {
         AppUser employee = requireUser(actingEmail);
         BlockerReply reply = requireReply(replyId);
-        requireEmployeeOwnsTask(reply.getTask(), employee);
+        requireEmployeeOwnsTask(reply.getSubject(), employee);
         requireOwnReply(reply, employee);
-        requireNotResolved(reply.getTask());
+        requireNotResolved(reply.getSubject());
         updateMessage(reply, message);
     }
 
     public void deleteReplyAsEmployee(Long replyId, String actingEmail) {
         AppUser employee = requireUser(actingEmail);
         BlockerReply reply = requireReply(replyId);
-        requireEmployeeOwnsTask(reply.getTask(), employee);
+        requireEmployeeOwnsTask(reply.getSubject(), employee);
         requireOwnReply(reply, employee);
-        requireNotResolved(reply.getTask());
+        requireNotResolved(reply.getSubject());
         deleteReplyInternal(reply);
     }
 
@@ -188,7 +200,7 @@ public class BlockerConversationService {
     public BlockerReplyAttachment getAttachmentForLead(Long attachmentId, String actingEmail) {
         AppUser lead = requireUser(actingEmail);
         BlockerReplyAttachment attachment = requireAttachment(attachmentId);
-        requireLeadOwnsTask(attachment.getReply().getTask(), lead);
+        requireLeadOwnsTask(attachment.getReply().getSubject(), lead);
         return attachment;
     }
 
@@ -196,14 +208,14 @@ public class BlockerConversationService {
     public BlockerReplyAttachment getAttachmentForEmployee(Long attachmentId, String actingEmail) {
         AppUser employee = requireUser(actingEmail);
         BlockerReplyAttachment attachment = requireAttachment(attachmentId);
-        requireEmployeeOwnsTask(attachment.getReply().getTask(), employee);
+        requireEmployeeOwnsTask(attachment.getReply().getSubject(), employee);
         return attachment;
     }
 
     // ── shared helpers ────────────────────────────────────────────────────────
 
-    private List<BlockerReplyDto> loadThread(EodTask task) {
-        List<BlockerReply> replies = replyRepository.findByTaskIdOrderByCreatedAtAsc(task.getId());
+    private List<BlockerReplyDto> loadThread(BlockerSubject task) {
+        List<BlockerReply> replies = subjects.thread(task.getBlockerKey());
         List<Long> replyIds = replies.stream().map(BlockerReply::getId).toList();
         Map<Long, List<BlockerAttachmentDto>> byReplyId = replyIds.isEmpty()
                 ? Map.of()
@@ -218,7 +230,7 @@ public class BlockerConversationService {
         return attachmentRepository.findMetaByReplyIds(List.of(replyId));
     }
 
-    private BlockerReply saveReply(EodTask task, AppUser sender, String message, List<MultipartFile> files) {
+    private BlockerReply saveReply(BlockerSubject task, AppUser sender, String message, List<MultipartFile> files) {
         List<MultipartFile> attachments = files == null ? List.of() : files.stream().filter(f -> !f.isEmpty()).toList();
         boolean hasMessage = message != null && !message.isBlank();
         // A reply needs a message OR at least one attachment, not necessarily both — an
@@ -252,7 +264,7 @@ public class BlockerConversationService {
         }
 
         BlockerReply reply = new BlockerReply();
-        reply.setTask(task);
+        reply.setSubject(task);
         reply.setSender(sender);
         // message_column is NOT NULL — an attachment-only reply (hasMessage false, caught above
         // only when there's also no attachment) stores empty string rather than null.
@@ -309,25 +321,20 @@ public class BlockerConversationService {
         replyRepository.delete(reply);
     }
 
-    private EodTask requireTask(Long taskId) {
-        return taskRepository.findById(taskId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
-    }
-
     // Before: only the frozen reporting manager (entry.managerId) could access the lead thread.
     // Now: frozen RM, the project's lead, and the project's PM are all allowed.
-    private void requireLeadOwnsTask(EodTask task, AppUser actor) {
+    private void requireLeadOwnsTask(BlockerSubject task, AppUser actor) {
         Long actorId = actor.getId();
         // Nobody reviews their OWN blocker, whatever else they are (a project lead raising a blocker on
         // his own project is handled by his reporting manager). The owner uses the employee-side
         // endpoints; this covers reading the thread and attachments and, through requireCanWriteAsLead,
         // posting / editing / deleting replies.
-        if (actorId.equals(task.getEodEntry().getEmployee().getId())) {
+        if (actorId.equals(task.getBlockerEntry().getEmployee().getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "You cannot act as the reviewer on your own blocker");
         }
-        if (actorId.equals(task.getEodEntry().getManagerId())) return;
-        com.nforceone.sync.project.Project project = task.getProject();
+        if (actorId.equals(task.getBlockerEntry().getManagerId())) return;
+        com.nforceone.sync.project.Project project = task.getBlockerProject();
         if (project != null) {
             if (project.getLead() != null && actorId.equals(project.getLead().getId())) return;
             if (project.getPm() != null && actorId.equals(project.getPm().getId())) return;
@@ -342,34 +349,34 @@ public class BlockerConversationService {
      * whatever their role (anyone can be a project's PM by assignment). A role-PM user is rejected first.
      */
     /** Does this replier own handling of the blocker (so his reply counts as the response)? */
-    private static boolean handlesBlocker(EodTask task, AppUser replier) {
-        com.nforceone.sync.project.Project project = task.getProject();
+    private static boolean handlesBlocker(BlockerSubject task, AppUser replier) {
+        com.nforceone.sync.project.Project project = task.getBlockerProject();
         if (project == null || project.getLead() == null) return true;   // no other lead exists: the RM handles it
         Long leadId = project.getLead().getId();
         return leadId.equals(replier.getId())
-                || leadId.equals(task.getEodEntry().getEmployee().getId());   // a lead's own blocker
+                || leadId.equals(task.getBlockerEntry().getEmployee().getId());   // a lead's own blocker
     }
 
-    private void requireCanWriteAsLead(EodTask task, AppUser actor) {
+    private void requireCanWriteAsLead(BlockerSubject task, AppUser actor) {
         requireLeadOwnsTask(task, actor);
         Long actorId = actor.getId();
-        boolean isRm = actorId.equals(task.getEodEntry().getManagerId());
-        com.nforceone.sync.project.Project project = task.getProject();
+        boolean isRm = actorId.equals(task.getBlockerEntry().getManagerId());
+        com.nforceone.sync.project.Project project = task.getBlockerProject();
         boolean isLead = project != null && project.getLead() != null && actorId.equals(project.getLead().getId());
         if (!isRm && !isLead) {
             throw PmReadOnlyPolicy.denial(com.nforceone.sync.project.PmScopeService.isPmOf(actor, project), "blockers");
         }
     }
 
-    private void requireEmployeeOwnsTask(EodTask task, AppUser employee) {
-        if (!task.getEodEntry().getEmployee().getId().equals(employee.getId())) {
+    private void requireEmployeeOwnsTask(BlockerSubject task, AppUser employee) {
+        if (!task.getBlockerEntry().getEmployee().getId().equals(employee.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
     }
 
     // The conversation closes once a blocker is marked Resolved — enforced here so a stale
     // UI (disabled button bypassed, or a direct API call) can't still post into a closed thread.
-    private void requireNotResolved(EodTask task) {
+    private void requireNotResolved(BlockerSubject task) {
         if (task.getResolvedAt() != null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This blocker has been marked resolved. Reply is disabled.");
@@ -381,10 +388,10 @@ public class BlockerConversationService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
     }
 
-    // task.getDescription() is a nullable free-text column — some legacy blockers have none,
+    // task.getBlockerDescription() is a nullable free-text column — some legacy blockers have none,
     // which would otherwise surface as a literal "null" in the notification message.
-    private static String blockerLabel(EodTask task) {
-        String description = task.getDescription();
+    private static String blockerLabel(BlockerSubject task) {
+        String description = task.getBlockerDescription();
         return description == null || description.isBlank() ? "a blocker" : description;
     }
 }

@@ -34,6 +34,7 @@ import { GlobalLoader } from '../../components/GlobalLoader';
 import { Pagination } from '../../components/Pagination';
 import { useToast } from '../../lib/toast';
 import { Card, Chip, extractError, initials } from './shared';
+import { LineStatusBadge } from '../../components/taskStatus/LineStatusBadge';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -132,12 +133,13 @@ function LogLinesTable({ piece, compact }: {
       <div style={{ border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)' }}>
         {piece.logLines.map((ln, i) => (
           <div key={i} style={{
-            display: 'flex', alignItems: 'flex-start', gap: 10,
+            display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap',
             padding: pad, fontSize: sz, color: 'var(--txt-dim)',
             borderBottom: i < piece.logLines.length - 1 ? '1px solid var(--line)' : undefined,
           }}>
             <span style={{ color: 'var(--txt)', fontWeight: 600, minWidth: catWidth, flexShrink: 0 }}>{ln.categoryName ?? '—'}</span>
             <span style={{ flex: 1 }}>{ln.description ?? ''}</span>
+            <LineStatusBadge status={ln.taskStatus} blockerReason={ln.blockerReason} />
             <span style={{ color: 'var(--txt)', fontWeight: 700, minWidth: 36, textAlign: 'right', flexShrink: 0 }}>
               {ln.hours != null ? `${ln.hours}h` : '—'}
             </span>

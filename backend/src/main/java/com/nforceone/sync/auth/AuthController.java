@@ -222,7 +222,8 @@ public class AuthController {
         // reporting team lists: only ACTIVE people count towards having a My Reporting Team section.
         boolean hasDirectReports = reportingScopeService.hasDirectReports(user.getId());
         String eodForm = computeEodForm(user);
-        return UserDto.from(user, led, managed, hasDirectReports, eodForm);
+        boolean benchMode = benchModePolicy.isBenchMode(user, java.time.LocalDate.now());
+        return UserDto.from(user, led, managed, hasDirectReports, eodForm, benchMode);
     }
 
     private static String firstNameOf(AppUser user) {
@@ -262,9 +263,10 @@ public class AuthController {
             return null;
         }
         java.time.LocalDate today = java.time.LocalDate.now();
-        boolean hasAllocation = !allocationRepository
-                .findEmployeeIdsAllocatedOn(List.of(user.getId()), today)
-                .isEmpty();
+        // Same question BenchModePolicy asks of an EMPLOYEE: an allocation counts only on an ACTIVE project. The
+        // any-project query used here before sent a PM/Admin whose only allocation was to an inactive, completed or
+        // on-hold project to the project-based Submit EOD form (time adjustment and all) instead of the Daily Log.
+        boolean hasAllocation = allocationRepository.existsActiveProjectAllocationOn(user.getId(), today);
         return hasAllocation ? "PROJECT_GROUPED" : "PLAIN_LOG";
     }
 }

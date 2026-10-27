@@ -32,3 +32,13 @@ export function formatFieldErrors(fields: Record<string, string> | undefined | n
     .map(p => p.text);
   return parts.length ? parts.join('; ') : null;
 }
+
+/**
+ * The id of the Daily Log line a "cannot be removed — it has a blocker conversation" 409 is about, or null for any
+ * other error. The server adds {@code lineId} to that one response so the form can show the message next to the line.
+ */
+export function lockedLineIdOf(err: unknown): number | null {
+  const e = err as { response?: { status?: number; data?: { lineId?: number } } };
+  const id = e?.response?.data?.lineId;
+  return e?.response?.status === 409 && typeof id === 'number' ? id : null;
+}

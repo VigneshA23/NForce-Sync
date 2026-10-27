@@ -2,6 +2,7 @@ import { Card } from './KpiCard';
 import { EodEntryBody, FieldLabel } from '../pages/approvals/shared';
 import type { EodEntryDto } from '../api/eod';
 import { formatDateTime } from '../lib/date';
+import { LineStatusBadge } from './taskStatus/LineStatusBadge';
 
 // Read-only rendering of one submitted EOD report for someone else's day (Team EOD Status
 // detail). The Submit EOD page is an editable form bound to the logged-in user, so this is a
@@ -48,6 +49,9 @@ function PlainLogBody({ entry }: { entry: EodEntryDto }) {
             <span style={{ fontSize: 12.5, color: 'var(--txt)', fontFamily: '"JetBrains Mono", monospace' }}>{Number(l.hours)}h</span>
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--txt-mut)' }}>{l.description || '—'}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 8px', marginTop: 6 }}>
+            <LineStatusBadge status={l.taskStatus} blockerReason={l.blockerReason} />
+          </div>
         </div>
       )) : (
         <div style={{ fontSize: 12.5, color: 'var(--txt)', background: 'var(--raised)', borderRadius: 6, padding: 10 }}>

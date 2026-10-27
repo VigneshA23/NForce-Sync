@@ -9,6 +9,8 @@ import com.nforceone.sync.eod.EodAccessPolicy;
 import com.nforceone.sync.config.BusinessClock;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
+import com.nforceone.sync.eod.EodLogLine;
+import com.nforceone.sync.eod.EodLogLineRepository;
 import com.nforceone.sync.eod.EodTask;
 import com.nforceone.sync.org.Designation;
 import com.nforceone.sync.org.DesignationRepository;
@@ -62,6 +64,7 @@ public class RmEodByEmployeeReportService {
     private final AppUserRepository appUserRepository;
     private final AllocationRepository allocationRepository;
     private final EodEntryRepository eodEntryRepository;
+    private final EodLogLineRepository logLineRepository;
     private final DesignationRepository designationRepository;
     private final ShiftDefinitionRepository shiftRepository;
     private final EodAccessPolicy accessPolicy;
@@ -70,6 +73,7 @@ public class RmEodByEmployeeReportService {
     public RmEodByEmployeeReportService(AppUserRepository appUserRepository,
                                         AllocationRepository allocationRepository,
                                         EodEntryRepository eodEntryRepository,
+                                        EodLogLineRepository logLineRepository,
                                         DesignationRepository designationRepository,
                                         ShiftDefinitionRepository shiftRepository,
                                         EodAccessPolicy accessPolicy,
@@ -78,6 +82,7 @@ public class RmEodByEmployeeReportService {
         this.appUserRepository = appUserRepository;
         this.allocationRepository = allocationRepository;
         this.eodEntryRepository = eodEntryRepository;
+        this.logLineRepository = logLineRepository;
         this.designationRepository = designationRepository;
         this.shiftRepository = shiftRepository;
         this.accessPolicy = accessPolicy;
@@ -175,6 +180,16 @@ public class RmEodByEmployeeReportService {
         Map<Long, Designation> designationsById = new HashMap<>();
         Set<Long> activeIds = Set.copyOf(accessPolicy.reportingTeamReportRoster(actor, Set.of()));
 
+        // Daily Log (PLAIN_LOG) entries carry log lines, not tasks — load them in one query for the approved ones.
+        List<Long> plainLogEntryIds = snapshotEntries.stream()
+                .filter(e -> e.getStatus() == EodEntry.Status.APPROVED
+                        && e.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG
+                        && employeesById.containsKey(e.getEmployee().getId()))
+                .map(EodEntry::getId).toList();
+        Map<Long, List<EodLogLine>> logLinesByEntry = plainLogEntryIds.isEmpty() ? Map.of()
+                : logLineRepository.findByEntryIdInOrderBySortOrderAscIdAsc(plainLogEntryIds).stream()
+                        .collect(Collectors.groupingBy(l -> l.getEntry().getId()));
+
         List<EodByEmployeeRowDto> rows = new ArrayList<>();
         int totalEntryCount = 0;
         BigDecimal totalHoursAll = BigDecimal.ZERO;
@@ -190,6 +205,31 @@ public class RmEodByEmployeeReportService {
                 if (isLate(entry, emp.getShiftId() == null ? null : shiftsById.get(emp.getShiftId()))) anyLate = true;
                 // Same rule as the PM and Lead reports: only approved days count towards hours and entries.
                 if (entry.getStatus() != EodEntry.Status.APPROVED) continue;
+                if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+                    // One row per log line: Bench/Daily Log category, no project, hours counted in the totals.
+                    String dayType = entry.getDayType() != null ? entry.getDayType().name() : null;
+                    // Same per-day repetition the task rows carry: the report prints it once, on the day's first row.
+                    String adjType = entry.getTimeAdjustmentType() != null ? entry.getTimeAdjustmentType().name() : null;
+                    Integer adjMinutes = entry.getTimeAdjustmentMinutes();
+                    List<EodLogLine> lines = logLinesByEntry.getOrDefault(entry.getId(), List.of());
+                    if (lines.isEmpty()) {
+                        // Pre-V110 entry: a single total, no lines.
+                        BigDecimal legacy = entry.getLogTotalHours();
+                        if (legacy != null && legacy.signum() > 0) {
+                            totalHours = totalHours.add(legacy);
+                            entryDtos.add(new EodByEmployeeEntryDto(entry.getId(), entry.getEntryDate(),
+                                    null, null, legacy, adjType, adjMinutes, dayType));
+                        }
+                    }
+                    for (EodLogLine line : lines) {
+                        BigDecimal hours = line.getHours() != null ? line.getHours() : BigDecimal.ZERO;
+                        totalHours = totalHours.add(hours);
+                        entryDtos.add(new EodByEmployeeEntryDto(entry.getId(), entry.getEntryDate(),
+                                null, line.getCategory() != null ? line.getCategory().getName() : null,
+                                hours, adjType, adjMinutes, dayType));
+                    }
+                    continue;
+                }
                 for (EodTask task : entry.getTasks()) {
                     BigDecimal hours = task.getHours() != null ? task.getHours() : BigDecimal.ZERO;
                     totalHours = totalHours.add(hours);

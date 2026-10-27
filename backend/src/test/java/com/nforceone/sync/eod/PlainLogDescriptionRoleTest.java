@@ -115,6 +115,7 @@ class PlainLogDescriptionRoleTest {
         line.setHours(new BigDecimal("2.00"));
         line.setDescription(description);
         line.setSortOrder(0);
+        line.setTaskStatus(EodTask.TaskStatus.COMPLETED);
         when(logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(77L)).thenReturn(List.of(line));
     }
 

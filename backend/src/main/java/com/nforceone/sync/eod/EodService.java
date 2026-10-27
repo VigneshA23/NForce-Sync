@@ -225,6 +225,11 @@ public class EodService {
         // PLAIN_LOG draft: persist log lines (V110+) or legacy summary/hours, skip task processing.
         if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
             EodEntry.DayType plainDayType = resolveDayType(request.dayType(), request.entryDate());
+            // Same rule as the task form: a time adjustment is a shift on a full Working day, so switching day
+            // type must not leave a stale one behind. Validated (type, 30–120 min, shift, monthly pool) on submit.
+            boolean plainAdjustmentAllowed = plainDayType == EodEntry.DayType.WORKING_DAY;
+            entry.setTimeAdjustmentType(plainAdjustmentAllowed ? request.timeAdjustmentType() : null);
+            entry.setTimeAdjustmentMinutes(plainAdjustmentAllowed ? request.timeAdjustmentMinutes() : null);
             boolean plainIsWeekend = plainDayType == EodEntry.DayType.WEEKEND;
             boolean plainContentSent = request.logLines() != null
                     ? !request.logLines().isEmpty()
@@ -272,12 +277,21 @@ public class EodService {
                         "An entry for this date was just created — reload and try again");
             }
 
-            // V110+: replace log lines on every save (delete + insert), same pattern as eod_task.
+            // V110+: save the lines. A line the client sends back WITH its id is updated in place — the same row, so a
+            // blocker thread, read state and Acknowledge/Resolve markers on it survive a rejected entry being saved
+            // again (the old delete-and-recreate would have orphaned or blocked on them). A row with no id is new;
+            // a saved row that is not sent back is removed — unless someone has already replied on its blocker.
             if (hasLines) {
-                logLineRepository.deleteByEntryId(savedPlain.getId());
+                List<EodLogLine> existingLines = logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(savedPlain.getId());
+                java.util.Map<Long, EodLogLine> existingById = new java.util.HashMap<>();
+                existingLines.forEach(l -> existingById.put(l.getId(), l));
+                java.util.Set<Long> keptIds = new java.util.HashSet<>();
                 int order = 0;
                 for (com.nforceone.sync.eod.dto.SaveEodLogLineRequest lineReq : plainLines) {
-                    EodLogLine line = new EodLogLine();
+                    Long requestedId = lineReq.id();
+                    EodLogLine line = requestedId != null && existingById.containsKey(requestedId) && !keptIds.contains(requestedId)
+                            ? existingById.get(requestedId) : new EodLogLine();
+                    if (line.getId() != null) keptIds.add(line.getId());
                     line.setEntry(savedPlain);
                     com.nforceone.sync.project.TaskCategory category = categoryRepository.findById(lineReq.categoryId())
                             .orElseThrow(() -> new ResponseStatusException(
@@ -296,8 +310,30 @@ public class EodService {
                     // A draft may have no description yet (null/blank is stored as ""); submit rejects it.
                     line.setDescription(lineReq.description() == null ? "" : lineReq.description().strip());
                     line.setSortOrder(lineReq.sortOrder() != null ? lineReq.sortOrder() : order);
+                    // Status and blocker reason. A draft may leave the status empty (submit requires it). The reason
+                    // is kept only while the line is Blocked. A line that BECOMES Blocked is a fresh blocker, so any
+                    // Acknowledge/Resolve left from an earlier round is cleared; its replies stay.
+                    EodTask.TaskStatus previousStatus = line.getTaskStatus();
+                    EodTask.TaskStatus newStatus = lineReq.taskStatus();
+                    boolean blocked = newStatus == EodTask.TaskStatus.BLOCKED;
+                    line.setTaskStatus(newStatus);
+                    String reason = lineReq.blockerReason() == null ? "" : lineReq.blockerReason().strip();
+                    line.setBlockerReason(blocked && !reason.isEmpty() ? reason : null);
+                    if (blocked && previousStatus != EodTask.TaskStatus.BLOCKED) {
+                        line.setAcknowledgedAt(null);
+                        line.setAcknowledgedBy(null);
+                        line.setResolvedAt(null);
+                        line.setResolvedBy(null);
+                    }
                     logLineRepository.save(line);
                     order++;
+                }
+                for (EodLogLine old : existingLines) {
+                    if (keptIds.contains(old.getId())) continue;
+                    if (logLineRepository.hasBlockerReplies(old.getId())) {
+                        throw new BlockerLineLockedException(old.getId(), old.getSortOrder() + 1);
+                    }
+                    logLineRepository.delete(old);
                 }
             }
 
@@ -394,6 +430,11 @@ public class EodService {
                     "Entry in status " + entry.getStatus() + " cannot be submitted");
         }
         if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
+            // Type, duration, shift length and the shared monthly pool — the same check the task form runs, and
+            // first, so the bench target below is computed from an adjustment already known to be sane. The
+            // balance deduction needs nothing more: the used-minutes query counts any submitted entry with an
+            // adjustment, whatever its form. No overtime for the Daily Log (weekend aside, below).
+            validateTimeAdjustment(entry, employee);
             validatePlainLog(entry);
             applyPlainWeekendOvertime(entry);
         } else {
@@ -737,7 +778,7 @@ public class EodService {
                 null, null, null, List.of(), List.of(),
                 null, null, null, null, null, null, null, null, null, null,
                 // PLAIN_LOG fields — synthetic rows are always PROJECT_GROUPED context
-                EodEntry.EntryForm.PROJECT_GROUPED.name(), null, null, null, null, null, List.of(), false, null, null);
+                EodEntry.EntryForm.PROJECT_GROUPED.name(), null, null, null, null, null, List.of(), false, null, null, false);
     }
 
     @Transactional(readOnly = true)
@@ -761,13 +802,27 @@ public class EodService {
      * Full DTO for an entry the caller has ALREADY been authorised to read. No access check here —
      * callers outside this package (My Reports' reporting-scope check) must do their own.
      */
+    /** The ids among these lines whose blocker already has a reply — one query for the whole list. */
+    private java.util.Set<Long> linesWithBlockerThread(List<EodLogLine> lines) {
+        if (lines.isEmpty()) return java.util.Set.of();
+        return new java.util.HashSet<>(logLineRepository.findLineIdsWithReplies(
+                lines.stream().map(EodLogLine::getId).toList()));
+    }
+
+    /** Line DTOs with the "has a blocker conversation" flag set, so the form can lock Remove on those lines. */
+    private List<com.nforceone.sync.eod.dto.EodLogLineDto> lineDtosWithThreadFlag(List<EodLogLine> lines) {
+        java.util.Set<Long> withThread = linesWithBlockerThread(lines);
+        return lines.stream()
+                .map(l -> com.nforceone.sync.eod.dto.EodLogLineDto.from(l).withBlockerThread(withThread.contains(l.getId())))
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public EodEntryDto toDetailDto(EodEntry entry) {
         EodAttachmentService.AttachmentsByScope attachments =
                 attachmentService.loadForEntries(List.of(entry.getId()));
         List<com.nforceone.sync.eod.dto.EodLogLineDto> logLines = entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG
-                ? logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(entry.getId())
-                        .stream().map(com.nforceone.sync.eod.dto.EodLogLineDto::from).toList()
+                ? lineDtosWithThreadFlag(logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(entry.getId()))
                 : List.of();
         return EodEntryDto.from(entry, latestReviewerComment(entry), null,
                 attachments.entryLevelByEntryId().getOrDefault(entry.getId(), List.of()),
@@ -960,10 +1015,10 @@ public class EodService {
             }
             return;
         }
-        // For non-EMPLOYEE roles check whether an allocation exists today.
-        boolean hasAllocation = !allocationRepository
-                .findEmployeeIdsAllocatedOn(List.of(employee.getId()), businessClock.today())
-                .isEmpty();
+        // For non-EMPLOYEE roles check whether an ACTIVE-project allocation exists today (same test as
+        // AuthController.computeEodForm and BenchModePolicy, so the form the UI shows and the one accepted agree).
+        boolean hasAllocation = allocationRepository
+                .existsActiveProjectAllocationOn(employee.getId(), businessClock.today());
         if (!hasAllocation && employee.getManager() != null
                 && requested == EodEntry.EntryForm.PROJECT_GROUPED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -992,9 +1047,12 @@ public class EodService {
             // V110+ path: convert persisted lines to SaveEodLogLineRequest for stateless validation.
             List<com.nforceone.sync.eod.dto.SaveEodLogLineRequest> lineReqs = lines.stream()
                     .map(l -> new com.nforceone.sync.eod.dto.SaveEodLogLineRequest(
-                            l.getCategory().getId(), l.getHours(), l.getDescription(), l.getSortOrder()))
+                            l.getCategory().getId(), l.getHours(), l.getDescription(), l.getSortOrder(),
+                            l.getId(), l.getTaskStatus(), l.getBlockerReason()))
                     .toList();
             error = PlainLogValidation.validate(lineReqs, entry.getLogNotes());
+            // Every line needs a Status on submit (a draft may leave it empty), and a Blocked one a reason.
+            if (error == null) error = PlainLogValidation.validateStatus(lineReqs);
         } else {
             // Legacy path: no log lines — use logTotalHours + logSummary.
             error = PlainLogValidation.validateLegacy(
@@ -1002,6 +1060,14 @@ public class EodService {
         }
         if (error != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error);
+        }
+
+        // A Blocked line is a blocker routed to the user's reporting manager, so there must be one to receive it.
+        // Checked at submit only (a draft may exist without), and only for a Blocked line — others submit as usual.
+        if (lines.stream().anyMatch(l -> l.getTaskStatus() == EodTask.TaskStatus.BLOCKED)
+                && entry.getEmployee().getManager() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "You have no reporting manager assigned to receive this blocker. Contact your administrator.");
         }
 
         // Validate dayType-dependent fields — same rules as the employee form (validateLoggedDay),
@@ -1018,6 +1084,29 @@ public class EodService {
         if (plainIsWeekend && Boolean.TRUE.equals(entry.getWeekendWorked()) && !plainHasContent(entry, lines)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "At least one line item is required when you worked on a weekend.");
+        }
+
+        // A bench Working day must total exactly 8.0 hrs. Only submit is judged (drafts may be partial);
+        // Leave, half-leave, Holiday and Weekend are excluded, and so is every non-bench Daily Log (PM/Admin).
+        BigDecimal plainTotal = !lines.isEmpty()
+                ? lines.stream().map(l -> l.getHours() != null ? l.getHours() : BigDecimal.ZERO)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add)
+                : entry.getLogTotalHours();
+        boolean plainHasHours = plainTotal != null && plainTotal.signum() > 0;
+        boolean plainHasAdjustment = entry.getTimeAdjustmentType() != null && entry.getTimeAdjustmentMinutes() != null;
+        // An adjustment shifts a day that has hours in it; on a zero-hours entry ("Mark as leave day") it means nothing.
+        if (plainHasAdjustment && !plainHasHours) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A time adjustment needs hours logged — remove it, or add your time breakdown.");
+        }
+        if (Boolean.TRUE.equals(entry.getBenchMode()) && plainDayType == EodEntry.DayType.WORKING_DAY
+                && plainHasHours) {
+            // Zero hours is the form's "Mark as leave day" (empty lines, auto-approved) — not a short log.
+            String hoursError = BenchModePolicy.workingDayHoursError(plainTotal,
+                    plainHasAdjustment ? entry.getTimeAdjustmentMinutes() : null);
+            if (hoursError != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, hoursError);
+            }
         }
 
         if (!plainNonWork && !plainIsWeekend) {
@@ -1353,10 +1442,12 @@ public class EodService {
                 .toList();
         Map<Long, List<com.nforceone.sync.eod.dto.EodLogLineDto>> logLinesByEntryId = new HashMap<>();
         if (!plainLogIds.isEmpty()) {
-            for (EodLogLine line : logLineRepository.findByEntryIdInOrderBySortOrderAscIdAsc(plainLogIds)) {
+            List<EodLogLine> allLines = logLineRepository.findByEntryIdInOrderBySortOrderAscIdAsc(plainLogIds);
+            java.util.Set<Long> withThread = linesWithBlockerThread(allLines);
+            for (EodLogLine line : allLines) {
                 logLinesByEntryId
                         .computeIfAbsent(line.getEntry().getId(), k -> new java.util.ArrayList<>())
-                        .add(com.nforceone.sync.eod.dto.EodLogLineDto.from(line));
+                        .add(com.nforceone.sync.eod.dto.EodLogLineDto.from(line).withBlockerThread(withThread.contains(line.getId())));
             }
         }
 

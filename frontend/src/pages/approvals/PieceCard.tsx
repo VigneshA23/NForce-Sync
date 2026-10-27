@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import type { ApprovalPieceDto } from '../../api/approvalPieces';
 import { formatDate } from '../../lib/date';
+import { timeAdjustmentLabel } from './shared';
+import { LineStatusBadge } from '../../components/taskStatus/LineStatusBadge';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -284,6 +286,18 @@ export function PieceCard({ piece, mode, onApprove, onReject, busy = false }: Pi
                   {piece.dayType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}
                 </div>
               )}
+              {timeAdjustmentLabel({
+                timeAdjustmentType: piece.timeAdjustmentType ?? null,
+                timeAdjustmentMinutes: piece.timeAdjustmentMinutes ?? null,
+              }) && (
+                <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
+                  <span style={{ color: 'var(--txt-mut)', fontWeight: 600 }}>Time adjustment: </span>
+                  {timeAdjustmentLabel({
+                    timeAdjustmentType: piece.timeAdjustmentType ?? null,
+                    timeAdjustmentMinutes: piece.timeAdjustmentMinutes ?? null,
+                  })}
+                </div>
+              )}
               {piece.workLocation && (
                 <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
                   <span style={{ color: 'var(--txt-mut)', fontWeight: 600 }}>Location: </span>
@@ -293,9 +307,10 @@ export function PieceCard({ piece, mode, onApprove, onReject, busy = false }: Pi
               {piece.logLines && piece.logLines.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 2 }}>
                   {piece.logLines.map((l, i) => (
-                    <div key={i} style={{ fontSize: 12, color: 'var(--txt)', lineHeight: 1.5 }}>
-                      <span style={{ color: 'var(--txt-mut)', fontWeight: 600 }}>{l.categoryName} · {l.hours}h — </span>
-                      {l.description}
+                    <div key={i} style={{ fontSize: 12, color: 'var(--txt)', lineHeight: 1.5, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 8px' }}>
+                      <span><span style={{ color: 'var(--txt-mut)', fontWeight: 600 }}>{l.categoryName} · {l.hours}h — </span>
+                      {l.description}</span>
+                      <LineStatusBadge status={l.taskStatus} blockerReason={l.blockerReason} />
                     </div>
                   ))}
                 </div>

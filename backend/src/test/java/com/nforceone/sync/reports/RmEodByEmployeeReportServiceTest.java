@@ -50,6 +50,7 @@ class RmEodByEmployeeReportServiceTest {
     @Mock AppUserRepository appUserRepository;
     @Mock AllocationRepository allocationRepository;
     @Mock EodEntryRepository eodEntryRepository;
+    @Mock com.nforceone.sync.eod.EodLogLineRepository logLineRepository;
     @Mock DesignationRepository designationRepository;
     @Mock ShiftDefinitionRepository shiftRepository;
     @Mock EodAccessPolicy accessPolicy;
@@ -80,7 +81,7 @@ class RmEodByEmployeeReportServiceTest {
             return roster;
         });
         service = new RmEodByEmployeeReportService(appUserRepository, allocationRepository, eodEntryRepository,
-                designationRepository, shiftRepository, accessPolicy, new com.nforceone.sync.config.BusinessClock(com.nforceone.sync.config.BusinessClock.DEFAULT_ZONE));
+                logLineRepository, designationRepository, shiftRepository, accessPolicy, new com.nforceone.sync.config.BusinessClock(com.nforceone.sync.config.BusinessClock.DEFAULT_ZONE));
     }
 
     private static AppUser user(Long id, String name) {
@@ -178,6 +179,59 @@ class RmEodByEmployeeReportServiceTest {
         snapshotEntries(entry(15L, rm, EodEntry.Status.APPROVED, 8));
         EodByEmployeeReportDto dto = report(null);
         assertTrue(dto.employees().stream().noneMatch(r -> r.employeeId() == 1L));
+    }
+
+    private static EodEntry plainLogEntry(Long id, AppUser employee, EodEntry.Status status) {
+        EodEntry e = entry(id, employee, status, 0);
+        e.setTasks(new ArrayList<>());
+        e.setEntryForm(EodEntry.EntryForm.PLAIN_LOG);
+        e.setDayType(EodEntry.DayType.WORKING_DAY);
+        return e;
+    }
+
+    private static com.nforceone.sync.eod.EodLogLine logLine(EodEntry entry, String category, String hours) {
+        com.nforceone.sync.project.TaskCategory c = new com.nforceone.sync.project.TaskCategory();
+        c.setName(category);
+        com.nforceone.sync.eod.EodLogLine l = new com.nforceone.sync.eod.EodLogLine();
+        l.setEntry(entry);
+        l.setCategory(c);
+        l.setHours(new BigDecimal(hours));
+        l.setDescription("worked");
+        return l;
+    }
+
+    @Test
+    void anApprovedBenchDailyLogShowsOneRowPerLogLineWithNoProjectAndCountsItsHours() {
+        EodEntry bench = plainLogEntry(20L, activeWithEntries, EodEntry.Status.APPROVED);
+        snapshotEntries(bench);
+        when(logLineRepository.findByEntryIdInOrderBySortOrderAscIdAsc(anyList())).thenReturn(List.of(
+                logLine(bench, "Training", "5.5"), logLine(bench, "Self Study", "2.5")));
+
+        EodByEmployeeRowDto row = report(null).employees().stream()
+                .filter(r -> r.employeeId() == 2L).findFirst().orElseThrow();
+        assertEquals(2, row.entryCount());
+        assertEquals(0, new BigDecimal("8.0").compareTo(row.totalHours()));
+        assertTrue(row.entries().stream().allMatch(e -> e.projectCode() == null));
+        assertTrue(row.entries().stream().anyMatch(e -> "Training".equals(e.categoryName())));
+    }
+
+    @Test
+    void aSubmittedButNotYetApprovedBenchDailyLogDoesNotCountTowardsHours() {
+        snapshotEntries(plainLogEntry(21L, activeWithEntries, EodEntry.Status.SUBMITTED));
+        EodByEmployeeRowDto row = report(null).employees().stream()
+                .filter(r -> r.employeeId() == 2L).findFirst().orElseThrow();
+        assertEquals(0, row.entryCount());
+        assertEquals("SUBMITTED", row.status());
+    }
+
+    @Test
+    void benchStaffAreDroppedWhenAProjectFilterIsSetBecauseTheyHaveNoProject() {
+        EodEntry bench = plainLogEntry(22L, activeWithEntries, EodEntry.Status.APPROVED);
+        snapshotEntries(bench);
+        when(logLineRepository.findByEntryIdInOrderBySortOrderAscIdAsc(anyList()))
+                .thenReturn(List.of(logLine(bench, "Training", "8")));
+        EodByEmployeeReportDto dto = service.getReport(rm.getEmail(), FROM, TO, null, 77L, null, null, null);
+        assertEquals(0, dto.employeeCount());
     }
 
     @Test

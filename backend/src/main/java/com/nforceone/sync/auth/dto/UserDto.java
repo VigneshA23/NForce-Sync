@@ -39,14 +39,21 @@ public record UserDto(
             // "PROJECT_GROUPED" = standard employee task form.
             // "PLAIN_LOG"       = daily summary form (PM/Admin with no active project allocation).
             String       eodForm,
-            boolean      submitsEod
+            boolean      submitsEod,
+            // True only for an EMPLOYEE on the bench today (BenchModePolicy) — the Daily Log form's bench rules
+            // (8.0 hrs, no time adjustment). A PM/Admin on the Daily Log is false.
+            boolean      benchMode,
+            // The bench Working-day total before any time adjustment (BenchModePolicy.BENCH_WORKING_DAY_HOURS) —
+            // sent so the form never keeps its own copy of the number.
+            java.math.BigDecimal benchDailyHours
     ) {
         static Capabilities empty() {
-            return new Capabilities(List.of(), List.of(), List.of(), List.of(), false, null, false);
+            return new Capabilities(List.of(), List.of(), List.of(), List.of(), false, null, false, false,
+                    com.nforceone.sync.eod.BenchModePolicy.BENCH_WORKING_DAY_HOURS);
         }
 
         static Capabilities from(List<Project> led, List<Project> managed,
-                                  boolean hasDirectReports, String eodForm) {
+                                  boolean hasDirectReports, String eodForm, boolean benchMode) {
             return new Capabilities(
                     led.stream().map(Project::getId).toList(),
                     led.stream().map(Project::getName).toList(),
@@ -54,17 +61,19 @@ public record UserDto(
                     managed.stream().map(Project::getName).toList(),
                     hasDirectReports,
                     eodForm,
-                    eodForm != null
+                    eodForm != null,
+                    benchMode,
+                    com.nforceone.sync.eod.BenchModePolicy.BENCH_WORKING_DAY_HOURS
             );
         }
     }
 
     public static UserDto from(AppUser user) {
-        return from(user, List.of(), List.of(), false, null);
+        return from(user, List.of(), List.of(), false, null, false);
     }
 
     public static UserDto from(AppUser user, List<Project> led, List<Project> managed,
-                                boolean hasDirectReports, String eodForm) {
+                                boolean hasDirectReports, String eodForm, boolean benchMode) {
         return new UserDto(
                 user.getId(),
                 user.getFullName(),
@@ -81,7 +90,7 @@ public record UserDto(
                 user.getWorkMode(),
                 user.getJoiningDate(),
                 user.isMustChangePassword(),
-                Capabilities.from(led, managed, hasDirectReports, eodForm)
+                Capabilities.from(led, managed, hasDirectReports, eodForm, benchMode)
         );
     }
 }

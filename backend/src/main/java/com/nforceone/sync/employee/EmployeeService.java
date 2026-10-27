@@ -13,6 +13,10 @@ import com.nforceone.sync.businessrules.ShiftSchedule;
 import com.nforceone.sync.eod.EodEntry;
 import com.nforceone.sync.eod.EodEntryRepository;
 import com.nforceone.sync.eod.EodTask;
+import com.nforceone.sync.eod.BlockerSubject;
+import com.nforceone.sync.eod.BlockerSubjects;
+import com.nforceone.sync.eod.EodLogLine;
+import com.nforceone.sync.eod.EodLogLineRepository;
 import com.nforceone.sync.eod.EodTaskRepository;
 import com.nforceone.sync.employee.dto.DashboardSummaryDto;
 import com.nforceone.sync.employee.dto.UtilizationDetailDto;
@@ -44,6 +48,8 @@ public class EmployeeService {
 
     private final EodEntryRepository        entryRepository;
     private final EodTaskRepository         taskRepository;
+    private final EodLogLineRepository      logLineRepository;
+    private final BlockerSubjects           blockerSubjects;
     private final UtilSnapshotRepository    snapshotRepository;
     private final UtilizationService        utilizationService;
     private final ShiftDefinitionRepository shiftRepository;
@@ -57,6 +63,8 @@ public class EmployeeService {
 
     public EmployeeService(EodEntryRepository entryRepository,
                            EodTaskRepository taskRepository,
+                           EodLogLineRepository logLineRepository,
+                           BlockerSubjects blockerSubjects,
                            UtilSnapshotRepository snapshotRepository,
                            UtilizationService utilizationService,
                            ShiftDefinitionRepository shiftRepository,
@@ -67,6 +75,8 @@ public class EmployeeService {
                            BusinessClock businessClock) {
         this.entryRepository  = entryRepository;
         this.taskRepository   = taskRepository;
+        this.logLineRepository = logLineRepository;
+        this.blockerSubjects  = blockerSubjects;
         this.snapshotRepository = snapshotRepository;
         this.utilizationService = utilizationService;
         this.shiftRepository  = shiftRepository;
@@ -133,10 +143,16 @@ public class EmployeeService {
         // permanently detached — no thread could resolve them afterward, not even this one. The
         // futures above/below were already dispatched (they run concurrently on the executor
         // while this query runs here), so this still overlaps with them in wall-clock time.
+        // Daily Log blockers (BLOCKED lines) for the same 14-day window — fetched with what the rows need (JOIN FETCH),
+        // so unlike the task rows above it is safe to fan out.
+        CompletableFuture<List<EodLogLine>> blockedLinesF = CompletableFuture.supplyAsync(
+                () -> logLineRepository.findBlockedByEmployeeAndDateRange(employeeId, today.minusDays(14), today),
+                dashboardQueryExecutor);
+
         List<EodEntry> last30Days = entryRepository.findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(
                 employeeId, lookback30, today);
 
-        CompletableFuture.allOf(cutoffStatusF, rangeSnapsF, statusByDateF,
+        CompletableFuture.allOf(cutoffStatusF, rangeSnapsF, statusByDateF, blockedLinesF,
                 last30SnapMapF, calendarDataF).join();
 
         DashboardSummaryDto.CutoffStatus cutoffStatus = Futures.join(cutoffStatusF);
@@ -162,7 +178,7 @@ public class EmployeeService {
 
         // ── Blocked tasks + recent entries — pure in-memory from last30Days/last30SnapMap ───
         List<DashboardSummaryDto.BlockedTask> blockedTasks =
-                blockedTasksFrom(last30Days, today.minusDays(14));
+                withLogLineBlockers(blockedTasksFrom(last30Days, today.minusDays(14)), Futures.join(blockedLinesF));
         List<DashboardSummaryDto.RecentEntry> recentEntries = buildRecentEntries(last30Days, last30SnapMap);
 
         return new DashboardSummaryDto(cutoffStatus, quickStats, blockedTasks, recentEntries, calendarData);
@@ -287,29 +303,44 @@ public class EmployeeService {
      *  a notification's deep link, which must resolve even to an old or since-resolved blocker. */
     @Transactional(readOnly = true)
     public DashboardSummaryDto.BlockedTask getBlockedTask(Long taskId, Long employeeId) {
-        EodTask task = taskRepository.findById(taskId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Blocker not found"));
-        EodEntry entry = task.getEodEntry();
-        if (!entry.getEmployee().getId().equals(employeeId)) {
+        // taskId is the blocker's API id: a task id, or the negative of a Daily Log line id (see BlockerKey).
+        BlockerSubject blocker = blockerSubjects.require(taskId);
+        if (!blocker.getBlockerEntry().getEmployee().getId().equals(employeeId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
-        String projectName = task.getProject() != null ? task.getProject().getName() : "—";
-        String categoryName = task.getTaskCategory() != null ? task.getTaskCategory().getName() : null;
+        return blockedTaskOf(blocker);
+    }
+
+    /** The My Blockers row for one blocker, a Submit EOD task or a Daily Log line alike. */
+    private static DashboardSummaryDto.BlockedTask blockedTaskOf(BlockerSubject blocker) {
+        EodEntry entry = blocker.getBlockerEntry();
+        // A Daily Log blocker has no project; the page already renders "—" for that.
+        String projectName = blocker.getBlockerProject() != null ? blocker.getBlockerProject().getName() : "—";
         return new DashboardSummaryDto.BlockedTask(
-                task.getId(),
+                blocker.getBlockerKey(),
                 entry.getId(),
                 entry.getEntryDate(),
                 projectName,
-                categoryName,
-                task.getDescription(),
-                task.getBlockerReason(),
-                task.getAcknowledgedAt() != null,
-                task.getAcknowledgedAt(),
-                task.getAcknowledgedBy() != null ? task.getAcknowledgedBy().getFullName() : null,
-                task.getBlockerStatus(),
-                task.getResolvedAt(),
-                task.getResolvedBy() != null ? task.getResolvedBy().getFullName() : null
+                blocker.getBlockerCategoryName(),
+                blocker.getBlockerDescription(),
+                blocker.getBlockerReason(),
+                blocker.getAcknowledgedAt() != null,
+                blocker.getAcknowledgedAt(),
+                blocker.getAcknowledgedBy() != null ? blocker.getAcknowledgedBy().getFullName() : null,
+                blocker.getBlockerStatus(),
+                blocker.getResolvedAt(),
+                blocker.getResolvedBy() != null ? blocker.getResolvedBy().getFullName() : null
         );
+    }
+
+    /** Adds the employee's Daily Log blockers to his Submit EOD ones, newest entry first. */
+    private static List<DashboardSummaryDto.BlockedTask> withLogLineBlockers(
+            List<DashboardSummaryDto.BlockedTask> taskBlockers, List<EodLogLine> lines) {
+        if (lines.isEmpty()) return taskBlockers;
+        List<DashboardSummaryDto.BlockedTask> all = new ArrayList<>(taskBlockers);
+        lines.forEach(l -> all.add(blockedTaskOf(l)));
+        all.sort(java.util.Comparator.comparing(DashboardSummaryDto.BlockedTask::entryDate).reversed());
+        return all;
     }
 
     /** Full blocker history for the "My Blockers" page — unlike the dashboard's fixed
@@ -322,7 +353,8 @@ public class EmployeeService {
     private List<DashboardSummaryDto.BlockedTask> buildBlockedTasks(Long employeeId, LocalDate from, LocalDate to) {
         List<EodEntry> recent = entryRepository
                 .findByEmployeeIdAndEntryDateBetweenOrderByEntryDateDesc(employeeId, from, to);
-        return blockedTasksFrom(recent, from);
+        return withLogLineBlockers(blockedTasksFrom(recent, from),
+                logLineRepository.findBlockedByEmployeeAndDateRange(employeeId, from, to));
     }
 
     /** Shared with getDashboardSummary, which already has a 30-day entry fetch on hand and

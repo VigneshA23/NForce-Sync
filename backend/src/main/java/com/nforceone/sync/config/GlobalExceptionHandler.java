@@ -31,6 +31,13 @@ public class GlobalExceptionHandler {
         return JsonMapper.builder().build();
     }
 
+    /** The usual {"error": ...} plus the id of the Daily Log line that cannot be removed, so the form can mark it. */
+    @ExceptionHandler(com.nforceone.sync.eod.BlockerLineLockedException.class)
+    public ResponseEntity<Map<String, Object>> handleBlockerLineLocked(com.nforceone.sync.eod.BlockerLineLockedException ex) {
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(Map.of("error", ex.getReason(), "lineId", ex.getLineId()));
+    }
+
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException ex) {
         String message = ex.getReason() != null ? ex.getReason() : ex.getStatusCode().toString();
@@ -50,11 +57,59 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> handleUnreadableBody(HttpMessageNotReadableException ex) {
-        String detail = ex.getMessage();
-        String msg = (detail != null && detail.contains("not one of the values accepted for Enum class"))
-                ? "Invalid role"
-                : "Invalid request body";
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", msg));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", unreadableBodyMessage(ex)));
+    }
+
+    /**
+     * The message for a request body that could not be read. A value that is not one of an enum's constants (a
+     * task status, a day type, a role...) names the field and lists what is accepted — "Invalid status. Use
+     * Completed, In Progress, Blocked or Not Started." — instead of the old blanket "Invalid role" that every enum
+     * used to get. Anything else unreadable stays "Invalid request body".
+     */
+    static String unreadableBodyMessage(HttpMessageNotReadableException ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof tools.jackson.databind.exc.InvalidFormatException ife
+                    && ife.getTargetType() != null && ife.getTargetType().isEnum()) {
+                return enumMessage(lastFieldOf(ife.getPathReference()), ife.getTargetType().getEnumConstants());
+            }
+            if (t.getCause() == t) break;
+        }
+        return "Invalid request body";
+    }
+
+    private static String enumMessage(String field, Object[] constants) {
+        String noun = humanize(field == null || field.isBlank() ? "value" : field).toLowerCase()
+                .replaceFirst("^task status$", "status");   // the request field is taskStatus; users call it Status
+        java.util.List<String> labels = new java.util.ArrayList<>();
+        for (Object c : constants) labels.add(valueLabel(((Enum<?>) c).name()));
+        String list = labels.size() <= 1 ? String.join("", labels)
+                : String.join(", ", labels.subList(0, labels.size() - 1)) + " or " + labels.get(labels.size() - 1);
+        return "Invalid " + noun + ". Use " + list + ".";
+    }
+
+    /** The last quoted property in a Jackson path reference such as {@code Req["logLines"]->List[0]->Line["taskStatus"]}. */
+    private static String lastFieldOf(String pathReference) {
+        if (pathReference == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\[\"([^\"]+)\"\\]").matcher(pathReference);
+        String last = null;
+        while (m.find()) last = m.group(1);
+        return last;
+    }
+
+    /** taskStatus -> "task status". */
+    private static String humanize(String camel) {
+        return camel.replaceAll("([a-z0-9])([A-Z])", "$1 $2");
+    }
+
+    /** IN_PROGRESS -> "In Progress"; a short code such as PM stays as it is. */
+    private static String valueLabel(String constant) {
+        if (constant.length() <= 3) return constant;
+        StringBuilder sb = new StringBuilder();
+        for (String word : constant.split("_")) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1).toLowerCase());
+        }
+        return sb.toString();
     }
 
     // A @PreAuthorize denial throws AccessDeniedException from inside the controller method

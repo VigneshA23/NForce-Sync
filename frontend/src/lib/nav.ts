@@ -386,10 +386,11 @@ export function getNavSections(role: Role, capabilities: ServerUserCapabilities)
     }
   }
 
-  // An EMPLOYEE with no active project (eodForm PLAIN_LOG) files the Daily Log, not the project-grouped EOD,
+  // Anyone on the Daily Log form (eodForm PLAIN_LOG) — an employee on the bench, or a PM/Admin with no active project —
+  // files the Daily Log, not the project-grouped EOD,
   // so the item is named for what the page is. Done here, once, so the sidebar, the breadcrumb (getNavItem)
-  // and Global Search all agree. Every other role/form keeps "Submit EOD" — Admin/PM/RM labels are untouched.
-  if (role === 'employee' && capabilities.eodForm === 'PLAIN_LOG') {
+  // and Global Search all agree. Everyone on the project form keeps "Submit EOD".
+  if (capabilities.eodForm === 'PLAIN_LOG') {
     sections = relabelEodSubmit(sections, DAILY_LOG_LABEL);
   }
 

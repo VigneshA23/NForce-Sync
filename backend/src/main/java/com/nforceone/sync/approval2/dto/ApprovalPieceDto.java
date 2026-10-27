@@ -48,7 +48,11 @@ public record ApprovalPieceDto(
     String nextDayPlan,
     String remarks,
     // Task lines for PROJECT_GROUPED pieces — empty for PLAIN_LOG
-    List<TaskLineDto> taskLines
+    List<TaskLineDto> taskLines,
+    // Time adjustment on a PLAIN_LOG entry (null when none, and for PROJECT_GROUPED pieces, whose adjustment
+    // the approver sees on the entry itself) — so a manager reviewing a Daily Log sees the partial leave.
+    String timeAdjustmentType,
+    Integer timeAdjustmentMinutes
 ) {
     public record TaskLineDto(String projectCode, String projectName, String categoryName, BigDecimal hours, String description) {}
 
@@ -101,7 +105,9 @@ public record ApprovalPieceDto(
                 isPlainLog ? entry.getWorkLocation() : null,
                 isPlainLog ? entry.getNextDayPlan() : null,
                 isPlainLog ? entry.getRemarks() : null,
-                isPlainLog ? List.of() : taskLines
+                isPlainLog ? List.of() : taskLines,
+                isPlainLog && entry.getTimeAdjustmentType() != null ? entry.getTimeAdjustmentType().name() : null,
+                isPlainLog ? entry.getTimeAdjustmentMinutes() : null
         );
     }
 

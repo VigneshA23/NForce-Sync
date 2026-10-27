@@ -14,7 +14,7 @@ import java.time.OffsetDateTime;
 @Table(name = "eod_task")
 @Getter
 @Setter
-public class EodTask {
+public class EodTask implements BlockerSubject {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -74,11 +74,13 @@ public class EodTask {
         COMPLETED, IN_PROGRESS, BLOCKED, NOT_STARTED
     }
 
-    /** Single source of truth for the blocker tri-state label, shared by both the Team
-     *  Lead's and the employee's DTOs so the two sides never derive it differently. */
-    public String getBlockerStatus() {
-        if (resolvedAt != null) return "RESOLVED";
-        if (acknowledgedAt != null) return "ACKNOWLEDGED";
-        return "NEEDS_RESPONSE";
-    }
+    // ── BlockerSubject ────────────────────────────────────────────────────────
+    // The blocker tri-state label (getBlockerStatus) is the interface's one definition, shared with the Daily Log.
+
+    @Override public Long getBlockerKey()              { return BlockerKey.ofTask(id); }
+    @Override public EodEntry getBlockerEntry()        { return eodEntry; }
+    @Override public Project getBlockerProject()       { return project; }
+    @Override public String getBlockerDescription()    { return description; }
+    @Override public BigDecimal getBlockerHours()      { return hours; }
+    @Override public String getBlockerCategoryName()   { return taskCategory != null ? taskCategory.getName() : null; }
 }

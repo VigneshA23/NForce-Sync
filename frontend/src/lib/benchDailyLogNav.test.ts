@@ -14,7 +14,7 @@ function submitItems(role: Role, c: ServerUserCapabilities) {
     .filter(i => i.path === '/eod/submit');
 }
 
-describe('Daily Log sidebar label for an employee on the bench (eodForm PLAIN_LOG)', () => {
+describe('Daily Log sidebar label for anyone on the Daily Log form (eodForm PLAIN_LOG)', () => {
   it('a new employee with no project sees "Daily Log", on the same /eod/submit route', () => {
     const items = submitItems('employee', caps({ eodForm: 'PLAIN_LOG' }));
     expect(items).toHaveLength(1);
@@ -39,8 +39,9 @@ describe('Daily Log sidebar label for an employee on the bench (eodForm PLAIN_LO
     expect(items.map(i => i.label)).toEqual(['Daily Log']);
   });
 
-  it.each<Role>(['pm', 'admin', 'superadmin'])('%s is unchanged — still "Submit EOD" even on PLAIN_LOG', (role) => {
-    expect(submitItems(role, caps({ eodForm: 'PLAIN_LOG' })).map(i => i.label)).toEqual(['Submit EOD']);
+  it.each<Role>(['pm', 'admin', 'superadmin'])('%s on the Daily Log form (PLAIN_LOG) sees "Daily Log" too; on the project form, "Submit EOD"', (role) => {
+    expect(submitItems(role, caps({ eodForm: 'PLAIN_LOG' })).map(i => i.label)).toEqual(['Daily Log']);
+    expect(submitItems(role, caps({ eodForm: 'PLAIN_LOG' })).map(i => i.path)).toEqual(['/eod/submit']);
     expect(submitItems(role, caps({ eodForm: 'PROJECT_GROUPED' })).map(i => i.label)).toEqual(['Submit EOD']);
   });
 

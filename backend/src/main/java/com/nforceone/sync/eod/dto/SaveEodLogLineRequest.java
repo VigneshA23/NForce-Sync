@@ -1,5 +1,6 @@
 package com.nforceone.sync.eod.dto;
 
+import com.nforceone.sync.eod.EodTask;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
@@ -22,5 +23,23 @@ public record SaveEodLogLineRequest(
         @Size(max = 4000, message = "Description must be 4000 characters or fewer")
         String description,
 
-        Integer sortOrder
-) {}
+        Integer sortOrder,
+
+        /** The id of the saved line this row came from, when the client has it. Lets a re-save keep the same row —
+         *  and so the blocker thread, read state and Acknowledge/Resolve markers attached to it — instead of
+         *  deleting and recreating it. Null for a row added since the entry was loaded. */
+        Long id,
+
+        // Same four values as a Submit EOD task. Drafts may leave it empty; every line needs one on SUBMIT
+        // (PlainLogValidation). An unknown value is rejected while the request is read.
+        EodTask.TaskStatus taskStatus,
+
+        /** Same cap as a Submit EOD task's blocker reason. Required on submit when the status is BLOCKED. */
+        @Size(max = 300, message = "Blocker reason must be 300 characters or fewer")
+        String blockerReason
+) {
+    /** A line with no id, status or blocker reason — how callers that predate V118 build one. */
+    public SaveEodLogLineRequest(Long categoryId, BigDecimal hours, String description, Integer sortOrder) {
+        this(categoryId, hours, description, sortOrder, null, null, null);
+    }
+}

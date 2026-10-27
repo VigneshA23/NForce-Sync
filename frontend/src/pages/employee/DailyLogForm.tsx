@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertTriangle, CheckCircle, Clock, Send, Save, Copy, Plus, Trash2,
+  AlertTriangle, CheckCircle, Clock, Lock, Send, Save, Plus, Trash2,
   ChevronLeft, ChevronRight, ListPlus,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
@@ -23,15 +23,21 @@ import { useEntryPieces } from '../../api/approvalPieces';
 import { useDashboardSummary } from '../../api/employee';
 import type { EodEntryDto, EodLogLineDto, SaveLogLineRequest } from '../../api/eod';
 import { DatePicker } from '../../components/DatePicker';
+import { TimeAdjustmentSection } from '../../components/timeAdjustment/TimeAdjustmentSection';
+import { useTimeAdjustment } from '../../components/timeAdjustment/useTimeAdjustment';
+import { minutesLabel } from '../../components/timeAdjustment/timeAdjustment';
+import { BlockerReasonField, TaskStatusField } from '../../components/taskStatus/TaskStatusFields';
 import { ApprovalStatusLine, HowItWorksPopover, SubmissionWindow } from './dailyLogParts';
 import { useSubmissionWindow } from './useSubmissionWindow';
 import { LegacyLogNotice } from './LegacyLogNotice';
 import { legacyLogOf } from './dailyLogLegacy';
 import { api } from '../../api/client';
-import { extractError } from '../../lib/extractError';
+import { extractError, lockedLineIdOf } from '../../lib/extractError';
 import {
-  MAX_DESC, QUARTER, clearedCategoriesNotice, descriptionError, draftBlockReason, draftErrorMessage, firstInvalidLine,
-  lineFieldId, lineProblems, noCategoriesMessage, staleCategoryRows, type LineField,
+  DEFAULT_BENCH_DAILY_HOURS, MAX_DESC, QUARTER, benchHoursMessage, benchHoursRuleApplies, benchTargetHours,
+  clearedCategoriesNotice, descriptionError,
+  draftBlockReason, draftErrorMessage, firstInvalidLine, lineFieldId, lineProblems, maxBenchLineHours,
+  noCategoriesMessage, staleCategoryRows, statusProblemMessages, type LineField,
 } from './dailyLogValidation';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -54,18 +60,30 @@ const DAY_TYPES = [
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface TaskCategoryDto { id: number; name: string; scope: string; }
-interface LogLine { key: number; categoryId: number | null; hours: number; description: string; }
+interface LogLine {
+  key: number; categoryId: number | null; hours: number; description: string;
+  /** The saved line this row came from, so a re-save keeps the same row and its blocker thread (see SaveLogLineRequest.id). */
+  serverId?: number | null;
+  /** The line's blocker already has a conversation, so it cannot be removed (set from the server). */
+  locked?: boolean;
+  taskStatus: string;      // '' until chosen; a draft may leave it, a submit may not
+  blockerReason: string;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 let _k = 0;
 const nextKey   = () => ++_k;
-const blankLine = (): LogLine => ({ key: nextKey(), categoryId: null, hours: 0.5, description: '' });
+const blankLine = (): LogLine => ({ key: nextKey(), categoryId: null, hours: 0.5, description: '', taskStatus: '', blockerReason: '' });
 const round25   = (v: number) => Math.round(v / QUARTER) * QUARTER;
 
 
 function linesFromDto(ll: EodLogLineDto[]): LogLine[] {
-  return ll.map(l => ({ key: nextKey(), categoryId: l.categoryId, hours: l.hours, description: l.description }));
+  return ll.map(l => ({
+    key: nextKey(), categoryId: l.categoryId, hours: l.hours, description: l.description,
+    serverId: l.id, taskStatus: l.taskStatus ?? '', blockerReason: l.blockerReason ?? '',
+    locked: l.hasBlockerThread === true,
+  }));
 }
 
 function sumHours(lines: LogLine[]) {
@@ -163,11 +181,15 @@ export default function DailyLogForm() {
   const [autosaving,   setAutosaving]   = useState(false);
   // Why the last autosave did not go through (null = fine). Autosave never toasts, but it must not fail unseen.
   const [autosaveError, setAutosaveError] = useState<string | null>(null);
+  // Server refusals to remove a line whose blocker has a conversation, by the line's server id (shown next to the line).
+  const [lineNotices, setLineNotices] = useState<Record<number, string>>({});
   const [errors,       setErrors]       = useState<string[]>([]);
   // Set by a failed submit: only then do empty required fields turn red, so a freshly added row isn't born
   // in an error state. `focusTarget.n` bumps on every failed attempt so repeating it re-focuses the field.
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [focusTarget, setFocusTarget] = useState<{ key: number; field: LineField; n: number } | null>(null);
+  // Time adjustment (Working day only) — the same state, rules and markup as Submit EOD. A day marked as leave carries none.
+  const ta = useTimeAdjustment({ date: selectedDate, dayType: isLeave ? 'LEAVE' : dayType, enabled: !!user, onChange: () => setErrors([]) });
 
   const errorRef      = useRef<HTMLDivElement>(null);
   const saveTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -212,13 +234,6 @@ export default function DailyLogForm() {
 
   const { data: dashboard, dataUpdatedAt: dashboardFetchedAt } = useDashboardSummary();
 
-  const [loadYday, setLoadYday] = useState(false);
-  const { data: ydayEntries } = useQuery({
-    queryKey: ['eod', 'list', user?.id, prevDate],
-    queryFn:  () => listEntries(undefined, prevDate, prevDate),
-    enabled:  !!user && loadYday, staleTime: 60_000,
-  });
-
   const entry: EodEntryDto | null = entries[0] ?? null;
 
   // `rawLines` is what the user has typed; `lines` is what everything else reads (render, validation, autosave,
@@ -237,10 +252,11 @@ export default function DailyLogForm() {
   const clearedNotice = clearedCategoriesNotice(staleRows);
   const { data: pieces = [] }     = useEntryPieces(entryId);
   const dailyCap                  = dayDefaults?.workingHoursPerDay ?? 8;
-  // An EMPLOYEE-role user only reaches this form when they have no active project (computeEodForm), so for them
-  // the server's list is the Bench Log set. Used only to word the "no categories" messages — the list itself
-  // always comes from the server, never from this flag.
-  const benchMode                 = user?.role === 'employee';
+  // Same definition as the server: an existing entry carries its frozen bench_mode; a date with no entry yet
+  // takes today's (capabilities.benchMode, from BenchModePolicy). A PM/Admin on this form is never bench. It
+  // words the "no categories" messages and switches on the exactly-8.0-hrs rule — the category list itself
+  // always comes from the server.
+  const benchMode                 = entry ? entry.benchMode === true : user?.capabilities?.benchMode === true;
 
   // ── Populate form ─────────────────────────────────────────────────────────
 
@@ -257,18 +273,19 @@ export default function DailyLogForm() {
       setDayType((entry.status === 'DRAFT' || entry.status === 'REJECTED') && dayDefaults?.dayType === 'WEEKEND'
         ? 'WEEKEND' : (entry.dayType ?? 'WORKING_DAY'));
       setWeekendWorked(entry.weekendWorked === true || (entry.logLines?.length ?? 0) > 0 || (entry.logTotalHours ?? 0) > 0);
+      ta.load(entry);
       setWorkLocation(entry.workLocation ?? ''); setNextDayPlan(entry.nextDayPlan ?? '');
       setRemarks(entry.remarks ?? ''); setNotes(entry.logNotes ?? '');
       if (entry.entryForm === 'PLAIN_LOG') {
         if (entry.logLines?.length) { setLines(linesFromDto(entry.logLines)); setIsLeave(false); }
-        else if ((entry.logTotalHours ?? 0) === 0) { setLines([]); setIsLeave(true); }
+        else if ((entry.logTotalHours ?? 0) === 0 && entry.status !== 'DRAFT' && entry.status !== 'REJECTED') { setLines([]); setIsLeave(true); } // a filed leave record; an empty DRAFT is just a blank form
         else { setLines([]); setIsLeave(false); }
       }
     } else {
       setEntryId(null); setEntryStatus(null);
       setDayType(dayDefaults?.dayType ?? 'WORKING_DAY'); setWeekendWorked(false);
       setWorkLocation(dayDefaults?.workLocation ?? '');
-      setNextDayPlan(''); setRemarks(''); setNotes(''); setLines([]); setIsLeave(false);
+      setNextDayPlan(''); setRemarks(''); setNotes(''); setLines([]); setIsLeave(false); ta.reset();
     }
     setErrors([]); setDirty(false);
   }, [entries, loadingEntry, selectedDate, dayDefaults, loadingDD]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -299,7 +316,13 @@ export default function DailyLogForm() {
   const weekendLocked = dayDefaults?.dayType === 'WEEKEND';
   const noWorkWeekend  = isWeekend && !weekendWorked;
   const total        = isLeave ? 0 : sumHours(lines);
-  const hoursOver    = total > dailyCap;
+  // Bench Working day only: lines must total exactly 8.0. Non-null = the inline message and a disabled Submit.
+  const benchRule    = isEditable && benchHoursRuleApplies(benchMode, dayType, isLeave);
+  const benchTarget  = benchTargetHours(user?.capabilities?.benchDailyHours ?? DEFAULT_BENCH_DAILY_HOURS, ta.adjActive ? ta.adjMins : 0);
+  const benchMsg     = benchRule ? benchHoursMessage(lines, benchTarget, ta.adjActive ? ta.adjMins : 0) : null;
+  // What the "x / y hrs total" counter shows: the bench target when that rule applies, else the usual day.
+  const shownCap     = benchRule ? benchTarget : dailyCap;
+  const hoursOver    = total > dailyCap && !benchRule;
   const isToday      = selectedDate === todayISO();
   const isPast       = selectedDate < todayISO();
   const cutoff       = dashboard?.cutoffStatus;
@@ -314,52 +337,40 @@ export default function DailyLogForm() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  function handleDateChange(d: string) { appliedRef.current = null; setSelectedDate(d); setErrors([]); setSubmitAttempted(false); setAutosaveError(null); }
+  function handleDateChange(d: string) { appliedRef.current = null; setSelectedDate(d); setErrors([]); setSubmitAttempted(false); setAutosaveError(null); setLineNotices({}); }
 
   function handleDayTypeChange(v: string) {
+    if (v !== 'WORKING_DAY') ta.reset(); // an adjustment exists only on a full Working day; the server clears it too
     setDayType(v); setWeekendWorked(false);
     if (v !== 'WORKING_DAY' && v !== 'FIRST_HALF_LEAVE' && v !== 'SECOND_HALF_LEAVE') setWorkLocation('');
     setErrors([]); setDirty(true);
   }
 
   const addLine    = useCallback(() => { setLines(p => [...p, blankLine()]); setIsLeave(false); setDirty(true); }, []);
-  const removeLine = useCallback((key: number) => { setLines(p => p.filter(l => l.key !== key)); setDirty(true); }, []);
+  // A line whose blocker has a conversation is never removed here (its Remove button is disabled and says why).
+  const removeLine = useCallback((key: number) => { setLines(p => p.filter(l => l.key !== key || l.locked)); setDirty(true); }, []);
   const updateLine = useCallback((key: number, patch: Partial<Omit<LogLine,'key'>>) => {
     setLines(p => p.map(l => l.key === key ? { ...l, ...patch } : l)); setDirty(true);
   }, []);
-
-  const handleCopyYesterday = useCallback(() => {
-    if (!loadYday) { setLoadYday(true); return; }
-    const prev = ydayEntries?.[0];
-    if (!prev || prev.entryForm !== 'PLAIN_LOG') { showToast('error', 'No daily log found for yesterday'); return; }
-    if (prev.logLines?.length) { setLines(linesFromDto(prev.logLines)); setIsLeave(false); } else setLines([]);
-    setNotes(prev.logNotes ?? ''); setDirty(true); showToast('success', 'Copied from yesterday');
-  }, [loadYday, ydayEntries, showToast]);
-
-  useEffect(() => {
-    if (!loadYday || !ydayEntries) return;
-    const prev = ydayEntries[0];
-    if (!prev || prev.entryForm !== 'PLAIN_LOG') return;
-    if (prev.logLines?.length) { setLines(linesFromDto(prev.logLines)); setIsLeave(false); } else setLines([]);
-    setNotes(prev.logNotes ?? ''); setDirty(true); setLoadYday(false);
-    showToast('success', 'Copied from yesterday');
-  }, [ydayEntries]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Request builder ───────────────────────────────────────────────────────
 
   const buildReq = useCallback(() => ({
     entryDate: selectedDate,
     dayType: dayType as 'WORKING_DAY'|'LEAVE'|'HOLIDAY'|'WEEKEND'|'FIRST_HALF_LEAVE'|'SECOND_HALF_LEAVE',
-    timeAdjustmentType: null, timeAdjustmentMinutes: null,
+    ...ta.payload(),
     workLocation: wLocDisabled ? null : (workLocation || null),
     weekendWorked: isWeekend ? weekendWorked : undefined,
     nextDayPlan: nextDayPlan || null, remarks: remarks || null,
     tasks: [], attachmentIds: [], entryForm: 'PLAIN_LOG' as const,
     logLines: (isLeave || isNonWork || noWorkWeekend ? [] : lines).map((l, i) => ({
       categoryId: l.categoryId ?? 0, hours: l.hours, description: l.description, sortOrder: i,
+      id: l.serverId ?? null,
+      taskStatus: l.taskStatus || null, // '' would fail enum parsing server-side
+      blockerReason: l.taskStatus === 'BLOCKED' ? (l.blockerReason.trim() || null) : null,
     } as SaveLogLineRequest)),
     logNotes: notes.trim() || null,
-  }), [selectedDate, dayType, workLocation, nextDayPlan, remarks, lines, notes, isLeave, isNonWork, wLocDisabled, isWeekend, weekendWorked, noWorkWeekend]);
+  }), [selectedDate, dayType, workLocation, nextDayPlan, remarks, lines, notes, isLeave, isNonWork, wLocDisabled, isWeekend, weekendWorked, noWorkWeekend, ta.adjActive, ta.adjType, ta.adjMins]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Validation ────────────────────────────────────────────────────────────
 
@@ -371,13 +382,30 @@ export default function DailyLogForm() {
     if (!isWeekend && !nextDayPlan.trim()) e.push('Next-day plan is required.');
     if (!isLeave && !isNonWork && firstInvalidLine(lines))
       e.push('Fix all line items before submitting.');
-    if (notes.length       > MAX_NOTES) e.push(`Notes must be under ${MAX_NOTES} characters.`);
+    e.push(...ta.validate());
+    if (ta.adjActive && !isLeave && lines.length === 0) e.push('A time adjustment needs hours logged — remove it, or add your time breakdown.');
+    e.push(...statusProblemMessages(lines));
+    if (benchMsg) e.push(benchMsg);
+    if (notes.length      > MAX_NOTES) e.push(`Notes must be under ${MAX_NOTES} characters.`);
     if (nextDayPlan.length > MAX_TEXT)  e.push(`Next-day plan must be under ${MAX_TEXT} characters.`);
     if (remarks.length     > MAX_TEXT)  e.push(`Remarks must be under ${MAX_TEXT} characters.`);
     return e;
   }
 
   // ── Mutations ─────────────────────────────────────────────────────────────
+
+  // A 409 "this line has a blocker conversation, so it cannot be removed" is about one saved line. Show the message next
+  // to THAT line (keyed by its server id), and reload the entry so a row removed locally comes back — locked, with its
+  // Remove button disabled. Returns true when the error was that one (the caller then skips its generic handling).
+  const reportLockedLine = useCallback((err: unknown): boolean => {
+    const id = lockedLineIdOf(err);
+    if (id == null) return false;
+    setLineNotices(p => ({ ...p, [id]: extractError(err) }));
+    setErrors([]);
+    appliedRef.current = null;
+    qc.invalidateQueries({ queryKey: ['eod'] });
+    return true;
+  }, [qc]);
 
   const saveMut = useMutation({
     mutationFn: () => {
@@ -397,6 +425,7 @@ export default function DailyLogForm() {
     // also shown in the banner, because a toast alone is easy to miss for a message that needs acting on.
     onError: (err: unknown) => {
       if (err instanceof DraftBlockedError) { showToast('error', `Can't save draft yet — ${err.message}`); return; }
+      if (reportLockedLine(err)) return;
       const msg = draftErrorMessage(extractError(err));
       showToast('error', msg); setErrors([msg]);
     },
@@ -425,6 +454,7 @@ export default function DailyLogForm() {
     },
     onError: (err: unknown) => {
       if ((err as Error).message === 'validation') return;
+      if (reportLockedLine(err)) return;
       const msg = extractError(err);
       showToast('error', msg); setErrors([msg]);
     },
@@ -445,7 +475,7 @@ export default function DailyLogForm() {
         setEntryId(saved.id ?? null); setEntryStatus(saved.status);
         appliedRef.current = entrySignature(selectedDate, saved);
         qc.invalidateQueries({ queryKey: ['eod'] });
-      } catch (err) { setAutosaveError(draftErrorMessage(extractError(err))); }
+      } catch (err) { if (!reportLockedLine(err)) setAutosaveError(draftErrorMessage(extractError(err))); }
       finally { setAutosaving(false); setDirty(false); }
     }, AUTOSAVE_MS);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
@@ -587,6 +617,16 @@ export default function DailyLogForm() {
           </div>
 
           {/* Non-work day / leave banner */}
+          {/* Time adjustment (checkbox, shift timings, type, duration, impact, balance) — the same block as Submit
+              EOD, for every Daily Log user. Working day with a shift only; hidden while "Mark as leave day". */}
+          <TimeAdjustmentSection
+            ta={ta}
+            dailyHoursCap={dailyCap}
+            isEditable={isEditable}
+            isReadOnly={isReadOnly}
+            recapNote={<>{minutesLabel(ta.adjMins)} counted toward this day's logged hours{benchMode ? ` - the lines total ${benchTarget.toFixed(1)}h with it.` : '.'}</>}
+          />
+
           {(isNonWork || isWeekend) && (
             <div style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'12px 16px', borderRadius:8, marginTop:24, background:'rgba(47,182,124,.08)', border:'1px solid rgba(47,182,124,.3)' }}>
               <CheckCircle size={15} style={{ color:'var(--ok)', flexShrink:0, marginTop:1 }} aria-hidden />
@@ -617,19 +657,14 @@ export default function DailyLogForm() {
                   Time breakdown
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                  {isEditable && (
-                    <button onClick={handleCopyYesterday} style={{ background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:5, fontSize:12, color:'var(--txt-dim)' }}>
-                      <Copy size={12} />Copy yesterday
-                    </button>
-                  )}
                   {lines.length > 0 && !isLeave && (
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                       <div style={{ width:72, height:5, borderRadius:3, background:'var(--line2)', overflow:'hidden' }} aria-hidden>
-                        <div style={{ height:'100%', borderRadius:3, transition:'width 200ms ease', width:`${Math.min(100,(total/Math.max(0.01,dailyCap))*100)}%`, background:hoursOver?'var(--warn)':'var(--ok)' }} />
+                        <div style={{ height:'100%', borderRadius:3, transition:'width 200ms ease', width:`${Math.min(100,(total/Math.max(0.01,shownCap))*100)}%`, background:hoursOver?'var(--warn)':'var(--ok)' }} />
                       </div>
                       <div style={{ fontSize:13, color:'var(--txt-mut)', fontVariantNumeric:'tabular-nums' }}>
                         <span style={{ color:'var(--txt)', fontWeight:600 }}>{total.toFixed(1)}</span>
-                        {' '}/ {dailyCap.toFixed(1)} hrs
+                        {' '}/ {shownCap.toFixed(1)} hrs total
                       </div>
                     </div>
                   )}
@@ -656,7 +691,7 @@ export default function DailyLogForm() {
                       <Plus size={14} aria-hidden />Add line item
                     </button>
                     {!isWeekend && (
-                      <button onClick={() => { setIsLeave(true); setDirty(true); }} style={{ padding:'9px 16px', borderRadius:6, background:'transparent', border:'1px solid var(--line2)', color:'var(--txt-mut)', fontSize:13, fontWeight:500, cursor:'pointer' }}>
+                      <button onClick={() => { setIsLeave(true); ta.reset(); setDirty(true); }} style={{ padding:'9px 16px', borderRadius:6, background:'transparent', border:'1px solid var(--line2)', color:'var(--txt-mut)', fontSize:13, fontWeight:500, cursor:'pointer' }}>
                         Mark as leave day
                       </button>
                     )}
@@ -698,13 +733,23 @@ export default function DailyLogForm() {
                     index={idx}
                     categories={categories}
                     benchMode={benchMode}
+                    maxHours={benchRule ? maxBenchLineHours(lines, line.key, benchTarget) : 24}
                     isReadOnly={isReadOnly}
                     showErrors={submitAttempted}
+                    notice={line.serverId != null ? lineNotices[line.serverId] : undefined}
                     onUpdate={patch => updateLine(line.key, patch)}
                     onRemove={() => removeLine(line.key)}
                   />
                 ))}
               </div>
+
+              {/* Bench Working day: must total exactly 8.0 hrs */}
+              {benchMsg && (
+                <div role="alert" style={{ display:'flex', gap:6, alignItems:'center', fontSize:12, color:'var(--warn)', marginTop:10, fontWeight:500 }}>
+                  <AlertTriangle size={13} />
+                  {benchMsg}
+                </div>
+              )}
 
               {/* Overtime note */}
               {hoursOver && !isLeave && (
@@ -809,8 +854,9 @@ export default function DailyLogForm() {
                 </button>
                 <button
                   onClick={() => setConfirming(true)}
-                  disabled={saveMut.isPending || submitMut.isPending}
-                  style={{ padding:'9px 22px', borderRadius:6, background:'var(--brand)', border:'1px solid var(--brand-deep)', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', boxShadow:'0 2px 8px color-mix(in srgb, var(--brand) 35%, transparent)', display:'flex', alignItems:'center', gap:7 }}
+                  disabled={saveMut.isPending || submitMut.isPending || benchMsg != null}
+                  title={benchMsg ?? undefined}
+                  style={{ padding:'9px 22px', borderRadius:6, background:'var(--brand)', border:'1px solid var(--brand-deep)', color:'#fff', fontSize:13, fontWeight:600, cursor:benchMsg?'not-allowed':'pointer', opacity:benchMsg?0.5:1, boxShadow:'0 2px 8px color-mix(in srgb, var(--brand) 35%, transparent)', display:'flex', alignItems:'center', gap:7 }}
                 >
                   <Send size={14} />
                   {isLeave || isNonWork ? 'Record leave' : noWorkWeekend ? 'Record weekend' : 'Submit log'}
@@ -851,20 +897,29 @@ interface LineRowProps {
   line: LogLine; index: number; categories: TaskCategoryDto[];
   /** Employee on the bench: they have no Org Masters to configure, so the empty placeholder must not point there. */
   benchMode: boolean;
+  /** Highest hours this line may take (24, or on a bench Working day 8 minus the other lines). */
+  maxHours: number;
   isReadOnly: boolean;
   /** True after a failed submit: empty required fields then show their error, not just malformed ones. */
   showErrors: boolean;
+  /** The server refused to remove this line (its blocker has a conversation): shown next to the line. */
+  notice?: string;
   onUpdate: (p: Partial<Omit<LogLine,'key'>>) => void;
   onRemove: () => void;
 }
 
-function LineRow({ line, index, categories, benchMode, isReadOnly, showErrors, onUpdate, onRemove }: LineRowProps) {
+const LOCKED_LINE_TEXT = "This line has a blocker conversation with your reporting manager, so it can't be removed. Change its status instead.";
+
+function LineRow({ line, index, categories, benchMode, maxHours, isReadOnly, showErrors, notice, onUpdate, onRemove }: LineRowProps) {
   const problems = lineProblems(line);
   const hoursOk  = problems.hours == null;
   // A description error shows once the user has typed something wrong, or — for an empty field — only after
   // they tried to submit (so a brand-new row isn't red before the user has done anything).
   const descError = isReadOnly ? null
     : (line.description.length > 0 || showErrors) ? descriptionError(line.description) : null;
+  // Status / blocker-reason problems show once a submit was attempted (a fresh row is not red before the user acts).
+  const statusError = !isReadOnly && showErrors ? problems.status ?? null : null;
+  const reasonError = !isReadOnly && showErrors ? problems.blockerReason ?? null : null;
   const CHIPS   = [0.5, 1, 1.5, 2, 3, 4, 6, 8];
 
   const cellStyle: React.CSSProperties = {
@@ -889,23 +944,38 @@ function LineRow({ line, index, categories, benchMode, isReadOnly, showErrors, o
         </select>
         <input
           id={lineFieldId(line.key, 'hours')}
-          type="number" min={QUARTER} max={24} step={QUARTER}
+          type="number" min={QUARTER} max={maxHours} step={QUARTER}
           value={line.hours} disabled={isReadOnly}
-          onChange={e => { const v=round25(parseFloat(e.target.value)||QUARTER); onUpdate({ hours:Math.min(24,Math.max(QUARTER,v)) }); }}
+          onChange={e => { const v=round25(parseFloat(e.target.value)||QUARTER); onUpdate({ hours:Math.min(maxHours,Math.max(QUARTER,v)) }); }}
           style={{ ...cellStyle, width:64, textAlign:'right', fontFamily:'"JetBrains Mono",monospace', fontWeight:700, borderColor:!hoursOk&&!isReadOnly?'rgba(228,55,61,.4)':'var(--line2)' }}
         />
         <span style={{ fontSize:12, color:'var(--txt-dim)', flexShrink:0 }}>h</span>
         {!isReadOnly && (
-          <button onClick={onRemove} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--risk)', padding:4, flexShrink:0 }}>
-            <Trash2 size={14} />
+          <button
+            type="button"
+            onClick={line.locked ? undefined : onRemove}
+            disabled={line.locked}
+            aria-disabled={line.locked || undefined}
+            title={line.locked ? LOCKED_LINE_TEXT : 'Remove this line'}
+            aria-label={line.locked ? `Remove disabled: ${LOCKED_LINE_TEXT}` : 'Remove this line'}
+            style={{ background:'none', border:'none', cursor:line.locked?'not-allowed':'pointer', color:line.locked?'var(--txt-dim)':'var(--risk)', opacity:line.locked?0.5:1, padding:4, flexShrink:0 }}
+          >
+            {line.locked ? <Lock size={14} /> : <Trash2 size={14} />}
           </button>
         )}
       </div>
+      {/* Why this line cannot be removed — dim when it is only locked, red when the server just refused a removal. */}
+      {(notice || (line.locked && !isReadOnly)) && (
+        <div role={notice ? 'alert' : 'note'} style={{ display:'flex', gap:6, alignItems:'center', padding:'6px 14px', fontSize:11.5, color:notice?'var(--risk)':'var(--txt-dim)', background:notice?'rgba(228,55,61,.06)':'transparent', borderBottom:'1px solid var(--line)' }}>
+          <Lock size={12} aria-hidden />
+          {notice ?? LOCKED_LINE_TEXT}
+        </div>
+      )}
       {/* Hour chips + description */}
       <div style={{ padding:'10px 14px', display:'flex', flexDirection:'column', gap:8 }}>
         {!isReadOnly && (
           <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
-            {CHIPS.map(v => (
+            {CHIPS.filter(v => v <= maxHours).map(v => (
               <button key={v} onClick={() => onUpdate({ hours:v })} style={{
                 display:'inline-flex', alignItems:'center', gap:4,
                 padding:'4px 9px', borderRadius:6,
@@ -919,7 +989,8 @@ function LineRow({ line, index, categories, benchMode, isReadOnly, showErrors, o
             ))}
           </div>
         )}
-        <div>
+        <div style={{ display:'flex', gap:12, alignItems:'flex-start', flexWrap:'wrap' }}>
+        <div style={{ flex:'1 1 260px', minWidth:0 }}>
           {/* The marker lives on a label above the field (not only in the placeholder, which vanishes as soon
               as the user types). Same red * as Day type, Work location and Next-day plan. */}
           <label htmlFor={lineFieldId(line.key, 'description')} style={{ display:'block', fontSize:11, fontWeight:500, color:'var(--txt-mut)', letterSpacing:'0.06em', textTransform:'uppercase', marginBottom:5 }}>
@@ -940,6 +1011,28 @@ function LineRow({ line, index, categories, benchMode, isReadOnly, showErrors, o
             <div role="alert" style={{ fontSize:11, color:showErrors?'var(--risk)':'var(--warn)', marginTop:4 }}>{descError}</div>
           )}
         </div>
+        {/* Status — the same control and options as Submit EOD's per-task Status, mandatory on submit. */}
+        <div style={{ flex: '0 0 190px', minWidth: 160 }}>
+          <TaskStatusField
+            id={lineFieldId(line.key, 'status')}
+            value={line.taskStatus}
+            onChange={v => onUpdate({ taskStatus: v, ...(v !== 'BLOCKED' ? { blockerReason: '' } : null) })}
+            readOnly={isReadOnly}
+            controlStyle={{ minHeight: 38 }}
+            error={statusError}
+          />
+        </div>
+        </div>
+        {/* Blocker reason — only while Blocked; routed to the reporting manager on submit. */}
+        {line.taskStatus === 'BLOCKED' && (
+          <BlockerReasonField
+            id={lineFieldId(line.key, 'blockerReason')}
+            value={line.blockerReason}
+            onChange={v => onUpdate({ blockerReason: v })}
+            readOnly={isReadOnly}
+            error={reasonError}
+          />
+        )}
       </div>
     </div>
   );

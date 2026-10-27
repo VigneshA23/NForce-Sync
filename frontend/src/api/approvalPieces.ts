@@ -40,6 +40,9 @@ export interface ApprovalPieceDto {
   workLocation: string | null;
   nextDayPlan: string | null;
   remarks: string | null;
+  /** Time adjustment on a PLAIN_LOG entry — null when none (and for PROJECT_GROUPED pieces). */
+  timeAdjustmentType?: string | null;
+  timeAdjustmentMinutes?: number | null;
   // Task lines for PROJECT_GROUPED pieces — empty [] for PLAIN_LOG
   taskLines: { projectCode: string | null; projectName: string | null; categoryName: string | null; hours: number | null; description: string | null }[];
 }

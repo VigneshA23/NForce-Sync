@@ -38,6 +38,7 @@ import {
 import { GlobalLoader } from '../components/GlobalLoader';
 import { Pagination } from '../components/Pagination';
 import { DateRangeSelector, type QuickRangeMode } from '../components/DateRangeSelector';
+import { LineStatusBadge } from '../components/taskStatus/LineStatusBadge';
 
 // Pending-tab equivalents of entryProjects/entryCategories — a pending ApprovalPieceDto has no
 // `.tasks` array, so its projects/categories live in taskLines (PROJECT_GROUPED) or logLines
@@ -161,7 +162,7 @@ function EntryRow({
             >
               {entry.tasks.length > 0 ? entry.tasks.map(t => (
                 <div key={t.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
+                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
                   padding: '4px 11px',
                   fontSize: 11, color: 'var(--txt-dim)',
                   borderBottom: '1px solid var(--line)',
@@ -381,12 +382,13 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
             <div style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)' }}>
               {piece.logLines!.map((l, i) => (
                 <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
+                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
                   padding: '4px 11px', fontSize: 11, color: 'var(--txt-dim)',
                   borderBottom: '1px solid var(--line)',
                 }}>
                   <span style={{ color: 'var(--txt)', fontWeight: 600, minWidth: 150, flexShrink: 0 }}>{l.categoryName}</span>
                   <span style={{ flex: 1 }}>{l.description}</span>
+                  <LineStatusBadge status={l.taskStatus} blockerReason={l.blockerReason} />
                   <span style={{ color: 'var(--txt)', fontWeight: 700, minWidth: 36, textAlign: 'right', flexShrink: 0 }}>
                     {l.hours}h
                   </span>
@@ -418,7 +420,7 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
             <div style={{ marginTop: 6, border: '1px solid var(--line)', borderRadius: 9, overflow: 'hidden', background: 'rgba(255,255,255,.02)' }}>
               {projectTasks.map(t => (
                 <div key={t.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
+                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
                   padding: '4px 11px', fontSize: 11, color: 'var(--txt-dim)',
                   borderBottom: '1px solid var(--line)',
                 }}>

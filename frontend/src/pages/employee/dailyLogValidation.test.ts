@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  clearedCategoriesNotice, descriptionError, draftBlockReason, draftErrorMessage, firstInvalidLine, lineProblems,
-  noCategoriesMessage, staleCategoryRows, type LineFields,
+  benchHoursMessage, benchHoursRuleApplies, benchTargetHours, clearedCategoriesNotice, descriptionError, draftBlockReason,
+  draftErrorMessage, firstInvalidLine, lineProblems, maxBenchLineHours,
+  noCategoriesMessage, staleCategoryRows, statusProblemMessages, type LineFields,
 } from './dailyLogValidation';
 
 const line = (over: Partial<LineFields> = {}): LineFields =>
-  ({ key: 1, categoryId: 5, hours: 1, description: 'Standup', ...over });
+  ({ key: 1, categoryId: 5, hours: 1, description: 'Standup', taskStatus: 'COMPLETED', blockerReason: '', ...over });
 
 describe('descriptionError — one rule for every role on the Daily Log form', () => {
   it('empty and whitespace-only are required errors', () => {
@@ -94,5 +95,75 @@ describe('noCategoriesMessage', () => {
   it('every other role keeps the existing Org Masters wording', () => {
     const m = noCategoriesMessage(false);
     expect(m.lead + m.admin + m.tail).toBe('No categories configured. Go to Org Masters → Task Categories and add categories with scope "Management".');
+  });
+});
+
+describe('bench Working day — lines + time adjustment = the bench day', () => {
+  const ls = (...hours: number[]) => hours.map((h, i) => ({ key: i + 1, hours: h }));
+
+  it('the rule applies to a bench Working day only', () => {
+    expect(benchHoursRuleApplies(true, 'WORKING_DAY', false)).toBe(true);
+    expect(benchHoursRuleApplies(false, 'WORKING_DAY', false)).toBe(false); // allocated / PM / Admin
+    for (const d of ['LEAVE', 'HOLIDAY', 'WEEKEND', 'FIRST_HALF_LEAVE', 'SECOND_HALF_LEAVE'])
+      expect(benchHoursRuleApplies(true, d, false)).toBe(false);
+    expect(benchHoursRuleApplies(true, 'WORKING_DAY', true)).toBe(false); // "Mark as leave day"
+  });
+  it('the target is the server\'s bench day less the adjustment — 7.0 for an hour, never below 6.0', () => {
+    expect(benchTargetHours(8, 0)).toBe(8);
+    expect(benchTargetHours(8, 60)).toBe(7);
+    expect(benchTargetHours(8, 45)).toBe(7.25);
+    expect(benchTargetHours(8, 120)).toBe(6);
+    expect(benchTargetHours(7.5, 30)).toBe(7); // follows the server value if it moves
+  });
+  it('exactly the target passes — 7.5 + 0.5 is 8, not 7.999…', () => {
+    expect(benchHoursMessage(ls(8), 8)).toBeNull();
+    expect(benchHoursMessage(ls(7.5, 0.5), 8)).toBeNull();
+    expect(benchHoursMessage(ls(0.1 * 3 + 7.7), 8)).toBeNull(); // float noise rounds to the quarter grid
+    expect(benchHoursMessage(ls(2.25, 2.25, 3.5), 8)).toBeNull();
+    expect(benchHoursMessage(ls(7), 7, 60)).toBeNull();
+    expect(benchHoursMessage(ls(3.5, 2.5), 6, 120)).toBeNull();
+  });
+  it('under and over the target give the message, and say why when an adjustment moved it', () => {
+    expect(benchHoursMessage(ls(7.75), 8)).toBe('Bench Daily Log must total exactly 8.0 hrs (currently 7.75 hrs).');
+    expect(benchHoursMessage(ls(8, 0.25), 8)).toContain('exactly 8.0 hrs');
+    expect(benchHoursMessage([], 8)).toContain('currently 0.00 hrs');
+    // 8.0 is the right answer with no adjustment but one hour too many with a 60-minute one.
+    expect(benchHoursMessage(ls(8), 7, 60))
+      .toBe('Bench Daily Log must total exactly 7.0 hrs with your time adjustment of 60 minutes (currently 8.00 hrs).');
+  });
+  it('a line is capped at the target minus the other lines, never below one step', () => {
+    expect(maxBenchLineHours(ls(2, 3), 1, 8)).toBe(5);
+    expect(maxBenchLineHours(ls(2, 3), 2, 8)).toBe(6);
+    expect(maxBenchLineHours(ls(2, 3), 1, 7)).toBe(4); // an adjustment lowers the cap
+    expect(maxBenchLineHours(ls(8, 1), 2, 8)).toBe(0.25);
+    expect(maxBenchLineHours(ls(4), 1, 8)).toBe(8);
+  });
+});
+
+describe('Status and Blocker reason on a Daily Log line — the same rules as Submit EOD', () => {
+  it('a line with no status is invalid inline and in the banner, worded "Row n:"', () => {
+    const bad = line({ taskStatus: '' });
+    expect(lineProblems(bad).status).toBe('Status is required');
+    expect(statusProblemMessages([line(), bad])).toEqual(['Row 2: status is required.']);
+  });
+  it('every one of the four statuses is accepted', () => {
+    for (const s of ['COMPLETED', 'IN_PROGRESS', 'NOT_STARTED'])
+      expect(lineProblems(line({ taskStatus: s })).status).toBeUndefined();
+    expect(lineProblems(line({ taskStatus: 'BLOCKED', blockerReason: 'Waiting on access' })).status).toBeUndefined();
+  });
+  it('Blocked needs a reason — only Blocked', () => {
+    expect(lineProblems(line({ taskStatus: 'BLOCKED', blockerReason: '   ' })).blockerReason)
+      .toBe('Blocker reason is required when status is Blocked');
+    expect(statusProblemMessages([line({ taskStatus: 'BLOCKED', blockerReason: '' })]))
+      .toEqual(['Row 1: blocker reason is required when status is Blocked.']);
+    expect(lineProblems(line({ taskStatus: 'IN_PROGRESS', blockerReason: '' })).blockerReason).toBeUndefined();
+  });
+  it('valid lines produce no messages', () => {
+    expect(statusProblemMessages([line(), line({ key: 2, taskStatus: 'BLOCKED', blockerReason: 'x' })])).toEqual([]);
+  });
+  it('the first invalid control is the status when only that is wrong, and the reason after it', () => {
+    expect(firstInvalidLine([line({ taskStatus: '' })])).toEqual({ key: 1, field: 'status' });
+    expect(firstInvalidLine([line({ taskStatus: 'BLOCKED', blockerReason: '' })])).toEqual({ key: 1, field: 'blockerReason' });
+    expect(firstInvalidLine([line({ taskStatus: '', description: '' })])).toEqual({ key: 1, field: 'description' });
   });
 });

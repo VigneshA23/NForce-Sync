@@ -60,7 +60,10 @@ public record EodEntryDto(
         BigDecimal       otherProjectsHours,
         // Set ONLY on a Team Lead's Approved/Rejected card: the decision on each of the other projects the
         // entry was split across (name + status only). Null everywhere else.
-        List<OtherProjectStatusDto> otherProjectStatuses
+        List<OtherProjectStatusDto> otherProjectStatuses,
+        // PLAIN_LOG only: the entry's frozen bench_mode (see BenchModePolicy). False for PROJECT_GROUPED and for
+        // PM/Admin Daily Logs. The Daily Log form reads it so the form and the server use one definition.
+        Boolean          benchMode
 ) {
     /**
      * The Team Lead's view of an entry: only the tasks on projects he leads (plus tasks with no project,
@@ -83,7 +86,7 @@ public record EodEntryDto(
                 remarks, submittedAt, createdAt, updatedAt, mine, attachments, reviewerComment, escalated,
                 tlInactivityHours, tlName, tlId, undertimeHours, isResubmission, decidedByName, decidedByRole,
                 decidedAt, entryForm, logSummary, logTotalHours, logNotes, logApproverName, logApproverType,
-                logLines, weekendWorked, other, otherProjectStatuses);
+                logLines, weekendWorked, other, otherProjectStatuses, benchMode);
     }
 
     /**
@@ -96,7 +99,7 @@ public record EodEntryDto(
                 remarks, submittedAt, createdAt, updatedAt, tasks, attachments, reviewerComment, escalated,
                 tlInactivityHours, tlName, tlId, undertimeHours, isResubmission, decidedByName, decidedByRole,
                 decidedAt, entryForm, logSummary, logTotalHours, logNotes, logApproverName, logApproverType,
-                logLines, weekendWorked, otherProjectsHours, others);
+                logLines, weekendWorked, otherProjectsHours, others, benchMode);
     }
 
     // Default factory — no reviewer comment (used in approval flow, saveDraft, submit)
@@ -173,7 +176,8 @@ public record EodEntryDto(
                 logLines != null ? logLines : List.of(),
                 Boolean.TRUE.equals(e.getWeekendWorked()),
                 null,
-                null
+                null,
+                Boolean.TRUE.equals(e.getBenchMode())
         );
     }
 }

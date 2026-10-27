@@ -6,17 +6,22 @@ import { useClarificationStatus } from '../../api/eodClarification';
 import { ClarificationChatPopup } from '../../components/ClarificationChatPopup';
 import { useToast } from '../../lib/toast';
 import { useAuth } from '../../lib/auth';
-import { todayISO, formatDate, formatTime12h } from '../../lib/date';
+import { todayISO, formatDate } from '../../lib/date';
 import { listProjects } from '../../api/projects';
 import { useMyEmployeeProjects } from '../../api/employeeProjects';
 import { useEntryPieces } from '../../api/approvalPieces';
 import { listTaskCategories } from '../../api/taskCategories';
 import {
-  saveDraft, submitEntry, listEntries, getTimeAdjustmentContext, getDayDefaults,
+  saveDraft, submitEntry, listEntries, getDayDefaults,
   uploadEodAttachment, deleteEodAttachment, getEodAttachmentDataUrl,
 } from '../../api/eod';
 import { DatePicker } from '../../components/DatePicker';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { TimeAdjustmentSection } from '../../components/timeAdjustment/TimeAdjustmentSection';
+import { useTimeAdjustment } from '../../components/timeAdjustment/useTimeAdjustment';
+import { BlockerReasonField, TaskStatusField } from '../../components/taskStatus/TaskStatusFields';
+import { TASK_STATUS_COLOR, blockerReasonMessage, statusMissingMessage } from '../../components/taskStatus/taskStatus';
+import { minutesLabel } from '../../components/timeAdjustment/timeAdjustment';
 import type { EodEntryDto, EodTaskDto, EodAttachmentDto } from '../../api/eod';
 import {
   ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENTS_PER_TASK,
@@ -24,19 +29,6 @@ import {
 } from '../../lib/eodAttachments';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-
-/**
- * The empty first entry is the default, so status is a deliberate choice rather than a silent
- * "Completed". Kept in this list (not a bare <option> in the markup) so the read-only view and
- * the validator resolve labels from one place.
- */
-const TASK_STATUSES = [
-  { value: '',            label: 'Status' },
-  { value: 'COMPLETED',   label: 'Completed' },
-  { value: 'IN_PROGRESS', label: 'In Progress' },
-  { value: 'BLOCKED',     label: 'Blocked' },
-  { value: 'NOT_STARTED', label: 'Not Started' },
-];
 
 const WORK_LOCATIONS = ['Office', 'Remote', 'Client Site', 'Field'];
 
@@ -89,45 +81,6 @@ const FALLBACK_HOURS_PER_DAY = 8;
  * requiredMinHours below. Mirrored server-side in EodService.
  */
 const MAX_HOURS_PER_DAY = 24;
-
-/** Per-use duration limits for a time adjustment. Mirrored server-side in EodService. */
-const MIN_ADJ_MINUTES = 30;
-const MAX_ADJ_MINUTES = 120;
-
-/**
- * Duration choices for ALL three adjustment types: 30 minutes to 2 hours in 15-minute steps.
- * A fixed list rather than free text means the 30-120 policy range cannot be violated from the
- * UI at all. The server still re-checks it — the dropdown is a convenience, not the guarantee.
- */
-const ADJ_MINUTE_OPTIONS = [30, 45, 60, 75, 90, 105, 120];
-
-const ADJ_TYPES = [
-  { value: 'LATE_ARRIVAL', label: 'Late arrival',         durationLabel: 'Will come late by' },
-  { value: 'INTERVENING',  label: 'Intervening time-off', durationLabel: 'Time away during shift' },
-  { value: 'EARLY_LEAVE',  label: 'Leaving early',        durationLabel: 'Will leave early by' },
-];
-
-function minutesLabel(m: number): string {
-  if (m < 60) return `${m} minutes`;
-  const h = Math.floor(m / 60);
-  const rem = m % 60;
-  const hLabel = h === 1 ? '1 hour' : `${h} hours`;
-  return rem === 0 ? hLabel : `${hLabel} ${rem} minutes`;
-}
-
-/** 'HH:mm:ss' → minutes since midnight. */
-function timeToMinutes(hms: string): number {
-  const [h, m] = hms.split(':').map(Number);
-  return (h || 0) * 60 + (m || 0);
-}
-
-/** Minutes since midnight → 'HH:mm' for formatTime12h, wrapping past midnight. */
-function minutesToHm(mins: number): string {
-  const wrapped = ((mins % 1440) + 1440) % 1440;
-  const h = Math.floor(wrapped / 60);
-  const m = wrapped % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
 
 /**
  * Total minutes → "H.MM" for the "hrs expected" indicator's numerator — NOT decimal hours.
@@ -490,11 +443,8 @@ export default function SubmitEOD() {
   // validations and every logged hour counts as overtime. Reset whenever the date changes.
   const [weekendWorked, setWeekendWorked] = useState(false);
 
-  // Time adjustment (Working day only)
-  const [adjEnabled, setAdjEnabled] = useState(false);
-  const [adjType,    setAdjType]    = useState<string | null>(null);
-  const [adjMinutes, setAdjMinutes] = useState<string>('');
-  const [showBalance, setShowBalance] = useState(false);
+  // Time adjustment (Working day only) — state, rules and markup shared with the Daily Log.
+  const ta = useTimeAdjustment({ date: selectedDate, dayType, onChange: () => setErrors([]) });
 
   // Validation errors (client-side)
   const [errors, setErrors] = useState<string[]>([]);
@@ -555,13 +505,6 @@ export default function SubmitEOD() {
   // "X / Y hrs" target below and the server's minimum-hours rejection can never disagree.
   const dailyHoursCap = dayDefaults?.workingHoursPerDay ?? FALLBACK_HOURS_PER_DAY;
 
-  // Shift timings + real monthly allowance usage. Keyed by date so the month's counts follow
-  // the entry date rather than today.
-  const { data: adjContext } = useQuery({
-    queryKey: ['eod', 'time-adjustment-context', selectedDate],
-    queryFn:  () => getTimeAdjustmentContext(selectedDate),
-  });
-
   const { data: myProjects = [] } = useMyEmployeeProjects(selectedDate);
   const { data: entryPieces = [] } = useEntryPieces(
     entryStatus === 'SUBMITTED' || entryStatus === 'PARTIALLY_APPROVED' || entryStatus === 'REJECTED'
@@ -598,9 +541,7 @@ export default function SubmitEOD() {
       setDayType(entryEditable && dayDefaults?.dayType === 'WEEKEND'
         ? 'WEEKEND'
         : (entry.dayType ?? 'WORKING_DAY'));
-      setAdjEnabled(entry.timeAdjustmentType != null);
-      setAdjType(entry.timeAdjustmentType ?? null);
-      setAdjMinutes(entry.timeAdjustmentMinutes != null ? String(entry.timeAdjustmentMinutes) : '');
+      ta.load(entry);
       setWorkLocation(entry.workLocation ?? '');
       setNextDayPlan(entry.nextDayPlan ?? '');
       setRemarks(entry.remarks ?? '');
@@ -619,9 +560,7 @@ export default function SubmitEOD() {
       // (holiday calendar today) rather than hardcoding, falling back to Working day/Office
       // when nothing overrides it for this date.
       setDayType(dayDefaults?.dayType ?? 'WORKING_DAY');
-      setAdjEnabled(false);
-      setAdjType(null);
-      setAdjMinutes('');
+      ta.reset();
       setWorkLocation(dayDefaults?.workLocation ?? '');
       setNextDayPlan('');
       setRemarks('');
@@ -630,7 +569,7 @@ export default function SubmitEOD() {
       setWeekendWorked(false);
     }
     setErrors([]);
-  }, [entries, loadingEntry, selectedDate, categories, dayDefaults, loadingDayDefaults]);
+  }, [entries, loadingEntry, selectedDate, categories, dayDefaults, loadingDayDefaults]); // eslint-disable-line react-hooks/exhaustive-deps -- ta.load/reset only set state
 
   // Clear the applied signature when the date changes so the next query result repopulates
   function handleDateChange(d: string) {
@@ -649,12 +588,7 @@ export default function SubmitEOD() {
     if (!nextIsWorkDay) setWorkLocation('');
     // A time adjustment only exists on a full working day — leaving one behind would submit an
     // adjustment the form no longer shows. The server clears it too.
-    if (next !== 'WORKING_DAY') {
-      setAdjEnabled(false);
-      setAdjType(null);
-      setAdjMinutes('');
-      setShowBalance(false);
-    }
+    if (next !== 'WORKING_DAY') ta.reset();
     setErrors([]);
   }
 
@@ -755,27 +689,8 @@ export default function SubmitEOD() {
   // A weekend with no work carries no tasks at all; only "I worked on this day" brings them back.
   const noWorkWeekend = isWeekend && !weekendWorked;
 
-  // ── Time adjustment derived state ─────────────────────────────────────────
-  const isWorkingDay  = dayType === 'WORKING_DAY';
-  const shiftAssigned = adjContext?.shiftAssigned === true;
-  // Without a shift there are no timings to compute "reach office by" or expectedHours from,
-  // so the whole feature is unavailable rather than half-working.
-  const canRequestAdj = isWorkingDay && shiftAssigned;
-  const adjMins       = parseInt(adjMinutes, 10) || 0;
-  const adjActive     = canRequestAdj && adjEnabled && adjType != null && adjMins > 0;
-
-  /**
-   * One monthly pool of minutes shared across all three types (V62), straight from the backend.
-   * The backend already excludes drafts, rejected entries and this very day, so `remaining` is
-   * exactly what this entry may still spend.
-   */
-  const adjBudget    = adjContext?.monthlyAdjustmentMinutes ?? 0;
-  const adjUsedMins  = adjContext?.adjustmentMinutesUsed ?? 0;
-  const adjRemaining = Math.max(0, adjBudget - adjUsedMins);
-  /** No headroom left at all — every type is unavailable, not just the one already used. */
-  const adjExhausted = adjRemaining <= 0;
-
-  const shiftMins    = adjContext?.shiftDurationMinutes ?? 0;
+  // ── Time adjustment derived state (state, rules and markup live in components/timeAdjustment) ──
+  const { adjMins, adjActive } = ta;
   // A half-day leave is only expected to cover half the standard day, so that half — not the
   // full dailyHoursCap — is both its minimum-hours floor and its overtime reference. Mirrors
   // EodService.halfDayHoursCap()/applyOvertime.
@@ -786,8 +701,6 @@ export default function SubmitEOD() {
   // A weekend has no baseline at all — the target is 0, so any hours logged are entirely
   // overtime, mirroring EodService.applyOvertime's zeroed reference for DayType.WEEKEND.
   const expectedHrs  = isWeekend ? 0 : (isHalfLeave ? halfDayHoursCap : dailyHoursCap);
-  /** Unpaid break implied by the gap between the rostered span and the paid working day. */
-  const breakMins    = Math.max(0, shiftMins - dailyHoursCap * 60);
   // Logged hours for the day = task rows + an active time adjustment's duration, counted in
   // whole minutes so a rollover (e.g. 30 task-minutes + 45 adjustment-minutes = 75) correctly
   // carries into the next hour instead of ever showing a 60+ minute remainder. This is the value
@@ -805,36 +718,6 @@ export default function SubmitEOD() {
   const hoursShort   = !isNonWorkDay && !isWeekend && effectiveLoggedHours < expectedHrs - 0.001;
   const hoursShortBy = Math.max(0, expectedHrs - effectiveLoggedHours);
 
-  /** Live impact line. Exact wording matches the approved prototype. */
-  function adjBanner(): string {
-    if (!adjType) return 'Select a time adjustment type to see the calculated impact.';
-    if (adjMins <= 0) {
-      return adjType === 'LATE_ARRIVAL'
-        ? 'Choose how late you will arrive (30 minutes to 2 hours).'
-        : 'Choose a duration (30 minutes to 2 hours).';
-    }
-    const start = adjContext?.shiftStart ? timeToMinutes(adjContext.shiftStart) : 0;
-    const end   = adjContext?.shiftEnd   ? timeToMinutes(adjContext.shiftEnd)   : 0;
-    if (adjType === 'LATE_ARRIVAL') {
-      return `You will have to reach office by ${formatTime12h(minutesToHm(start + adjMins))}`;
-    }
-    if (adjType === 'EARLY_LEAVE') {
-      return `You can leave office by ${formatTime12h(minutesToHm(end - adjMins))}`;
-    }
-    return `You will be away from office for ${adjMins} minutes during your shift.`;
-  }
-
-  function handleAdjToggle(checked: boolean) {
-    setAdjEnabled(checked);
-    if (!checked) { setAdjType(null); setAdjMinutes(''); setShowBalance(false); }
-    setErrors([]);
-  }
-
-  function handleAdjTypeChange(next: string) {
-    setAdjType(next);
-    setAdjMinutes(''); // the two input styles don't share a scale, so never carry a value over
-    setErrors([]);
-  }
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
@@ -995,15 +878,15 @@ export default function SubmitEOD() {
       if (!leaveRow && !t.projectId) errs.push(`Task ${n}: project is required.`);
       // Status now defaults to blank, so it has to be chosen. A leave row is forced to COMPLETED
       // and its select is disabled, so it never trips this.
-      if (!t.taskStatus) errs.push(`Task ${n}: status is required.`);
+      const statusMsg = statusMissingMessage('Task', n, t.taskStatus);
+      if (statusMsg) errs.push(statusMsg);
       if (leaveRow && (t.projectId || t.taskStatus !== 'COMPLETED')) {
         errs.push(`Row #${n}: Leave rows cannot have a project set.`);
       }
       if (t.hours === '' || isNaN(parseFloat(t.hours))) errs.push(`Task ${n}: hours are required.`);
       if (parseFloat(t.hours) < 0) errs.push(`Task ${n}: hours cannot be negative.`);
-      if (t.taskStatus === 'BLOCKED' && !t.blockerReason.trim()) {
-        errs.push(`Task ${n}: blocker reason is required when status is Blocked.`);
-      }
+      const blockerMsg = blockerReasonMessage('Task', n, t.taskStatus, t.blockerReason);
+      if (blockerMsg) errs.push(blockerMsg);
     });
     // Exceeding the day's EXPECTED hours is overtime, surfaced to the manager on submit, never a
     // reason to block. These are different: they bound what is required/plausible for a day. A
@@ -1025,38 +908,10 @@ export default function SubmitEOD() {
     if (effectiveLoggedHours > MAX_HOURS_PER_DAY + 0.001) {
       errs.push(`Total hours (${effectiveLoggedHours.toFixed(2)}) cannot exceed ${MAX_HOURS_PER_DAY} for a single day.`);
     }
-    errs.push(...validateAdjustment());
+    errs.push(...ta.validate());
     return errs;
   }
 
-  function validateAdjustment(): string[] {
-    if (!canRequestAdj || !adjEnabled) return [];
-    const errs: string[] = [];
-    if (!adjType) {
-      errs.push('Select a time adjustment type (Late arrival, Intervening time-off, or Leaving early).');
-      return errs;
-    }
-    const label = ADJ_TYPES.find(t => t.value === adjType)?.label ?? 'Time adjustment';
-    if (adjMins <= 0) {
-      errs.push('Enter a valid duration for this time adjustment.');
-      return errs;
-    }
-    if (adjMins < MIN_ADJ_MINUTES || adjMins > MAX_ADJ_MINUTES) {
-      errs.push(`${label} must be between 30 minutes and 2 hours (got ${adjMins} minutes).`);
-    }
-    if (shiftMins > 0 && adjMins > shiftMins) {
-      errs.push(`Time adjustment minutes (${adjMins}) cannot exceed the shift length (${shiftMins} minutes).`);
-    }
-    // One shared pool, so the test is whether THIS duration still fits in what is left —
-    // mirrors EodService.validateTimeAdjustment.
-    if (adjMins > adjRemaining) {
-      errs.push(
-        `${label} of ${minutesLabel(adjMins)} exceeds your monthly time adjustment budget - `
-        + `${minutesLabel(adjRemaining)} of ${minutesLabel(adjBudget)} left this month.`,
-      );
-    }
-    return errs;
-  }
 
   // ── Action handlers ───────────────────────────────────────────────────────
 
@@ -1065,8 +920,7 @@ export default function SubmitEOD() {
       entryDate:    selectedDate,
       dayType,
       // Only ever sent on a working day with a shift; the server clears it otherwise anyway.
-      timeAdjustmentType:    adjActive ? adjType  : null,
-      timeAdjustmentMinutes: adjActive ? adjMins  : null,
+      ...ta.payload(),
       // Never send a location the day type doesn't allow. The server also nulls it for a
       // holiday, but sending it would be a lie about what the form showed.
       workLocation: workLocDisabled ? null : (workLocation || null),
@@ -1329,177 +1183,15 @@ export default function SubmitEOD() {
             </div>
           </div>
 
-          {/* Read-only recap of an adjustment already on the entry. The editable block below is
-              gated on isEditable, so without this a submitted/approved day showed no trace of the
-              adjustment at all — even though it is what reduced the expected hours. */}
-          {isReadOnly && adjType && adjMins > 0 && (
-            <div style={{
-              marginTop: 20, padding: '14px 18px', borderRadius: 8,
-              background: 'color-mix(in srgb, var(--brand-bright) 8%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--brand-bright) 30%, transparent)',
-            }}>
-              <Label>Time adjustment</Label>
-              <div style={{ fontSize: 13, color: 'var(--txt)', marginTop: 2 }}>
-                {ADJ_TYPES.find(t => t.value === adjType)?.label ?? 'Time adjustment'}
-                {' · '}
-                <span>{minutesLabel(adjMins)}</span>
-              </div>
-              <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 6 }}>
-                {adjBanner()}
-              </div>
-              {/* Says out loud that the adjustment counts toward logged hours, not toward a
-                  bigger target — the target itself never moves for an adjustment. */}
-              <div style={{ fontSize: 11.5, color: 'var(--txt-dim)', marginTop: 4 }}>
-                {minutesLabel(adjMins)} counted toward this day's logged hours - the {expectedHrs.toFixed(1)}h target is unchanged.
-              </div>
-            </div>
-          )}
-
-          {/* Time adjustment — a partial-day schedule shift on a working day. Hidden entirely
-              for Leave/Holiday, and when no shift is assigned (nothing to compute from). */}
-          {canRequestAdj && isEditable && (
-            <>
-              <label style={{
-                display: 'flex', alignItems: 'center', gap: 8, marginTop: 20,
-                cursor: 'pointer', userSelect: 'none',
-              }}>
-                <input
-                  type="checkbox"
-                  checked={adjEnabled}
-                  onChange={e => handleAdjToggle(e.target.checked)}
-                  style={{ width: 14, height: 14, accentColor: 'var(--brand)', cursor: 'pointer' }}
-                />
-                <span style={{ fontSize: 13, color: 'var(--txt-mut)' }}>
-                  Request a time adjustment for today (late arrival, early leave, or time away mid-shift)
-                </span>
-              </label>
-
-              {adjEnabled && (
-                <div style={{
-                  marginTop: 12, padding: '16px 18px', borderRadius: 8,
-                  background: 'color-mix(in srgb, var(--brand-bright) 8%, transparent)',
-                  border: '1px solid color-mix(in srgb, var(--brand-bright) 30%, transparent)',
-                }}>
-                  {/* Shift timings — read-only, from the existing shift assignment */}
-                  <Label>Shift timings</Label>
-                  <div style={{ fontSize: 13, color: 'var(--txt)', marginBottom: 4 }}>
-                    {adjContext?.shiftStart && adjContext?.shiftEnd
-                      ? `${formatTime12h(adjContext.shiftStart)} – ${formatTime12h(adjContext.shiftEnd)}`
-                      : '-'}
-                    {adjContext?.shiftName && (
-                      <span style={{ color: 'var(--txt-dim)', fontFamily: 'inherit' }}> · {adjContext.shiftName}</span>
-                    )}
-                  </div>
-                  {/* Spells out why expected hours come off the configured cap and not the longer span. */}
-                  <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginBottom: 14 }}>
-                    {(shiftMins / 60).toFixed(0)}h rostered
-                    {breakMins > 0 && ` · ${breakMins}m unpaid break`}
-                    {' '}· {dailyHoursCap} working hours
-                  </div>
-
-                  {/* Mutually exclusive types. The budget is one shared pool, so when it is spent
-                      every type is unavailable — not just the one it was spent on. */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, marginBottom: 14 }}>
-                    {ADJ_TYPES.map(t => (
-                      <label
-                        key={t.value}
-                        title={adjExhausted ? 'Monthly time adjustment budget fully used' : undefined}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 7, fontSize: 13,
-                          cursor: adjExhausted ? 'not-allowed' : 'pointer',
-                          opacity: adjExhausted ? 0.5 : 1,
-                          color: adjType === t.value ? 'var(--txt)' : 'var(--txt-mut)',
-                          fontWeight: adjType === t.value ? 600 : 400,
-                        }}
-                      >
-                        <input
-                          type="radio"
-                          name="timeAdjType"
-                          checked={adjType === t.value}
-                          disabled={adjExhausted}
-                          onChange={() => handleAdjTypeChange(t.value)}
-                          style={{ width: 'auto', accentColor: 'var(--brand)', cursor: adjExhausted ? 'not-allowed' : 'pointer' }}
-                        />
-                        <span>{t.label}</span>
-                      </label>
-                    ))}
-                    {adjExhausted && (
-                      <span style={{ fontSize: 11, color: 'var(--warn)', alignSelf: 'center' }}>
-                        Monthly budget fully used ({minutesLabel(adjUsedMins)} of {minutesLabel(adjBudget)})
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Duration — 30 minutes to 2 hours, further capped by what is left in the pool
-                      so an unaffordable option cannot be picked at all. Server re-validates. */}
-                  {adjType && (
-                    <div style={{ maxWidth: 240, marginBottom: 14 }}>
-                      <Label>{ADJ_TYPES.find(t => t.value === adjType)?.durationLabel}</Label>
-                      <Sel value={adjMinutes} onChange={e => { setAdjMinutes(e.target.value); setErrors([]); }}>
-                        <option value="">Select Time</option>
-                        {ADJ_MINUTE_OPTIONS.filter(m => m <= adjRemaining).map(m => (
-                          <option key={m} value={m}>{minutesLabel(m)}</option>
-                        ))}
-                      </Sel>
-                      {/* The shortest adjustment is 30 minutes, so a smaller remainder buys nothing. */}
-                      {adjRemaining < MIN_ADJ_MINUTES && !adjExhausted && (
-                        <div style={{ fontSize: 11, color: 'var(--warn)', marginTop: 6 }}>
-                          Only {minutesLabel(adjRemaining)} left this month - below the {MIN_ADJ_MINUTES}-minute minimum.
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Live calculated impact */}
-                  <div style={{
-                    padding: '10px 12px', borderRadius: 6, marginBottom: 12, fontSize: 13,
-                    background: 'color-mix(in srgb, var(--brand-bright) 8%, transparent)',
-                    border: '1px solid color-mix(in srgb, var(--brand-bright) 30%, transparent)',
-                    color: 'var(--brand-bright)',
-                  }}>
-                    {adjBanner()}
-                  </div>
-
-                  {/* Real usage for the entry's calendar month — not a placeholder */}
-                  <button
-                    type="button"
-                    onClick={() => setShowBalance(s => !s)}
-                    style={{
-                      background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                      fontSize: 12, color: 'var(--brand-bright)', borderBottom: '1px dashed var(--line2)',
-                    }}
-                  >
-                    View available balance
-                  </button>
-                  {showBalance && (
-                    <div style={{
-                      marginTop: 10, padding: '10px 12px', borderRadius: 6, fontSize: 12,
-                      background: 'var(--raised2)', border: '1px solid var(--line2)',
-                      color: 'var(--txt-mut)', display: 'flex', flexWrap: 'wrap', gap: 16,
-                    }}>
-                      <span>
-                        Used this month:{' '}
-                        <strong style={{ color: 'var(--txt)' }}>
-                          {minutesLabel(adjUsedMins)} of {minutesLabel(adjBudget)}
-                        </strong>
-                      </span>
-                      <span>
-                        Remaining:{' '}
-                        <strong style={{ color: adjExhausted ? 'var(--warn)' : 'var(--ok)' }}>
-                          {minutesLabel(adjRemaining)}
-                        </strong>
-                      </span>
-                      {/* Says out loud that the pool is shared — the previous per-type rows
-                          implied three separate budgets. */}
-                      <span style={{ flexBasis: '100%', color: 'var(--txt-dim)' }}>
-                        Shared across late arrival, intervening time-off and leaving early.
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
+          {/* Time adjustment (checkbox, shift timings, type, duration, impact, balance) and the read-only recap
+              of one already on the entry — shared with the Daily Log. */}
+          <TimeAdjustmentSection
+            ta={ta}
+            dailyHoursCap={dailyHoursCap}
+            isEditable={isEditable}
+            isReadOnly={isReadOnly}
+            recapNote={<>{minutesLabel(adjMins)} counted toward this day's logged hours - the {expectedHrs.toFixed(1)}h target is unchanged.</>}
+          />
 
           {/* Holiday, Leave and Weekend — nothing REQUIRED to log, so this banner always shows
               for them. Holiday/Leave also replace the whole Tasks section with this (see
@@ -1811,18 +1503,11 @@ function TaskCard({
   const isLeave   = task.categoryName === LEAVE;
   const isBlocked = task.taskStatus === 'BLOCKED';
 
-  const statusColor: Record<string, string> = {
-    COMPLETED:   '#2FB67C',
-    IN_PROGRESS: '#4C8DD6',
-    BLOCKED:     '#E4373D',
-    NOT_STARTED: '#9BA1AC',
-  };
-
   return (
     <div style={{
       background: 'var(--raised)', border: '1px solid var(--line)',
       borderRadius: 8, padding: '14px 16px',
-      borderLeft: `3px solid ${statusColor[task.taskStatus] ?? 'var(--line)'}`,
+      borderLeft: `3px solid ${TASK_STATUS_COLOR[task.taskStatus] ?? 'var(--line)'}`,
     }}>
       {/* Task header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -1887,26 +1572,13 @@ function TaskCard({
               placeholder="0"
             />
           </div>
-          {/* Status */}
-          <div>
-            <Label>Status <Req /></Label>
-            {isReadOnly ? (
-              <div style={{ ...inputStyle, fontSize: 12, color: statusColor[task.taskStatus] ?? 'var(--txt)' }}>
-                {/* An unset status must not echo the dropdown's own placeholder back as a value. */}
-                {task.taskStatus
-                  ? TASK_STATUSES.find(s => s.value === task.taskStatus)?.label ?? task.taskStatus
-                  : '-'}
-              </div>
-            ) : (
-              <Sel
-                value={isLeave ? 'COMPLETED' : task.taskStatus}
-                onChange={e => onUpdate({ taskStatus: e.target.value })}
-                disabled={isLeave}
-              >
-                {TASK_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </Sel>
-            )}
-          </div>
+          {/* Status — the same control the Daily Log shows on each line */}
+          <TaskStatusField
+            value={isLeave ? 'COMPLETED' : task.taskStatus}
+            onChange={v => onUpdate({ taskStatus: v })}
+            readOnly={isReadOnly}
+            disabled={isLeave}
+          />
           {/* Remove */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {!isReadOnly && canRemove && (
@@ -1974,27 +1646,9 @@ function TaskCard({
         </div>
       )}
 
-      {/* Blocker reason — only for BLOCKED status */}
+      {/* Blocker reason — only for BLOCKED status (shared with the Daily Log) */}
       {isBlocked && (
-        <div style={{ marginTop: 10 }}>
-          <Label>
-            <span style={{ color: '#E4373D' }}>Blocker reason</span>
-            <span style={{ color: '#E4373D', marginLeft: 3 }}>*</span>
-          </Label>
-          {isReadOnly
-            ? <div style={{ ...inputStyle, opacity: 0.7, lineHeight: 1.5, borderColor: 'rgba(228,55,61,.3)' }}>{task.blockerReason || '-'}</div>
-            : <>
-                <Txt
-                  value={task.blockerReason}
-                  onChange={e => onUpdate({ blockerReason: e.target.value })}
-                  rows={2}
-                  placeholder="Describe what is blocking you and what support you need"
-                  maxLength={MAX_TEXT_LEN}
-                  style={{ minHeight: 54, borderColor: 'rgba(228,55,61,.35)' }}
-                />
-                <CharCount value={task.blockerReason} />
-              </>}
-        </div>
+        <BlockerReasonField value={task.blockerReason} onChange={v => onUpdate({ blockerReason: v })} readOnly={isReadOnly} />
       )}
     </div>
   );
