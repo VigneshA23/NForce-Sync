@@ -19,6 +19,8 @@ import { toLocalISODate } from '../../lib/date';
 import { readStoredDateFilter, resolveBlockersDateFilter, writeStoredDateFilter } from '../../lib/blockersDateFilter';
 import { ReporteeScopePicker } from '../../components/ReporteeScopePicker';
 import { useAuth } from '../../lib/auth';
+import { useToast } from '../../lib/toast';
+import { extractApiError } from '../../api/admin';
 
 // ── Table layout ───────────────────────────────────────────────────────────────
 // Header row and body rows must share one template or the columns desync.
@@ -323,7 +325,12 @@ function InfoField({ icon, label, children }: { icon: React.ReactNode; label: st
 function DetailPanel({ b, range, onClose, readOnly = false, variant = 'lead' }: { b: TeamBlockerDto; range: DateRange; onClose: () => void; readOnly?: boolean; variant?: BlockersVariant }) {
   const { date: reportedDate, time: reportedTime } = fmtDateTimeParts(b.submittedAt ?? `${b.entryDate}T09:00:00`);
   const setStatus = useSetBlockerStatus(range, variant);
+  const toast = useToast();
   const [confirmResolve, setConfirmResolve] = useState(false);
+  // Why the last Resolve attempt failed, shown inside the confirmation, which stays open so nothing looks like it just did nothing.
+  const [resolveError, setResolveError] = useState<string | null>(null);
+  const failureMessage = (err: unknown) =>
+    extractApiError(err, 'Could not update the blocker status. Please try again.');
 
   return (
     // Capped to the viewport (minus the sticky topbar + the gap this panel sticks below — see
@@ -359,8 +366,10 @@ function DetailPanel({ b, range, onClose, readOnly = false, variant = 'lead' }: 
                 status={b.status}
                 disabled={setStatus.isPending || readOnly}
                 onChange={(status) => {
-                  if (status === 'RESOLVED') setConfirmResolve(true);
-                  else setStatus.mutate({ taskId: b.taskId, status });
+                  if (status === 'RESOLVED') { setResolveError(null); setConfirmResolve(true); }
+                  else setStatus.mutate({ taskId: b.taskId, status }, {
+                    onError: (err) => toast.showToast('error', failureMessage(err)),
+                  });
                 }}
               />
             )}
@@ -434,14 +443,30 @@ function DetailPanel({ b, range, onClose, readOnly = false, variant = 'lead' }: 
 
       <ConfirmModal
         open={confirmResolve}
-        onClose={() => setConfirmResolve(false)}
+        onClose={() => { setConfirmResolve(false); setResolveError(null); }}
         onConfirm={() => {
+          setResolveError(null);
           setStatus.mutate({ taskId: b.taskId, status: 'RESOLVED' }, {
             onSuccess: () => setConfirmResolve(false),
+            // Stay open on failure: the blocker is not resolved, so say why and let them retry or cancel.
+            onError: (err) => {
+              const message = failureMessage(err);
+              setResolveError(message);
+              toast.showToast('error', message);
+            },
           });
         }}
         title="Resolve this blocker?"
-        message={`This will mark the blocker as resolved and notify ${b.employeeName}. This cannot be undone.`}
+        message={
+          <>
+            {`This will mark the blocker as resolved and notify ${b.employeeName}. This cannot be undone.`}
+            {resolveError && (
+              <span role="alert" style={{ display: 'block', marginTop: 10, color: 'var(--risk)', fontWeight: 600 }}>
+                Not resolved: {resolveError}
+              </span>
+            )}
+          </>
+        }
         confirmLabel="Yes, Resolve"
         isPending={setStatus.isPending}
       />
