@@ -87,6 +87,11 @@ public class EmployeeService {
         this.businessClock = businessClock;
     }
 
+    // readOnly transaction on the request thread: blockedTasksFrom reads task.getAcknowledgedBy()/getResolvedBy(),
+    // lazy relations the 30-day entry query's @EntityGraph does not cover. With open-in-view off, without this
+    // the entities are detached the moment the repository call returns and an employee whose blocker has been
+    // acknowledged or resolved gets a 500 (LazyInitializationException). The fanned-out reads use their own sessions.
+    @Transactional(readOnly = true)
     public DashboardSummaryDto getDashboardSummary(AppUser employee, LocalDate calendarFrom, LocalDate calendarTo) {
         Long employeeId = employee.getId();
         LocalDate today = businessClock.today();
