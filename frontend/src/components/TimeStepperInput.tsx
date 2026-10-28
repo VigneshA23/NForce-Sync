@@ -19,6 +19,10 @@ interface TimeStepperInputProps {
   label: string;
   /** Tightens internal spacing/padding for narrow layouts (e.g. side-by-side columns). Default rendering is unchanged when omitted. */
   compact?: boolean;
+  /** Marks the hour/minute boxes aria-invalid and turns the border red. Default rendering is unchanged when omitted. */
+  invalid?: boolean;
+  /** Id of the element that carries the error text, wired to the boxes through aria-describedby. */
+  errorId?: string;
 }
 
 function parse24h(value: string): { hour12: number; minute: number; period: 'AM' | 'PM' } {
@@ -52,9 +56,10 @@ const numberBoxStyleCompact: React.CSSProperties = { ...numberBoxStyle, width: 1
 
 // One HH or MM field: a typeable box plus an up/down chevron pair, wrapping at [min, max].
 function NumberStepper({
-  value, min, max, ariaLabel, onChange, compact,
+  value, min, max, ariaLabel, onChange, compact, invalid, errorId,
 }: {
   value: number; min: number; max: number; ariaLabel: string; onChange: (n: number) => void; compact?: boolean;
+  invalid?: boolean; errorId?: string;
 }) {
   const [text, setText] = useState(String(value).padStart(2, '0'));
 
@@ -80,6 +85,8 @@ function NumberStepper({
         type="text"
         inputMode="numeric"
         pattern="[0-9]*"
+        aria-invalid={invalid ? true : undefined}
+        aria-describedby={invalid ? errorId : undefined}
         value={text}
         onChange={(e) => setText(e.target.value.replace(/\D/g, '').slice(0, 2))}
         onBlur={(e) => commit(e.target.value)}
@@ -102,7 +109,7 @@ function NumberStepper({
   );
 }
 
-export function TimeStepperInput({ id, value, onChange, label, compact }: TimeStepperInputProps) {
+export function TimeStepperInput({ id, value, onChange, label, compact, invalid, errorId }: TimeStepperInputProps) {
   const { hour12, minute, period } = parse24h(value);
 
   return (
@@ -110,17 +117,17 @@ export function TimeStepperInput({ id, value, onChange, label, compact }: TimeSt
       id={id}
       style={{
         display: 'flex', alignItems: 'center', gap: compact ? 4 : 8,
-        background: 'var(--shell)', border: '1px solid var(--line2)', borderRadius: 6,
+        background: 'var(--shell)', border: invalid ? '1px solid var(--risk)' : '1px solid var(--line2)', borderRadius: 6,
         padding: compact ? '6px 6px' : '7px 10px', boxSizing: 'border-box',
       }}
     >
       <NumberStepper
-        value={hour12} min={1} max={12} ariaLabel={`${label} hour`} compact={compact}
+        value={hour12} min={1} max={12} ariaLabel={`${label} hour`} compact={compact} invalid={invalid} errorId={errorId}
         onChange={(h) => onChange(to24h(h, minute, period))}
       />
       <span style={{ color: 'var(--txt-mut)', fontWeight: 600, fontSize: compact ? 13 : 15 }}>:</span>
       <NumberStepper
-        value={minute} min={0} max={59} ariaLabel={`${label} minute`} compact={compact}
+        value={minute} min={0} max={59} ariaLabel={`${label} minute`} compact={compact} invalid={invalid} errorId={errorId}
         onChange={(m) => onChange(to24h(hour12, m, period))}
       />
       <div style={{ display: 'flex', marginLeft: 'auto', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--line2)' }}>

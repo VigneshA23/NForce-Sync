@@ -3,6 +3,17 @@ import type { KeyboardEvent } from 'react';
 const FOCUSABLE_SELECTOR = 'input, select, textarea, button, [tabindex]:not([tabindex="-1"])';
 
 /**
+ * Moves focus to the first field in `root` marked aria-invalid and scrolls it into view if it is off-screen.
+ * Call it after the render that shows the errors (e.g. from an effect), so the markers are in the DOM.
+ */
+export function focusFirstInvalid(root: HTMLElement | null | undefined) {
+  const first = root?.querySelector<HTMLElement>('[aria-invalid="true"]');
+  if (!first) return;
+  first.focus();
+  first.scrollIntoView?.({ block: 'nearest' });
+}
+
+/**
  * Enter-key handler for form fields: moves focus to the next focusable element
  * in DOM/tab order instead of letting the browser's default "Enter submits the
  * form" behaviour fire. Attach to text-like inputs where Enter shouldn't submit;

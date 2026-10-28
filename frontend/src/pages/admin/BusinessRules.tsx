@@ -1,89 +1,29 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Bell, CalendarClock, CalendarDays, Clock, Clock3, Pencil, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, Clock, Clock3, Pencil, Plus, Power, PowerOff, Trash2 } from 'lucide-react';
 import {
   getBusinessRuleConfig, updateTimeAttendance, updateNotifications, updateAllowances,
   listShifts, createShift, updateShift, toggleShift, deleteShift,
   listHolidays, createHoliday, updateHoliday, deleteHoliday,
 } from '../../api/businessRules';
 import type { ShiftDefinitionDto, ShiftPayload, HolidayDto, WeekendRule } from '../../api/businessRules';
-import { extractApiError, extractFieldErrors, isHttpStatus, listAuditLog } from '../../api/admin';
+import { extractApiError, listAuditLog } from '../../api/admin';
 import type { AuditLogDto } from '../../api/admin';
 import { formatRelative } from '../../lib/auditLog';
 import { formatDate, formatTime12h } from '../../lib/date';
-import { capitalizeFirst } from '../../lib/strings';
 import { Modal } from '../../components/Modal';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { DropdownMenu } from '../../components/DropdownMenu';
-import { TimeStepperInput } from '../../components/TimeStepperInput';
 import { Pagination } from '../../components/Pagination';
 import { useToast } from '../../lib/toast';
-
-// ── Shared styles (matches OrganizationMasters.tsx idiom) ──────────────────────
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: 'var(--shell)',
-  border: '1px solid var(--line2)',
-  borderRadius: 6,
-  padding: '9px 12px',
-  color: 'var(--txt)',
-  fontSize: 13,
-  outline: 'none',
-  fontFamily: 'Inter, sans-serif',
-  boxSizing: 'border-box',
-};
-
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--txt-mut)',
-  marginBottom: 5,
-  textTransform: 'uppercase',
-  letterSpacing: '.06em',
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'var(--brand)',
-  border: 'none',
-  borderRadius: 7,
-  color: '#fff',
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'transparent',
-  border: '1px solid var(--line2)',
-  borderRadius: 7,
-  color: 'var(--txt-mut)',
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-function ErrorBanner({ message }: { message: string }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'flex-start', gap: 8,
-      padding: '10px 14px', borderRadius: 7, marginBottom: 14,
-      background: 'rgba(228,55,61,.10)', border: '1px solid rgba(228,55,61,.25)',
-      fontSize: 12, color: 'var(--risk)',
-    }} role="alert">
-      <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
-      {message}
-    </div>
-  );
-}
-
-function FieldError({ msg }: { msg?: string }) {
-  if (!msg) return null;
-  return <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>{msg}</p>;
-}
+import { FieldError, UnitField } from './businessRules/formParts';
+import {
+  inputStyle, labelStyle, primaryButtonStyle, secondaryButtonStyle,
+} from './businessRules/formStyles';
+import { HolidayFormModal } from './businessRules/HolidayFormModal';
+import { ShiftFormModal } from './businessRules/ShiftFormModal';
+import { serverErrorsFor } from './businessRules/businessRulesValidation';
+import { cutoffLabel } from './businessRules/shiftTime';
 
 // ── Card shell ───────────────────────────────────────────────────────────────
 
@@ -143,22 +83,6 @@ function SectionIcon({ icon, accent }: { icon: React.ReactNode; accent: string }
   );
 }
 
-// Small non-editable suffix (e.g. "min", "hrs") inside a numeric input, so the
-// unit is visible without re-reading the field label above.
-function UnitField({ unit, children }: { unit: string; children: React.ReactNode }) {
-  return (
-    <div style={{ position: 'relative' }}>
-      {children}
-      <span style={{
-        position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-        fontSize: 11, fontWeight: 500, color: 'var(--txt-dim)', pointerEvents: 'none',
-      }}>
-        {unit}
-      </span>
-    </div>
-  );
-}
-
 interface LastUpdateInfo { occurredAt: string; actorName: string }
 
 // `isReady` gates the "No changes recorded yet" text on the section's own audit query having
@@ -181,38 +105,6 @@ function LastUpdatedCaption({ info, isReady }: { info: LastUpdateInfo | null; is
 function lastUpdateFromAudit(data: { content: AuditLogDto[] } | undefined): LastUpdateInfo | null {
   const hit = data?.content[0];
   return hit ? { occurredAt: hit.occurredAt, actorName: hit.actorName ?? 'System' } : null;
-}
-
-// Truncates a backend "HH:mm:ss" string to the "HH:mm" shape <input type="time"> expects.
-function toHm(time: string): string {
-  return time.length >= 5 ? time.slice(0, 5) : time;
-}
-
-function toMinutes(time: string): number {
-  const [h, m] = toHm(time).split(':').map(Number);
-  return h * 60 + m;
-}
-
-/**
- * When a shift's EOD is actually due, as an absolute clock time rather than an offset the reader
- * has to add up — "+3h → 3:30 AM (next day)" for a 15:30-00:30 shift.
- *
- * Mirrors ShiftSchedule.cutoffAt on the backend: an end at or before the start crosses midnight,
- * and the cutoff is measured from that end.
- */
-function cutoffLabel(startTime: string, endTime: string, hours: number | null): string {
-  if (hours == null) return '—';
-  const startMin = toMinutes(startTime);
-  let endMin = toMinutes(endTime);
-  if (endMin <= startMin) endMin += 1440;
-
-  const cutoffMin = endMin + Math.round(hours * 60);
-  const clock = ((cutoffMin % 1440) + 1440) % 1440;
-  const daysAfter = Math.floor(cutoffMin / 1440);
-  const hhmmss = `${String(Math.floor(clock / 60)).padStart(2, '0')}:${String(clock % 60).padStart(2, '0')}:00`;
-
-  const suffix = daysAfter === 0 ? '' : daysAfter === 1 ? ' (next day)' : ` (+${daysAfter} days)`;
-  return `+${hours}h → ${formatTime12h(hhmmss)}${suffix}`;
 }
 
 const WEEKEND_OPTIONS: { value: WeekendRule; label: string }[] = [
@@ -457,9 +349,9 @@ export default function BusinessRules() {
       setShiftModal(null);
     },
     onError: (err) => {
-      if (isHttpStatus(err, 409)) { setShiftFormError('A shift with this name already exists.'); return; }
-      setShiftFieldErrors(extractFieldErrors(err));
-      setShiftFormError(extractApiError(err, 'Failed to save shift.'));
+      const { fields, banner } = serverErrorsFor('shift', err, 'Failed to save shift.');
+      setShiftFieldErrors(fields);
+      setShiftFormError(banner);
     },
   });
 
@@ -473,9 +365,9 @@ export default function BusinessRules() {
       setShiftModal(null);
     },
     onError: (err) => {
-      if (isHttpStatus(err, 409)) { setShiftFormError('A shift with this name already exists.'); return; }
-      setShiftFieldErrors(extractFieldErrors(err));
-      setShiftFormError(extractApiError(err, 'Failed to save shift.'));
+      const { fields, banner } = serverErrorsFor('shift', err, 'Failed to save shift.');
+      setShiftFieldErrors(fields);
+      setShiftFormError(banner);
     },
   });
 
@@ -516,9 +408,9 @@ export default function BusinessRules() {
       setHolidayModal(null);
     },
     onError: (err) => {
-      if (isHttpStatus(err, 409)) { setHolidayFormError('A holiday is already defined on this date.'); return; }
-      setHolidayFieldErrors(extractFieldErrors(err));
-      setHolidayFormError(extractApiError(err, 'Failed to add holiday.'));
+      const { fields, banner } = serverErrorsFor('holiday', err, 'Failed to add holiday.');
+      setHolidayFieldErrors(fields);
+      setHolidayFormError(banner);
     },
   });
 
@@ -532,9 +424,9 @@ export default function BusinessRules() {
       setHolidayModal(null);
     },
     onError: (err) => {
-      if (isHttpStatus(err, 409)) { setHolidayFormError('A holiday is already defined on this date.'); return; }
-      setHolidayFieldErrors(extractFieldErrors(err));
-      setHolidayFormError(extractApiError(err, 'Failed to update holiday.'));
+      const { fields, banner } = serverErrorsFor('holiday', err, 'Failed to update holiday.');
+      setHolidayFieldErrors(fields);
+      setHolidayFormError(banner);
     },
   });
 
@@ -799,6 +691,8 @@ export default function BusinessRules() {
         onClose={() => setShiftModal(null)}
         onSubmit={(payload) => {
           if (!shiftModal) return;
+          setShiftFormError(null);
+          setShiftFieldErrors({});
           if (shiftModal.mode === 'create') createShiftMutation.mutate(payload);
           else updateShiftMutation.mutate({ id: shiftModal.shift.id, payload });
         }}
@@ -836,6 +730,8 @@ export default function BusinessRules() {
         onClose={() => setHolidayModal(null)}
         onSubmit={(payload) => {
           if (!holidayModal) return;
+          setHolidayFormError(null);
+          setHolidayFieldErrors({});
           if (holidayModal.mode === 'create') createHolidayMutation.mutate(payload);
           else updateHolidayMutation.mutate({ id: holidayModal.holiday.id, payload });
         }}
@@ -1025,176 +921,6 @@ function HolidayTable({ data, isPending, isError, onEdit, onDelete, openMenuId, 
         />
       )}
     </div>
-  );
-}
-
-// ── Shift add/edit modal (uses Modal's sticky footer) ───────────────────────
-
-type ShiftModalState = { mode: 'create' } | { mode: 'edit'; shift: ShiftDefinitionDto } | null;
-
-interface ShiftFormModalProps {
-  state: ShiftModalState;
-  onClose: () => void;
-  onSubmit: (payload: { name: string; startTime: string; endTime: string; eodCutoffHours: number | null }) => void;
-  isPending: boolean;
-  error: string | null;
-  fieldErrors: Record<string, string>;
-}
-
-function ShiftFormModal({ state, onClose, onSubmit, isPending, error, fieldErrors }: ShiftFormModalProps) {
-  const nameId = useId();
-  const [name, setName] = useState('');
-  const [start, setStart] = useState('09:00');
-  const [end, setEnd] = useState('18:00');
-  const [cutoff, setCutoff] = useState('');
-
-  useEffect(() => {
-    if (state?.mode === 'edit') {
-      setName(state.shift.name);
-      setStart(toHm(state.shift.startTime));
-      setEnd(toHm(state.shift.endTime));
-      setCutoff(state.shift.eodCutoffHours == null ? '' : String(state.shift.eodCutoffHours));
-    } else if (state?.mode === 'create') {
-      setName(''); setStart('09:00'); setEnd('18:00'); setCutoff('');
-    }
-  }, [state]);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || !start || !end) return;
-    // Blank is a deliberate value, not a zero: it means "no deadline for this shift".
-    const trimmed = cutoff.trim();
-    onSubmit({
-      name: name.trim(),
-      startTime: `${start}:00`,
-      endTime: `${end}:00`,
-      eodCutoffHours: trimmed === '' ? null : Number(trimmed),
-    });
-  }
-
-  return (
-    <Modal
-      open={state != null}
-      title={state?.mode === 'edit' ? 'Edit Shift' : 'Add Shift'}
-      onClose={onClose}
-      width={420}
-      footer={
-        <>
-          <button type="submit" form="shift-form" disabled={isPending || !name.trim()} style={{ ...primaryButtonStyle, opacity: isPending ? 0.7 : 1, cursor: isPending ? 'not-allowed' : 'pointer' }}>
-            {isPending ? 'Saving…' : 'Save'}
-          </button>
-          <button type="button" onClick={onClose} style={secondaryButtonStyle}>Cancel</button>
-        </>
-      }
-    >
-      <form id="shift-form" onSubmit={handleSubmit} noValidate>
-        {error && <ErrorBanner message={error} />}
-        <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle} htmlFor={nameId}>Shift Name *</label>
-          <input id={nameId} type="text" placeholder="e.g. General" value={name} onChange={(e) => setName(capitalizeFirst(e.target.value))} style={inputStyle} autoFocus />
-          <FieldError msg={fieldErrors.name} />
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12, marginBottom: 4 }}>
-          <div style={{ minWidth: 0 }}>
-            <label style={labelStyle} id="shift-start-label">Start Time *</label>
-            <TimeStepperInput id="shift-start" label="Start time" value={start} onChange={setStart} compact />
-            <FieldError msg={fieldErrors.startTime} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <label style={labelStyle} id="shift-end-label">End Time *</label>
-            <TimeStepperInput id="shift-end" label="End time" value={end} onChange={setEnd} compact />
-            <FieldError msg={fieldErrors.endTime} />
-          </div>
-        </div>
-        <div style={{ marginTop: 14 }}>
-          <label style={labelStyle} htmlFor="shift-cutoff">EOD cutoff</label>
-          <UnitField unit="hrs after end">
-            <input
-              id="shift-cutoff"
-              type="number"
-              min={0}
-              max={24}
-              step={0.5}
-              placeholder="e.g. 3"
-              value={cutoff}
-              onChange={(e) => setCutoff(e.target.value)}
-              style={{ ...inputStyle, paddingRight: 96 }}
-            />
-          </UnitField>
-          <FieldError msg={fieldErrors.eodCutoffHours} />
-          <p style={{ fontSize: 11, color: 'var(--txt-dim)', margin: '6px 0 0' }}>
-            {cutoff.trim() === ''
-              ? 'Leave blank for no deadline, so no reminder will be sent for this shift.'
-              : `EOD due ${cutoffLabel(`${start}:00`, `${end}:00`, Number(cutoff))}. A reminder is sent once it passes.`}
-          </p>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-// ── Holiday add modal (uses Modal's sticky footer) ──────────────────────────
-
-type HolidayModalState = { mode: 'create' } | { mode: 'edit'; holiday: HolidayDto } | null;
-
-interface HolidayFormModalProps {
-  state: HolidayModalState;
-  onClose: () => void;
-  onSubmit: (payload: { name: string; holidayDate: string }) => void;
-  isPending: boolean;
-  error: string | null;
-  fieldErrors: Record<string, string>;
-}
-
-function HolidayFormModal({ state, onClose, onSubmit, isPending, error, fieldErrors }: HolidayFormModalProps) {
-  const nameId = useId();
-  const [name, setName] = useState('');
-  const [date, setDate] = useState('');
-
-  useEffect(() => {
-    if (state?.mode === 'edit') {
-      setName(state.holiday.name);
-      setDate(state.holiday.holidayDate);
-    } else if (state?.mode === 'create') {
-      setName(''); setDate('');
-    }
-  }, [state]);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || !date) return;
-    onSubmit({ name: name.trim(), holidayDate: date });
-  }
-
-  return (
-    <Modal
-      open={state != null}
-      title={state?.mode === 'edit' ? 'Edit Holiday' : 'Add Holiday'}
-      onClose={onClose}
-      width={420}
-      footer={
-        <>
-          <button type="submit" form="holiday-form" disabled={isPending || !name.trim() || !date} style={{ ...primaryButtonStyle, opacity: isPending ? 0.7 : 1, cursor: isPending ? 'not-allowed' : 'pointer' }}>
-            {isPending ? 'Saving…' : state?.mode === 'edit' ? 'Save' : 'Add'}
-          </button>
-          <button type="button" onClick={onClose} style={secondaryButtonStyle}>Cancel</button>
-        </>
-      }
-    >
-      <form id="holiday-form" onSubmit={handleSubmit} noValidate>
-        {error && <ErrorBanner message={error} />}
-        <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle} htmlFor={nameId}>Holiday Name *</label>
-          <input id={nameId} type="text" placeholder="e.g. Independence Day" value={name} onChange={(e) => setName(capitalizeFirst(e.target.value))} style={inputStyle} autoFocus />
-          <FieldError msg={fieldErrors.name} />
-        </div>
-        <div>
-          <label style={labelStyle} htmlFor="holiday-date">Date *</label>
-          <input id="holiday-date" type="date" lang="en-GB" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
-          <FieldError msg={fieldErrors.holidayDate} />
-        </div>
-      </form>
-    </Modal>
   );
 }
 

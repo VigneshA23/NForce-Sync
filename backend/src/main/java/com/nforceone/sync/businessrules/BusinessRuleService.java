@@ -160,13 +160,15 @@ public class BusinessRuleService {
     }
 
     public ShiftDefinitionDto createShift(CreateShiftRequest req, String actingEmail) {
-        if (shiftRepository.existsByName(req.name())) {
+        // Stored trimmed (the form trims too), so the duplicate check and the unique column see the same text.
+        String name = req.name().trim();
+        if (shiftRepository.existsByName(name)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A shift with this name already exists");
         }
         validateShiftTimes(req.startTime(), req.endTime());
         AppUser actor = requireActorByEmail(actingEmail);
         ShiftDefinition shift = ShiftDefinition.builder()
-                .name(req.name())
+                .name(name)
                 .startTime(req.startTime())
                 .endTime(req.endTime())
                 .eodCutoffHours(req.eodCutoffHours())
@@ -179,13 +181,14 @@ public class BusinessRuleService {
 
     public ShiftDefinitionDto updateShift(Long id, UpdateShiftRequest req, String actingEmail) {
         ShiftDefinition shift = requireShift(id);
-        if (!shift.getName().equals(req.name()) && shiftRepository.existsByName(req.name())) {
+        String name = req.name().trim();
+        if (!shift.getName().equals(name) && shiftRepository.existsByName(name)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A shift with this name already exists");
         }
         validateShiftTimes(req.startTime(), req.endTime());
         AppUser actor = requireActorByEmail(actingEmail);
         Map<String, Object> before = shiftSnapshot(shift);
-        shift.setName(req.name());
+        shift.setName(name);
         shift.setStartTime(req.startTime());
         shift.setEndTime(req.endTime());
         shift.setEodCutoffHours(req.eodCutoffHours());
@@ -250,7 +253,7 @@ public class BusinessRuleService {
         }
         AppUser actor = requireActorByEmail(actingEmail);
         Holiday holiday = Holiday.builder()
-                .name(req.name())
+                .name(req.name().trim())
                 .holidayDate(req.holidayDate())
                 .build();
         holiday = holidayRepository.save(holiday);
@@ -266,7 +269,7 @@ public class BusinessRuleService {
         }
         AppUser actor = requireActorByEmail(actingEmail);
         Map<String, Object> before = ruleSnapshot(holiday.getName(), holiday.getHolidayDate());
-        holiday.setName(req.name());
+        holiday.setName(req.name().trim());
         holiday.setHolidayDate(req.holidayDate());
         holiday = holidayRepository.save(holiday);
         writeAudit(holiday.getId(), "UPDATE", before, ruleSnapshot(holiday.getName(), holiday.getHolidayDate()), actor);
