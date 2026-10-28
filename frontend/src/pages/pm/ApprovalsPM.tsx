@@ -36,6 +36,7 @@ export default function ApprovalsPM() {
       showTlFilter
       showProjectFilter
       clarificationReadOnly
+      showRowMenu={false}
     />
   );
 }

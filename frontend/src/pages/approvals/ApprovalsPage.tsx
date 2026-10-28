@@ -41,7 +41,7 @@ import { dayTypeLabel, fmtDate, fmtHours, fmtInactivity, fmtRelative, totalHours
 // ── PieceCard ─────────────────────────────────────────────────────────────────
 
 function PieceCard({
-  piece, onOpenModal, tab, clarificationOpen, onOpenChat, clarificationReadOnly,
+  piece, onOpenModal, tab, clarificationOpen, onOpenChat, clarificationReadOnly, showRowMenu,
 }: {
   piece: ApprovalPieceDto;
   /** Opens the existing review modal - on its reason box when `mode` is 'reject'. */
@@ -52,6 +52,8 @@ function PieceCard({
   clarificationOpen: boolean;
   /** View-only clarifications (the PM Approvals page) — see ApprovalsPageProps. */
   clarificationReadOnly: boolean;
+  /** Show the row's 3-dot actions menu — see ApprovalsPageProps. */
+  showRowMenu: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user } = useAuth();
@@ -195,7 +197,7 @@ function PieceCard({
           >
             Review
           </button>
-          {actionable && (
+          {actionable && showRowMenu && (
             <DropdownMenu
               items={menuItems}
               ariaLabel={`Actions for ${piece.employeeName}`}
@@ -252,6 +254,12 @@ export interface ApprovalsPageProps {
    * because anyone can be a project's PM by assignment.
    */
   clarificationReadOnly?: boolean;
+  /**
+   * The 3-dot menu on each row (Approve / Reject / clarification shortcuts). Defaults to shown. The PM
+   * Escalated Approvals and Reporting Manager Pending Approvals pages hide it: the row's Review button
+   * opens the same review modal, which carries the same Approve / Reject / clarification actions.
+   */
+  showRowMenu?: boolean;
 }
 
 export default function ApprovalsPage({
@@ -261,6 +269,7 @@ export default function ApprovalsPage({
   pendingError, onRefetch,
   onApprove, onReject, approveBusy, rejectBusy,
   tabs, pendingShowsAll = false, showTlFilter, showProjectFilter, clarificationReadOnly = false, defaultSort = 'oldest',
+  showRowMenu = true,
 }: ApprovalsPageProps) {
   const { show } = useToast();
   const refreshClarification = useRefreshClarification();
@@ -588,6 +597,7 @@ export default function ApprovalsPage({
                 clarificationOpen={isPieceClarified(openClarifications, piece.id, piece.eodEntryId)}
                 onOpenChat={openChat}
                 clarificationReadOnly={clarificationReadOnly}
+                showRowMenu={showRowMenu}
               />
             </div>
           ))}
