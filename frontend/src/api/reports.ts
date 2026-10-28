@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from './client';
+import { toExportError } from '../lib/exportError';
 
 // ── types (mirror backend DTOs in com.nforceone.sync.reports) ────────────────────
 
@@ -82,7 +83,7 @@ export async function exportEodByEmployee(params: EodByEmployeeExportParams): Pr
   const response = await api.get('/reports/eod-by-employee/export', {
     params: { ...rest, employeeIds: employeeIds?.length ? employeeIds.join(',') : undefined },
     responseType: 'blob',
-  });
+  }).catch(async (err: unknown) => { throw await toExportError(err); });
   const extension = params.format === 'EXCEL' ? 'xlsx' : params.format.toLowerCase();
   const filename = filenameFromResponse(response.headers['content-disposition'], `eod-by-employee.${extension}`);
   downloadBlob(response.data as Blob, filename);

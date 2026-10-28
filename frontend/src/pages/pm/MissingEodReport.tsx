@@ -229,12 +229,11 @@ function EmployeeSearch({ query, onQueryChange, matches, onPick }: {
   );
 }
 
-function FilterBar({ filters, onChange, onReset, employeeMatches, onPickEmployee, preset, onPresetSelect }: {
+function FilterBar({ filters, onChange, employeeMatches, onPickEmployee, preset, onPresetSelect }: {
   preset: ReportRangePreset;
   onPresetSelect: (preset: ReportRangePreset) => void;
   filters: Filters;
   onChange: (next: Filters) => void;
-  onReset: () => void;
   /** Rows the current filters returned, already narrowed by the typed query. */
   employeeMatches: MissingEodRowDto[];
   onPickEmployee: (row: MissingEodRowDto) => void;
@@ -303,14 +302,6 @@ function FilterBar({ filters, onChange, onReset, employeeMatches, onPickEmployee
         </label>
       </div>
       {showsCurrentMonthNote({ from: filters.from, to: filters.to }) && <CurrentMonthNote />}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
-        <button
-          onClick={onReset}
-          style={{ background: 'none', border: '1px solid var(--line2)', borderRadius: 8, color: 'var(--brand-bright)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '7px 12px' }}
-        >
-          Clear filters
-        </button>
-      </div>
     </Card>
   );
 }
@@ -527,18 +518,14 @@ export default function MissingEodReport() {
   const isSuperAdmin = useIsSuperAdmin();
   // Own state, separate from the EOD by employee tab; lazily initialised from the local clock.
   const [filters, setFilters] = useState<Filters>(() => defaultFilters());
-  // Preset pills: picking one sets From/To; editing either date by hand makes Custom active; Reset
-  // goes back to This month. Changing any other filter leaves the pill as it was (useReportPreset).
-  const { preset, onPresetSelect, noteRangeEdit, reset } = useReportPreset(
+  // Preset pills: picking one sets From/To; editing either date by hand makes Custom active.
+  // Changing any other filter leaves the pill as it was (useReportPreset).
+  const { preset, onPresetSelect, noteRangeEdit } = useReportPreset(
     ({ from, to }) => setFilters(f => ({ ...f, from, to })),
   );
   function handleFilterChange(next: Filters) {
     noteRangeEdit(filters, next);
     setFilters(next);
-  }
-  function handleReset() {
-    reset();
-    setFilters(defaultFilters());
   }
 
   const [page, setPage] = useState(0);
@@ -627,7 +614,7 @@ export default function MissingEodReport() {
       </div>
 
       <FilterBar
-        filters={filters} onChange={handleFilterChange} onReset={handleReset}
+        filters={filters} onChange={handleFilterChange}
         employeeMatches={employeeMatches} onPickEmployee={pickEmployee}
         preset={preset} onPresetSelect={onPresetSelect}
       />

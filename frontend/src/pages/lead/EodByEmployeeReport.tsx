@@ -15,6 +15,7 @@ import { RequiredHoursBadge } from '../../components/RequiredHoursBadge';
 import { Pagination } from '../../components/Pagination';
 import { formatDate, todayISO } from '../../lib/date';
 import { useToast } from '../../lib/toast';
+import { exportErrorMessage } from '../../lib/exportError';
 import { useTeamReportFilters, useTeamEodByEmployeeReport, exportTeamEodByEmployee } from '../../api/teamReports';
 import { getDayDefaults } from '../../api/eod';
 import type { EodByEmployeeRowDto, EodByEmployeeEntryDto, ExportFormat } from '../../api/reports';
@@ -251,14 +252,13 @@ function EmployeeSearch({ query, onQueryChange, matches, onPick }: {
 }
 
 function FilterBar({
-  filters, onChange, onReset, format, onFormatChange, onDownloadAll, downloadingAll,
+  filters, onChange, format, onFormatChange, onDownloadAll, downloadingAll,
   employeeMatches, onPickEmployee, preset, onPresetSelect,
 }: {
   preset: ReportRangePreset;
   onPresetSelect: (preset: ReportRangePreset) => void;
   filters: Filters;
   onChange: (next: Filters) => void;
-  onReset: () => void;
   format: ExportFormat;
   onFormatChange: (f: ExportFormat) => void;
   onDownloadAll: () => void;
@@ -388,12 +388,6 @@ function FilterBar({
           }}
         >
           <Download size={13} aria-hidden="true" /> {downloadingAll ? 'Preparing…' : 'Download all'}
-        </button>
-        <button
-          onClick={onReset}
-          style={{ background: 'none', border: '1px solid var(--line2)', borderRadius: 8, color: 'var(--brand-bright)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '7px 12px' }}
-        >
-          Reset filters
         </button>
       </div>
     </Card>
@@ -815,18 +809,14 @@ function TeamFlow({
 
 export default function LeadEodByEmployeeReport() {
   const [filters, setFilters] = useState<Filters>(() => defaultFilters());
-  // Preset pills: picking one sets From/To; editing either date by hand makes Custom active; Reset
-  // goes back to This month. Changing any other filter leaves the pill as it was (useReportPreset).
-  const { preset, onPresetSelect, noteRangeEdit, reset } = useReportPreset(
+  // Preset pills: picking one sets From/To; editing either date by hand makes Custom active.
+  // Changing any other filter leaves the pill as it was (useReportPreset).
+  const { preset, onPresetSelect, noteRangeEdit } = useReportPreset(
     ({ from, to }) => setFilters(f => ({ ...f, from, to })),
   );
   function handleFilterChange(next: Filters) {
     noteRangeEdit(filters, next);
     setFilters(next);
-  }
-  function handleReset() {
-    reset();
-    setFilters(defaultFilters());
   }
   const [flow, setFlow] = useState<'roster' | 'team'>('roster');
   const [format, setFormat] = useState<ExportFormat>('EXCEL');
@@ -879,8 +869,9 @@ export default function LeadEodByEmployeeReport() {
         format,
       });
       show('Download started.', 'success');
-    } catch {
-      show('Export failed. Please try again.', 'error');
+    } catch (err) {
+      // The server's own reason when it gave one (read from the blob error body), else the generic text.
+      show(exportErrorMessage(err), 'error');
     } finally {
       setExportingKey(null);
     }
@@ -909,7 +900,7 @@ export default function LeadEodByEmployeeReport() {
       </div>
 
       <FilterBar
-        filters={filters} onChange={handleFilterChange} onReset={handleReset}
+        filters={filters} onChange={handleFilterChange}
         preset={preset} onPresetSelect={onPresetSelect}
         format={format} onFormatChange={setFormat}
         onDownloadAll={() => runExport('all')} downloadingAll={exportingKey === 'all'}

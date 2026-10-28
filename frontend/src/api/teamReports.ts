@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from './client';
+import { toExportError } from '../lib/exportError';
 import type { ProjectOptionDto } from './projectDashboard';
 import type {
   EodByEmployeeFilterParams,
@@ -66,7 +67,7 @@ export async function exportTeamEodByEmployee(params: EodByEmployeeExportParams)
   const response = await api.get('/team-reports/eod-by-employee/export', {
     params: { ...rest, employeeIds: employeeIds?.length ? employeeIds.join(',') : undefined },
     responseType: 'blob',
-  });
+  }).catch(async (err: unknown) => { throw await toExportError(err); });
   const extension = params.format === 'EXCEL' ? 'xlsx' : params.format.toLowerCase();
   const filename = filenameFromResponse(response.headers['content-disposition'], `team-eod.${extension}`);
   downloadBlob(response.data as Blob, filename);

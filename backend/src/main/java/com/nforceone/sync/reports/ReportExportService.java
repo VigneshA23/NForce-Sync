@@ -96,6 +96,11 @@ public class ReportExportService {
                 SXSSFSheet sheet = workbook.createSheet(uniqueSheetName(emp.employeeName(), usedSheetNames));
                 writeEmployeeSheet(sheet, emp, boldStyle, dateStyle);
             }
+            // A workbook with no sheets is not a valid .xlsx — Excel opens it with a "repair" prompt — so
+            // an empty result still gets one sheet: the header row plus a note saying why it's empty.
+            if (report.employees().isEmpty()) {
+                writeNoDataSheet(workbook.createSheet(NO_DATA_SHEET), boldStyle);
+            }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             workbook.write(out);
@@ -105,13 +110,28 @@ public class ReportExportService {
         }
     }
 
+    private static final String NO_DATA_SHEET = "No data";
+
+    private void writeNoDataSheet(SXSSFSheet sheet, CellStyle boldStyle) {
+        Row header = sheet.createRow(0);
+        for (int c = 0; c < SHEET_COLUMNS.length; c++) {
+            Cell cell = header.createCell(c);
+            cell.setCellValue(SHEET_COLUMNS[c]);
+            cell.setCellStyle(boldStyle);
+        }
+        sheet.createRow(1).createCell(0).setCellValue("No EOD entries for the selected date range and filters.");
+        for (int c = 0; c < SHEET_COLUMNS.length; c++) {
+            sheet.setColumnWidth(c, 22 * 256);
+        }
+    }
+
     private void writeEmployeeSheet(SXSSFSheet sheet, EodByEmployeeRowDto emp,
                                      CellStyle boldStyle, CellStyle dateStyle) {
         int rowNum = 0;
 
         Row nameRow = sheet.createRow(rowNum++);
         Cell nameCell = nameRow.createCell(0);
-        nameCell.setCellValue(emp.employeeName() + "  (" + emp.employeeCode() + ")");
+        nameCell.setCellValue(nonBlank(emp.employeeName()) + "  (" + nonBlank(emp.employeeCode()) + ")");
         nameCell.setCellStyle(boldStyle);
 
         Row metaRow = sheet.createRow(rowNum++);
@@ -149,21 +169,36 @@ public class ReportExportService {
         }
     }
 
-    /** Excel sheet names must be unique, non-blank, ≤31 chars, and free of : \ / ? * [ ]. */
-    private String uniqueSheetName(String rawName, Set<String> used) {
-        String base = rawName.replaceAll("[:\\\\/?*\\[\\]]", "").trim();
+    private static final int MAX_SHEET_NAME = 31;
+
+    /**
+     * A name Excel accepts, made from an employee's name: non-blank, at most 31 characters, free of
+     * {@code : \ / ? * [ ]} and control characters, not beginning or ending with an apostrophe, not the
+     * reserved word "History", and unique among {@code used} IGNORING CASE — Excel treats "Sai" and "SAI" as
+     * the same sheet, and POI throws on the clash. {@code used} holds the lower-cased names already taken.
+     */
+    static String uniqueSheetName(String rawName, Set<String> used) {
+        String base = trimEdges(rawName == null ? "" : rawName.replaceAll("[:\\\\/?*\\[\\]\\p{Cntrl}]", ""));
+        if (base.length() > MAX_SHEET_NAME) base = trimEdges(base.substring(0, MAX_SHEET_NAME));
         if (base.isEmpty()) base = "Employee";
-        if (base.length() > 31) base = base.substring(0, 31);
+        if (base.equalsIgnoreCase("History")) base = "History-1";
 
         String candidate = base;
         int suffix = 2;
-        while (!used.add(candidate)) {
-            String suffixStr = "-" + suffix;
-            int maxBaseLen = 31 - suffixStr.length();
-            candidate = (base.length() > maxBaseLen ? base.substring(0, maxBaseLen) : base) + suffixStr;
-            suffix++;
+        while (!used.add(candidate.toLowerCase(java.util.Locale.ROOT))) {
+            String suffixStr = "-" + suffix++;
+            int maxBaseLen = MAX_SHEET_NAME - suffixStr.length();
+            candidate = trimEdges(base.length() > maxBaseLen ? base.substring(0, maxBaseLen) : base) + suffixStr;
         }
         return candidate;
+    }
+
+    /** Trims whitespace and apostrophes from both ends (a sheet name can't begin or end with an apostrophe). */
+    private static String trimEdges(String s) {
+        int start = 0, end = s.length();
+        while (start < end && (Character.isWhitespace(s.charAt(start)) || s.charAt(start) == '\'')) start++;
+        while (end > start && (Character.isWhitespace(s.charAt(end - 1)) || s.charAt(end - 1) == '\'')) end--;
+        return s.substring(start, end);
     }
 
     public byte[] buildPdf(EodByEmployeeReportDto report) {
@@ -183,7 +218,7 @@ public class ReportExportService {
             document.add(new Paragraph(" "));
 
             for (EodByEmployeeRowDto emp : sortedByName(report)) {
-                Paragraph heading = new Paragraph(emp.employeeName() + "  (" + emp.employeeCode() + ")", headingFont);
+                Paragraph heading = new Paragraph(nonBlank(emp.employeeName()) + "  (" + nonBlank(emp.employeeCode()) + ")", headingFont);
                 document.add(heading);
 
                 String meta = String.join(" · ", nonBlank(emp.designationName()), "Status: " + emp.status(),
@@ -221,13 +256,16 @@ public class ReportExportService {
 
     private List<EodByEmployeeRowDto> sortedByName(EodByEmployeeReportDto report) {
         return report.employees().stream()
-                .sorted(Comparator.comparing(EodByEmployeeRowDto::employeeName))
+                .sorted(Comparator.comparing(EodByEmployeeRowDto::employeeName,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
     }
 
+    // Null-safe: a row with no date sorts last instead of throwing out of the whole export.
     private List<EodByEmployeeEntryDto> sortedByDate(List<EodByEmployeeEntryDto> entries) {
         return entries.stream()
-                .sorted(Comparator.comparing(EodByEmployeeEntryDto::date))
+                .sorted(Comparator.comparing(EodByEmployeeEntryDto::date,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
     }
 
