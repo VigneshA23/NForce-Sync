@@ -15,13 +15,16 @@ import com.nforceone.sync.reports.dto.EodByEmployeeRowDto;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.xssf.streaming.SXSSFSheet;
-import org.apache.poi.xssf.streaming.SXSSFWorkbook;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -30,6 +33,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Renders an already-scoped {@link EodByEmployeeReportDto} into a downloadable file. CSV uses one
@@ -77,8 +81,48 @@ public class ReportExportService {
 
     private static final String[] SHEET_COLUMNS = {"Entry Date", "Project", "Category", "Hours"};
 
+    private static final Logger log = LoggerFactory.getLogger(ReportExportService.class);
+
+    /**
+     * Most task rows one Excel download will hold. The workbook is built fully in memory (see buildExcel),
+     * so this keeps one request from exhausting a small container's heap; a normal report is a few hundred
+     * rows. Over the cap the caller is asked to narrow the date range or pick fewer employees.
+     */
+    static final int MAX_EXCEL_ROWS = 50_000;
+
+    /**
+     * An in-memory {@link XSSFWorkbook}, not the streaming SXSSF one: SXSSF opens a temp file per sheet, so it
+     * needs a writable java.io.tmpdir, which a locked-down container may not have. At these sizes memory is
+     * the cheaper resource. The try-with-resources closes the workbook on every path.
+     *
+     * <p>A failure surfaces as a {@link ResponseStatusException} carrying a safe reason and a reference id; the
+     * full stack trace is logged under the same id. Nothing from the exception message reaches the client.
+     */
     public byte[] buildExcel(EodByEmployeeReportDto report) {
-        try (SXSSFWorkbook workbook = new SXSSFWorkbook()) {
+        int rows = report.employees().stream().mapToInt(e -> e.entries().size()).sum();
+        if (rows > MAX_EXCEL_ROWS) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,
+                    "Excel export is limited to " + MAX_EXCEL_ROWS + " rows and this report has " + rows
+                            + ". Narrow the date range or select fewer employees.");
+        }
+        try {
+            return writeExcel(report);
+        } catch (IOException | RuntimeException e) {
+            String ref = UUID.randomUUID().toString().substring(0, 8);
+            log.error("Excel export failed [ref={}] employees={} rows={}", ref, report.employees().size(), rows, e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Excel export failed: " + safeReason(e) + " (ref " + ref + ")");
+        }
+    }
+
+    /** A reason fit for the client: the kind of failure, never the exception's own text. */
+    private static String safeReason(Exception e) {
+        if (e instanceof IOException) return "the workbook could not be written.";
+        return "an unexpected error occurred while building the workbook.";
+    }
+
+    private byte[] writeExcel(EodByEmployeeReportDto report) throws IOException {
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             CellStyle boldStyle = workbook.createCellStyle();
             org.apache.poi.ss.usermodel.Font boldFont = workbook.createFont();
             boldFont.setBold(true);
@@ -93,7 +137,7 @@ public class ReportExportService {
 
             Set<String> usedSheetNames = new HashSet<>();
             for (EodByEmployeeRowDto emp : sortedByName(report)) {
-                SXSSFSheet sheet = workbook.createSheet(uniqueSheetName(emp.employeeName(), usedSheetNames));
+                Sheet sheet = workbook.createSheet(uniqueSheetName(emp.employeeName(), usedSheetNames));
                 writeEmployeeSheet(sheet, emp, boldStyle, dateStyle);
             }
             // A workbook with no sheets is not a valid .xlsx — Excel opens it with a "repair" prompt — so
@@ -105,14 +149,12 @@ public class ReportExportService {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             workbook.write(out);
             return out.toByteArray();
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to build Excel export", e);
         }
     }
 
     private static final String NO_DATA_SHEET = "No data";
 
-    private void writeNoDataSheet(SXSSFSheet sheet, CellStyle boldStyle) {
+    private void writeNoDataSheet(Sheet sheet, CellStyle boldStyle) {
         Row header = sheet.createRow(0);
         for (int c = 0; c < SHEET_COLUMNS.length; c++) {
             Cell cell = header.createCell(c);
@@ -125,7 +167,7 @@ public class ReportExportService {
         }
     }
 
-    private void writeEmployeeSheet(SXSSFSheet sheet, EodByEmployeeRowDto emp,
+    private void writeEmployeeSheet(Sheet sheet, EodByEmployeeRowDto emp,
                                      CellStyle boldStyle, CellStyle dateStyle) {
         int rowNum = 0;
 

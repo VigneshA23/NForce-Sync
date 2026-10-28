@@ -7,7 +7,17 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 
+import org.apache.poi.util.DefaultTempFileCreationStrategy;
+import org.apache.poi.util.TempFile;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -241,5 +251,81 @@ class ReportExportServiceTest {
     @Test
     void sheetName_reservedHistory_isRenamed() {
         assertNotEquals("history", name("History", new HashSet<>()).toLowerCase());
+    }
+
+    // ── Environment and failure behaviour ──────────────────────────────────────
+
+    /**
+     * A locked-down container (read-only or missing /tmp) must not break Excel: the streaming SXSSF writer opened
+     * a temp file per sheet and failed there; the in-memory workbook needs none. The directory is a path
+     * beneath a regular file, so nothing can ever be created in it. POI caches its temp dir, so its strategy is
+     * pointed at the bad path as well as the system properties.
+     */
+    @Test
+    void excel_worksWhenTheTempDirectoryIsNotWritable(@TempDir Path tmp) throws Exception {
+        Path aFile = Files.createFile(tmp.resolve("not-a-dir"));
+        File unusable = aFile.resolve("tmp").toFile();
+
+        String oldTmp = System.getProperty("java.io.tmpdir");
+        String oldPoiTmp = System.getProperty("poi.tmpdir");
+        System.setProperty("java.io.tmpdir", unusable.getPath());
+        System.setProperty("poi.tmpdir", unusable.getPath());
+        TempFile.setTempFileCreationStrategy(new DefaultTempFileCreationStrategy(unusable));
+        try {
+            byte[] bytes = service.buildExcel(report(
+                    employee(1, "Sai Kumar", entry(DAY, "SYNC", "Development", "6.25")),
+                    employee(2, "Asha Rao", entry(DAY, "SYNC", "Testing", "4"))));
+            try (XSSFWorkbook wb = open(bytes)) {
+                assertEquals(List.of("Asha Rao", "Sai Kumar"), sheetNames(wb));
+            }
+        } finally {
+            restore("java.io.tmpdir", oldTmp);
+            restore("poi.tmpdir", oldPoiTmp);
+            TempFile.setTempFileCreationStrategy(new DefaultTempFileCreationStrategy());
+        }
+    }
+
+    private static void restore(String key, String value) {
+        if (value == null) System.clearProperty(key); else System.setProperty(key, value);
+    }
+
+    @Test
+    void excel_overTheRowCap_isRefusedWithAClearMessage() {
+        List<EodByEmployeeEntryDto> many = new ArrayList<>();
+        for (int i = 0; i <= ReportExportService.MAX_EXCEL_ROWS; i++) many.add(entry(DAY, "SYNC", "Development", "1"));
+        EodByEmployeeRowDto big = new EodByEmployeeRowDto(1L, "Sai Kumar", "NF-1", "Analyst", List.of(), "Acme",
+                "Boss", "ACTIVE", many.size(), BigDecimal.TEN, many);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> service.buildExcel(report(big)));
+        assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, ex.getStatusCode());
+        assertTrue(ex.getReason().contains("Narrow the date range"), ex.getReason());
+    }
+
+    @Test
+    void excel_atTheRowCap_stillBuilds() throws Exception {
+        List<EodByEmployeeEntryDto> many = new ArrayList<>();
+        for (int i = 0; i < 2_000; i++) many.add(entry(DAY, "SYNC", "Development", "1"));
+        EodByEmployeeRowDto emp = new EodByEmployeeRowDto(1L, "Sai Kumar", "NF-1", "Analyst", List.of(), "Acme",
+                "Boss", "ACTIVE", many.size(), BigDecimal.TEN, many);
+        try (XSSFWorkbook wb = open(service.buildExcel(report(emp)))) {
+            // name, meta, totals and header rows (the spacer row is never created) plus the data rows
+            assertEquals(2_000 + 4, wb.getSheetAt(0).getPhysicalNumberOfRows());
+        }
+    }
+
+    @Test
+    void excel_unexpectedFailure_returnsASpecificSafeMessageWithAReference() {
+        // A null element in the entries list throws inside the writer.
+        List<EodByEmployeeEntryDto> poisoned = Arrays.asList(entry(DAY, "SYNC", "Dev", "1"), null);
+        EodByEmployeeRowDto emp = new EodByEmployeeRowDto(1L, "Sai Kumar", "NF-1", "Analyst", List.of(), "Acme",
+                "Boss", "ACTIVE", 2, BigDecimal.TEN, poisoned);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> service.buildExcel(report(emp)));
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, ex.getStatusCode());
+        String msg = ex.getReason();
+        assertTrue(msg.startsWith("Excel export failed: "), msg);
+        assertTrue(msg.matches(".*\\(ref [0-9a-f]{8}\\)$"), msg);
+        // Nothing of the exception's own text, class names or frames reaches the client.
+        assertFalse(msg.contains("NullPointer") || msg.contains("Cannot invoke") || msg.contains("com.nforceone"), msg);
     }
 }
