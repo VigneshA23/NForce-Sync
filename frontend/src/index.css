@@ -779,6 +779,24 @@ textarea:-webkit-autofill:focus {
   }
 }
 
+/* ─── Profile dropdown items — theme-aware (Shell.tsx) ──────────── */
+.nf-profile-item {
+  background: transparent;
+  color: var(--txt-dim);
+  transition: background 120ms, color 120ms;
+}
+.nf-profile-item:hover,
+.nf-profile-item:focus-visible {
+  background: var(--raised2);
+  color: var(--txt);
+}
+.nf-profile-item--danger { color: var(--risk); }
+.nf-profile-item--danger:hover,
+.nf-profile-item--danger:focus-visible {
+  background: color-mix(in srgb, var(--risk) 8%, transparent);
+  color: var(--risk);
+}
+
 /* ─── Popovers & dropdowns — never leave the viewport ───────────── */
 @media (max-width: 640px) {
   .nf-r-popover {
@@ -1005,7 +1023,7 @@ html[data-high-contrast="true"][data-status-cues="true"][data-theme="light"] {
    submission window, approval status and "how it works" live in the header area (see dailyLogParts.tsx).
    The fields sit in a container-query context, so the Next-Day Plan / Remarks and meta-row stacking follow the
    form's OWN width — correct with the sidebar open or as an off-canvas drawer. Tokens only; no new colours. */
-.nf-dl-page { max-width: 1280px; min-width: 0; margin: 0 auto; }
+.nf-dl-page { min-width: 0; }
 .nf-dl-page select, .nf-dl-page input, .nf-dl-page textarea { min-width: 0; max-width: 100%; }
 
 .nf-dl-fields { container-type: inline-size; container-name: nf-dl; min-width: 0; }

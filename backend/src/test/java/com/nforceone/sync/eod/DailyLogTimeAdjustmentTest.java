@@ -37,6 +37,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
 /**
@@ -208,12 +210,81 @@ class DailyLogTimeAdjustmentTest {
         for (DailyLogUser u : everyDailyLogUser()) {
             persistedLines(u, "7.0");
             assertEquals(HttpStatus.BAD_REQUEST,
-                    rejected(plainEntry(u, EodEntry.DayType.WORKING_DAY, LATE, 15), u.user()).getStatusCode(), "under 30 min");
+                    rejected(plainEntry(u, EodEntry.DayType.WORKING_DAY, LATE, 0), u.user()).getStatusCode(), "zero minutes");
             assertEquals(HttpStatus.BAD_REQUEST,
                     rejected(plainEntry(u, EodEntry.DayType.WORKING_DAY, LATE, 150), u.user()).getStatusCode(), "over 2 h");
             assertEquals(HttpStatus.BAD_REQUEST,
                     rejected(plainEntry(u, EodEntry.DayType.WORKING_DAY, null, 60), u.user()).getStatusCode(), "minutes, no type");
         }
+    }
+
+    // ── no minimum: whatever is left in the pool can be used, in 15-minute steps ──
+
+    @Test
+    void twoHoursRemaining_anyStepUpToTwoHoursIsAccepted() {
+        for (DailyLogUser u : everyDailyLogUser()) {
+            // a bench log must total 8.0 minus the adjustment
+            Map<Integer, String> hoursFor = Map.of(15, "7.75", 30, "7.5", 45, "7.25", 60, "7.0", 120, "6.0");
+            for (Map.Entry<Integer, String> step : hoursFor.entrySet()) {
+                persistedLines(u, step.getValue());
+                assertDoesNotThrow(() -> submitChecks(
+                        plainEntry(u, EodEntry.DayType.WORKING_DAY, LATE, step.getKey()), u.user()), step.getKey() + " min");
+            }
+        }
+    }
+
+    @Test
+    void fifteenMinutesRemaining_fifteenIsAccepted_thirtyIsNot() {
+        when(entryRepository.sumAdjustmentMinutesInPeriod(anyLong(), any(), any(), any())).thenReturn(105L);
+        for (DailyLogUser u : everyDailyLogUser()) {
+            persistedLines(u, "7.75");
+            assertDoesNotThrow(() -> submitChecks(plainEntry(u, EodEntry.DayType.WORKING_DAY, LATE, 15), u.user()));
+            persistedLines(u, "7.5");
+            ResponseStatusException ex = rejected(plainEntry(u, EodEntry.DayType.WORKING_DAY, LATE, 30), u.user());
+            assertTrue(ex.getReason().contains("15m of 2h left this month"), ex.getReason());
+        }
+    }
+
+    @Test
+    void nothingRemaining_everyDurationIsRejected() {
+        when(entryRepository.sumAdjustmentMinutesInPeriod(anyLong(), any(), any(), any())).thenReturn(120L);
+        for (DailyLogUser u : everyDailyLogUser()) {
+            persistedLines(u, "7.75");
+            ResponseStatusException ex = rejected(plainEntry(u, EodEntry.DayType.WORKING_DAY, LATE, 15), u.user());
+            assertTrue(ex.getReason().contains("exceeds your monthly time adjustment budget"), ex.getReason());
+        }
+    }
+
+    @Test
+    void editingAnEntry_itsOwnAdjustmentIsNotCountedAgainstTheBalance() {
+        DailyLogUser u = everyDailyLogUser().get(0);
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.user().getEmail())).thenReturn(Optional.of(u.user()));
+        when(entryRepository.findByEmployeeIdAndEntryDate(u.user().getId(), PAST))
+                .thenReturn(Optional.of(plainEntry(u, EodEntry.DayType.WORKING_DAY, LATE, 45)));
+        // 45 of this entry + 60 from other days = 105 spent; without the exclusion the form would see 15 left.
+        when(entryRepository.sumAdjustmentMinutesInPeriod(anyLong(), any(), any(), eq(77L))).thenReturn(60L);
+        when(entryRepository.sumAdjustmentMinutesInPeriod(anyLong(), any(), any(), isNull())).thenReturn(105L);
+        assertEquals(60, service.getTimeAdjustmentContext(PAST, u.user().getEmail()).adjustmentMinutesUsed());
+    }
+
+    @Test
+    void aNewOrChangedOffStepDurationIsRejectedOnSave_anUnchangedLegacyOneIsNot() {
+        DailyLogUser u = everyDailyLogUser().get(0);
+        when(userRepository.findByEmailAndDeletedAtIsNull(u.user().getEmail())).thenReturn(Optional.of(u.user()));
+        // no stored adjustment: 20 minutes is new
+        when(entryRepository.findByEmployeeIdAndEntryDate(u.user().getId(), PAST))
+                .thenReturn(Optional.of(plainEntry(u, EodEntry.DayType.WORKING_DAY, null, null)));
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> service.saveDraft(draft(EodEntry.DayType.WORKING_DAY, LATE, 20), u.user().getEmail()));
+        assertTrue(ex.getReason().contains("multiple of 15 minutes"), ex.getReason());
+        // stored legacy 20: saving 20 again is fine, changing it to 25 is not
+        when(entryRepository.findByEmployeeIdAndEntryDate(u.user().getId(), PAST))
+                .thenReturn(Optional.of(plainEntry(u, EodEntry.DayType.WORKING_DAY, LATE, 20)));
+        assertDoesNotThrow(() -> service.saveDraft(draft(EodEntry.DayType.WORKING_DAY, LATE, 20), u.user().getEmail()));
+        when(entryRepository.findByEmployeeIdAndEntryDate(u.user().getId(), PAST))
+                .thenReturn(Optional.of(plainEntry(u, EodEntry.DayType.WORKING_DAY, LATE, 20)));
+        assertThrows(ResponseStatusException.class,
+                () -> service.saveDraft(draft(EodEntry.DayType.WORKING_DAY, LATE, 25), u.user().getEmail()));
     }
 
     @Test
@@ -317,6 +388,9 @@ class DailyLogTimeAdjustmentTest {
         assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(
                 service, "validateTimeAdjustment", taskEntry(allocated, "7.0", LATE, 60), allocated));
         assertThrows(ResponseStatusException.class, () -> ReflectionTestUtils.invokeMethod(
+                service, "validateTimeAdjustment", taskEntry(allocated, "7.0", LATE, 150), allocated));
+        // no minimum any more: 15 minutes is a valid adjustment
+        assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(
                 service, "validateTimeAdjustment", taskEntry(allocated, "7.0", LATE, 15), allocated));
 
         // 9h of tasks with a 1h adjustment: reference is 8 + 1 = 9, so no overtime; 10h is 1h over.

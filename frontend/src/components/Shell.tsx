@@ -1067,17 +1067,20 @@ export function Shell() {
                     position: 'absolute',
                     top: 'calc(100% + 8px)',
                     right: 0,
-                    width: 224,
-                    background: '#1E2128',
-                    border: '1px solid #2A2E37',
+                    // Sized to its content so a long email shows in full; anchored right, so it grows leftward.
+                    minWidth: 240,
+                    width: 'max-content',
+                    maxWidth: 'calc(100vw - 16px)',
+                    background: 'var(--raised)',
+                    border: '1px solid var(--line)',
                     borderRadius: 10,
-                    boxShadow: '0 8px 24px rgba(0,0,0,.44)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,.28)',
                     zIndex: 100,
                     overflow: 'hidden',
                   }}
                 >
                   {/* Identity header */}
-                  <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid #2A2E37' }}>
+                  <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid var(--line)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{
                         width: 36,
@@ -1094,14 +1097,14 @@ export function Shell() {
                       }}>
                         <AvatarContent photo={photo} initials={user!.initials} />
                       </span>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#E8EAED', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
                           {user!.name}
                         </div>
-                        <div style={{ fontSize: 11, color: '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 11, color: 'var(--txt-dim)' }}>
                           {user!.email}
                         </div>
-                        <div style={{ fontSize: 10, color: ROLE_COLORS[role], fontWeight: 600, marginTop: 3, letterSpacing: '0.04em' }}>
+                        <div style={{ fontSize: 10, color: `color-mix(in srgb, ${ROLE_COLORS[role]} 60%, var(--txt))`, fontWeight: 600, marginTop: 3, letterSpacing: '0.04em' }}>
                           {ROLE_LABELS[role]}
                         </div>
                       </div>
@@ -1114,6 +1117,7 @@ export function Shell() {
                     <Link
                       to="/profile"
                       role="menuitem"
+                      className="nf-profile-item"
                       onClick={() => setProfileOpen(false)}
                       style={{
                         display: 'flex',
@@ -1123,19 +1127,9 @@ export function Shell() {
                         padding: '9px 10px',
                         borderRadius: 6,
                         textDecoration: 'none',
-                        color: '#9BA1AC',
                         fontSize: 13,
                         fontWeight: 500,
                         fontFamily: 'Inter, sans-serif',
-                        transition: 'background 120ms, color 120ms',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,.05)';
-                        e.currentTarget.style.color = '#E8EAED';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'transparent';
-                        e.currentTarget.style.color = '#9BA1AC';
                       }}
                     >
                       <UserCircle2 size={14} aria-hidden="true" />
@@ -1146,6 +1140,7 @@ export function Shell() {
                     <Link
                       to="/preferences"
                       role="menuitem"
+                      className="nf-profile-item"
                       onClick={() => setProfileOpen(false)}
                       style={{
                         display: 'flex',
@@ -1155,19 +1150,9 @@ export function Shell() {
                         padding: '9px 10px',
                         borderRadius: 6,
                         textDecoration: 'none',
-                        color: '#9BA1AC',
                         fontSize: 13,
                         fontWeight: 500,
                         fontFamily: 'Inter, sans-serif',
-                        transition: 'background 120ms, color 120ms',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,.05)';
-                        e.currentTarget.style.color = '#E8EAED';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'transparent';
-                        e.currentTarget.style.color = '#9BA1AC';
                       }}
                     >
                       <Settings size={14} aria-hidden="true" />
@@ -1178,6 +1163,7 @@ export function Shell() {
                     <Link
                       to="/help"
                       role="menuitem"
+                      className="nf-profile-item"
                       onClick={() => setProfileOpen(false)}
                       style={{
                         display: 'flex',
@@ -1187,19 +1173,9 @@ export function Shell() {
                         padding: '9px 10px',
                         borderRadius: 6,
                         textDecoration: 'none',
-                        color: '#9BA1AC',
                         fontSize: 13,
                         fontWeight: 500,
                         fontFamily: 'Inter, sans-serif',
-                        transition: 'background 120ms, color 120ms',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,.05)';
-                        e.currentTarget.style.color = '#E8EAED';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'transparent';
-                        e.currentTarget.style.color = '#9BA1AC';
                       }}
                     >
                       <HelpCircle size={14} aria-hidden="true" />
@@ -1210,6 +1186,7 @@ export function Shell() {
                     <Link
                       to="/change-password"
                       role="menuitem"
+                      className="nf-profile-item"
                       onClick={() => setProfileOpen(false)}
                       style={{
                         display: 'flex',
@@ -1219,19 +1196,9 @@ export function Shell() {
                         padding: '9px 10px',
                         borderRadius: 6,
                         textDecoration: 'none',
-                        color: '#9BA1AC',
                         fontSize: 13,
                         fontWeight: 500,
                         fontFamily: 'Inter, sans-serif',
-                        transition: 'background 120ms, color 120ms',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,.05)';
-                        e.currentTarget.style.color = '#E8EAED';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'transparent';
-                        e.currentTarget.style.color = '#9BA1AC';
                       }}
                     >
                       <KeyRound size={14} aria-hidden="true" />
@@ -1239,11 +1206,12 @@ export function Shell() {
                     </Link>
 
                     {/* Divider before destructive action */}
-                    <div style={{ height: 1, background: '#2A2E37', margin: '4px 2px' }} />
+                    <div style={{ height: 1, background: 'var(--line)', margin: '4px 2px' }} />
 
                     {/* Sign out — handler unchanged: clears session, redirects /login */}
                     <button
                       role="menuitem"
+                      className="nf-profile-item nf-profile-item--danger"
                       onClick={() => { setProfileOpen(false); logout(); navigate('/login'); }}
                       style={{
                         display: 'flex',
@@ -1251,24 +1219,13 @@ export function Shell() {
                         gap: 8,
                         width: '100%',
                         padding: '9px 10px',
-                        background: 'transparent',
                         border: 'none',
                         borderRadius: 6,
                         cursor: 'pointer',
-                        color: 'var(--risk)',
                         fontSize: 13,
                         fontWeight: 500,
                         fontFamily: 'Inter, sans-serif',
-                        transition: 'background 120ms, color 120ms',
                         textAlign: 'left',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'color-mix(in srgb, var(--risk) 8%, transparent)';
-                        e.currentTarget.style.color = 'var(--risk)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'transparent';
-                        e.currentTarget.style.color = 'var(--risk)';
                       }}
                     >
                       <LogOut size={14} aria-hidden="true" />

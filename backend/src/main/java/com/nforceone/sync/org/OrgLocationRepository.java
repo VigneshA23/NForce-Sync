@@ -7,4 +7,5 @@ import java.util.List;
 public interface OrgLocationRepository extends JpaRepository<OrgLocation, Long> {
     boolean existsByName(String name);
     List<OrgLocation> findAllByOrderByNameAsc();
+    List<OrgLocation> findAllByActiveTrueOrderByNameAsc();
 }

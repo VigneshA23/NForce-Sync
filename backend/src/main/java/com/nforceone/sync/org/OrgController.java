@@ -56,8 +56,8 @@ public class OrgController {
 
     @GetMapping("/departments")
     @PreAuthorize("isAuthenticated()")
-    public List<DepartmentDto> listDepartments() {
-        return orgService.listDepartments();
+    public List<DepartmentDto> listDepartments(@RequestParam(defaultValue = "false") boolean activeOnly) {
+        return orgService.listDepartments(activeOnly);
     }
 
     @PostMapping("/departments")
@@ -84,8 +84,8 @@ public class OrgController {
 
     @GetMapping("/designations")
     @PreAuthorize("isAuthenticated()")
-    public List<DesignationDto> listDesignations() {
-        return orgService.listDesignations();
+    public List<DesignationDto> listDesignations(@RequestParam(defaultValue = "false") boolean activeOnly) {
+        return orgService.listDesignations(activeOnly);
     }
 
     @PostMapping("/designations")
@@ -112,8 +112,8 @@ public class OrgController {
 
     @GetMapping("/locations")
     @PreAuthorize("isAuthenticated()")
-    public List<OrgLocationDto> listLocations() {
-        return orgService.listLocations();
+    public List<OrgLocationDto> listLocations(@RequestParam(defaultValue = "false") boolean activeOnly) {
+        return orgService.listLocations(activeOnly);
     }
 
     @PostMapping("/locations")

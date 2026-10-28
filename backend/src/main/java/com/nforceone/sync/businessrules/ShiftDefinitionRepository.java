@@ -8,6 +8,7 @@ import java.util.List;
 
 public interface ShiftDefinitionRepository extends JpaRepository<ShiftDefinition, Long> {
     List<ShiftDefinition> findAllByOrderByStartTimeAsc();
+    List<ShiftDefinition> findAllByActiveTrueOrderByStartTimeAsc();
     boolean existsByName(String name);
 
     // Legacy `employee` table (no JPA entity — predates the AppUser-based employee

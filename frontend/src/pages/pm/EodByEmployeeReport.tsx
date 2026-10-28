@@ -427,8 +427,10 @@ const ENTRY_TABLE_COLUMNS = '100px 1.1fr 1.4fr 62px';
 const ENTRY_TABLE_MIN_WIDTH = 460;
 
 function RosterFlow({
-  employees, isLoading, onExport, exportingKey, selectedId, setSelectedId, emptyMessage,
+  employees, isLoading, onExport, exportingKey, selectedId, setSelectedId, emptyMessage, noProjectLabel,
 }: {
+  /** What the Project column shows for an entry with no project; default is a dash. */
+  noProjectLabel?: string;
   /** Replaces the default "no employees" wording (set by a report source that has its own). */
   emptyMessage?: string;
   employees: EodByEmployeeRowDto[];
@@ -634,7 +636,7 @@ function RosterFlow({
                       </>
                     ) : ''}
                   </div>
-                  <div style={{ color: 'var(--txt)' }}>{e.projectCode ?? '—'}</div>
+                  <div style={{ color: 'var(--txt)' }}>{e.projectCode ?? noProjectLabel ?? '—'}</div>
                   <div style={{ color: 'var(--txt-mut)' }}>{e.categoryName ?? '—'}</div>
                   <div style={{ textAlign: 'right', fontWeight: 700, color: 'var(--txt)' }}>{hrs(e.hours)}</div>
                 </div>
@@ -670,8 +672,10 @@ const summaryHeaderCellStyle: React.CSSProperties = {
 };
 
 function TeamFlow({
-  employees, isLoading, onExport, exportingKey, emptyMessage,
+  employees, isLoading, onExport, exportingKey, emptyMessage, noProjectLabel,
 }: {
+  /** What the Project and Assigned-to columns show when there is no project; default is a dash. */
+  noProjectLabel?: string;
   /** Replaces the default "no entries" wording (set by a report source that has its own). */
   emptyMessage?: string;
   employees: EodByEmployeeRowDto[];
@@ -761,7 +765,7 @@ function TeamFlow({
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}
                   >
-                    {r.projectCodes.length > 0 ? r.projectCodes.join(', ') : '—'}
+                    {r.projectCodes.length > 0 ? r.projectCodes.join(', ') : (noProjectLabel ?? '—')}
                   </span>
                   <span style={{ fontSize: 11.5, color: 'var(--txt-dim)', textAlign: 'right' }}>{r.entryCount}</span>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--txt)', textAlign: 'right' }}>{hrs(r.totalHours)}</span>
@@ -811,7 +815,7 @@ function TeamFlow({
                         </>
                       ) : ''}
                     </span>
-                    <span>{e.projectCode ?? '—'}</span>
+                    <span>{e.projectCode ?? noProjectLabel ?? '—'}</span>
                     <span>{e.categoryName ?? '—'}</span>
                     <span style={{ textAlign: 'right', color: 'var(--txt)' }}>{hrs(e.hours)}</span>
                   </div>
@@ -835,7 +839,11 @@ function TeamFlow({
 
 // ── main ───────────────────────────────────────────────────────────────────────
 
-export default function EodByEmployeeReport({ source = PM_REPORT_SOURCE }: { source?: EodReportSource } = {}) {
+export default function EodByEmployeeReport({ source = PM_REPORT_SOURCE, noProjectLabel }: {
+  source?: EodReportSource;
+  /** Shown instead of a dash for an entry (or employee) with no project. Only the Reporting Manager page passes it. */
+  noProjectLabel?: string;
+} = {}) {
   // Lazy initialiser: the default range is computed from the local clock when the page mounts.
   const [filters, setFilters] = useState<Filters>(() => defaultFilters());
   // Preset pills: picking one sets From/To; editing either date by hand makes Custom active; Reset
@@ -962,9 +970,10 @@ export default function EodByEmployeeReport({ source = PM_REPORT_SOURCE }: { sou
         <RosterFlow
           employees={employees} isLoading={isLoading} onExport={runExport} exportingKey={exportingKey}
           selectedId={selectedId} setSelectedId={setSelectedId} emptyMessage={source.emptyMessage}
+          noProjectLabel={noProjectLabel}
         />
       ) : (
-        <TeamFlow employees={employees} isLoading={isLoading} onExport={runExport} exportingKey={exportingKey} emptyMessage={source.emptyMessage} />
+        <TeamFlow employees={employees} isLoading={isLoading} onExport={runExport} exportingKey={exportingKey} emptyMessage={source.emptyMessage} noProjectLabel={noProjectLabel} />
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 11.5, color: 'var(--txt-dim)' }}>

@@ -206,7 +206,8 @@ public class RmEodByEmployeeReportService {
                 // Same rule as the PM and Lead reports: only approved days count towards hours and entries.
                 if (entry.getStatus() != EodEntry.Status.APPROVED) continue;
                 if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
-                    // One row per log line: Bench/Daily Log category, no project, hours counted in the totals.
+                    // One row per log line: Bench/Daily Log category, no project (labelled as such so the report never
+                    // shows a bare dash for it), hours counted in the totals.
                     String dayType = entry.getDayType() != null ? entry.getDayType().name() : null;
                     // Same per-day repetition the task rows carry: the report prints it once, on the day's first row.
                     String adjType = entry.getTimeAdjustmentType() != null ? entry.getTimeAdjustmentType().name() : null;
@@ -218,14 +219,14 @@ public class RmEodByEmployeeReportService {
                         if (legacy != null && legacy.signum() > 0) {
                             totalHours = totalHours.add(legacy);
                             entryDtos.add(new EodByEmployeeEntryDto(entry.getId(), entry.getEntryDate(),
-                                    null, null, legacy, adjType, adjMinutes, dayType));
+                                    ProjectLabels.NO_PROJECTS_ASSIGNED, null, legacy, adjType, adjMinutes, dayType));
                         }
                     }
                     for (EodLogLine line : lines) {
                         BigDecimal hours = line.getHours() != null ? line.getHours() : BigDecimal.ZERO;
                         totalHours = totalHours.add(hours);
                         entryDtos.add(new EodByEmployeeEntryDto(entry.getId(), entry.getEntryDate(),
-                                null, line.getCategory() != null ? line.getCategory().getName() : null,
+                                ProjectLabels.NO_PROJECTS_ASSIGNED, line.getCategory() != null ? line.getCategory().getName() : null,
                                 hours, adjType, adjMinutes, dayType));
                     }
                     continue;
@@ -235,7 +236,7 @@ public class RmEodByEmployeeReportService {
                     totalHours = totalHours.add(hours);
                     entryDtos.add(new EodByEmployeeEntryDto(
                             entry.getId(), entry.getEntryDate(),
-                            task.getProject() != null ? task.getProject().getCode() : null,
+                            task.getProject() != null ? task.getProject().getCode() : ProjectLabels.NO_PROJECTS_ASSIGNED,
                             task.getTaskCategory() != null ? task.getTaskCategory().getName() : null,
                             hours,
                             entry.getTimeAdjustmentType() != null ? entry.getTimeAdjustmentType().name() : null,

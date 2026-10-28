@@ -13,7 +13,11 @@ import com.nforceone.sync.auth.PasswordResetTokenRepository;
 import com.nforceone.sync.auth.dto.UserDto;
 import com.nforceone.sync.email.EmailService;
 import com.nforceone.sync.notification.NotificationService;
+import com.nforceone.sync.businessrules.ShiftDefinition;
+import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
+import com.nforceone.sync.org.Department;
 import com.nforceone.sync.org.DepartmentRepository;
+import com.nforceone.sync.org.Designation;
 import com.nforceone.sync.org.DesignationRepository;
 import com.nforceone.sync.org.OrgLocation;
 import com.nforceone.sync.org.OrgLocationRepository;
@@ -58,6 +62,7 @@ public class UserService {
     private final DepartmentRepository departmentRepository;
     private final DesignationRepository designationRepository;
     private final OrgLocationRepository locationRepository;
+    private final ShiftDefinitionRepository shiftRepository;
     private final EmailService emailService;
     private final NotificationService notificationService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
@@ -69,6 +74,7 @@ public class UserService {
                        DepartmentRepository departmentRepository,
                        DesignationRepository designationRepository,
                        OrgLocationRepository locationRepository,
+                       ShiftDefinitionRepository shiftRepository,
                        EmailService emailService,
                        NotificationService notificationService,
                        PasswordResetTokenRepository passwordResetTokenRepository) {
@@ -79,7 +85,8 @@ public class UserService {
         this.departmentRepository  = departmentRepository;
         this.designationRepository = designationRepository;
         this.locationRepository    = locationRepository;
-        this.emailService          = emailService;
+        this.shiftRepository       = shiftRepository;
+        this.emailService         = emailService;
         this.notificationService   = notificationService;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
     }
@@ -102,7 +109,8 @@ public class UserService {
         }
         AppUser actor = requireActorByEmail(actingEmail);
 
-        requireOrgReferencesExist(request.departmentId(), request.designationId(), request.locationId());
+        requireAssignableOrgReferences(null, request.departmentId(), request.designationId(),
+                request.locationId(), request.shiftId());
 
         String tempPassword = generateTempPassword();
 
@@ -191,7 +199,8 @@ public class UserService {
             assertSurvivingSuperAdmin();
         }
 
-        requireOrgReferencesExist(request.departmentId(), request.designationId(), request.locationId());
+        requireAssignableOrgReferences(user, request.departmentId(), request.designationId(),
+                request.locationId(), request.shiftId());
 
         // Reassigning to a legacy role (Delivery Manager, Finance Admin, Leadership Viewer) is
         // blocked going forward, but a user who already holds one is left untouched as long as
@@ -321,15 +330,40 @@ public class UserService {
         }
     }
 
-    private void requireOrgReferencesExist(Long departmentId, Long designationId, Long locationId) {
-        if (departmentId != null && !departmentRepository.existsById(departmentId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Department not found");
+    private static final String ORG_MASTERS = "Organization Masters";
+
+    /** Department, Designation, Location and Shift: each must exist and be assignable. See {@link #requireAssignable}. */
+    private void requireAssignableOrgReferences(AppUser current, Long departmentId, Long designationId,
+                                                Long locationId, Long shiftId) {
+        requireAssignable("Department", ORG_MASTERS, departmentId, current == null ? null : current.getDepartmentId(),
+                departmentRepository::findById, Department::isActive, Department::getName);
+        requireAssignable("Designation", ORG_MASTERS, designationId, current == null ? null : current.getDesignationId(),
+                designationRepository::findById, Designation::isActive, Designation::getTitle);
+        requireAssignable("Location", ORG_MASTERS, locationId, current == null ? null : current.getLocationId(),
+                locationRepository::findById, OrgLocation::isActive, OrgLocation::getName);
+        requireAssignable("Shift", "Business Rules", shiftId, current == null ? null : current.getShiftId(),
+                shiftRepository::findById, ShiftDefinition::isActive, ShiftDefinition::getName);
+    }
+
+    /**
+     * An id must exist and be active to be assigned. Null means "none" and is always valid.
+     * {@code currentId} is the user's present value (null on create): keeping it unchanged is
+     * always allowed, so an existing user on a since-deactivated value can still have their other
+     * fields saved. Only choosing a different inactive value is rejected.
+     */
+    private <T> void requireAssignable(String label, String reactivateIn, Long id, Long currentId,
+                                       java.util.function.Function<Long, java.util.Optional<T>> finder,
+                                       java.util.function.Predicate<T> isActive,
+                                       java.util.function.Function<T, String> nameOf) {
+        if (id == null) {
+            return;
         }
-        if (designationId != null && !designationRepository.existsById(designationId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Designation not found");
-        }
-        if (locationId != null && !locationRepository.existsById(locationId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Location not found");
+        T item = finder.apply(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, label + " not found"));
+        if (!isActive.test(item) && !id.equals(currentId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    label + " \"" + nameOf.apply(item) + "\" is inactive and cannot be assigned. "
+                    + "Reactivate it in " + reactivateIn + " first.");
         }
     }
 

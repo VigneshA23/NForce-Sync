@@ -7,4 +7,5 @@ import java.util.List;
 public interface DepartmentRepository extends JpaRepository<Department, Long> {
     boolean existsByName(String name);
     List<Department> findAllByOrderByNameAsc();
+    List<Department> findAllByActiveTrueOrderByNameAsc();
 }

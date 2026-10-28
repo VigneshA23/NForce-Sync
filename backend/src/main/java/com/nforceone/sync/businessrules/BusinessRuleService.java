@@ -149,8 +149,12 @@ public class BusinessRuleService {
     // ── Shift timings ───────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<ShiftDefinitionDto> listShifts() {
-        return shiftRepository.findAllByOrderByStartTimeAsc().stream()
+    public List<ShiftDefinitionDto> listShifts(boolean activeOnly) {
+        // The Shift Timings page needs every shift to manage; the Add/Edit User picker passes activeOnly.
+        List<ShiftDefinition> rows = activeOnly
+                ? shiftRepository.findAllByActiveTrueOrderByStartTimeAsc()
+                : shiftRepository.findAllByOrderByStartTimeAsc();
+        return rows.stream()
                 .map(s -> ShiftDefinitionDto.from(s, shiftRepository.countEmployeesAssigned(s.getName())))
                 .toList();
     }

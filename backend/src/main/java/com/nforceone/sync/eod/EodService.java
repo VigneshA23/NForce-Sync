@@ -78,8 +78,8 @@ public class EodService {
      *  unlimited adjustments, matching what getTimeAdjustmentContext already displays. */
     private static final int FALLBACK_ADJUSTMENT_ALLOWANCE = 0;
 
-    /** Per-use duration limits for a time adjustment. Distinct from the monthly allowance. */
-    private static final int MIN_ADJUSTMENT_MINUTES = 30;
+    /** Per-use duration rules for a time adjustment. Distinct from the monthly allowance. */
+    private static final int ADJUSTMENT_STEP_MINUTES = 15;
     private static final int MAX_ADJUSTMENT_MINUTES = 120;
 
     private static final java.util.Set<EodEntry.Status> NEEDS_COMMENT = java.util.Set.of(
@@ -226,8 +226,9 @@ public class EodService {
         if (entry.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG) {
             EodEntry.DayType plainDayType = resolveDayType(request.dayType(), request.entryDate());
             // Same rule as the task form: a time adjustment is a shift on a full Working day, so switching day
-            // type must not leave a stale one behind. Validated (type, 30–120 min, shift, monthly pool) on submit.
+            // type must not leave a stale one behind. Validated (type, 15-minute steps up to 2 h, shift, monthly pool) on submit.
             boolean plainAdjustmentAllowed = plainDayType == EodEntry.DayType.WORKING_DAY;
+            if (plainAdjustmentAllowed) rejectOffStepAdjustment(entry, request.timeAdjustmentType(), request.timeAdjustmentMinutes());
             entry.setTimeAdjustmentType(plainAdjustmentAllowed ? request.timeAdjustmentType() : null);
             entry.setTimeAdjustmentMinutes(plainAdjustmentAllowed ? request.timeAdjustmentMinutes() : null);
             boolean plainIsWeekend = plainDayType == EodEntry.DayType.WEEKEND;
@@ -373,6 +374,7 @@ public class EodService {
         // A time adjustment is a shift on a working day, so switching day type must not leave a
         // stale one behind. Cleared unconditionally for LEAVE and HOLIDAY.
         boolean adjustmentAllowed = dayType == EodEntry.DayType.WORKING_DAY;
+        if (adjustmentAllowed) rejectOffStepAdjustment(entry, request.timeAdjustmentType(), request.timeAdjustmentMinutes());
         entry.setTimeAdjustmentType(adjustmentAllowed ? request.timeAdjustmentType() : null);
         entry.setTimeAdjustmentMinutes(adjustmentAllowed ? request.timeAdjustmentMinutes() : null);
 
@@ -1181,6 +1183,23 @@ public class EodService {
         return entryRepository.sumAdjustmentMinutesInPeriod(employeeId, from, to, excludeEntryId);
     }
 
+    /**
+     * A new or changed adjustment must be a positive multiple of ADJUSTMENT_STEP_MINUTES. An entry that already
+     * carries an off-step legacy value may keep it (same type, same minutes) so editing the rest of the entry is
+     * never blocked. Runs where the value is saved, because that is the only place it can be told apart from the
+     * stored one — submit only sees what was saved.
+     */
+    private void rejectOffStepAdjustment(EodEntry entry, EodEntry.TimeAdjustmentType newType, Integer newMinutes) {
+        if (newMinutes == null || newMinutes <= 0 || newMinutes % ADJUSTMENT_STEP_MINUTES == 0) return;
+        boolean unchanged = newType != null && newType == entry.getTimeAdjustmentType()
+                && newMinutes.equals(entry.getTimeAdjustmentMinutes());
+        if (!unchanged) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    (newType != null ? label(newType) : "Time adjustment") + " must be a multiple of "
+                            + ADJUSTMENT_STEP_MINUTES + " minutes (got " + newMinutes + " minutes).");
+        }
+    }
+
     /** No-op when the entry carries no adjustment. */
     private void validateTimeAdjustment(EodEntry entry, AppUser employee) {
         EodEntry.TimeAdjustmentType type = entry.getTimeAdjustmentType();
@@ -1201,10 +1220,12 @@ public class EodService {
                     "Enter a valid duration for this time adjustment.");
         }
         // Applies to ALL three types, not just late arrival. Re-checked here because the UI
-        // constraint is a convenience, not a guarantee.
-        if (minutes < MIN_ADJUSTMENT_MINUTES || minutes > MAX_ADJUSTMENT_MINUTES) {
+        // constraint is a convenience, not a guarantee. There is no minimum: whatever is left in the
+        // shared pool can be used, in whole 15-minute steps (the step is enforced when the value is
+        // saved — see rejectOffStepAdjustment — so a legacy off-step value can still be resubmitted).
+        if (minutes > MAX_ADJUSTMENT_MINUTES) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    label(type) + " must be between 30 minutes and 2 hours (got " + minutes + " minutes).");
+                    label(type) + " cannot be longer than 2 hours (got " + minutes + " minutes).");
         }
 
         ShiftDefinition shift = shiftFor(employee);

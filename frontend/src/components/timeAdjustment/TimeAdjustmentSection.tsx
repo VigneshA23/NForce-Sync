@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { formatTime12h } from '../../lib/date';
 import {
-  ADJ_MINUTE_OPTIONS, ADJ_TYPES, MIN_ADJ_MINUTES, minutesLabel,
+  ADJ_TYPES, minutesLabel,
 } from './timeAdjustment';
 import type { TimeAdjustmentState } from './useTimeAdjustment';
 
@@ -22,7 +22,7 @@ export function TimeAdjustmentSection({ ta, dailyHoursCap, isEditable, isReadOnl
 }) {
   const {
     adjEnabled, adjType, adjMinutes, adjMins, adjContext, adjBudget, adjUsedMins, adjRemaining, adjExhausted,
-    shiftMins, canRequestAdj, showBalance,
+    shiftMins, canRequestAdj, showBalance, durationOptions, unchangedFromSaved,
   } = ta;
   const breakMins = Math.max(0, shiftMins - dailyHoursCap * 60);
 
@@ -126,7 +126,7 @@ export function TimeAdjustmentSection({ ta, dailyHoursCap, isEditable, isReadOnl
                 )}
               </div>
 
-              {/* Duration — 30 minutes to 2 hours, further capped by what is left in the pool so an
+              {/* Duration — 15-minute steps up to what is left in the pool (and the 2-hour / shift caps), so an
                   unaffordable option cannot be picked at all. Server re-validates. */}
               {adjType && (
                 <div style={{ maxWidth: 240, marginBottom: 14 }}>
@@ -134,17 +134,21 @@ export function TimeAdjustmentSection({ ta, dailyHoursCap, isEditable, isReadOnl
                   <select
                     value={adjMinutes}
                     onChange={e => ta.changeMinutes(e.target.value)}
+                    disabled={durationOptions.length === 0 && !unchangedFromSaved}
                     style={selectStyle}
                   >
                     <option value="">Select Time</option>
-                    {ADJ_MINUTE_OPTIONS.filter(m => m <= adjRemaining).map(m => (
+                    {/* An off-step legacy value already saved on this entry stays selectable so editing is not blocked. */}
+                    {unchangedFromSaved && !durationOptions.includes(adjMins) && (
+                      <option value={adjMins}>{minutesLabel(adjMins)}</option>
+                    )}
+                    {durationOptions.map(m => (
                       <option key={m} value={m}>{minutesLabel(m)}</option>
                     ))}
                   </select>
-                  {/* The shortest adjustment is 30 minutes, so a smaller remainder buys nothing. */}
-                  {adjRemaining < MIN_ADJ_MINUTES && !adjExhausted && (
-                    <div style={{ fontSize: 11, color: 'var(--warn)', marginTop: 6 }}>
-                      Only {minutesLabel(adjRemaining)} left this month - below the {MIN_ADJ_MINUTES}-minute minimum.
+                  {adjExhausted && (
+                    <div role="status" style={{ fontSize: 11, color: 'var(--warn)', marginTop: 6 }}>
+                      No time adjustment balance left this month ({minutesLabel(adjUsedMins)} of {minutesLabel(adjBudget)} used).
                     </div>
                   )}
                 </div>

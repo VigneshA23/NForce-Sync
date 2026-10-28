@@ -6,6 +6,7 @@ import com.nforceone.sync.auth.AuditLogRepository;
 import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.auth.PasswordResetTokenRepository;
+import com.nforceone.sync.businessrules.ShiftDefinitionRepository;
 import com.nforceone.sync.email.EmailService;
 import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.org.DepartmentRepository;
@@ -39,6 +40,7 @@ class UserServiceUpdateManagerTest {
     @Mock DepartmentRepository departmentRepository;
     @Mock DesignationRepository designationRepository;
     @Mock OrgLocationRepository locationRepository;
+    @Mock ShiftDefinitionRepository shiftRepository;
     @Mock EmailService emailService;
     @Mock NotificationService notificationService;
     @Mock PasswordResetTokenRepository passwordResetTokenRepository;
@@ -60,7 +62,7 @@ class UserServiceUpdateManagerTest {
     @BeforeEach
     void setUp() {
         service = new UserService(userRepository, auditLogRepository, passwordEncoder, mapper,
-                departmentRepository, designationRepository, locationRepository,
+                departmentRepository, designationRepository, locationRepository, shiftRepository,
                 emailService, notificationService, passwordResetTokenRepository);
         actor = user(1, AppUser.Role.ADMIN);
         oldManager = user(10, AppUser.Role.SUPERADMIN);

@@ -763,7 +763,7 @@ function DepartmentsTab() {
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['org', 'departments'],
-    queryFn: listDepartments,
+    queryFn: () => listDepartments(),
   });
 
   const addMutation = useMutation({
@@ -894,7 +894,7 @@ function DesignationsTab() {
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['org', 'designations'],
-    queryFn: listDesignations,
+    queryFn: () => listDesignations(),
   });
 
   const addMutation = useMutation({
@@ -1023,7 +1023,7 @@ function LocationsTab() {
 
   const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['org', 'locations'],
-    queryFn: listLocations,
+    queryFn: () => listLocations(),
   });
 
   const addMutation = useMutation({

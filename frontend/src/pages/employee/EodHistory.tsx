@@ -1,3 +1,4 @@
+import { NO_PROJECT_ASSIGNED } from '../../lib/projectLabels';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -285,11 +286,15 @@ export default function EodHistory() {
     return entry.tasks.reduce((sum, t) => sum + (Number(t.hours) || 0), 0);
   };
 
+  // Derived from the entry itself, never from the employee's current allocation: an entry with project lines names
+  // its project(s); one without (a bench or Daily Log entry) says so. Only a Missing row has nothing to describe.
   const projectSummary = (entry: EodHistoryEntryDto): string => {
-    if (entry.entryForm === 'PLAIN_LOG') return 'Daily log';
-    const codes = Array.from(new Set(entry.tasks.map(t => t.projectCode).filter(Boolean))) as string[];
-    if (codes.length === 0) return '-';
-    return codes.length === 1 ? codes[0] : `${codes[0]} +${codes.length - 1}`;
+    if (entry.status === 'MISSED') return '-';
+    const names = Array.from(new Set(
+      (entry.tasks ?? []).map(t => t.projectName ?? t.projectCode).filter(Boolean),
+    )) as string[];
+    if (names.length === 0) return NO_PROJECT_ASSIGNED;
+    return names.length === 1 ? names[0] : `${names[0]} +${names.length - 1} more`;
   };
 
   const taskSummary = (entry: EodHistoryEntryDto): string => {

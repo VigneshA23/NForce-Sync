@@ -292,8 +292,14 @@ export interface OrgLocationDto {
   active: boolean;
 }
 
-export async function listDepartments(): Promise<DepartmentDto[]> {
-  const res = await api.get<DepartmentDto[]>('/org/departments');
+// The list* functions below take `activeOnly` for the Add/Edit User pickers; the default returns
+// every row, inactive included. Checked with `=== true`, not truthiness: they are passed straight
+// as a React Query `queryFn`, which hands them a context object as the first argument.
+const activeOnlyParams = (activeOnly?: boolean) =>
+  activeOnly === true ? { params: { activeOnly: true } } : undefined;
+
+export async function listDepartments(activeOnly?: boolean): Promise<DepartmentDto[]> {
+  const res = await api.get<DepartmentDto[]>('/org/departments', activeOnlyParams(activeOnly));
   return res.data;
 }
 
@@ -307,8 +313,8 @@ export async function toggleDepartment(id: number): Promise<DepartmentDto> {
   return res.data;
 }
 
-export async function listDesignations(): Promise<DesignationDto[]> {
-  const res = await api.get<DesignationDto[]>('/org/designations');
+export async function listDesignations(activeOnly?: boolean): Promise<DesignationDto[]> {
+  const res = await api.get<DesignationDto[]>('/org/designations', activeOnlyParams(activeOnly));
   return res.data;
 }
 
@@ -322,8 +328,8 @@ export async function toggleDesignation(id: number): Promise<DesignationDto> {
   return res.data;
 }
 
-export async function listLocations(): Promise<OrgLocationDto[]> {
-  const res = await api.get<OrgLocationDto[]>('/org/locations');
+export async function listLocations(activeOnly?: boolean): Promise<OrgLocationDto[]> {
+  const res = await api.get<OrgLocationDto[]>('/org/locations', activeOnlyParams(activeOnly));
   return res.data;
 }
 
@@ -350,8 +356,8 @@ export interface ShiftDefinitionDto {
   assignedEmployeeCount: number;
 }
 
-export async function listShifts(): Promise<ShiftDefinitionDto[]> {
-  const res = await api.get<ShiftDefinitionDto[]>('/admin/business-rules/shifts');
+export async function listShifts(activeOnly?: boolean): Promise<ShiftDefinitionDto[]> {
+  const res = await api.get<ShiftDefinitionDto[]>('/admin/business-rules/shifts', activeOnlyParams(activeOnly));
   return res.data;
 }
 

@@ -6,16 +6,21 @@
 import { formatTime12h } from '../../lib/date';
 import type { TimeAdjustmentContextDto } from '../../api/eod';
 
-/** Per-use duration limits for a time adjustment. Mirrored server-side in EodService. */
-export const MIN_ADJ_MINUTES = 30;
+/** Per-use duration rules for a time adjustment. Mirrored server-side in EodService. */
+export const ADJ_STEP_MINUTES = 15;
 export const MAX_ADJ_MINUTES = 120;
 
 /**
- * Duration choices for ALL three adjustment types: 30 minutes to 2 hours in 15-minute steps.
- * A fixed list rather than free text means the 30-120 policy range cannot be violated from the
- * UI at all. The server still re-checks it — the dropdown is a convenience, not the guarantee.
+ * Duration choices for ALL three adjustment types: 15-minute steps from one step up to the smallest of
+ * the per-use cap, the shift length and what is left in the month's shared pool. The server still
+ * re-checks every rule — the dropdown is a convenience, not the guarantee.
  */
-export const ADJ_MINUTE_OPTIONS = [30, 45, 60, 75, 90, 105, 120];
+export function adjustmentDurationOptions(remaining: number, shiftMins: number): number[] {
+  const ceiling = Math.min(MAX_ADJ_MINUTES, shiftMins > 0 ? shiftMins : MAX_ADJ_MINUTES, Math.max(0, remaining));
+  const out: number[] = [];
+  for (let m = ADJ_STEP_MINUTES; m <= ceiling; m += ADJ_STEP_MINUTES) out.push(m);
+  return out;
+}
 
 export const ADJ_TYPES = [
   { value: 'LATE_ARRIVAL', label: 'Late arrival',         durationLabel: 'Will come late by' },
@@ -47,13 +52,14 @@ export function minutesToHm(mins: number): string {
 
 /** Live impact line. Exact wording matches the approved prototype. */
 export function adjustmentBanner(
-  ctx: TimeAdjustmentContextDto | undefined, type: string | null, mins: number,
+  ctx: TimeAdjustmentContextDto | undefined, type: string | null, mins: number, maxMins?: number,
 ): string {
   if (!type) return 'Select a time adjustment type to see the calculated impact.';
   if (mins <= 0) {
+    const upTo = minutesLabel(maxMins ?? MAX_ADJ_MINUTES);
     return type === 'LATE_ARRIVAL'
-      ? 'Choose how late you will arrive (30 minutes to 2 hours).'
-      : 'Choose a duration (30 minutes to 2 hours).';
+      ? `Choose how late you will arrive (up to ${upTo}).`
+      : `Choose a duration (up to ${upTo}).`;
   }
   const start = ctx?.shiftStart ? timeToMinutes(ctx.shiftStart) : 0;
   const end   = ctx?.shiftEnd   ? timeToMinutes(ctx.shiftEnd)   : 0;
@@ -75,6 +81,8 @@ export interface AdjustmentInput {
   shiftMins: number;
   remaining: number;
   budget: number;
+  /** The entry being edited already carries this exact (possibly legacy, off-step) duration for this type. */
+  unchangedFromSaved?: boolean;
 }
 
 /** Client-side mirror of EodService.validateTimeAdjustment. Empty = valid (or no adjustment asked for). */
@@ -86,8 +94,11 @@ export function validateAdjustmentInput(a: AdjustmentInput): string[] {
   const label = ADJ_TYPES.find(t => t.value === a.type)?.label ?? 'Time adjustment';
   if (a.mins <= 0) return ['Enter a valid duration for this time adjustment.'];
   const errs: string[] = [];
-  if (a.mins < MIN_ADJ_MINUTES || a.mins > MAX_ADJ_MINUTES) {
-    errs.push(`${label} must be between 30 minutes and 2 hours (got ${a.mins} minutes).`);
+  if (a.mins > MAX_ADJ_MINUTES) {
+    errs.push(`${label} cannot be longer than 2 hours (got ${a.mins} minutes).`);
+  }
+  if (a.mins % ADJ_STEP_MINUTES !== 0 && !a.unchangedFromSaved) {
+    errs.push(`${label} must be a multiple of ${ADJ_STEP_MINUTES} minutes (got ${a.mins} minutes).`);
   }
   if (a.shiftMins > 0 && a.mins > a.shiftMins) {
     errs.push(`Time adjustment minutes (${a.mins}) cannot exceed the shift length (${a.shiftMins} minutes).`);

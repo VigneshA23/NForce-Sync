@@ -17,6 +17,7 @@ export interface EodTaskDto {
   id: number;
   projectId: number | null;
   projectCode: string | null;
+  projectName?: string | null;
   taskCategoryId: number | null;
   categoryName: string | null;
   description: string | null;

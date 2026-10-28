@@ -7,4 +7,5 @@ import java.util.List;
 public interface DesignationRepository extends JpaRepository<Designation, Long> {
     boolean existsByTitle(String title);
     List<Designation> findAllByOrderByTitleAsc();
+    List<Designation> findAllByActiveTrueOrderByTitleAsc();
 }

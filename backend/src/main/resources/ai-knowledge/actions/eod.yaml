@@ -64,7 +64,7 @@ knowledge:
       types: Late Arrival, Intervening (a short break during the day) and Leaving Early.
 
       Rules:
-      - The duration must be between 30 minutes and 2 hours.
+      - The duration must be a multiple of 15 minutes, up to 2 hours (and no more than what is left of the monthly allowance).
       - You need an assigned shift to use this at all — without one, it's blocked with a message
         to contact your administrator.
       - The duration cannot exceed your shift's own length.

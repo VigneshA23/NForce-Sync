@@ -8,12 +8,13 @@
  * cards live on as: a submission-window chip/banner + an approval status line under the header, and a
  * "How it works" popover beside the title (dailyLogParts.tsx).
  */
+import { DateStepper } from '../../components/DateStepper';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle, CheckCircle, Clock, Lock, Send, Save, Plus, Trash2,
-  ChevronLeft, ChevronRight, ListPlus,
+  ListPlus,
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../../lib/toast';
@@ -27,7 +28,7 @@ import { TimeAdjustmentSection } from '../../components/timeAdjustment/TimeAdjus
 import { useTimeAdjustment } from '../../components/timeAdjustment/useTimeAdjustment';
 import { minutesLabel } from '../../components/timeAdjustment/timeAdjustment';
 import { BlockerReasonField, TaskStatusField } from '../../components/taskStatus/TaskStatusFields';
-import { ApprovalStatusLine, HowItWorksPopover, SubmissionWindow } from './dailyLogParts';
+import { ApprovalStatusLine, SubmissionWindow } from './dailyLogParts';
 import { useSubmissionWindow } from './useSubmissionWindow';
 import { LegacyLogNotice } from './LegacyLogNotice';
 import { legacyLogOf } from './dailyLogLegacy';
@@ -194,18 +195,6 @@ export default function DailyLogForm() {
   const errorRef      = useRef<HTMLDivElement>(null);
   const saveTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appliedRef    = useRef<string | null>(null);
-
-  const prevDate = (() => {
-    const d = new Date(selectedDate + 'T00:00:00');
-    d.setDate(d.getDate() - 1);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  })();
-
-  const nextDate = (() => {
-    const d = new Date(selectedDate + 'T00:00:00');
-    d.setDate(d.getDate() + 1);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  })();
 
   // ── Queries ───────────────────────────────────────────────────────────────
 
@@ -490,42 +479,18 @@ export default function DailyLogForm() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    // One centered column capped for reading width (equal gutters left and right on wide screens; the title and
-    // fields share the column); see the .nf-dl-* rules in index.css.
+    // Full content width, like Submit EOD and the other pages (the Shell's own padding is the gutter); see the
+    // .nf-dl-* rules in index.css.
     <div className="nf-dl-page">
 
       {/* ── Header (SubmitEOD PageHeader style) ── */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:12 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <button
-            onClick={() => handleDateChange(prevDate)}
-            style={{ display:'flex', alignItems:'center', justifyContent:'center', width:30, height:30, borderRadius:6, background:'var(--raised2)', border:'1px solid var(--line2)', cursor:'pointer', color:'var(--txt-mut)', flexShrink:0 }}
-            aria-label="Previous day"
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <h1 style={{ fontFamily:'"Inter","Segoe UI","Roboto","Helvetica Neue",Arial,sans-serif', fontSize:26, fontWeight:700, color:'var(--txt)', margin:0, letterSpacing:'-0.01em' }}>
-            Daily Log
-          </h1>
-          <button
-            onClick={() => handleDateChange(nextDate)}
-            disabled={isToday}
-            // Disabled while viewing today: dimmed, but still a visible chevron (it used to be var(--line) on
-            // a near-identical background, which read as an empty box beside the title).
-            style={{ display:'flex', alignItems:'center', justifyContent:'center', width:30, height:30, borderRadius:6, background:'var(--raised2)', border:'1px solid var(--line2)', cursor:isToday?'not-allowed':'pointer', color:isToday?'var(--txt-dim)':'var(--txt-mut)', opacity:isToday?0.55:1, flexShrink:0 }}
-            aria-label="Next day"
-          >
-            <ChevronRight size={15} />
-          </button>
-          {isPast && (
-            <button
-              onClick={() => handleDateChange(todayISO())}
-              style={{ padding:'4px 10px', borderRadius:20, background:'var(--raised2)', border:'1px solid var(--line2)', color:'var(--txt-mut)', fontSize:11, fontWeight:500, cursor:'pointer' }}
-            >
-              Today
-            </button>
-          )}
-          <HowItWorksPopover />
+          <DateStepper date={selectedDate} onChange={handleDateChange}>
+            <h1 style={{ fontFamily:'"Inter","Segoe UI","Roboto","Helvetica Neue",Arial,sans-serif', fontSize:26, fontWeight:700, color:'var(--txt)', margin:0, letterSpacing:'-0.01em' }}>
+              Daily Log
+            </h1>
+          </DateStepper>
         </div>
         {entryStatus && <StatusBadge status={entryStatus} />}
       </div>
@@ -748,14 +713,6 @@ export default function DailyLogForm() {
                 <div role="alert" style={{ display:'flex', gap:6, alignItems:'center', fontSize:12, color:'var(--warn)', marginTop:10, fontWeight:500 }}>
                   <AlertTriangle size={13} />
                   {benchMsg}
-                </div>
-              )}
-
-              {/* Overtime note */}
-              {hoursOver && !isLeave && (
-                <div style={{ display:'flex', gap:6, alignItems:'center', fontSize:12, color:'var(--warn)', marginTop:10, fontWeight:500 }}>
-                  <AlertTriangle size={13} />
-                  Logging overtime — your manager will be notified on approval.
                 </div>
               )}
 

@@ -78,7 +78,7 @@ public class BusinessRuleConfig {
     // leave. Replaced three per-type counts in V62: counted separately, one use of each could
     // reach the 120-minute per-use cap and total 6 hours against a 2-hour policy. Global —
     // no per-role or per-department override. Separate from the per-use duration limit
-    // (30-120 minutes), which lives in EodService.
+    // (up to 120 minutes, in 15-minute steps), which lives in EodService.
     @Column(name = "monthly_adjustment_minutes", nullable = false)
     private Integer monthlyAdjustmentMinutes;
 

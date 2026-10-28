@@ -99,9 +99,11 @@ public class OrgService {
     // ── Department ────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<DepartmentDto> listDepartments() {
-        return departmentRepository.findAllByOrderByNameAsc()
-                .stream()
+    public List<DepartmentDto> listDepartments(boolean activeOnly) {
+        List<Department> rows = activeOnly
+                ? departmentRepository.findAllByActiveTrueOrderByNameAsc()
+                : departmentRepository.findAllByOrderByNameAsc();
+        return rows.stream()
                 .map(DepartmentDto::from)
                 .toList();
     }
@@ -129,9 +131,11 @@ public class OrgService {
     // ── Designation ───────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<DesignationDto> listDesignations() {
-        return designationRepository.findAllByOrderByTitleAsc()
-                .stream()
+    public List<DesignationDto> listDesignations(boolean activeOnly) {
+        List<Designation> rows = activeOnly
+                ? designationRepository.findAllByActiveTrueOrderByTitleAsc()
+                : designationRepository.findAllByOrderByTitleAsc();
+        return rows.stream()
                 .map(DesignationDto::from)
                 .toList();
     }
@@ -159,9 +163,13 @@ public class OrgService {
     // ── Location ──────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<OrgLocationDto> listLocations() {
-        return locationRepository.findAllByOrderByNameAsc()
-                .stream()
+    public List<OrgLocationDto> listLocations(boolean activeOnly) {
+        // Pickers (Add/Edit User) pass activeOnly; Org Masters, filters and name lookups need
+        // every row, so "all" stays the default.
+        List<OrgLocation> rows = activeOnly
+                ? locationRepository.findAllByActiveTrueOrderByNameAsc()
+                : locationRepository.findAllByOrderByNameAsc();
+        return rows.stream()
                 .map(OrgLocationDto::from)
                 .toList();
     }

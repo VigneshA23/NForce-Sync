@@ -1,3 +1,4 @@
+import { DateStepper } from '../../components/DateStepper';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -1453,6 +1454,7 @@ export default function SubmitEOD() {
 
 function PageHeader({
   selectedDate,
+  onDateChange,
   entryStatus,
 }: {
   selectedDate: string;
@@ -1467,9 +1469,19 @@ function PageHeader({
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
       <div>
-        <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', margin: 0, letterSpacing: '-0.01em' }}>
-          End-of-Day Report
-        </h1>
+        {onDateChange ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <DateStepper date={selectedDate} onChange={onDateChange}>
+              <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', margin: 0, letterSpacing: '-0.01em' }}>
+            End-of-Day Report
+          </h1>
+            </DateStepper>
+          </div>
+        ) : (
+          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 26, fontWeight: 700, color: 'var(--txt)', margin: 0, letterSpacing: '-0.01em' }}>
+            End-of-Day Report
+          </h1>
+        )}
         <div style={{ marginTop: 4, fontSize: 13, color: 'var(--txt-mut)' }}>{formatted}</div>
       </div>
       {entryStatus && <StatusBadge status={entryStatus} />}

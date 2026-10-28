@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown, ChevronRight, X, CheckCheck, RefreshCw,
-  Search, AlertTriangle, MessageCircleQuestion, Check,
+  Search, AlertTriangle, MessageCircleQuestion,
 } from 'lucide-react';
 import {
   useApprove, useReject, type PendingApprovalsRange,
@@ -11,16 +11,13 @@ import {
   type ApprovalPieceDto,
 } from '../api/approvalPieces';
 import {
-  useEodInbox, useClarificationStatusForApprovals, useRefreshClarification,
+  useEodInbox, useRefreshClarification,
 } from '../api/eodClarification';
 import { ClarificationChatPopup } from '../components/ClarificationChatPopup';
-import { DropdownMenu, type DropdownMenuItem } from '../components/DropdownMenu';
 import { ReviewButton } from '../components/ReviewButton';
-import { ConfirmModal } from '../components/ConfirmModal';
-import { useAuth } from '../lib/auth';
+import { EodReviewModal } from '../components/EodReviewModal';
 import {
-  CLARIFICATION_BLOCKS_DECISION_REASON, clarificationMenuState, decisionBlockedReason, isBlockingStatus,
-  isPieceClarified,
+  CLARIFICATION_BLOCKS_DECISION_REASON, isPieceClarified,
 } from '../lib/clarificationGate';
 import { FilterDropdown } from '../components/FilterDropdown';
 import { useToast } from '../lib/toast';
@@ -242,13 +239,8 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
   /** From the one batched useEodInbox('lead') list — cheap, so no per-card status poll. */
   clarificationOpen: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [rejecting, setRejecting] = useState(false);
-  const [comment, setComment] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [confirmApprove, setConfirmApprove] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const { show } = useToast();
-  const { user } = useAuth();
   const refreshClarification = useRefreshClarification();
 
   const approvePiece = useApprovePiece();
@@ -267,58 +259,24 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
     ? Number(piece.logTotalHours)
     : (piece.logLines ?? []).reduce((s, l) => s + Number(l.hours ?? 0), 0);
 
-  // The row's own status is fetched only while its menu is open (no poll per card) and wins over
-  // the batched list once fresh; otherwise the batched list decides. An open round blocks EVERY
-  // piece on the entry (rounds are per entry).
-  const live = useClarificationStatusForApprovals(piece.eodEntryId, menuOpen, false, piece.id);
-  const liveStatus = menuOpen && !live.isFetching ? live.data : undefined;
-  const blocked = liveStatus ? isBlockingStatus(liveStatus.status) : clarificationOpen;
-  const blockedReason = decisionBlockedReason(blocked);
-
-  // Never offer reviewer actions on your own EOD — the server rejects it too (403).
-  const isOwn = user != null && piece.employeeId === user.id;
-
-  const busy = approvePiece.isPending || rejectPiece.isPending;
   const padding = '9px 16px';
-  const menu = clarificationMenuState({
-    isOwn, blockedByList: clarificationOpen, status: liveStatus, busy,
-    readOnlyReviewer: false,
-  });
-  const menuItems: DropdownMenuItem[] = [
-    {
-      key: 'approve', label: 'Approve', icon: Check, color: 'var(--ok)',
-      disabled: menu.approve.disabled, title: menu.approve.title,
-      onSelect: () => setConfirmApprove(true),
-    },
-    {
-      key: 'reject', label: 'Reject', icon: X, color: 'var(--risk)',
-      disabled: menu.reject.disabled, title: menu.reject.title,
-      onSelect: () => { setRejecting(true); setExpanded(true); },
-    },
-    ...menu.clarification.map((c, i) => ({
-      key: `clarification-${c.kind}`, label: c.label, icon: MessageCircleQuestion, color: 'var(--warn)',
-      disabled: c.disabled, dividerBefore: i === 0,
-      onSelect: () => onOpenChat(piece),
-    })),
-  ];
 
   async function handleApprove() {
     try {
       await approvePiece.mutateAsync({ pieceId: piece.id });
       show('Approved.', 'success');
+      setReviewOpen(false);
     } catch (err) {
       show(extractError(err), 'error');
       refreshClarification(err, piece.eodEntryId);   // a 409 means a round opened: update the buttons now
     }
   }
 
-  async function handleReject() {
-    if (!comment.trim()) return;
+  async function handleReject(comment: string) {
     try {
-      await rejectPiece.mutateAsync({ pieceId: piece.id, comment: comment.trim() });
+      await rejectPiece.mutateAsync({ pieceId: piece.id, comment });
       show('Rejected.', 'success');
-      setRejecting(false);
-      setComment('');
+      setReviewOpen(false);
     } catch (err) {
       show(extractError(err), 'error');
       refreshClarification(err, piece.eodEntryId);
@@ -439,7 +397,7 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
             <Chip tone="neutral">
               {hrs(piece.entryForm === 'PLAIN_LOG' ? plainLogHours : totalHours)}h logged
             </Chip>
-            {blocked && (
+            {clarificationOpen && (
               <span title={CLARIFICATION_BLOCKS_DECISION_REASON}>
                 <Chip tone="warn"><MessageCircleQuestion size={11} aria-hidden="true" /> Clarification requested</Chip>
               </span>
@@ -447,83 +405,24 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
           </div>
         </div>
 
-        {/* Right column — Approve/Reject instead of EntryRow's Review button */}
+        {/* Right column — plain Review button; the shared modal carries Approve / Reject / Clarification */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-          {!rejecting && (
-            <DropdownMenu
-              items={menuItems}
-              ariaLabel={`Review ${piece.employeeName}`}
-              trigger="review"
-              open={menuOpen}
-              onOpenChange={setMenuOpen}
-            />
-          )}
-          <button
-            onClick={() => setExpanded(e => !e)}
-            title="View details"
-            style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
-          >
-            {expanded ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
-          </button>
+          <ReviewButton onClick={() => setReviewOpen(true)} aria-label={`Review ${piece.employeeName}`} />
         </div>
       </div>
 
-      {/* Approve is easy to mis-click from a menu and hard to undo, so it asks first */}
-      <ConfirmModal
-        open={confirmApprove}
-        onClose={() => setConfirmApprove(false)}
-        onConfirm={() => { setConfirmApprove(false); void handleApprove(); }}
-        title="Approve this entry?"
-        message={`${piece.employeeName} · ${fmtDate(piece.entryDate)}${piece.projectName ? ` · ${piece.projectName}` : ''}`}
-        confirmLabel="Approve"
-        isPending={approvePiece.isPending}
+      <EodReviewModal
+        piece={reviewOpen ? piece : null}
+        initialMode="view"
+        onClose={() => setReviewOpen(false)}
+        onApprove={handleApprove}
+        onReject={(_id, comment) => handleReject(comment)}
+        approveBusy={approvePiece.isPending}
+        rejectBusy={rejectPiece.isPending}
+        clarificationOpen={clarificationOpen}
+        onOpenChat={onOpenChat}
+        clarificationReadOnly={false}
       />
-
-      {/* Expanded area — rejection form in same zone as EntryRow's AuditTrail */}
-      {expanded && rejecting && (
-        <div style={{ borderTop: '1px solid var(--line)', padding: '12px 16px', background: 'var(--raised)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)' }}>
-            Rejection reason <span style={{ color: 'var(--risk)' }}>*</span>
-          </div>
-          <textarea
-            rows={3}
-            placeholder="Explain why this piece is being rejected…"
-            value={comment}
-            onChange={e => setComment(e.target.value)}
-            style={{
-              width: '100%', resize: 'vertical', padding: '8px 10px', boxSizing: 'border-box',
-              background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6,
-              color: 'var(--txt)', fontSize: 12.5, outline: 'none',
-            }}
-          />
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button
-              onClick={() => { setRejecting(false); setComment(''); }}
-              style={{
-                padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 500,
-                border: '1px solid var(--line2)', background: 'none',
-                color: 'var(--txt-dim)', cursor: 'pointer',
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleReject}
-              disabled={!comment.trim() || busy || blocked}
-              title={blockedReason}
-              style={{
-                padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                border: '1px solid rgba(228,55,61,.4)', background: 'rgba(228,55,61,.1)',
-                color: 'var(--risk)',
-                cursor: (!comment.trim() || busy || blocked) ? 'not-allowed' : 'pointer',
-                opacity: (!comment.trim() || busy || blocked) ? 0.5 : 1,
-              }}
-            >
-              Confirm Reject
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

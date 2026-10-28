@@ -201,7 +201,7 @@ class RmEodByEmployeeReportServiceTest {
     }
 
     @Test
-    void anApprovedBenchDailyLogShowsOneRowPerLogLineWithNoProjectAndCountsItsHours() {
+    void anApprovedBenchDailyLogShowsOneRowPerLogLineLabelledNoProjectsAssignedAndCountsItsHours() {
         EodEntry bench = plainLogEntry(20L, activeWithEntries, EodEntry.Status.APPROVED);
         snapshotEntries(bench);
         when(logLineRepository.findByEntryIdInOrderBySortOrderAscIdAsc(anyList())).thenReturn(List.of(
@@ -211,7 +211,7 @@ class RmEodByEmployeeReportServiceTest {
                 .filter(r -> r.employeeId() == 2L).findFirst().orElseThrow();
         assertEquals(2, row.entryCount());
         assertEquals(0, new BigDecimal("8.0").compareTo(row.totalHours()));
-        assertTrue(row.entries().stream().allMatch(e -> e.projectCode() == null));
+        assertTrue(row.entries().stream().allMatch(e -> ProjectLabels.NO_PROJECTS_ASSIGNED.equals(e.projectCode())));
         assertTrue(row.entries().stream().anyMatch(e -> "Training".equals(e.categoryName())));
     }
 

@@ -61,13 +61,14 @@ knowledge:
     errorMessages:
       - "Select a time adjustment type (Late arrival, Intervening time-off, or Leaving early)."
       - "Enter a valid duration for this time adjustment."
-      - "{Late arrival|Leaving early|Intervening time-off} must be between 30 minutes and 2 hours (got {n} minutes)."
+      - "{Late arrival|Leaving early|Intervening time-off} cannot be longer than 2 hours (got {n} minutes)."
+      - "{Late arrival|Leaving early|Intervening time-off} must be a multiple of 15 minutes (got {n} minutes)."
       - "A time adjustment needs an assigned shift. Contact your administrator."
       - "Time adjustment minutes ({n}) cannot exceed the shift length ({n} minutes)."
       - "{Late arrival|Leaving early|Intervening time-off} of {duration} exceeds your monthly time adjustment budget — {remaining} of {budget} left this month."
     body: |
       A time adjustment fails validation when: no type is picked but a duration is entered (or
-      vice versa); the duration is outside 30 minutes to 2 hours; you have no shift assigned, so
+      vice versa); the duration is over 2 hours or not a multiple of 15 minutes; you have no shift assigned, so
       there's nothing to adjust against; the duration is longer than your actual shift; or using
       it would put you over your shared monthly adjustment-minutes budget across all three
       adjustment types combined. The exact remaining budget is shown in the error.

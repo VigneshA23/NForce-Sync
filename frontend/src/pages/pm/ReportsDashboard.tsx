@@ -17,12 +17,14 @@ function isTab(v: string | null): v is Tab {
  * (see eodReportSources.ts); a source without a Missing EOD tab simply doesn't list it, so nothing here
  * is hidden by role. Defaults to the Project Manager source.
  */
-export default function ReportsDashboard({ initialTab, title = 'Reports', subtitle = 'Employee-wise EOD exports and compliance, scoped to your projects', source = PM_REPORT_SOURCE }: {
+export default function ReportsDashboard({ initialTab, title = 'Reports', subtitle = 'Employee-wise EOD exports and compliance, scoped to your projects', source = PM_REPORT_SOURCE, noProjectLabel }: {
   initialTab?: Tab;
   /** Page heading. The Super Admin route passes "EOD Reports"; the PM page keeps "Reports". */
   title?: string;
   subtitle?: string;
   source?: EodReportSource;
+  /** Passed through to EOD by employee: shown instead of a dash where there is no project. */
+  noProjectLabel?: string;
 } = {}) {
   // `?tab=` lets a KPI tile elsewhere (e.g. Executive Dashboard's EOD Compliance/Missing EODs)
   // deep-link straight to a tab — falls back to the explicit prop, then 'eod'. A tab the source doesn't
@@ -55,7 +57,7 @@ export default function ReportsDashboard({ initialTab, title = 'Reports', subtit
         </div>
       )}
 
-      {tab === 'eod' && <EodByEmployeeReport source={source} />}
+      {tab === 'eod' && <EodByEmployeeReport source={source} noProjectLabel={noProjectLabel} />}
       {tab === 'missing' && <MissingEodReport />}
     </div>
   );

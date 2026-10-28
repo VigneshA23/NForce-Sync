@@ -31,6 +31,8 @@ import { useToast } from '../../lib/toast';
 import { useBodyScrollLock } from '../../lib/useBodyScrollLock';
 import { focusNextOnEnter } from '../../lib/formFocus';
 import { GENDER_OPTIONS } from '../../lib/illustration';
+import { inactiveNames, pickerItems, withInactiveSuffix } from '../../lib/masterOptions';
+import { useAssignableMaster } from '../../lib/useAssignableMaster';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -277,6 +279,7 @@ function CreatableSelect<T extends CreatableItem>({
   invalidateKey,
   placeholder,
   noneLabel = 'No matches',
+  inactiveNames,
 }: {
   items: T[];
   getLabel: (item: T) => string;
@@ -286,6 +289,8 @@ function CreatableSelect<T extends CreatableItem>({
   invalidateKey: string[];
   placeholder: string;
   noneLabel?: string;
+  /** Names that exist but are deactivated: typing one must not offer "Create" (it would only 409). */
+  inactiveNames?: string[];
 }) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
@@ -298,7 +303,9 @@ function CreatableSelect<T extends CreatableItem>({
     ? items.filter(i => getLabel(i).toLowerCase().includes(query.toLowerCase()))
     : items;
   const exactMatch = items.some(i => getLabel(i).toLowerCase() === query.trim().toLowerCase());
-  const showCreate = query.trim().length > 0 && !exactMatch;
+  const matchesInactive = query.trim().length > 0
+    && (inactiveNames ?? []).some(n => n.toLowerCase() === query.trim().toLowerCase());
+  const showCreate = query.trim().length > 0 && !exactMatch && !matchesInactive;
 
   async function handleCreate() {
     setCreating(true);
@@ -344,7 +351,7 @@ function CreatableSelect<T extends CreatableItem>({
               and Work Mode do. Manager is the one field that genuinely needs "nobody" as a
               choice, and it is a PlainSelect with an explicit emptyLabel. Clearing the text still
               unassigns, for the rare case someone needs to. */}
-          {filtered.length === 0 && !showCreate && (
+          {filtered.length === 0 && !showCreate && !matchesInactive && (
             <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--txt-dim)' }}>{noneLabel}</div>
           )}
           {filtered.map(i => (
@@ -362,6 +369,14 @@ function CreatableSelect<T extends CreatableItem>({
               {getLabel(i)}
             </div>
           ))}
+          {matchesInactive && (
+            <div style={{
+              padding: '9px 14px', fontSize: 12, color: 'var(--txt-dim)',
+              borderTop: filtered.length > 0 ? '1px solid var(--line)' : 'none',
+            }}>
+              &ldquo;{query.trim()}&rdquo; is inactive. Reactivate it in Organization Masters to use it.
+            </div>
+          )}
           {showCreate && (
             <div
               onMouseDown={creating ? undefined : handleCreate}
@@ -596,15 +611,29 @@ function ManagerSearchableSelect({
 // ── Org data hook ─────────────────────────────────────────────────────────────
 
 function useOrgData() {
-  const depts = useQuery({ queryKey: ['org', 'departments'], queryFn: listDepartments });
-  const desigs = useQuery({ queryKey: ['org', 'designations'], queryFn: listDesignations });
-  const locs  = useQuery({ queryKey: ['org', 'locations'],    queryFn: listLocations });
-  const shifts = useQuery({ queryKey: ['business-rules', 'shifts'], queryFn: listShifts });
+  // Every item, inactive included: the filters, the table columns, CSV export and the Edit modal's
+  // "current value" lookup must keep resolving the stored name of users on a since-deactivated one.
+  const depts = useQuery({ queryKey: ['org', 'departments'], queryFn: () => listDepartments() });
+  const desigs = useQuery({ queryKey: ['org', 'designations'], queryFn: () => listDesignations() });
+  const locs  = useQuery({ queryKey: ['org', 'locations'],    queryFn: () => listLocations() });
+  const shifts = useQuery({ queryKey: ['business-rules', 'shifts'], queryFn: () => listShifts() });
   return {
     departments:  depts.data  ?? [],
     designations: desigs.data ?? [],
     locations:    locs.data   ?? [],
     shifts:       shifts.data ?? [],
+  };
+}
+
+// What a user may be assigned to: active items only, served by the backend. Separate from
+// useOrgData's full lists. Each key sits under the master's existing key, so the invalidation
+// Org Masters / Shift Timings fire on a toggle refreshes these too (see useAssignableMaster).
+function useAssignableOrgData(enabled: boolean) {
+  return {
+    departments:  useAssignableMaster(['org', 'departments', 'active'], () => listDepartments(true), enabled),
+    designations: useAssignableMaster(['org', 'designations', 'active'], () => listDesignations(true), enabled),
+    locations:    useAssignableMaster(['org', 'locations', 'active'], () => listLocations(true), enabled),
+    shifts:       useAssignableMaster(['business-rules', 'shifts', 'active'], () => listShifts(true), enabled),
   };
 }
 
@@ -648,7 +677,8 @@ function AddModal({
   onCreated: (tempPassword: string) => void;
 }) {
   const toast = useToast();
-  const { departments, designations, locations, shifts } = useOrgData();
+  // Add User offers active items only.
+  const { departments, designations, locations, shifts } = useAssignableOrgData(true);
   const queryClient = useQueryClient();
   const [form, setForm] = useState<CreateForm>(EMPTY_CREATE);
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
@@ -1050,7 +1080,31 @@ function EditModal({
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const { departments, designations, locations, shifts } = useOrgData();
+  const all = useOrgData();
+  const active = useAssignableOrgData(open);
+  // The user's current value is the one that may be inactive: it stays selectable (marked
+  // "(inactive)") so the field never goes blank, but only the stored value — not a fresh pick —
+  // can be inactive. The picker lists come from the active-only fetch plus that one item.
+  const departmentItems = useMemo(
+    () => pickerItems(active.departments, all.departments, user?.departmentId),
+    [active.departments, all.departments, user?.departmentId],
+  );
+  const designationItems = useMemo(
+    () => pickerItems(active.designations, all.designations, user?.designationId),
+    [active.designations, all.designations, user?.designationId],
+  );
+  const locationItems = useMemo(
+    () => pickerItems(active.locations, all.locations, user?.locationId),
+    [active.locations, all.locations, user?.locationId],
+  );
+  const shiftItems = useMemo(
+    () => pickerItems(active.shifts, all.shifts, user?.shiftId),
+    [active.shifts, all.shifts, user?.shiftId],
+  );
+  // Typing the name of a deactivated item must not offer "Create" — it exists, it just needs reactivating.
+  const inactiveDeptNames = useMemo(() => inactiveNames(all.departments, d => d.name), [all.departments]);
+  const inactiveDesigNames = useMemo(() => inactiveNames(all.designations, d => d.title), [all.designations]);
+  const inactiveLocNames = useMemo(() => inactiveNames(all.locations, l => l.name), [all.locations]);
 
   const [form, setForm] = useState<UpdateUserPayload>({
     fullName: '', role: 'EMPLOYEE',
@@ -1174,8 +1228,9 @@ function EditModal({
           {/* Department — creatable */}
           <Field label="Department">
             <CreatableSelect
-              items={departments}
-              getLabel={(d: DepartmentDto) => d.name}
+              items={departmentItems}
+              getLabel={(d: DepartmentDto) => withInactiveSuffix(d.name, d.active)}
+              inactiveNames={inactiveDeptNames}
               value={form.departmentId}
               onChange={id => set('departmentId', id)}
               onCreate={createDepartment}
@@ -1188,8 +1243,9 @@ function EditModal({
           {/* Designation — creatable */}
           <Field label="Designation">
             <CreatableSelect
-              items={designations}
-              getLabel={(d: DesignationDto) => d.title}
+              items={designationItems}
+              getLabel={(d: DesignationDto) => withInactiveSuffix(d.title, d.active)}
+              inactiveNames={inactiveDesigNames}
               value={form.designationId}
               onChange={id => set('designationId', id)}
               onCreate={createDesignation}
@@ -1203,7 +1259,9 @@ function EditModal({
           <Field label="Shift">
             <PlainSelect
               value={form.shiftId != null ? String(form.shiftId) : ''}
-              options={shifts.map((s: ShiftDefinitionDto) => ({ value: String(s.id), label: formatShiftLabel(s) }))}
+              options={shiftItems.map((s: ShiftDefinitionDto) => ({
+                value: String(s.id), label: withInactiveSuffix(formatShiftLabel(s), s.active),
+              }))}
               onChange={v => set('shiftId', v ? Number(v) : null)}
               placeholder="Select shift"
             />
@@ -1213,8 +1271,9 @@ function EditModal({
           <div style={{ gridColumn: '1/-1' }}>
             <Field label="Location">
               <CreatableSelect
-                items={locations}
-                getLabel={(l: OrgLocationDto) => l.name}
+                items={locationItems}
+                getLabel={(l: OrgLocationDto) => withInactiveSuffix(l.name, l.active)}
+                inactiveNames={inactiveLocNames}
                 value={form.locationId}
                 onChange={id => set('locationId', id)}
                 onCreate={createLocation}

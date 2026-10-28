@@ -68,8 +68,8 @@ public class BusinessRuleController {
     // ── Shift timings ───────────────────────────────────────────────────────────
 
     @GetMapping("/shifts")
-    public List<ShiftDefinitionDto> listShifts() {
-        return businessRuleService.listShifts();
+    public List<ShiftDefinitionDto> listShifts(@RequestParam(defaultValue = "false") boolean activeOnly) {
+        return businessRuleService.listShifts(activeOnly);
     }
 
     @PostMapping("/shifts")

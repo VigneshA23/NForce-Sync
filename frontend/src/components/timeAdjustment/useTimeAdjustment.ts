@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getTimeAdjustmentContext } from '../../api/eod';
 import {
-  adjustmentBanner, validateAdjustmentInput,
+  adjustmentBanner, adjustmentDurationOptions, validateAdjustmentInput,
 } from './timeAdjustment';
 
 /**
@@ -23,6 +23,8 @@ export function useTimeAdjustment({ date, dayType, enabled = true, onChange }: {
   const [adjType,     setAdjType]     = useState<string | null>(null);
   const [adjMinutes,  setAdjMinutes]  = useState<string>('');
   const [showBalance, setShowBalance] = useState(false);
+  // What the saved entry carried when it was loaded — lets an unchanged off-step legacy value through.
+  const [saved, setSaved] = useState<{ type: string; minutes: number } | null>(null);
 
   const { data: adjContext } = useQuery({
     queryKey: ['eod', 'time-adjustment-context', date],
@@ -46,9 +48,12 @@ export function useTimeAdjustment({ date, dayType, enabled = true, onChange }: {
   /** No headroom left at all — every type is unavailable, not just the one already used. */
   const adjExhausted = adjRemaining <= 0;
   const shiftMins    = adjContext?.shiftDurationMinutes ?? 0;
+  const durationOptions    = adjustmentDurationOptions(adjRemaining, shiftMins);
+  const maxDuration        = durationOptions.length > 0 ? durationOptions[durationOptions.length - 1] : 0;
+  const unchangedFromSaved = saved != null && saved.type === adjType && saved.minutes === adjMins;
 
   function reset() {
-    setAdjEnabled(false); setAdjType(null); setAdjMinutes(''); setShowBalance(false);
+    setAdjEnabled(false); setAdjType(null); setAdjMinutes(''); setShowBalance(false); setSaved(null);
   }
 
   return {
@@ -56,11 +61,12 @@ export function useTimeAdjustment({ date, dayType, enabled = true, onChange }: {
     adjEnabled, adjType, adjMinutes, showBalance, setShowBalance, adjContext,
     // derived
     canRequestAdj, adjMins, adjActive, adjBudget, adjUsedMins, adjRemaining, adjExhausted, shiftMins,
-    banner: () => adjustmentBanner(adjContext, adjType, adjMins),
+    durationOptions, unchangedFromSaved,
+    banner: () => adjustmentBanner(adjContext, adjType, adjMins, maxDuration),
     /** Errors for the current input; empty when no adjustment is asked for. */
     validate: () => validateAdjustmentInput({
       canRequest: canRequestAdj, enabled: adjEnabled, type: adjType, mins: adjMins,
-      shiftMins, remaining: adjRemaining, budget: adjBudget,
+      shiftMins, remaining: adjRemaining, budget: adjBudget, unchangedFromSaved,
     }),
     /** What to put on the save request: both null unless an adjustment is complete and allowed. */
     payload: () => ({
@@ -86,6 +92,8 @@ export function useTimeAdjustment({ date, dayType, enabled = true, onChange }: {
       setAdjEnabled(entry.timeAdjustmentType != null);
       setAdjType(entry.timeAdjustmentType ?? null);
       setAdjMinutes(entry.timeAdjustmentMinutes != null ? String(entry.timeAdjustmentMinutes) : '');
+      setSaved(entry.timeAdjustmentType != null && entry.timeAdjustmentMinutes != null
+        ? { type: entry.timeAdjustmentType, minutes: entry.timeAdjustmentMinutes } : null);
     },
   };
 }
