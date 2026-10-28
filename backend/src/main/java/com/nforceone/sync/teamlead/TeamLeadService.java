@@ -22,6 +22,7 @@ import com.nforceone.sync.notification.NotificationService;
 import com.nforceone.sync.org.Designation;
 import com.nforceone.sync.org.DesignationRepository;
 import com.nforceone.sync.project.Allocation;
+import com.nforceone.sync.project.ProjectLabel;
 import com.nforceone.sync.project.AllocationRepository;
 import com.nforceone.sync.project.Project;
 import com.nforceone.sync.project.ProjectRepository;
@@ -247,7 +248,9 @@ public class TeamLeadService {
 
     public List<MemberEodStatusDto> getMemberStatuses(LocalDate from, LocalDate to, String actingEmail, Long teamLeadId) {
         Long leadId = resolveLeadId(actingEmail, teamLeadId);
-        return computeMemberStatuses(from, to, activeMembers(leadId), leadBlockerScope(leadId));
+        // The Team Lead section shows a member's led projects only — never the other projects they are on.
+        return computeMemberStatuses(from, to, activeMembers(leadId), leadBlockerScope(leadId),
+                leadTeamPolicy.ledProjectIds(leadId));
     }
 
     /** For callers (e.g. MyReportsService) that scope team by manager_id, not project lead. */
@@ -274,6 +277,16 @@ public class TeamLeadService {
 
     private List<MemberEodStatusDto> computeMemberStatuses(LocalDate from, LocalDate to, List<AppUser> members,
                                                            BlockerScope blockerScope) {
+        return computeMemberStatuses(from, to, members, blockerScope, null);
+    }
+
+    /**
+     * @param projectScope when non-null, each member's {@code projectNames} lists only these projects (the Team Lead
+     *                     section passes the projects the lead leads); null keeps every active allocation, which is
+     *                     what the Reporting Manager section shows.
+     */
+    private List<MemberEodStatusDto> computeMemberStatuses(LocalDate from, LocalDate to, List<AppUser> members,
+                                                           BlockerScope blockerScope, java.util.Set<Long> projectScope) {
         List<Long> memberIds = members.stream().map(AppUser::getId).toList();
 
         // Independent reads, fanned out — see AsyncQueryConfig/EmployeeService for why.
@@ -289,7 +302,7 @@ public class TeamLeadService {
                         .collect(java.util.stream.Collectors.toSet()),
                 dashboardQueryExecutor);
         CompletableFuture<Map<Long, List<String>>> projectNamesByEmployeeF = CompletableFuture.supplyAsync(
-                () -> activeProjectNamesByEmployee(memberIds, to), dashboardQueryExecutor);
+                () -> activeProjectNamesByEmployee(memberIds, to, projectScope), dashboardQueryExecutor);
         CompletableFuture<Map<Long, EodEntry>> entryByMemberF =
                 CompletableFuture.supplyAsync(() -> entriesForMembersOnDate(memberIds, to), dashboardQueryExecutor);
         CompletableFuture<Map<Long, BigDecimal>> pctByMemberF = CompletableFuture.supplyAsync(
@@ -786,14 +799,24 @@ public class TeamLeadService {
     // not whatever project (if any) they happened to tag their EOD tasks with — an employee
     // with no entry yet for `onDate`, or whose tasks weren't tagged, still has an assignment.
     // Batched into one query for the whole team rather than per-member, to avoid N+1.
-    private Map<Long, List<String>> activeProjectNamesByEmployee(List<Long> employeeIds, LocalDate onDate) {
+    private Map<Long, List<String>> activeProjectNamesByEmployee(List<Long> employeeIds, LocalDate onDate,
+                                                                 java.util.Set<Long> projectScope) {
         if (employeeIds.isEmpty()) return Map.of();
+        return projectLabelsByEmployee(
+                allocationRepository.findActiveInRangeForEmployees(employeeIds, onDate, onDate), projectScope);
+    }
+
+    /**
+     * Each employee's project labels ("{code} — {name}", see {@link ProjectLabel}), in allocation order and without
+     * repeats. A non-null {@code projectScope} keeps only allocations on those project ids; null keeps all.
+     */
+    static Map<Long, List<String>> projectLabelsByEmployee(List<Allocation> allocations,
+                                                           java.util.Set<Long> projectScope) {
         Map<Long, List<String>> byEmployee = new LinkedHashMap<>();
-        for (Allocation allocation : allocationRepository.findActiveInRangeForEmployees(employeeIds, onDate, onDate)) {
+        for (Allocation allocation : allocations) {
+            if (projectScope != null && !projectScope.contains(allocation.getProject().getId())) continue;
             List<String> names = byEmployee.computeIfAbsent(allocation.getEmployee().getId(), id -> new ArrayList<>());
-            // "{code} — {name}" matches the existing project-display convention used
-            // elsewhere in the app (e.g. the project pickers in SubmitEOD/ProjectsAllocation).
-            String projectLabel = allocation.getProject().getCode() + " — " + allocation.getProject().getName();
+            String projectLabel = ProjectLabel.of(allocation.getProject());
             if (!names.contains(projectLabel)) names.add(projectLabel);
         }
         return byEmployee;

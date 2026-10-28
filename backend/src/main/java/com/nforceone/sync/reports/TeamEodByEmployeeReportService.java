@@ -33,6 +33,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -84,12 +85,14 @@ public class TeamEodByEmployeeReportService {
                 .map(p -> new ProjectOptionDto(p.getId(), p.getName(), p.getClient()))
                 .toList();
 
-        // The Client filter is unaffected by this fix — it stays scoped to what the team's own
-        // allocations reference, matching how getReport() itself derives client-eligible rows.
+        // The Client filter offers the clients of the projects this lead leads — not those of every project the
+        // team's members also happen to be allocated to. (Super Admin, who sees everyone, keeps the team-wide list.)
         List<AppUser> teamMembers = getTeamMembers(lead);
+        Set<Long> ledScope = displayScope(lead);
         List<String> clients = teamMembers.isEmpty() ? List.of() : allocationRepository
                 .findByEmployeeIdIn(teamMembers.stream().map(AppUser::getId).toList())
                 .stream()
+                .filter(a -> ledScope == null || ledScope.contains(a.getProject().getId()))
                 .map(a -> a.getProject().getClient())
                 .filter(c -> c != null && !c.isBlank())
                 .distinct()
@@ -167,9 +170,13 @@ public class TeamEodByEmployeeReportService {
         List<Allocation> allAllocations = allocationRepository.findActiveInRangeForEmployees(filteredEmployeeIds, from, to);
         Map<Long, Project> primaryProjectByEmployee = new HashMap<>();
         Map<Long, java.util.Set<String>> projectCodesByEmployee = new HashMap<>();
+        // Display only: the project codes and client on a row name the lead's own projects. Which entries, hours and
+        // totals the row carries is unchanged.
+        Set<Long> ledScope = displayScope(lead);
         for (Allocation a : allAllocations) {
             Long empId = a.getEmployee().getId();
             if (!employeesById.containsKey(empId)) continue;
+            if (ledScope != null && !ledScope.contains(a.getProject().getId())) continue;
             primaryProjectByEmployee.merge(empId, a.getProject(),
                     (existing, candidate) -> existing.getName().compareTo(candidate.getName()) <= 0 ? existing : candidate);
             projectCodesByEmployee.computeIfAbsent(empId, k -> new java.util.TreeSet<>()).add(a.getProject().getCode());
@@ -259,6 +266,11 @@ public class TeamEodByEmployeeReportService {
      */
     private boolean isLate(EodEntry entry, ShiftDefinition shift) {
         return ShiftSchedule.isSubmittedLate(shift, entry.getEntryDate(), entry.getSubmittedAt(), businessClock.zone());
+    }
+
+    /** The project ids a row may name: the ones this lead leads; null (no limit) for Super Admin, who sees everyone. */
+    private Set<Long> displayScope(AppUser lead) {
+        return lead.getRole() == AppUser.Role.SUPERADMIN ? null : leadTeamPolicy.ledProjectIds(lead.getId());
     }
 
     private AppUser requireManager(String actingEmail) {

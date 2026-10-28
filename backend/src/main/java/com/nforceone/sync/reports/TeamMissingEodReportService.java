@@ -145,8 +145,11 @@ public class TeamMissingEodReportService {
         List<Long> filteredEmployeeIds = new ArrayList<>(employeesById.keySet());
         List<Allocation> allAllocations = allocationRepository.findActiveInRangeForEmployees(filteredEmployeeIds, from, to);
         Map<Long, Project> primaryProjectByEmployee = new HashMap<>();
+        // Display only: the row names one of the lead's own projects (Super Admin, who sees everyone, is unlimited).
+        Set<Long> ledScope = lead.getRole() == AppUser.Role.SUPERADMIN ? null : leadTeamPolicy.ledProjectIds(lead.getId());
         for (Allocation a : allAllocations) {
             if (!employeesById.containsKey(a.getEmployee().getId())) continue;
+            if (ledScope != null && !ledScope.contains(a.getProject().getId())) continue;
             primaryProjectByEmployee.merge(a.getEmployee().getId(), a.getProject(),
                     (existing, candidate) -> existing.getName().compareTo(candidate.getName()) <= 0 ? existing : candidate);
         }

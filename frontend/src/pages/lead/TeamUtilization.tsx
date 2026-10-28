@@ -16,6 +16,7 @@ import {
   type MemberEodStatusDto,
 } from '../../api/teamLead';
 import { useMyLeadProjects } from '../../api/teamLeadProjects';
+import { ledProjectOptions } from '../../lib/projectLabel';
 import { RingGauge } from '../../components/RingGauge';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { Pagination } from '../../components/Pagination';
@@ -597,10 +598,8 @@ export default function TeamUtilization() {
   const { data: statuses, isPending: statusesLoading, isError, refetch } = useTeamMemberStatuses(range, false, isSuperAdmin ? teamLeadId : undefined);
   const { data: teamUtil, isPending: utilLoading } = useTeamUtil(effectiveLeadId, dateISO);
   const { data: summary } = useTeamLeadSummary(range, false, true, isSuperAdmin ? teamLeadId : undefined);
-  // Same source of truth as "My Projects" (TeamLeadProjectService.listMyProjects, scoped by
-  // Project.pm to the logged-in Team Lead) — the Project filter must offer every project
-  // actually assigned to this Team Lead, not just whatever project names happen to appear on
-  // a team member's EOD entry for the single selected date (see allProjects below).
+  // Same source of truth as "My Projects" (TeamLeadProjectService.listMyProjects, scoped by project.lead_id to the
+  // logged-in Team Lead) — the Project filter offers every project this lead leads, and only those (see allProjects).
   const { data: leadProjects } = useMyLeadProjects(undefined, isSuperAdmin ? teamLeadId : undefined);
 
   const isPending = statusesLoading || utilLoading;
@@ -626,15 +625,10 @@ export default function TeamUtilization() {
     });
   }, [statuses, teamUtil, workingDay]);
 
-  // Union of the Team Lead's actually-assigned projects (so every project they own is always
-  // selectable, even before anyone logs an EOD against it today) with whatever project names
-  // already appear on today's member statuses (kept so a project name can never disappear from
-  // the filter merely because this list came from a different source moment-to-moment).
-  const allProjects = useMemo(() => {
-    const assigned = (leadProjects ?? []).map(p => p.name);
-    const fromStatuses = members.flatMap(m => m.projectNames);
-    return [...new Set([...assigned, ...fromStatuses])].sort();
-  }, [leadProjects, members]);
+  // Only the projects this lead leads, as "CODE — Name" — the same label the backend puts on each member row, so an
+  // option matches the rows it filters. Not merged with the members' own project names: those include projects the
+  // lead does not lead, and a second spelling of the same project.
+  const allProjects = useMemo(() => ledProjectOptions(leadProjects), [leadProjects]);
 
   const visible = useMemo(() => {
     let list = members;
@@ -738,7 +732,7 @@ export default function TeamUtilization() {
         <SelectDropdown
           value={projectFilter}
           onChange={setProjectFilter}
-          options={[{ value: 'ALL', label: 'Project: All' }, ...allProjects.map(p => ({ value: p, label: p }))]}
+          options={[{ value: 'ALL', label: 'All my projects' }, ...allProjects.map(p => ({ value: p, label: p }))]}
         />
         <SelectDropdown
           value={statusFilter}
