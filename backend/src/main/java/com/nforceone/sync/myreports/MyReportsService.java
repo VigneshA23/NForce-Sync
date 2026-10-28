@@ -147,11 +147,15 @@ public class MyReportsService {
         return teamLeadService.getBlockerByIdForReportingManager(taskId, actor);
     }
 
+    // Read-write, overriding this class's readOnly default. Without it the write below joins this class's read-only
+    // transaction, Hibernate never flushes, and the change is silently dropped while the call still returns 200.
+    @Transactional
     public com.nforceone.sync.teamlead.dto.TeamBlockerDto acknowledgeBlocker(Long taskId, String actingEmail) {
         requireManager(actingEmail);
         return teamLeadService.acknowledgeBlocker(taskId, actingEmail);
     }
 
+    @Transactional   // read-write, see acknowledgeBlocker
     public com.nforceone.sync.teamlead.dto.TeamBlockerDto setBlockerStatus(
             Long taskId, String actingEmail, com.nforceone.sync.teamlead.dto.BlockerStatusRequest body) {
         requireManager(actingEmail);
