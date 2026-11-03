@@ -7,6 +7,8 @@
 /* ─── Design tokens — dark (default) ──────────────────────────── */
 :root,
 [data-theme="dark"] {
+  --pb-g1: color-mix(in srgb, var(--brand-bright) 10%, #0E0F12); --pb-g2: color-mix(in srgb, var(--brand-bright) 4%, #0E0F12); --pb-g3: #0E0F12;
+  --pb-tile: color-mix(in srgb, var(--brand-bright) 18%, #0E0F12); --pb-pink: var(--brand-bright); --pb-crimson: var(--brand-bright);
   --shell:       #0E0F12;
   --panel:       #16181D;
   --raised:      #1E2128;
@@ -94,6 +96,8 @@
  *                                      normal-size text; same token, same fix as dark)
  */
 [data-theme="light"] {
+  --pb-g1: color-mix(in srgb, var(--brand-bright) 6%, #fff); --pb-g2: color-mix(in srgb, var(--brand-bright) 2%, #fff); --pb-g3: #FFFFFF;
+  --pb-tile: #FFFFFF; --pb-pink: color-mix(in srgb, var(--brand-bright) 45%, #fff); --pb-crimson: var(--brand-bright);
   --shell:       #F7F8FA;
   --panel:       #FFFFFF;
   --raised:      #FFFFFF;

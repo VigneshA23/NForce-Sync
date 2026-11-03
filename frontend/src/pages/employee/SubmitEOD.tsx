@@ -1,4 +1,5 @@
 import { DateStepper } from '../../components/DateStepper';
+import { PageBackdrop } from '../../components/PageBackdrop';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -1017,10 +1018,15 @@ export default function SubmitEOD() {
     );
   }
 
+  // Submit is only "highlighted" once every mandatory field passes the same validation Submit runs.
+  // Not disabled when merely incomplete (except hoursShort, as before) so a click still lists what is missing.
+  const submitReady = !hoursShort && validate().length === 0;
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div>
+    <div style={{ position: 'relative', isolation: 'isolate' }}>
+      <PageBackdrop />
       {/* Page header */}
       <PageHeader
         selectedDate={selectedDate}
@@ -1406,9 +1412,18 @@ export default function SubmitEOD() {
               {/* Submit stays disabled (not just an error after clicking) until logged hours meet
                   the day's required target — see hoursShort above. */}
               {hoursShort && (
-                <div style={{ fontSize: 12, color: 'var(--warn)', fontWeight: 500 }}>
-                  Log {hoursShortBy.toFixed(1)} more hour{hoursShortBy > 1.001 ? 's' : ''} to submit
-                  {' '}({effectiveLoggedHours.toFixed(1)} / {expectedHrs.toFixed(1)} hrs)
+                <div role="alert" style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 12px', borderRadius: 8,
+                  fontSize: 13, color: 'var(--warn)', fontWeight: 600,
+                  background: 'color-mix(in srgb, var(--warn) 12%, var(--raised))',
+                  border: '1px solid color-mix(in srgb, var(--warn) 40%, transparent)',
+                }}>
+                  <AlertTriangle size={14} style={{ flexShrink: 0 }} aria-hidden />
+                  <span>
+                    Log {hoursShortBy.toFixed(1)} more hour{hoursShortBy > 1.001 ? 's' : ''} to submit
+                    {' '}({effectiveLoggedHours.toFixed(1)} / {expectedHrs.toFixed(1)} hrs)
+                  </span>
                 </div>
               )}
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
@@ -1418,7 +1433,7 @@ export default function SubmitEOD() {
                   style={{
                     padding: '9px 20px', borderRadius: 6,
                     background: 'var(--raised2)', border: '1px solid var(--line2)',
-                    color: 'var(--txt)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                    color: 'var(--txt)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
                     opacity: draftMutation.isPending ? 0.6 : 1,
                   }}
                 >
@@ -1430,13 +1445,13 @@ export default function SubmitEOD() {
                   title={hoursShort ? `Log ${hoursShortBy.toFixed(1)} more hour(s) to submit` : undefined}
                   style={{
                     padding: '9px 22px', borderRadius: 6,
-                    background: hoursShort ? 'var(--raised2)' : 'var(--brand)',
-                    border: `1px solid ${hoursShort ? 'var(--line2)' : 'var(--brand-deep)'}`,
-                    color: hoursShort ? 'var(--txt-dim)' : '#fff',
-                    fontSize: 13, fontWeight: 600,
+                    background: !submitReady ? 'var(--raised2)' : 'var(--brand)',
+                    border: `1px solid ${!submitReady ? 'var(--line2)' : 'var(--brand-deep)'}`,
+                    color: 'var(--txt)',
+                    fontSize: 13, fontWeight: 700,
                     cursor: hoursShort ? 'not-allowed' : 'pointer',
                     opacity: submitMutation.isPending ? 0.6 : 1,
-                    boxShadow: hoursShort ? 'none' : '0 2px 8px color-mix(in srgb, var(--brand) 35%, transparent)',
+                    boxShadow: !submitReady ? 'none' : '0 2px 8px color-mix(in srgb, var(--brand) 35%, transparent)',
                   }}
                 >
                   {submitMutation.isPending ? 'Submitting…' : 'Submit report'}
