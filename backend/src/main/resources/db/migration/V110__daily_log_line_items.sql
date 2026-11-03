@@ -23,8 +23,8 @@ CREATE UNIQUE INDEX task_category_scope_name_uq
 
 -- 4. Seed 12 management categories.
 --    WHERE NOT EXISTS guards against re-runs (the unique index is the definitive guard).
-INSERT INTO task_category (name, is_productive, is_billable_default, active, scope)
-SELECT v.n, v.p, FALSE, TRUE, 'MANAGEMENT'
+INSERT INTO task_category (name, is_productive, active, scope)
+SELECT v.n, v.p, TRUE, 'MANAGEMENT'
 FROM (VALUES
     ('Meetings and Calls',               TRUE),
     ('Reviews and Approvals',            TRUE),
