@@ -1,5 +1,5 @@
 import { DateStepper } from '../../components/DateStepper';
-import { PageBackdrop } from '../../components/PageBackdrop';
+import { PageBackdrop, pageBackdropWrapperStyle } from '../../components/PageBackdrop';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -220,7 +220,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-mut)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 5 }}>
+    <div className="eod-form-label">
       {children}
     </div>
   );
@@ -228,7 +228,7 @@ function Label({ children }: { children: React.ReactNode }) {
 
 /** Required-field marker, matching the asterisk already used on the blocker-reason label. */
 function Req() {
-  return <span style={{ color: '#E4373D' }}>*</span>;
+  return <span style={{ color: 'var(--brand-bright)' }}>*</span>;
 }
 
 /**
@@ -261,26 +261,25 @@ function AddTaskButton({ onClick, style }: { onClick: () => void; style?: React.
   );
 }
 
+// Hover/focus/placeholder/disabled live in the .eod-form-field class (index.css). The base values are
+// inlined here too because read-only divs and DatePicker reuse inputStyle and cannot take the class.
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '8px 10px',
-  background: 'var(--raised2)', border: '1px solid var(--line2)',
-  borderRadius: 6, color: 'var(--txt)', fontSize: 13,
+  width: '100%', padding: '10px 12px', minHeight: 44,
+  background: 'var(--eod-field-bg)', border: '1px solid var(--eod-field-border)',
+  borderRadius: 10, color: 'var(--txt)', fontSize: 14,
   outline: 'none', boxSizing: 'border-box',
 };
 
-const disabledInputStyle: React.CSSProperties = {
-  ...inputStyle,
-  opacity: 0.45,
-  cursor: 'not-allowed',
-};
+// Disabled look comes from .eod-form-field:disabled; no opacity so the text stays legible.
+const disabledInputStyle: React.CSSProperties = inputStyle;
 
 function Inp(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} style={{ ...(props.disabled ? disabledInputStyle : inputStyle), ...props.style }} />;
+  return <input {...props} className={`eod-form-field ${props.className ?? ''}`} style={{ ...(props.disabled ? disabledInputStyle : inputStyle), ...props.style }} />;
 }
 
 function Sel(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select {...props} style={{ ...(props.disabled ? disabledInputStyle : inputStyle), ...props.style }}>
+    <select {...props} className={`eod-form-field ${props.className ?? ''}`} style={{ ...(props.disabled ? disabledInputStyle : inputStyle), ...props.style }}>
       {props.children}
     </select>
   );
@@ -288,7 +287,7 @@ function Sel(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
 
 function Txt(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
-    <textarea {...props} style={{ ...inputStyle, resize: 'vertical', minHeight: 70, lineHeight: 1.5, ...props.style }} />
+    <textarea {...props} className={`eod-form-field ${props.className ?? ''}`} style={{ ...inputStyle, resize: 'vertical', minHeight: 70, lineHeight: 1.5, ...props.style }} />
   );
 }
 
@@ -306,12 +305,8 @@ function CharCount({ value, max = MAX_TEXT_LEN }: { value: string; max?: number 
   return (
     <div
       aria-live="polite"
-      style={{
-        fontSize: 11,
-        color: atLimit ? 'var(--warn)' : 'var(--txt-dim)',
-        textAlign: 'right',
-        marginTop: 4,
-      }}
+      className="eod-form-count"
+      data-state={atLimit ? 'limit' : used >= max * 0.9 ? 'near' : undefined}
     >
       {used}/{max} characters used
     </div>
@@ -1093,7 +1088,8 @@ export default function SubmitEOD() {
 
   if (loadingProjects || loadingCategories) {
     return (
-      <div>
+      <div style={pageBackdropWrapperStyle}>
+        <PageBackdrop />
         <PageHeader selectedDate={selectedDate} onDateChange={handleDateChange} entryStatus={null} />
         <GlobalLoader fullScreen={false} label="Loading EOD form..." />
       </div>
@@ -1107,7 +1103,7 @@ export default function SubmitEOD() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ position: 'relative', isolation: 'isolate' }}>
+    <div style={pageBackdropWrapperStyle}>
       <PageBackdrop />
       {/* Page header */}
       <PageHeader
@@ -1291,11 +1287,7 @@ export default function SubmitEOD() {
             recapNote={<>{minutesLabel(adjMins)} counted toward this day's logged hours - the {expectedHrs.toFixed(1)}h target is unchanged.</>}
           />
 
-          {/* Holiday, Leave and Weekend — nothing REQUIRED to log, so this banner always shows
-              for them. Holiday/Leave also replace the whole Tasks section with this (see
-              isNonWorkDay below); a Weekend keeps the Tasks section too, so the Add-task button
-              stays available right underneath for optional overtime logging. Reuses the same
-              banner shape and the existing --ok role as the approved banner above; no new colors. */}
+          {/* Holiday, Leave and Weekend information banner */}
           {(isNonWorkDay || isWeekend) && (
             <div style={{
               display: 'flex', gap: 10, alignItems: 'flex-start',
@@ -1305,7 +1297,7 @@ export default function SubmitEOD() {
               <CheckCircle size={15} style={{ color: 'var(--ok)', flexShrink: 0, marginTop: 1 }} aria-hidden />
               <div>
                 {!isHoliday && (
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ok)', marginBottom: 2 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ok)', marginBottom: 2 }}>
                     No tasks required
                   </div>
                 )}
@@ -1521,14 +1513,14 @@ export default function SubmitEOD() {
                   </span>
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <div className="eod-form-actions">
                 <button
                   onClick={handleSaveDraft}
                   disabled={draftMutation.isPending || submitMutation.isPending}
                   style={{
-                    padding: '9px 20px', borderRadius: 6,
-                    background: 'var(--raised2)', border: '1px solid var(--line2)',
-                    color: 'var(--txt)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    padding: '9px 20px', borderRadius: 10,
+                    background: 'var(--eod-field-bg)', border: '1px solid var(--eod-field-border-hover)',
+                    color: 'var(--eod-btn-text)', fontSize: 14, fontWeight: 700, cursor: 'pointer',
                     opacity: draftMutation.isPending ? 0.6 : 1,
                   }}
                 >
@@ -1539,11 +1531,11 @@ export default function SubmitEOD() {
                   disabled={draftMutation.isPending || submitMutation.isPending || hoursShort}
                   title={hoursShort ? `Log ${hoursShortBy.toFixed(1)} more hour(s) to submit` : undefined}
                   style={{
-                    padding: '9px 22px', borderRadius: 6,
+                    padding: '9px 22px', borderRadius: 10,
                     background: !submitReady ? 'var(--raised2)' : 'var(--brand)',
                     border: `1px solid ${!submitReady ? 'var(--line2)' : 'var(--brand-deep)'}`,
-                    color: 'var(--txt)',
-                    fontSize: 13, fontWeight: 700,
+                    color: submitReady ? '#fff' : 'var(--txt)',
+                    fontSize: 14, fontWeight: 700,
                     cursor: hoursShort ? 'not-allowed' : 'pointer',
                     opacity: submitMutation.isPending ? 0.6 : 1,
                     boxShadow: !submitReady ? 'none' : '0 2px 8px color-mix(in srgb, var(--brand) 35%, transparent)',
