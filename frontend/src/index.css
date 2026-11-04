@@ -737,23 +737,22 @@ textarea:-webkit-autofill:focus {
 }
 
 /* ─── Profile page — cover banner header ────────────────────────── */
-/* The avatar overlaps the banner's bottom-left corner at a fixed offset
-   tuned for its 88px desktop size (top: -44, exactly half its height, left:
-   24 matching the content padding) — shrinking the avatar without shrinking
-   that offset would leave it floating above the banner instead of sitting
-   on its edge, so avatar size, position and the details block's clearing
-   padding-top all move together at each step down. */
+/* Identity row: avatar overlaps the cover's bottom edge, name / designation / email / chips sit to its right
+   (OneHR's My Profile arrangement). Wraps instead of overflowing: the Edit/Save group drops below when the
+   row is too narrow, and on phones the avatar shrinks and the name steps down. */
 @media (max-width: 640px) {
-  .nf-r-profile-details { flex-direction: column !important; align-items: flex-start !important; }
+  .nf-r-profile-actions-wrap { width: 100%; padding-top: 0 !important; }
   .nf-r-profile-actions { width: 100%; }
   .nf-r-profile-actions > button { flex: 1; }
+  .nf-r-profile-name { font-size: 22px !important; }
 }
 @media (max-width: 480px) {
-  .nf-r-profile-content { padding: 0 16px 16px !important; }
+  .nf-r-profile-content { padding: 0 16px 16px !important; gap: 14px !important; }
   .nf-r-profile-banner { height: 88px !important; }
-  .nf-r-profile-avatar { top: -32px !important; left: 16px !important; }
-  .nf-r-profile-avatar-img { width: 64px !important; height: 64px !important; }
-  .nf-r-profile-details { padding-top: 40px !important; }
+  .nf-r-profile-avatar { margin-top: -26px !important; }
+  .nf-r-profile-avatar-img { width: 72px !important; height: 72px !important; }
+  .nf-r-profile-info { padding-top: 0 !important; }
+  .nf-r-profile-name { font-size: 19px !important; }
 }
 /* Quick-facts contact chips — own breakpoints rather than reusing
    .nf-r-stack-sm, since 3 columns of icon+label+value chips need a tablet

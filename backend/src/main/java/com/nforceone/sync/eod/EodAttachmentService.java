@@ -150,6 +150,11 @@ public class EodAttachmentService {
         return attachment;
     }
 
+    /** Drops every attachment of an entry — used when the entry becomes a holiday, which carries none. */
+    public void deleteAllForEntry(Long entryId) {
+        attachmentRepository.deleteAllByEntryId(entryId);
+    }
+
     /**
      * Called from EodService.saveDraft right after the entry (and its freshly recreated task
      * rows) have been flushed. Re-points whichever attachment IDs the client says now belong to

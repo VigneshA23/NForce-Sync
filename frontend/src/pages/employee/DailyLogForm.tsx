@@ -19,16 +19,17 @@ import {
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../../lib/toast';
 import { todayISO, formatDate } from '../../lib/date';
-import { saveDraft, submitEntry, listEntries, getDayDefaults } from '../../api/eod';
+import { saveDraft, submitEntry, listEntries, getDayDefaults, markHoliday, clearHoliday, isAutoHolidayEntry } from '../../api/eod';
 import { useEntryPieces } from '../../api/approvalPieces';
 import { useDashboardSummary } from '../../api/employee';
 import type { EodEntryDto, EodLogLineDto, SaveLogLineRequest } from '../../api/eod';
 import { DatePicker } from '../../components/DatePicker';
+import { ConfirmModal } from '../../components/ConfirmModal';
 import { TimeAdjustmentSection } from '../../components/timeAdjustment/TimeAdjustmentSection';
 import { useTimeAdjustment } from '../../components/timeAdjustment/useTimeAdjustment';
 import { minutesLabel } from '../../components/timeAdjustment/timeAdjustment';
 import { BlockerReasonField, TaskStatusField } from '../../components/taskStatus/TaskStatusFields';
-import { ApprovalStatusLine, SubmissionWindow } from './dailyLogParts';
+import { ApprovalStatusLine, SubmissionWindow, DAILY_LOG_HOLIDAY_MESSAGE } from './dailyLogParts';
 import { useSubmissionWindow } from './useSubmissionWindow';
 import { LegacyLogNotice } from './LegacyLogNotice';
 import { legacyLogOf } from './dailyLogLegacy';
@@ -99,7 +100,8 @@ function entrySignature(date: string, e?: EodEntryDto | null) {
 class DraftBlockedError extends Error {}
 
 function editable(entry: EodEntryDto | null | undefined) {
-  return !entry || entry.status === 'DRAFT' || entry.status === 'REJECTED';
+  // A holiday the system recorded itself is APPROVED but was never submitted: it must not lock the Day Type.
+  return !entry || entry.status === 'DRAFT' || entry.status === 'REJECTED' || isAutoHolidayEntry(entry);
 }
 
 
@@ -195,6 +197,13 @@ export default function DailyLogForm() {
   const errorRef      = useRef<HTMLDivElement>(null);
   const saveTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appliedRef    = useRef<string | null>(null);
+  // The date the user deliberately moved off a calendar holiday, so the populate effect does not snap back to it.
+  const holidayOptOutDate = useRef<string | null>(null);
+  // An in-flight "remove the auto-recorded holiday"; every save waits for it so it can never hit a locked entry.
+  const pendingClear  = useRef<Promise<unknown> | null>(null);
+  const selectedDateRef = useRef(selectedDate);
+  useEffect(() => { selectedDateRef.current = selectedDate; }, [selectedDate]);
+  const [confirmHoliday, setConfirmHoliday] = useState(false);
 
   // ── Queries ───────────────────────────────────────────────────────────────
 
@@ -247,6 +256,20 @@ export default function DailyLogForm() {
   // always comes from the server.
   const benchMode                 = entry ? entry.benchMode === true : user?.capabilities?.benchMode === true;
 
+  // Records the day as a holiday with no Save draft / Submit: no approval pieces, no notifications. Idempotent on the
+  // server, so a refresh or a repeated trigger returns the same entry instead of creating another.
+  const holidayMut = useMutation({
+    mutationFn: (date: string) => markHoliday(date, 'PLAIN_LOG'),
+    onSuccess: (saved, date) => {
+      if (date !== selectedDateRef.current) return; // the user already moved to another date
+      setEntryId(saved.id ?? null); setEntryStatus(saved.status);
+      appliedRef.current = entrySignature(date, saved);
+      qc.invalidateQueries({ queryKey: ['eod'] });
+    },
+    onError: (err: unknown) => showToast('error', extractError(err)),
+  });
+  function recordHoliday() { holidayMut.mutate(selectedDate); }
+
   // ── Populate form ─────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -265,14 +288,20 @@ export default function DailyLogForm() {
       ta.load(entry);
       setWorkLocation(entry.workLocation ?? ''); setNextDayPlan(entry.nextDayPlan ?? '');
       setRemarks(entry.remarks ?? ''); setNotes(entry.logNotes ?? '');
+      // A holiday still sitting as an editable draft (saved before holidays were automatic) is recorded now.
+      if ((entry.status === 'DRAFT' || entry.status === 'REJECTED') && entry.dayType === 'HOLIDAY') recordHoliday();
       if (entry.entryForm === 'PLAIN_LOG') {
         if (entry.logLines?.length) { setLines(linesFromDto(entry.logLines)); setIsLeave(false); }
-        else if ((entry.logTotalHours ?? 0) === 0 && entry.status !== 'DRAFT' && entry.status !== 'REJECTED') { setLines([]); setIsLeave(true); } // a filed leave record; an empty DRAFT is just a blank form
+        else if ((entry.logTotalHours ?? 0) === 0 && entry.status !== 'DRAFT' && entry.status !== 'REJECTED' && entry.dayType !== 'HOLIDAY') { setLines([]); setIsLeave(true); } // a filed leave record (never a holiday: an auto-recorded holiday is APPROVED with no hours too); an empty DRAFT is just a blank form
         else { setLines([]); setIsLeave(false); }
       }
     } else {
       setEntryId(null); setEntryStatus(null);
-      setDayType(dayDefaults?.dayType ?? 'WORKING_DAY'); setWeekendWorked(false);
+      const optedOut = holidayOptOutDate.current === selectedDate && dayDefaults?.dayType === 'HOLIDAY';
+      const defaultDayType = optedOut ? 'WORKING_DAY' : (dayDefaults?.dayType ?? 'WORKING_DAY');
+      setDayType(defaultDayType); setWeekendWorked(false);
+      // Calendar holiday: record it straight away, no Save draft / Submit.
+      if (defaultDayType === 'HOLIDAY') recordHoliday();
       setWorkLocation(dayDefaults?.workLocation ?? '');
       setNextDayPlan(''); setRemarks(''); setNotes(''); setLines([]); setIsLeave(false); ta.reset();
     }
@@ -297,6 +326,7 @@ export default function DailyLogForm() {
   const isEditable   = editable(entry);
   const isReadOnly   = !isEditable;
   const isRejected   = entryStatus === 'REJECTED';
+  const isHoliday    = dayType === 'HOLIDAY';
   const isNonWork    = dayType === 'LEAVE' || dayType === 'HOLIDAY';
   const isWeekend    = dayType === 'WEEKEND';
   const wLocDisabled = isNonWork || isWeekend;
@@ -326,9 +356,40 @@ export default function DailyLogForm() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  function handleDateChange(d: string) { appliedRef.current = null; setSelectedDate(d); setErrors([]); setSubmitAttempted(false); setAutosaveError(null); setLineNotices({}); }
+  function handleDateChange(d: string) { appliedRef.current = null; holidayOptOutDate.current = null; setSelectedDate(d); setErrors([]); setSubmitAttempted(false); setAutosaveError(null); setLineNotices({}); }
+
+  const hasEnteredContent = () => lines.length > 0 || isLeave || nextDayPlan.trim() !== '' || remarks.trim() !== '' || notes.trim() !== '';
+
+  function applyHoliday() {
+    holidayOptOutDate.current = null;
+    setDayType('HOLIDAY'); setWeekendWorked(false); setWorkLocation('');
+    setLines([]); setIsLeave(false); setNextDayPlan(''); setRemarks(''); setNotes(''); ta.reset();
+    setErrors([]); setDirty(false); setAutosaveError(null);
+    recordHoliday();
+  }
 
   function handleDayTypeChange(v: string) {
+    if (v === 'HOLIDAY' && dayType !== 'HOLIDAY') {
+      if (hasEnteredContent()) { setConfirmHoliday(true); return; }
+      applyHoliday();
+      return;
+    }
+    if (dayType === 'HOLIDAY' && v !== 'HOLIDAY') {
+      // Leaving Holiday: drop the auto-recorded entry so the normal flow starts from a clean slate. Nothing was
+      // edited, so nothing is marked dirty and no autosave fires for the switch itself.
+      holidayOptOutDate.current = selectedDate;
+      if (entryId != null) {
+        const p = clearHoliday(selectedDate)
+          .then(() => qc.invalidateQueries({ queryKey: ['eod'] }))
+          .catch((err: unknown) => showToast('error', extractError(err)))
+          .finally(() => { if (pendingClear.current === p) pendingClear.current = null; });
+        pendingClear.current = p;
+      }
+      setEntryId(null); setEntryStatus(null);
+      appliedRef.current = entrySignature(selectedDate, null);
+      setDayType(v); setWeekendWorked(false); setWorkLocation(''); setErrors([]);
+      return;
+    }
     if (v !== 'WORKING_DAY') ta.reset(); // an adjustment exists only on a full Working day; the server clears it too
     setDayType(v); setWeekendWorked(false);
     if (v !== 'WORKING_DAY' && v !== 'FIRST_HALF_LEAVE' && v !== 'SECOND_HALF_LEAVE') setWorkLocation('');
@@ -397,9 +458,10 @@ export default function DailyLogForm() {
   }, [qc]);
 
   const saveMut = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const blocked = draftBlockReason(isLeave || isNonWork || noWorkWeekend ? [] : lines);
       if (blocked) throw new DraftBlockedError(blocked);
+      await pendingClear.current;
       return saveDraft(buildReq());
     },
     onSuccess: (saved) => {
@@ -432,6 +494,7 @@ export default function DailyLogForm() {
       }
       setErrors([]);
       setSubmitAttempted(false);
+      await pendingClear.current;
       const saved = await saveDraft(buildReq());
       return submitEntry(saved.id);
     },
@@ -452,13 +515,15 @@ export default function DailyLogForm() {
   // ── Autosave ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!dirty || !isEditable) return;
+    // A holiday is recorded by its own call, never as a draft.
+    if (!dirty || !isEditable || isHoliday) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       const blocked = draftBlockReason(isLeave || isNonWork || noWorkWeekend ? [] : lines);
       if (blocked) { setAutosaveError(blocked); setDirty(false); return; }
       setAutosaving(true);
       try {
+        await pendingClear.current;
         const saved = await saveDraft(buildReq());
         setAutosaveError(null);
         setEntryId(saved.id ?? null); setEntryStatus(saved.status);
@@ -492,15 +557,25 @@ export default function DailyLogForm() {
             </h1>
           </DateStepper>
         </div>
-        {entryStatus && <StatusBadge status={entryStatus} />}
+        {entryStatus && !(isHoliday && isEditable) && <StatusBadge status={entryStatus} />}
       </div>
 
       {/* Status strip: who reviews it and where it stands, plus the submission window (a chip while open, a
           banner once closed). Replaces the Approval and Submission-window cards. */}
       <div style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-start', gap:'10px 16px', marginBottom:20, minWidth:0 }}>
-        <ApprovalStatusLine pieces={pieces} />
+        {/* No reviewer on a holiday: nothing is submitted, so there is nothing to assign. */}
+        {!isHoliday && <ApprovalStatusLine pieces={pieces} />}
         <SubmissionWindow state={windowState} editable={isEditable} />
       </div>
+
+      <ConfirmModal
+        open={confirmHoliday}
+        onClose={() => setConfirmHoliday(false)}
+        onConfirm={() => { setConfirmHoliday(false); applyHoliday(); }}
+        title="Mark this day as a holiday?"
+        message="Everything you have entered for this date (line items, plan, remarks and notes) will be discarded. The day is recorded as a holiday automatically."
+        confirmLabel="Mark as holiday"
+      />
 
       {/* ── Full-width banners ── */}
 
@@ -596,10 +671,10 @@ export default function DailyLogForm() {
             <div style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'12px 16px', borderRadius:8, marginTop:24, background:'rgba(47,182,124,.08)', border:'1px solid rgba(47,182,124,.3)' }}>
               <CheckCircle size={15} style={{ color:'var(--ok)', flexShrink:0, marginTop:1 }} aria-hidden />
               <div>
-                <div style={{ fontSize:13, fontWeight:600, color:'var(--ok)', marginBottom:2 }}>No tasks required</div>
+                {!isHoliday && <div style={{ fontSize:13, fontWeight:600, color:'var(--ok)', marginBottom:2 }}>No tasks required</div>}
                 <div style={{ fontSize:12, color:'var(--txt-mut)', lineHeight:1.5 }}>
-                  {dayType==='LEAVE' || isLeave ? 'Leave day — this entry will be auto-approved.'
-                    : dayType==='HOLIDAY' ? 'Company holiday — this entry will be auto-approved.'
+                  {isHoliday ? DAILY_LOG_HOLIDAY_MESSAGE
+                    : dayType==='LEAVE' || isLeave ? 'Leave day — this entry will be auto-approved.'
                     : weekendWorked ? 'You worked this weekend day. Every hour you log counts as overtime.'
                     : 'Weekend — no line items required. Submit as-is to record no work, or turn on "I worked on this day".'}
                 </div>
@@ -751,6 +826,7 @@ export default function DailyLogForm() {
           )}
 
           {/* Next-day plan (required, first) and Remarks (optional): side by side from 1536px up, stacked below. */}
+          {!isHoliday && (<>
           <div className="nf-dl-textpair" style={{ marginTop:24 }}>
           {!isNonWork && !isWeekend && (
             <div>
@@ -786,13 +862,14 @@ export default function DailyLogForm() {
                   <CharCount value={notes} max={MAX_NOTES} />
                 </>}
           </div>
+          </>)}
 
           {/* ── Action buttons (SubmitEOD style — right-aligned) ── */}
       </div>
 
           {/* Sticky action bar: solid background + top border, always on screen; it sits in normal flow at the end
               of the form (so it never covers the last fields) and only floats while that end is off-screen. */}
-          {isEditable && !confirming && (
+          {isEditable && !confirming && !isHoliday && (
             <div className="nf-dl-actionbar" style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8 }}>
               {autosaving && <div style={{ fontSize:12, color:'var(--txt-dim)' }}>Saved just now</div>}
               {autosaveError && !autosaving && (
@@ -823,7 +900,7 @@ export default function DailyLogForm() {
           )}
 
           {/* Confirmation dialog */}
-          {isEditable && confirming && (
+          {isEditable && confirming && !isHoliday && (
             <div className="nf-dl-actionbar nf-dl-confirm" style={{ padding:'16px 18px', borderRadius:8, background:'color-mix(in srgb, var(--brand) 8%, var(--shell))', border:'1px solid rgba(177,17,22,.2)' }}>
               <div style={{ fontSize:14, fontWeight:600, color:'var(--txt)', marginBottom:6 }}>
                 {isLeave || isNonWork ? 'Record this as a leave day?' : noWorkWeekend ? 'Record this weekend as no work?' : `Submit your daily log for ${formatDate(selectedDate)}?`}

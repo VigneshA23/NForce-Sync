@@ -419,6 +419,126 @@ public class EodService {
                 attachments.byTaskId());
     }
 
+    /**
+     * Records the day as a holiday without Save Draft or Submit. The entry is written straight to
+     * APPROVED with no approval pieces, no submittedAt and no manager snapshot, so it never reaches an
+     * approver's inbox, never raises a notification and is never "owed" by the reminder or Missing EOD
+     * logic. Hours stay zero, so it can never count as productive time.
+     *
+     * <p>Idempotent: an entry already recorded as a holiday is returned untouched. An editable draft /
+     * rejected entry for the date is converted (its rows, log lines and attachments are removed — a
+     * holiday carries none). An entry that is already in the approval workflow is left alone (409).
+     */
+    public EodEntryDto markHoliday(com.nforceone.sync.eod.dto.MarkHolidayRequest request, String actingEmail) {
+        AppUser employee = requireUserByEmail(actingEmail);
+        LocalDate date = request.entryDate();
+        requireNotFutureDate(date);
+        // Rejects HOLIDAY on a locked weekend date, the same rule saveDraft applies.
+        resolveDayType(EodEntry.DayType.HOLIDAY, date);
+
+        EodEntry entry = entryRepository.findByEmployeeIdAndEntryDate(employee.getId(), date).orElse(null);
+        OffsetDateTime now = OffsetDateTime.now();
+
+        if (entry != null) {
+            if (isAutoHoliday(entry)) return holidayDto(entry);
+            if (!entry.isEditable()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Entry in status " + entry.getStatus() + " cannot be changed to a holiday");
+            }
+            for (EodLogLine line : logLineRepository.findByEntryIdOrderBySortOrderAscIdAsc(entry.getId())) {
+                if (logLineRepository.hasBlockerReplies(line.getId())) {
+                    throw new BlockerLineLockedException(line.getId(), line.getSortOrder() + 1);
+                }
+            }
+            logLineRepository.deleteByEntryId(entry.getId());
+            attachmentService.deleteAllForEntry(entry.getId());
+            entry.getTasks().clear();
+            // A rejected cycle's pieces are history, not a live approval.
+            List<EodProjectApproval> stale = projectApprovalRepository.findByEodEntryId(entry.getId());
+            stale.forEach(p -> p.setSupersededAt(now));
+            projectApprovalRepository.saveAll(stale);
+        } else {
+            entry = new EodEntry();
+            entry.setEmployee(employee);
+            entry.setEntryDate(date);
+            entry.setCreatedAt(now);
+            EodEntry.EntryForm requestedForm = request.entryForm();
+            if (requestedForm != null) {
+                validateFormAssignment(requestedForm, employee, date);
+                entry.setEntryForm(requestedForm);
+            } else if (employee.getRole() == AppUser.Role.EMPLOYEE) {
+                validateFormAssignment(EodEntry.EntryForm.PROJECT_GROUPED, employee, date);
+            }
+            entry.setBenchMode(benchModePolicy.isBenchMode(employee, date));
+        }
+
+        entry.setDayType(EodEntry.DayType.HOLIDAY);
+        entry.setStatus(EodEntry.Status.APPROVED);
+        entry.setWorkLocation(null);
+        entry.setNextDayPlan(null);
+        entry.setRemarks(null);
+        entry.setTimeAdjustmentType(null);
+        entry.setTimeAdjustmentMinutes(null);
+        entry.setWeekendWorked(Boolean.FALSE);
+        entry.setIsOvertime(Boolean.FALSE);
+        entry.setOvertimeHours(null);
+        entry.setLogSummary(null);
+        entry.setLogTotalHours(null);
+        entry.setLogNotes(null);
+        entry.setSubmittedAt(null);
+        entry.setManagerId(null);
+        entry.setUpdatedAt(now);
+
+        EodEntry saved;
+        try {
+            saved = entryRepository.saveAndFlush(entry);
+        } catch (DataIntegrityViolationException ex) {
+            // A concurrent first visit created it between our read and insert — that is the result we wanted.
+            EodEntry existing = entryRepository.findByEmployeeIdAndEntryDate(employee.getId(), date)
+                    .filter(this::isAutoHoliday)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                            "An entry for this date was just created — reload and try again"));
+            return holidayDto(existing);
+        }
+        writeAuditLog("EOD_ENTRY", saved.getId(), "HOLIDAY_AUTO_RECORDED", employee,
+                "{\"date\":\"" + date + "\"}");
+        return holidayDto(saved);
+    }
+
+    /**
+     * Undoes {@link #markHoliday}: the user switched the Day Type away from Holiday. The row is removed
+     * outright so nothing holiday-shaped is left behind and the normal flow starts from a clean slate.
+     * No entry, or one that is not a holiday, is a no-op; a holiday that already went through the
+     * approval workflow (filed before this feature) stays locked, as it always was.
+     */
+    public void clearHoliday(LocalDate date, String actingEmail) {
+        AppUser employee = requireUserByEmail(actingEmail);
+        EodEntry entry = entryRepository.findByEmployeeIdAndEntryDate(employee.getId(), date).orElse(null);
+        if (entry == null || entry.getDayType() != EodEntry.DayType.HOLIDAY) return;
+        if (!isAutoHoliday(entry)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Entry in status " + entry.getStatus() + " cannot be changed");
+        }
+        Long id = entry.getId();
+        entryRepository.delete(entry);
+        entryRepository.flush();
+        writeAuditLog("EOD_ENTRY", id, "HOLIDAY_AUTO_CLEARED", employee, "{\"date\":\"" + date + "\"}");
+    }
+
+    /** A holiday recorded by {@link #markHoliday}: APPROVED, Holiday, never submitted (so no approval pieces). */
+    private boolean isAutoHoliday(EodEntry e) {
+        return e.getDayType() == EodEntry.DayType.HOLIDAY
+                && e.getStatus() == EodEntry.Status.APPROVED
+                && e.getSubmittedAt() == null
+                && projectApprovalRepository.findByEodEntryId(e.getId()).isEmpty();
+    }
+
+    private EodEntryDto holidayDto(EodEntry e) {
+        return e.getEntryForm() == EodEntry.EntryForm.PLAIN_LOG
+                ? EodEntryDto.from(e, null, null, List.of(), java.util.Map.of(), List.of())
+                : EodEntryDto.from(e, null, null, List.of(), java.util.Map.of());
+    }
+
     public EodEntryDto submit(Long entryId, String actingEmail) {
         AppUser employee = requireUserByEmail(actingEmail);
         EodEntry entry = requireEntryById(entryId);

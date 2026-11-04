@@ -37,6 +37,22 @@ public class EodController {
         return eodService.saveDraft(request, actingEmail());
     }
 
+    /**
+     * Records the day as a holiday with no Save Draft / Submit: no approval pieces, no notifications.
+     * Idempotent — repeating it for the same date returns the same entry.
+     */
+    @PostMapping("/holiday")
+    public EodEntryDto markHoliday(@Valid @RequestBody com.nforceone.sync.eod.dto.MarkHolidayRequest request) {
+        return eodService.markHoliday(request, actingEmail());
+    }
+
+    /** Undoes an auto-recorded holiday (the user switched the Day Type away from Holiday). Idempotent. */
+    @DeleteMapping("/holiday")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void clearHoliday(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        eodService.clearHoliday(date, actingEmail());
+    }
+
     @PostMapping("/{id}/submit")
     public EodEntryDto submit(@PathVariable Long id) {
         return eodService.submit(id, actingEmail());
