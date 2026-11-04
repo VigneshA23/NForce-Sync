@@ -1,7 +1,8 @@
 // Decorative page backdrop: blush-pink → white gradient (dark: deep rose → near-black) with very-low-opacity crimson
-// accents. Purely visual — aria-hidden, no pointer events. Sits behind page content (zIndex -1);
-// the parent must be `position: relative; isolation: isolate`. It bleeds `inset` px past the
-// parent so it fills the Shell's page padding (28px).
+// accents. Purely visual — aria-hidden, no pointer events. Attached to the VIEWPORT (position: fixed),
+// below the top bar and right of the sidebar (--header-h / --sidebar-w from index.css), so it never
+// depends on page height, Day Type or window size. Sits behind page content (zIndex -1); the parent
+// wrapper must be `isolation: isolate` (see pageBackdropWrapperStyle).
 
 const C = 'var(--pb-crimson)';
 const PINK = 'var(--pb-pink)';
@@ -11,18 +12,27 @@ const LEAF = 'M0,0 C-70,-60 -70,-190 0,-280 C70,-190 70,-60 0,0 Z';
 
 
 
-export function PageBackdrop({ inset = 28 }: { inset?: number }) {
+// Always-rendered wrapper for the backdrop. Base colour matches the gradient so a short page never shows a strip.
+// minHeight subtracts the top bar and the Shell's 28px+28px page padding so it fills the viewport without adding scroll.
+export const pageBackdropWrapperStyle = {
+  position: 'relative',
+  isolation: 'isolate',
+  minHeight: 'calc(100dvh - var(--header-h) - 56px)',
+  background: 'var(--pb-g2)',
+} as const;
+
+export function PageBackdrop() {
   return (
     <svg
       aria-hidden
       focusable="false"
       viewBox="0 0 1600 900"
-      preserveAspectRatio="xMidYMid slice"
+      preserveAspectRatio="xMaxYMax slice"
       style={{
-        position: 'absolute',
-        top: -inset, right: -inset, bottom: -inset, left: -inset,
-        width: `calc(100% + ${inset * 2}px)`,
-        height: `calc(100% + ${inset * 2}px)`,
+        position: 'fixed',
+        top: 'var(--header-h)', left: 'var(--sidebar-w)', right: 0, bottom: 0,
+        width: 'calc(100vw - var(--sidebar-w))',
+        height: 'calc(100dvh - var(--header-h))',
         zIndex: -1,
         pointerEvents: 'none',
       }}
