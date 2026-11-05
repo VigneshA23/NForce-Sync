@@ -1,19 +1,60 @@
 import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
+/** Panel card — OneHR's `nf-dash-card`: 16px corners, a faint crimson wash across the top
+ *  110px, soft drop shadow that warms to crimson on hover. */
 export function Card({ children, style, className }: { children: React.ReactNode; style?: React.CSSProperties; className?: string }) {
   return (
     <div
-      className={className}
+      className={['nf-card', className].filter(Boolean).join(' ')}
       style={{
-        background: 'var(--panel)',
+        background: 'linear-gradient(180deg, color-mix(in srgb, var(--brand) 4%, var(--panel)) 0%, var(--panel) 110px)',
         border: '1px solid var(--line)',
-        borderRadius: 10,
+        borderRadius: 16,
+        boxShadow: '0 6px 22px rgba(16,24,40,.07)',
         padding: 'var(--nf-density-card-pad, 20px)',
         ...style,
       }}
     >
       {children}
+    </div>
+  );
+}
+
+/** A Card's heading row — OneHR's `nf-dash-title`: 38px crimson icon tile + bold 16px title,
+ *  with an optional right-aligned slot (a "View all →" link, a filter, a count). Pass `accent`
+ *  (e.g. var(--warn)) when the panel's colour carries meaning — it tints the tile and title. */
+export function CardTitle({ icon: Icon, children, right, accent, style }: {
+  icon?: LucideIcon;
+  accent?: string;
+  children: React.ReactNode;
+  right?: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, ...style }}>
+      {Icon && (
+        <span aria-hidden="true" style={{
+          width: 38, height: 38, flexShrink: 0, borderRadius: 11,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          color: accent ?? 'var(--brand)',
+          background: `color-mix(in srgb, ${accent ?? 'var(--brand)'} 12%, var(--panel))`,
+          border: `1px solid color-mix(in srgb, ${accent ?? 'var(--brand)'} 28%, transparent)`,
+        }}>
+          <Icon size={18} />
+        </span>
+      )}
+      <h3 style={{
+        // 160px basis: in a wrapping title row, the `right` slot drops to its own line on narrow
+        // screens instead of squeezing the title into a one-word-per-line column.
+        flex: '1 1 160px', minWidth: 0, margin: 0,
+        fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
+        fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em', color: accent ?? 'var(--txt)',
+      }}>
+        {children}
+      </h3>
+      {right}
     </div>
   );
 }
@@ -38,58 +79,58 @@ interface KpiProps {
   style?: React.CSSProperties;
 }
 
+/** KPI tile — OneHR's `nf-dash-tile`: a 6px accent edge on the left, a diagonal wash toward the
+ *  accent, label + accent icon tile on top, the value underneath. The value keeps the accent
+ *  colour because in Sync the colour carries meaning (risk/warn/ok), not decoration. */
 export function KpiCard({ icon, label, value, accent = 'var(--txt)', trend, loading = false, title, style: extraStyle }: KpiProps) {
   const [hov, setHov] = useState(false);
+  // A neutral (text-coloured) tile still gets a visible edge — use the brand crimson for it.
+  const edge = accent === 'var(--txt)' ? 'var(--brand)' : accent;
   return (
     <div
-      title={title}
-      aria-busy={loading || undefined}
+
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        background: 'var(--panel)',
-        border: `1px solid ${hov ? `color-mix(in srgb, ${accent} 45%, var(--line))` : 'var(--line)'}`,
-        borderRadius: 12,
-        padding: '16px 18px',
+        background: `linear-gradient(135deg, var(--panel) 0%, var(--panel) 35%, color-mix(in srgb, ${edge} 16%, var(--panel)) 100%)`,
+        border: '1px solid var(--line)',
+        borderLeft: `6px solid ${edge}`,
+        borderRadius: 16,
+        padding: '10px 14px 9px 12px',
         // Fills whatever height the wrapping ClickableKpi (or a bare grid cell) stretches it
         // to — without this, a tile with no `trend` line renders shorter than its siblings that
         // have one, since a plain block div sizes to its own content by default rather than
         // inheriting a parent's stretched height.
         height: '100%',
         boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
         position: 'relative',
         overflow: 'hidden',
-        transform: hov ? 'translateY(-3px) scale(1.01)' : 'translateY(0) scale(1)',
-        transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.18s ease, box-shadow 0.18s ease',
+        transform: hov ? 'translateY(-2px)' : 'translateY(0)',
+        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
         boxShadow: hov
-          ? `0 8px 24px -4px color-mix(in srgb, ${accent} 25%, transparent), 0 2px 8px color-mix(in srgb, ${accent} 10%, transparent)`
-          : '0 1px 4px rgba(0,0,0,0.06)',
+          ? `0 10px 22px -10px color-mix(in srgb, ${edge} 65%, transparent)`
+          : `0 6px 18px -10px color-mix(in srgb, ${edge} 55%, transparent)`,
         cursor: 'default',
         ...extraStyle,
       }}
     >
-      {/* ambient glow blob */}
-      <div aria-hidden="true" style={{
-        position: 'absolute', top: -16, right: -16, width: 72, height: 72, borderRadius: '50%',
-        background: `radial-gradient(circle, color-mix(in srgb, ${accent} 28%, transparent), transparent 70%)`,
-        opacity: hov ? 1 : 0.5, transition: 'opacity 0.25s ease', pointerEvents: 'none',
-      }} />
-      {/* top accent shimmer */}
-      <div aria-hidden="true" style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: 2,
-        background: `linear-gradient(90deg, transparent, color-mix(in srgb, ${accent} 50%, transparent) 50%, transparent)`,
-        opacity: hov ? 0.6 : 0, transition: 'opacity 0.25s ease',
-        borderRadius: '12px 12px 0 0', pointerEvents: 'none',
-      }} />
-
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
         <div style={{
-          width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-          background: `color-mix(in srgb, ${accent} 14%, var(--raised2))`,
-          boxShadow: `0 0 0 1px color-mix(in srgb, ${accent} 20%, transparent)${hov ? `, 0 0 12px color-mix(in srgb, ${accent} 30%, transparent)` : ''}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
-          transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease',
-          transform: hov ? 'scale(1.12)' : 'scale(1)',
+          minWidth: 0, overflowWrap: 'anywhere', lineHeight: 1.3, paddingTop: 2,
+          fontSize: 13, fontWeight: 700, color: 'var(--txt)',
+        }}>
+          {label}
+        </div>
+        <div aria-hidden="true" className="nf-kpi-ico" style={{
+          width: 30, height: 30, borderRadius: 10, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: edge,
+          background: `color-mix(in srgb, ${edge} 14%, var(--panel))`,
+          border: `1px solid color-mix(in srgb, ${edge} 22%, transparent)`,
+          boxShadow: `0 4px 10px -6px color-mix(in srgb, ${edge} 60%, transparent)`,
         }}>
           {icon}
         </div>
@@ -97,9 +138,9 @@ export function KpiCard({ icon, label, value, accent = 'var(--txt)', trend, load
 
       <div style={{
         fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-        fontSize: 24, fontWeight: 700, color: accent,
-        letterSpacing: '-0.02em', lineHeight: 1,
-        fontVariantNumeric: 'tabular-nums', marginBottom: 5,
+        fontSize: 24, fontWeight: 800, color: accent,
+        letterSpacing: '-0.02em', lineHeight: 1.05,
+        fontVariantNumeric: 'tabular-nums',
       }}>
         {loading ? (
           <span
@@ -111,10 +152,9 @@ export function KpiCard({ icon, label, value, accent = 'var(--txt)', trend, load
           />
         ) : value}
       </div>
-      <div style={{ fontSize: 11.5, color: 'var(--txt-mut)', fontWeight: 500 }}>{label}</div>
       {trend && (
         <div style={{
-          marginTop: 6, fontSize: 11, fontWeight: 600,
+          fontSize: 11, fontWeight: 600,
           color: trend.positive ? 'var(--ok)' : 'var(--risk)',
         }}>
           {trend.label}
@@ -138,15 +178,16 @@ export function ClickableKpi({ onClick, children }: { onClick: () => void; child
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
       style={{
-        cursor: 'pointer', borderRadius: 12, position: 'relative', height: '100%',
+        cursor: 'pointer', borderRadius: 16, position: 'relative', height: '100%',
       }}
     >
       {children}
+      {/* Bottom-right: the icon tile now owns the top-right corner (OneHR tile layout). */}
       <ChevronRight
         size={14}
         aria-hidden="true"
         style={{
-          position: 'absolute', top: 10, right: 10, color: 'var(--txt-dim)',
+          position: 'absolute', bottom: 8, right: 9, color: 'var(--txt-dim)',
           opacity: hover ? 1 : 0.45, transition: 'opacity 0.14s', pointerEvents: 'none',
         }}
       />

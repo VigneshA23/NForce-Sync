@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Paperclip, Smile, AtSign, Eye, Search, File as FileIcon, X, Download, AlertCircle,
-  Pencil, Trash2, Copy,
+  Pencil, Trash2, Copy, MessageSquare,
 } from 'lucide-react';
+import { EmptyState } from './EmptyState';
 import {
   useBlockerThread, useSendBlockerReply, useEditBlockerReply, useDeleteBlockerReply, fetchBlockerAttachmentUrl,
   type ConversationScope,
@@ -17,6 +18,13 @@ import { ConfirmModal } from './ConfirmModal';
 import {
   ALLOWED_ATTACHMENT_TYPES, ALLOWED_ATTACHMENT_TYPES_LABEL, MAX_ATTACHMENT_BYTES, validateAttachmentFile,
 } from '../lib/eodAttachments';
+import { btnNeutral, btnPrimary, btnSm, fieldStyle, textareaStyle } from '../lib/uiStyles';
+
+/** Emoji / @mention popovers above the reply box — OneHR popover frame. */
+const POPOVER_FRAME: React.CSSProperties = {
+  background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 12,
+  boxShadow: '0 16px 40px rgba(0,0,0,.35)',
+};
 
 /** Matches the extractError helper duplicated in SubmitEOD.tsx / approvals/shared.tsx. */
 function extractError(err: unknown): string {
@@ -283,9 +291,8 @@ function GenericConversationMessage({
               onChange={e => setEditText(e.target.value)}
               rows={2}
               style={{
-                width: '100%', resize: 'none', padding: '6px 10px', borderRadius: 8, fontSize: 12.5,
-                background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                fontFamily: 'inherit', boxSizing: 'border-box', display: 'block', marginBottom: 6,
+                ...textareaStyle, minHeight: 0, resize: 'none', padding: '6px 10px', fontSize: 12.5,
+                display: 'block', marginBottom: 6,
               }}
             />
             <div style={{ display: 'flex', gap: 8 }}>
@@ -293,11 +300,8 @@ function GenericConversationMessage({
                 type="button"
                 onClick={saveEdit}
                 disabled={saving || !editText.trim()}
-                style={{
-                  padding: '5px 12px', fontSize: 11.5, fontWeight: 600, borderRadius: 6,
-                  background: 'var(--risk)', border: '1px solid var(--risk)', color: '#fff',
-                  cursor: saving || !editText.trim() ? 'default' : 'pointer', opacity: saving || !editText.trim() ? 0.6 : 1,
-                }}
+                className="nf-btn nf-btn--primary"
+                style={{ ...btnPrimary, ...btnSm }}
               >
                 {saving ? 'Saving…' : 'Save'}
               </button>
@@ -305,10 +309,8 @@ function GenericConversationMessage({
                 type="button"
                 onClick={() => setEditing(false)}
                 disabled={saving}
-                style={{
-                  padding: '5px 12px', fontSize: 11.5, fontWeight: 600, borderRadius: 6,
-                  background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', cursor: 'pointer',
-                }}
+                className="nf-btn nf-btn--neutral"
+                style={{ ...btnNeutral, ...btnSm }}
               >
                 Cancel
               </button>
@@ -500,7 +502,7 @@ export function ThreadView({
         {isPending ? (
           <GlobalLoader fullScreen={false} compact label="Loading conversation..." />
         ) : (messages ?? []).length === 0 ? (
-          <div style={{ fontSize: 12.5, color: 'var(--txt-dim)' }}>{emptyMessage ?? 'No messages yet.'}</div>
+          <EmptyState icon={MessageSquare} title={emptyMessage ?? 'No messages yet.'} />
         ) : (
           (messages ?? []).map(m => (
             <GenericConversationMessage
@@ -568,15 +570,15 @@ export function ThreadView({
           // (native textarea scrolling, unaffected by resize:none below).
           rows={2}
           style={{
-            width: '100%', resize: 'none', padding: '8px 12px', borderRadius: '8px 8px 0 0', fontSize: 12.5,
-            background: 'var(--raised2)', border: '1px solid var(--line2)', borderBottom: 'none', color: 'var(--txt)',
-            fontFamily: 'inherit', display: 'block',
+            width: '100%', resize: 'none', padding: '10px 14px', borderRadius: '9px 9px 0 0', fontSize: 13,
+            background: 'var(--panel)', border: '1px solid var(--line2)', borderBottom: 'none', color: 'var(--txt)',
+            fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box', outline: 'none', display: 'block',
           }}
         />
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '6px 8px', borderRadius: '0 0 8px 8px',
-          background: 'var(--raised2)', border: '1px solid var(--line2)', borderTop: '1px solid var(--line)',
+          padding: '6px 8px', borderRadius: '0 0 9px 9px',
+          background: 'var(--panel)', border: '1px solid var(--line2)', borderTop: '1px solid var(--line)',
           marginBottom: 10,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--txt-dim)' }}>
@@ -619,8 +621,7 @@ export function ThreadView({
                   <div onClick={() => setEmojiOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
                   <div style={{
                     position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 20, width: 220,
-                    background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 8,
-                    boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
+                    ...POPOVER_FRAME, padding: 8,
                     display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 2,
                   }}>
                     {EMOJI_OPTIONS.map(e => (
@@ -659,8 +660,7 @@ export function ThreadView({
                   <div onClick={() => setMentionOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
                   <div style={{
                     position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 20, width: 200,
-                    background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 8,
-                    boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
+                    ...POPOVER_FRAME, padding: 8,
                   }}>
                     <div style={{ position: 'relative', marginBottom: 6 }}>
                       <Search size={12} aria-hidden="true" style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-dim)' }} />
@@ -669,10 +669,7 @@ export function ThreadView({
                         value={mentionQuery}
                         onChange={(e) => setMentionQuery(e.target.value)}
                         placeholder="Search participants..."
-                        style={{
-                          width: '100%', padding: '5px 8px 5px 24px', fontSize: 11.5, borderRadius: 6,
-                          background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                        }}
+                        style={{ ...fieldStyle, height: 30, padding: '0 8px 0 24px', fontSize: 11.5, borderRadius: 7 }}
                       />
                     </div>
                     {mentionResults.length === 0 ? (
@@ -698,11 +695,8 @@ export function ThreadView({
           <button
             onClick={handleSend}
             disabled={!canSend || isSending}
-            style={{
-              padding: '8px 16px', fontSize: 12.5, fontWeight: 600, borderRadius: 8,
-              background: 'var(--risk)', border: '1px solid var(--risk)', color: '#fff',
-              cursor: !canSend ? 'default' : 'pointer', opacity: !canSend ? 0.6 : 1,
-            }}
+            className="nf-btn nf-btn--primary"
+            style={{ ...btnPrimary, ...btnSm }}
           >
             {isSending ? 'Sending…' : 'Send Reply'}
           </button>

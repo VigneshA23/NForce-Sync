@@ -12,11 +12,12 @@ export function FilterGrid({ count, children }: { count: 2 | 3 | 4; children: Re
   return <div className={`nf-filter-grid nf-filter-grid--n${count}`}>{children}</div>;
 }
 
+// OneHR nf-pd-input / nf-pd-select frame (42px, 9px corners, panel fill).
 const CONTROL_BASE: React.CSSProperties = {
-  width: '100%', height: 36, boxSizing: 'border-box',
-  background: 'var(--shell)', border: '1px solid var(--line2)', borderRadius: 6,
-  color: 'var(--txt)', fontSize: 13, fontWeight: 400, fontFamily: 'Inter, sans-serif',
-  padding: '0 12px', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden',
+  width: '100%', height: 42, boxSizing: 'border-box',
+  background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 9,
+  color: 'var(--txt)', fontSize: 13, fontWeight: 400, fontFamily: 'inherit',
+  padding: '0 14px', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden',
 };
 
 function ClearButton({ label, onClick, right }: { label: string; onClick: () => void; right: number }) {
@@ -54,7 +55,7 @@ export function FilterSelect({ value, onChange, onClear, label, placeholder, chi
         onChange={e => onChange(e.target.value)}
         aria-label={`Filter by ${label}`}
         // Right padding clears the chevron (and the x while a value is set) so long names ellipsize instead of running under them.
-        style={{ ...CONTROL_BASE, appearance: 'none', cursor: 'pointer', paddingRight: hasValue ? 54 : 32 }}
+        style={{ ...CONTROL_BASE, appearance: 'none', cursor: 'pointer', paddingRight: hasValue ? 58 : 36 }}
       >
         <option value="">{placeholder}</option>
         {children}
@@ -84,7 +85,7 @@ export function FilterSearch({ value, onChange, label, placeholder }: {
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={`Search ${label}`}
-        style={{ ...CONTROL_BASE, paddingLeft: 30, paddingRight: value !== '' ? 32 : 12 }}
+        style={{ ...CONTROL_BASE, paddingLeft: 38, paddingRight: value !== '' ? 34 : 14 }}
       />
       {value !== '' && (
         <ClearButton

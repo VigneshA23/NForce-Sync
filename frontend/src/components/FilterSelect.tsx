@@ -8,7 +8,7 @@ import { X } from 'lucide-react';
  * them all. A ✕ sitting in the control solves that without adding a pseudo-option to the list,
  * where the OS-drawn menu would render it as just another value.
  *
- * The button sits left of the native arrow, and the select gains right padding while it is shown
+ * The button sits left of the select's chevron (native arrow or selectStyle's drawn one), and the select gains right padding while it is shown
  * so a long option label can never run underneath it.
  */
 export function FilterSelect({
@@ -33,7 +33,7 @@ export function FilterSelect({
         onChange={e => onChange(e.target.value)}
         disabled={disabled}
         style={{
-          ...style, paddingRight: isSet ? 46 : style?.paddingRight,
+          ...style, paddingRight: isSet ? 54 : style?.paddingRight,
           opacity: disabled ? 0.6 : 1, cursor: disabled ? 'not-allowed' : style?.cursor,
         }}
       >
@@ -46,7 +46,7 @@ export function FilterSelect({
           title={`Clear ${label}`}
           onClick={() => onChange('')}
           style={{
-            position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)',
+            position: 'absolute', right: 30, top: '50%', transform: 'translateY(-50%)',
             background: 'none', border: 'none', cursor: 'pointer', padding: 3,
             display: 'flex', color: 'var(--txt-dim)', borderRadius: 4,
           }}

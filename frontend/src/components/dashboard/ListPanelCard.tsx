@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Card } from '../KpiCard';
+import { EmptyState } from '../EmptyState';
+import { insetRowStyle, viewAllLinkStyle } from '../../lib/uiStyles';
 
 /**
  * Shared chrome for a titled list/section panel: icon + title (+ optional count badge) on the
@@ -37,35 +39,32 @@ export function ListPanelCard({
           </span>
         )}
         {viewAllPath && (
-          <Link to={viewAllPath} className="nf-link" style={{
-            marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4,
-            color: 'var(--info)', fontSize: 11, fontWeight: 500, textDecoration: 'none',
-          }}>
+          <Link to={viewAllPath} className="nf-link" style={{ ...viewAllLinkStyle, marginLeft: 'auto' }}>
             {viewAllLabel} <ArrowRight size={11} />
           </Link>
         )}
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: maxHeight === 'none' ? 'visible' : 'auto', maxHeight: maxHeight === 'none' ? undefined : maxHeight }}>
+      <div style={{
+        flex: 1, minHeight: 0, overflowY: maxHeight === 'none' ? 'visible' : 'auto', maxHeight: maxHeight === 'none' ? undefined : maxHeight,
+        display: 'flex', flexDirection: 'column', gap: 8, padding: '0 14px 14px',
+      }}>
         {children}
       </div>
     </Card>
   );
 }
 
-/** One row inside a ListPanelCard — consistent left border, padding, hover-free static row. */
-export function ListPanelRow({ children, style }: { children: ReactNode; style?: React.CSSProperties }) {
+/** One row inside a ListPanelCard — its own rounded inset row (OneHR `nf-ah-row`) tinted with
+ *  `color` (the item's status colour; neutral when it has none). Stacked by the card body. */
+export function ListPanelRow({ children, color, style }: { children: ReactNode; color?: string; style?: React.CSSProperties }) {
   return (
-    <div style={{ padding: '9px 16px', borderTop: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10, ...style }}>
+    <div style={{ ...insetRowStyle(color), gap: 10, flexShrink: 0, ...style }}>
       {children}
     </div>
   );
 }
 
 /** Standard empty-state body for a ListPanelCard. */
-export function ListPanelEmpty({ children }: { children: ReactNode }) {
-  return (
-    <div style={{ textAlign: 'center', padding: '20px 16px', fontSize: 12, color: 'var(--txt-dim)' }}>
-      {children}
-    </div>
-  );
+export function ListPanelEmpty({ children, icon }: { children: ReactNode; icon?: LucideIcon }) {
+  return <EmptyState icon={icon} title={children} />;
 }

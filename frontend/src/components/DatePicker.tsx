@@ -263,8 +263,8 @@ export function DatePicker({
       {open && (
         <div className="nf-r-popover" style={{
           position: 'absolute', top: '100%', left: 0, marginTop: 4, width: 260,
-          background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8,
-          boxShadow: '0 8px 24px rgba(0,0,0,.3)', zIndex: 100, padding: 12,
+          background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 12,
+          boxShadow: '0 16px 40px rgba(0,0,0,.35)', zIndex: 100, padding: 12,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <button type="button" onClick={() => shiftMonth(-1)} aria-label="Previous month" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-dim)', display: 'flex', padding: 4 }}>

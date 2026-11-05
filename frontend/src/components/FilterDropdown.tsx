@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowUpDown, ChevronDown, ListFilter } from 'lucide-react';
+import { fieldStyle } from '../lib/uiStyles';
 
 // ── checkbox multi-select filter dropdown with a "Clear all" option ────────────
 // Shared by Approvals and Team Lead Blockers so both pages behave identically:
@@ -24,11 +25,10 @@ export function FilterDropdown({ label, options, selected, onToggle, onClear, ge
         onClick={() => setOpen(o => !o)}
         title={label}
         style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 500,
-          background: selected.size ? 'color-mix(in srgb, var(--brand) 10%, var(--raised2))' : 'var(--raised2)',
+          ...fieldStyle, width: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8,
+          cursor: 'pointer', whiteSpace: 'nowrap',
+          background: selected.size ? 'color-mix(in srgb, var(--brand) 10%, var(--panel))' : 'var(--panel)',
           border: `1px solid ${selected.size ? 'color-mix(in srgb, var(--brand) 50%, transparent)' : 'var(--line2)'}`,
-          color: 'var(--txt)', cursor: 'pointer', whiteSpace: 'nowrap',
         }}
       >
         <ListFilter size={13} aria-hidden="true" />
@@ -43,8 +43,8 @@ export function FilterDropdown({ label, options, selected, onToggle, onClear, ge
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
           <div className="nf-r-popover" style={{
             position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, minWidth: 210,
-            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 10,
-            boxShadow: '0 12px 28px rgba(0,0,0,0.35)', maxHeight: 260, overflowY: 'auto',
+            background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 12, padding: 10,
+            boxShadow: '0 16px 40px rgba(0,0,0,.35)', maxHeight: 260, overflowY: 'auto',
           }}>
             {selected.size > 0 && (
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
@@ -99,10 +99,8 @@ export function SortDropdown<T extends string>({ label, options, value, onChange
         onClick={() => setOpen(o => !o)}
         title={`${label}: ${current?.label ?? ''}`}
         style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 500,
-          background: 'var(--raised2)', border: '1px solid var(--line2)',
-          color: 'var(--txt)', cursor: 'pointer', whiteSpace: 'nowrap',
+          ...fieldStyle, width: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8,
+          cursor: 'pointer', whiteSpace: 'nowrap',
         }}
       >
         <ArrowUpDown size={13} aria-hidden="true" />
@@ -114,8 +112,8 @@ export function SortDropdown<T extends string>({ label, options, value, onChange
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
           <div className="nf-r-popover" style={{
             position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 20, minWidth: 180,
-            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 10,
-            boxShadow: '0 12px 28px rgba(0,0,0,0.35)', maxHeight: 260, overflowY: 'auto',
+            background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 12, padding: 10,
+            boxShadow: '0 16px 40px rgba(0,0,0,.35)', maxHeight: 260, overflowY: 'auto',
           }}>
             {defaultValue !== undefined && (
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>

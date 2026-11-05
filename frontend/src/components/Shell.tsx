@@ -387,6 +387,12 @@ function NavLinkItem({ item, isActive, badge, indent, onNavClick }: {
       }}
       onClick={onNavClick}
     >
+      {isActive && (
+        <span aria-hidden="true" style={{
+          position: 'absolute', left: -8, top: 6, bottom: 6, width: 3,
+          background: 'var(--brand-bright)', borderRadius: '0 3px 3px 0',
+        }} />
+      )}
       <Icon size={15} style={{ flex: 'none', opacity: isActive ? 1 : 0.8 }} aria-hidden="true" />
       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {item.label}

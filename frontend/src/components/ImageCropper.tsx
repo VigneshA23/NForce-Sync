@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ZoomIn, ZoomOut } from 'lucide-react';
+import { btnNeutral, btnPrimary } from '../lib/uiStyles';
 
 interface ImageCropperProps {
   file: File;
@@ -161,14 +162,16 @@ export function ImageCropper({ file, aspect, outputWidth = 1200, onCancel, onCro
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
         <button
           onClick={onCancel}
-          style={{ padding: '7px 14px', background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 6, fontSize: 12.5, color: 'var(--txt-mut)', cursor: 'pointer' }}
+          className="nf-btn nf-btn--neutral"
+          style={btnNeutral}
         >
           Cancel
         </button>
         <button
           onClick={handleApply}
           disabled={!imgEl}
-          style={{ padding: '7px 16px', background: 'var(--brand)', border: 'none', borderRadius: 6, fontSize: 12.5, fontWeight: 600, color: '#fff', cursor: imgEl ? 'pointer' : 'not-allowed', opacity: imgEl ? 1 : 0.6 }}
+          className="nf-btn nf-btn--primary"
+          style={btnPrimary}
         >
           Apply crop
         </button>

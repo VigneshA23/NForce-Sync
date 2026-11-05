@@ -3,6 +3,7 @@ import { EodEntryBody, FieldLabel } from '../pages/approvals/shared';
 import type { EodEntryDto } from '../api/eod';
 import { formatDateTime } from '../lib/date';
 import { LineStatusBadge } from './taskStatus/LineStatusBadge';
+import { statusPillStyle } from '../lib/uiStyles';
 
 // Read-only rendering of one submitted EOD report for someone else's day (Team EOD Status
 // detail). The Submit EOD page is an editable form bound to the logged-in user, so this is a
@@ -84,12 +85,7 @@ export function EodReportView({ entry }: { entry: EodEntryDto }) {
         display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16, alignItems: 'start',
       }}>
         <Meta label="Report status">
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 999,
-            background: `color-mix(in srgb, ${status.color} 16%, transparent)`,
-            border: `1px solid color-mix(in srgb, ${status.color} 30%, transparent)`,
-            color: status.color, fontSize: 11, fontWeight: 600,
-          }}>
+          <span style={{ ...statusPillStyle(status.color), gap: 6 }}>
             <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: status.color }} />
             {status.label}
           </span>

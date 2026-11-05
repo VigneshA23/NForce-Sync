@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { useAccessibility } from '../lib/accessibility';
+import { insetRowStyle } from '../lib/uiStyles';
 
 export interface DonutSegment {
   label: string;
@@ -82,13 +83,13 @@ export function DonutBreakdown({ data, centerLabel = 'Total users', size = 190 }
       {/* Legend sits to the right of the chart (wraps below it on narrow cards); it grows with the number
           of entries and scrolls past ~8 rows so a long list can't stretch the card indefinitely. */}
       <div style={{
-        flex: '1 1 180px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2,
+        flex: '1 1 180px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6,
         maxHeight: 300, overflowY: 'auto',
       }}>
         {segments.map(seg => (
           <div
             key={seg.label}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '6px 8px' }}
+            style={{ ...insetRowStyle(seg.color), justifyContent: 'space-between', padding: '7px 10px', flexShrink: 0 }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
               <span style={{ width: 10, height: 10, borderRadius: '50%', background: seg.color, flexShrink: 0 }} />

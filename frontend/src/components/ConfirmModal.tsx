@@ -1,4 +1,5 @@
 import { Modal } from './Modal';
+import { btnDanger, btnNeutral } from '../lib/uiStyles';
 
 interface ConfirmModalProps {
   open: boolean;
@@ -9,11 +10,6 @@ interface ConfirmModalProps {
   confirmLabel: string;
   isPending?: boolean;
 }
-
-const secondaryButtonStyle: React.CSSProperties = {
-  padding: '9px 20px', background: 'var(--raised2)', border: '1px solid var(--line2)',
-  borderRadius: 7, color: 'var(--txt)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-};
 
 /** Shared "Are you sure?" confirmation dialog built on the base Modal — the reusable
  *  counterpart to the ConfirmModal copies duplicated locally in BusinessRules.tsx and
@@ -26,20 +22,13 @@ export function ConfirmModal({ open, onClose, onConfirm, title, message, confirm
       onClose={onClose}
       width={420}
       footer={
-        <>
-          <button
-            onClick={onConfirm}
-            disabled={isPending}
-            style={{
-              padding: '9px 20px', background: 'rgba(228,55,61,.15)', border: '1px solid rgba(228,55,61,.4)',
-              borderRadius: 7, color: 'var(--risk)', fontSize: 13, fontWeight: 600,
-              cursor: isPending ? 'not-allowed' : 'pointer',
-            }}
-          >
+        <div style={{ display: 'flex', gap: 10, marginLeft: 'auto' }}>
+          {/* OneHR dialog order: dismiss on the left, the action on the right. */}
+          <button onClick={onClose} className="nf-btn nf-btn--neutral" style={btnNeutral}>Cancel</button>
+          <button onClick={onConfirm} disabled={isPending} className="nf-btn nf-btn--danger" style={btnDanger}>
             {isPending ? 'Working…' : confirmLabel}
           </button>
-          <button onClick={onClose} style={secondaryButtonStyle}>Cancel</button>
-        </>
+        </div>
       }
     >
       <div style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.7 }}>{message}</div>
