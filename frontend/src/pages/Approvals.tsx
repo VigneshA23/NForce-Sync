@@ -16,6 +16,10 @@ import {
 import { ClarificationChatPopup } from '../components/ClarificationChatPopup';
 import { ReviewButton } from '../components/ReviewButton';
 import { EodReviewModal } from '../components/EodReviewModal';
+import { DropdownMenu, type DropdownMenuItem } from '../components/DropdownMenu';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { PageHeader } from '../components/PageHeader';
+import { useAuth } from '../lib/auth';
 import {
   CLARIFICATION_BLOCKS_DECISION_REASON, isPieceClarified,
 } from '../lib/clarificationGate';
@@ -33,9 +37,14 @@ import {
   Card, Chip, AuditTrail, SubmissionDetailModal,
 } from './approvals/shared';
 import { GlobalLoader } from '../components/GlobalLoader';
+import { EmptyState } from '../components/EmptyState';
 import { Pagination } from '../components/Pagination';
 import { DateRangeSelector, type QuickRangeMode } from '../components/DateRangeSelector';
 import { LineStatusBadge } from '../components/taskStatus/LineStatusBadge';
+import {
+  btnPrimary, btnNeutral, btnDanger, btnSecondary, btnSm, textareaStyle, selectStyle,
+  tabBarStyle, tabStyle, tabCountStyle,
+} from '../lib/uiStyles';
 
 // Pending-tab equivalents of entryProjects/entryCategories — a pending ApprovalPieceDto has no
 // `.tasks` array, so its projects/categories live in taskLines (PROJECT_GROUPED) or logLines
@@ -52,7 +61,6 @@ function pieceCategories(p: ApprovalPieceDto): string[] {
   }
   return [...new Set(p.logLines.map(l => l.categoryName).filter((c): c is string => !!c))];
 }
-
 // Matches the PM Approvals page's helper of the same name, so the two screens describe the same
 // stretch of inactivity identically.
 function formatInactivity(hoursSince: number | null | undefined): string {
@@ -206,7 +214,13 @@ function EntryRow({
             this explicit Review button (not a whole-card click, which risked opening the modal
             on an accidental tap anywhere in the row). */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-          <ReviewButton onClick={onOpenDetails} />
+          <button
+            onClick={onOpenDetails}
+            className="nf-btn nf-btn--primary"
+            style={{ ...btnPrimary, ...btnSm }}
+          >
+            Review
+          </button>
           <button
             onClick={onToggleExpand}
             title="View audit trail"
@@ -423,6 +437,39 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
         onOpenChat={onOpenChat}
         clarificationReadOnly={false}
       />
+      {/* Expanded area — rejection form in same zone as EntryRow's AuditTrail */}
+      {expanded && rejecting && (
+        <div style={{ borderTop: '1px solid var(--line)', padding: '12px 16px', background: 'var(--raised)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)' }}>
+            Rejection reason <span style={{ color: 'var(--risk)' }}>*</span>
+          </div>
+          <textarea
+            rows={3}
+            placeholder="Explain why this piece is being rejected…"
+            value={comment}
+            onChange={e => setComment(e.target.value)}
+            style={textareaStyle}
+          />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => { setRejecting(false); setComment(''); }}
+              className="nf-btn nf-btn--neutral"
+              style={{ ...btnNeutral, ...btnSm }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleReject}
+              disabled={!comment.trim() || busy || blocked}
+              title={blockedReason}
+              className="nf-btn nf-btn--danger"
+              style={{ ...btnDanger, ...btnSm }}
+            >
+              Confirm Reject
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -658,7 +705,7 @@ export default function Approvals() {
     return (
       <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
         <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load pending entries.</div>
-        <button onClick={() => refetch()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 13, cursor: 'pointer' }}>
+        <button onClick={() => refetch()} className="nf-btn nf-btn--secondary" style={btnSecondary}>
           <RefreshCw size={14} aria-hidden="true" /> Retry
         </button>
       </Card>
@@ -668,13 +715,10 @@ export default function Approvals() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 14, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-            Approvals
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>Review and act on your team's EOD submissions</p>
-        </div>
+      <PageHeader
+        title="Approvals"
+        subtitle="Review and act on your team's EOD submissions"
+        actions={tab === 'pending' ? <>
         {/* Date filter only ever affects the Pending query (see usePendingApprovals above) —
             Approved/Rejected have no date param to filter by, so the picker stays hidden there
             rather than showing a control that would silently do nothing. */}
@@ -690,42 +734,34 @@ export default function Approvals() {
                 type="button"
                 onClick={clearDateRange}
                 aria-label="Clear date filter"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '9px 12px',
-                  background: 'transparent', border: '1px solid var(--line2)', borderRadius: 8,
-                  color: 'var(--txt-mut)', fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.color = 'var(--txt)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = 'var(--txt-mut)'; }}
+                className="nf-btn nf-btn--neutral"
+                style={btnNeutral}
               >
                 <X size={13} aria-hidden="true" /> Clear
               </button>
             )}
           </div>
         )}
-      </div>
+        </> : undefined}
+      />
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div role="tablist" style={{ ...tabBarStyle, marginBottom: 16 }}>
         {([
           ['pending', 'Pending', pendingCount],
           ['approved', 'Approved', approvedCount],
           ['rejected', 'Rejected', rejectedCount],
         ] as [Tab, string, number][]).map(([key, label, count]) => (
-          <button key={key} onClick={() => switchTab(key)} style={{
-            padding: '8px 15px', borderRadius: 20, border: `1px solid ${tab === key ? 'var(--brand)' : 'var(--line2)'}`,
-            background: tab === key ? 'var(--brand)' : 'var(--raised2)', color: tab === key ? '#fff' : 'var(--txt-dim)',
-            fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7,
-          }}>
+          <button key={key} onClick={() => switchTab(key)} className="nf-tab" role="tab" aria-selected={tab === key} style={tabStyle(tab === key)}>
             {label}
-            <span style={{ background: tab === key ? 'rgba(255,255,255,.25)' : 'rgba(255,255,255,.1)', padding: '1px 7px', borderRadius: 20, fontSize: 11.5 }}>{count}</span>
+            <span style={tabCountStyle(tab === key)}>{count}</span>
           </button>
         ))}
       </div>
 
       {/* Toolbar */}
       <div className="nf-r-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
-        <div style={{ width: 220, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 8, padding: '7px 12px', marginRight: 14 }}>
+        <div style={{ width: 220, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 9, height: 34, padding: '0 12px', boxSizing: 'border-box', marginRight: 14 }}>
           <Search size={13} style={{ color: 'var(--txt-dim)' }} aria-hidden="true" />
           <input
             value={search}
@@ -757,13 +793,14 @@ export default function Approvals() {
           {hasActiveFilters && (
             <button
               onClick={clearAllFilters}
-              style={{ background: 'none', border: '1px solid var(--line2)', borderRadius: 8, color: 'var(--brand-bright)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '7px 12px' }}
+              className="nf-btn nf-btn--neutral"
+              style={{ ...btnNeutral, ...btnSm }}
             >
               Clear all filters
             </button>
           )}
         </div>
-        <select value={sort} onChange={e => setSort(e.target.value as SortMode)} style={{ background: 'var(--raised2)', color: 'var(--txt)', border: '1px solid var(--line2)', borderRadius: 8, padding: '7px 10px', fontSize: 12.5 }}>
+        <select value={sort} onChange={e => setSort(e.target.value as SortMode)} style={{ ...selectStyle, width: 'auto', height: 34 }}>
           <option value="latest">Sort: Latest first</option>
           <option value="oldest">Sort: Oldest first</option>
           <option value="hours">Sort: Most hours</option>
@@ -778,12 +815,13 @@ export default function Approvals() {
             <GlobalLoader fullScreen={false} compact label="Loading pending pieces..." />
           </Card>
         ) : filteredPieces.length === 0 ? (
-          <Card style={{ textAlign: 'center', padding: '48px 20px' }}>
-            <CheckCheck size={28} style={{ color: 'var(--ok)', marginBottom: 12 }} aria-hidden="true" />
-            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)', marginBottom: 6 }}>You're all caught up</div>
-            <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>
-              {search.trim() ? 'No pieces match your search.' : 'No pending approval pieces.'}
-            </div>
+          <Card style={{ padding: 16 }}>
+            <EmptyState
+              icon={CheckCheck}
+              tone="var(--ok)"
+              title="You're all caught up"
+              hint={search.trim() ? 'No pieces match your search.' : 'No pending approval pieces.'}
+            />
           </Card>
         ) : (
           <Card style={{ padding: 0, overflow: 'hidden' }}>
@@ -808,16 +846,18 @@ export default function Approvals() {
           <GlobalLoader fullScreen={false} compact label="Loading approvals..." />
         </Card>
       ) : visible.length === 0 ? (
-        <Card style={{ textAlign: 'center', padding: '48px 20px' }}>
-          <CheckCheck size={28} style={{ color: 'var(--ok)', marginBottom: 12 }} aria-hidden="true" />
-          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)', marginBottom: 6 }}>
-            {tab === 'approved' && 'No approved entries yet'}
-            {tab === 'rejected' && 'No rejected entries'}
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>
-            {tab === 'approved' && 'Entries you approve will appear here.'}
-            {tab === 'rejected' && 'Entries you reject will appear here with the reason given.'}
-          </div>
+        <Card style={{ padding: 16 }}>
+          <EmptyState
+            icon={CheckCheck}
+            title={<>
+              {tab === 'approved' && 'No approved entries yet'}
+              {tab === 'rejected' && 'No rejected entries'}
+            </>}
+            hint={<>
+              {tab === 'approved' && 'Entries you approve will appear here.'}
+              {tab === 'rejected' && 'Entries you reject will appear here with the reason given.'}
+            </>}
+          />
         </Card>
       ) : (
         <Card style={{ padding: 0, overflow: 'hidden' }}>

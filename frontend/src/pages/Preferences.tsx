@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Sun, Moon, Monitor, Check } from 'lucide-react';
+import { ArrowLeft, Sun, Moon, Monitor, Check, SlidersHorizontal } from 'lucide-react';
 import { useTheme, type ThemeMode } from '../lib/theme';
 import { useAccentColor, ACCENT_SWATCHES, type AccentColor } from '../lib/accentColor';
 import { useDensity, type Density } from '../lib/density';
 import { useFontSize, type FontSize } from '../lib/fontSize';
 import { useAccessibility, type AccessibilityKey } from '../lib/accessibility';
 import { Card } from '../components/KpiCard';
+import { PageHeader } from '../components/PageHeader';
+import { btnNeutral, selectStyle } from '../lib/uiStyles';
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
@@ -78,12 +80,7 @@ const ACCESSIBILITY_TOGGLES: { key: AccessibilityKey; title: string; label: stri
   { key: 'statusCues',     title: 'Color vision',   label: 'Color-blind friendly status cues', hint: 'Add icons to status colors and use a red/green-safe palette.' },
 ];
 
-const SELECT_STYLE: React.CSSProperties = {
-  width: '100%', maxWidth: 280, boxSizing: 'border-box',
-  background: 'var(--raised)', border: '1px solid var(--line2)',
-  borderRadius: 6, padding: '7px 10px', fontSize: 13, color: 'var(--txt)', outline: 'none',
-  fontFamily: 'Inter, sans-serif',
-};
+const SELECT_STYLE: React.CSSProperties = { ...selectStyle, maxWidth: 280 };
 
 const DISPLAY_MODES: { key: ThemeMode; label: string; icon: React.ComponentType<{ size?: number; 'aria-hidden'?: boolean }> }[] = [
   { key: 'light', label: 'Light', icon: Sun },
@@ -121,8 +118,12 @@ export default function Preferences() {
         >
           <ArrowLeft size={14} aria-hidden="true" /> Back to Application
         </button>
-        <h1 style={{ margin: 0, marginBottom: 4, fontSize: 20, fontWeight: 700, color: 'var(--txt)' }}>User Preferences</h1>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--txt-mut)' }}>Manage your personal appearance and accessibility settings.</p>
+        <PageHeader
+          icon={SlidersHorizontal}
+          title="User Preferences"
+          subtitle="Manage your personal appearance and accessibility settings."
+          style={{ marginBottom: 0 }}
+        />
       </div>
 
       <div className="nf-r-preferences-layout" style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
@@ -208,10 +209,8 @@ export default function Preferences() {
                 <button
                   type="button"
                   onClick={resetAccessibility}
-                  style={{
-                    padding: '8px 14px', borderRadius: 8, border: '1px solid var(--line2)',
-                    background: 'var(--raised2)', color: 'var(--txt)', cursor: 'pointer', fontSize: 13, fontWeight: 500,
-                  }}
+                  className="nf-btn nf-btn--neutral"
+                  style={btnNeutral}
                 >
                   Reset accessibility settings
                 </button>

@@ -13,6 +13,8 @@ import { GlobalLoader } from '../../components/GlobalLoader';
 import { Card, KpiCard, ClickableKpi } from '../../components/KpiCard';
 import { HeroBanner } from '../../components/dashboard/HeroBanner';
 import { DonutBreakdown, type DonutSegment } from '../../components/DonutBreakdown';
+import { EmptyState } from '../../components/EmptyState';
+import { btnSecondary, insetRowStyle, statusPillStyle, tabBarStyle, tabStyle } from '../../lib/uiStyles';
 
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
@@ -46,7 +48,7 @@ function UsersBreakdownCard({ byRole, byDepartment, byLocation }: {
     <Card>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 18 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>Users by {BREAKDOWN_VIEWS.find(v => v.key === view)?.label}</div>
-        <div role="tablist" aria-label="Group users by" style={{ display: 'flex', gap: 4, padding: 3, background: 'var(--raised2)', borderRadius: 8 }}>
+        <div role="tablist" aria-label="Group users by" style={tabBarStyle}>
           {BREAKDOWN_VIEWS.map(({ key, label }) => {
             const selected = view === key;
             return (
@@ -56,12 +58,8 @@ function UsersBreakdownCard({ byRole, byDepartment, byLocation }: {
                 role="tab"
                 aria-selected={selected}
                 onClick={() => setView(key)}
-                style={{
-                  padding: '4px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                  fontSize: 12, fontWeight: selected ? 600 : 500,
-                  background: selected ? 'var(--brand)' : 'transparent',
-                  color: selected ? '#fff' : 'var(--txt-mut)',
-                }}
+                className="nf-tab"
+                style={{ ...tabStyle(selected), padding: '6px 12px', fontSize: 12 }}
               >
                 {label}
               </button>
@@ -70,7 +68,7 @@ function UsersBreakdownCard({ byRole, byDepartment, byLocation }: {
         </div>
       </div>
       {segments.length === 0
-        ? <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>No data</div>
+        ? <EmptyState icon={Users} title="No data" />
         : <DonutBreakdown data={segments} />}
     </Card>
   );
@@ -105,11 +103,7 @@ function EodTodayCard({ submitted, expected }: { submitted: number; expected: nu
     <Card style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>EOD Submitted Today</div>
-        <span style={{
-          padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, color: 'var(--info)',
-          background: 'color-mix(in srgb, var(--info) 14%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--info) 30%, transparent)',
-        }}>
+        <span style={statusPillStyle('var(--info)')}>
           {pct}% done
         </span>
       </div>
@@ -141,10 +135,7 @@ function EodTodayCard({ submitted, expected }: { submitted: number; expected: nu
             { label: 'Submitted', value: submitted, color: 'var(--cat-1)' },
             { label: 'Pending',   value: pending,   color: 'var(--cat-3)' },
           ].map(({ label, value, color }) => (
-            <div key={label} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-              padding: '14px 16px', borderRadius: 10, background: 'var(--raised2)', borderLeft: `3px solid ${color}`,
-            }}>
+            <div key={label} style={{ ...insetRowStyle(color), justifyContent: 'space-between', gap: 10, padding: '14px 16px' }}>
               <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--txt)' }}>{label}</span>
               <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--txt)', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
             </div>
@@ -192,7 +183,8 @@ export default function AdminDashboard() {
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load dashboard stats.</div>
           <button
             onClick={() => refetch()}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 13, cursor: 'pointer' }}
+            className="nf-btn nf-btn--secondary"
+            style={btnSecondary}
           >
             <RefreshCw size={14} aria-hidden="true" /> Retry
           </button>

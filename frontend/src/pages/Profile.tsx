@@ -11,9 +11,11 @@ import { ImageCropper } from '../components/ImageCropper';
 import { Card } from '../components/KpiCard';
 import { useHashScroll } from '../lib/useHashScroll';
 import { GlobalLoader } from '../components/GlobalLoader';
+import { PageHeader } from '../components/PageHeader';
 import { GENDER_OPTIONS } from '../lib/illustration';
 import { DEFAULT_DIAL_CODE, defaultDialCodeForLocation } from '../lib/countryCodes';
 import { CountryCodeSelect } from '../components/CountryCodeSelect';
+import { btnDanger, btnNeutral, btnPrimary, fieldLabelStyle, fieldStyle, statusPillStyle } from '../lib/uiStyles';
 
 // Shared card shadow — a bit more "lift" than a flat border on its own, barely visible on dark
 // panels and a gentle depth cue on light ones.
@@ -60,7 +62,7 @@ function SectionHeader({ title, badge }: { title: string; badge?: string }) {
         {title}
       </h2>
       {badge && (
-        <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, background: 'rgba(107,114,128,.15)', color: 'var(--txt-dim)', letterSpacing: '.04em', textTransform: 'uppercase' }}>
+        <span style={{ ...statusPillStyle('var(--txt-dim)'), letterSpacing: '.04em', textTransform: 'uppercase' }}>
           {badge}
         </span>
       )}
@@ -97,12 +99,8 @@ function ReadField({ label, value }: { label: string; value: string | null | und
   );
 }
 
-const INPUT_STYLE: React.CSSProperties = {
-  width: '100%', boxSizing: 'border-box',
-  background: 'var(--raised)', border: '1px solid var(--line2)',
-  borderRadius: 6, padding: '7px 10px', fontSize: 13, color: 'var(--txt)', outline: 'none',
-  fontFamily: 'Inter, sans-serif',
-};
+// Shared by inputs, selects and the address textarea — the field frame at natural height.
+const INPUT_STYLE: React.CSSProperties = { ...fieldStyle, height: 'auto', padding: '11px 14px' };
 
 function EditField({ label, value, onChange, type = 'text', placeholder }: {
   label: string;
@@ -113,7 +111,7 @@ function EditField({ label, value, onChange, type = 'text', placeholder }: {
 }) {
   return (
     <div>
-      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-mut)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>{label}</label>
+      <label style={fieldLabelStyle}>{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
         style={INPUT_STYLE} />
     </div>
@@ -163,7 +161,7 @@ function PhoneEditField({ label, dialCode, onDialCodeChange, number, onNumberCha
 }) {
   return (
     <div>
-      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-mut)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>{label}</label>
+      <label style={fieldLabelStyle}>{label}</label>
       <div style={{ display: 'flex', gap: 6 }}>
         <CountryCodeSelect value={dialCode} onChange={onDialCodeChange} ariaLabel={`${label} country code`} />
         <input
@@ -395,10 +393,12 @@ export default function Profile() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
 
       {/* Page header */}
-      <div>
-        <h1 style={{ margin: 0, marginBottom: 4, fontSize: 20, fontWeight: 700, color: 'var(--txt)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif' }}>My Profile</h1>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--txt-mut)' }}>View and update your personal information.</p>
-      </div>
+      <PageHeader
+        icon={UserCircle2}
+        title="My Profile"
+        subtitle="View and update your personal information."
+        style={{ marginBottom: 0 }}
+      />
 
       {/* Banner + avatar + identity card — LinkedIn-style: avatar overlaps the banner's
           bottom-left corner, and the identity details sit below it (not beside it). */}
@@ -477,25 +477,25 @@ export default function Profile() {
             )}
           </div>
 
-          <div className="nf-r-profile-info" style={{ flex: '1 1 220px', minWidth: 0, paddingTop: 0 }}>
-            <div className="nf-r-profile-name" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.5, color: 'var(--txt)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', marginBottom: 3, overflowWrap: 'anywhere' }}>{profile.fullName}</div>
-            {profile.designationName && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13.5, color: 'var(--txt-mut)', marginBottom: 3, minWidth: 0 }}>
-                <Briefcase size={14} aria-hidden style={{ flexShrink: 0 }} />
-                <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{profile.designationName}</span>
+          {/* Details — sit below the avatar, full width, with Edit/Save floated to the right. */}
+          <div className="nf-r-profile-details" style={{ paddingTop: 52, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.fullName}</div>
+              {profile.designationName && (
+                <div style={{ fontSize: 13, color: 'var(--txt-mut)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.designationName}</div>
+              )}
+              <div style={{ fontSize: 12, color: 'var(--txt-mut)', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.email}</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <span style={statusPillStyle('var(--brand-bright)')}>
+                  {ROLE_LABELS[profile.role] ?? profile.role}
+                </span>
+                <span style={statusPillStyle(profile.active ? 'var(--ok)' : 'var(--txt-dim)')}>
+                  {profile.active ? 'Active' : 'Inactive'}
+                </span>
+                <span style={{ ...statusPillStyle('var(--txt-dim)'), fontWeight: 500 }}>
+                  {profile.employeeCode}
+                </span>
               </div>
-            )}
-            <div style={{ fontSize: 13, color: 'var(--txt-mut)', marginBottom: 8, overflowWrap: 'anywhere' }}>{profile.email}</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'color-mix(in srgb, var(--brand) 18%, transparent)', color: 'var(--brand-bright)' }}>
-                {ROLE_LABELS[profile.role] ?? profile.role}
-              </span>
-              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: profile.active ? 'rgba(47,182,124,.15)' : 'rgba(107,114,128,.15)', color: profile.active ? 'var(--ok)' : 'var(--txt-dim)' }}>
-                {profile.active ? 'Active' : 'Inactive'}
-              </span>
-              <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 20, background: 'rgba(107,114,128,.15)', color: 'var(--txt-dim)' }}>
-                {profile.employeeCode}
-              </span>
             </div>
           </div>
 
@@ -506,18 +506,18 @@ export default function Profile() {
                 {editing ? (
                   <>
                     <button onClick={cancelEdit}
-                      style={{ padding: '7px 14px', background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 6, fontSize: 12.5, color: 'var(--txt-mut)', cursor: 'pointer' }}>
+                      className="nf-btn nf-btn--neutral" style={btnNeutral}>
                       Cancel
                     </button>
                     <button onClick={handleSave} disabled={saving}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', background: 'var(--brand)', border: 'none', borderRadius: 6, fontSize: 12.5, fontWeight: 600, color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? .7 : 1 }}>
+                      className="nf-btn nf-btn--primary" style={btnPrimary}>
                       {saving && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
                       {saving ? 'Saving…' : 'Save Changes'}
                     </button>
                   </>
                 ) : (
                   <button onClick={startEdit}
-                    style={{ padding: '7px 16px', background: 'var(--brand)', border: 'none', borderRadius: 6, fontSize: 12.5, fontWeight: 600, color: '#fff', cursor: 'pointer' }}>
+                    className="nf-btn nf-btn--primary" style={btnPrimary}>
                     Edit Profile
                   </button>
                 )}
@@ -550,7 +550,7 @@ export default function Profile() {
               <PhoneEditField label="Phone" dialCode={phoneCode} onDialCodeChange={setPhoneCode} number={field('phone')} onNumberChange={setPhone('phone')} placeholder="9999999999" />
               <EditField label="Date of Birth" value={field('dateOfBirth')} onChange={set('dateOfBirth')} type="date" />
               <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-mut)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Gender</label>
+                <label style={fieldLabelStyle}>Gender</label>
                 <select value={field('gender')} onChange={e => set('gender')(e.target.value)} style={{ ...INPUT_STYLE }}>
                   <option value="">Select…</option>
                   {GENDER_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
@@ -558,7 +558,7 @@ export default function Profile() {
               </div>
               <EditField label="Personal Email" value={field('personalEmail')} onChange={set('personalEmail')} type="email" placeholder="personal@email.com" />
               <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-mut)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Address</label>
+                <label style={fieldLabelStyle}>Address</label>
                 <textarea value={field('address')} onChange={e => set('address')(e.target.value)}
                   placeholder="Your address…" rows={3}
                   style={{ ...INPUT_STYLE, resize: 'vertical' }} />
@@ -628,7 +628,8 @@ export default function Profile() {
           </div>
           <button
             onClick={() => navigate('/change-password')}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 6, fontSize: 12.5, color: 'var(--txt)', cursor: 'pointer' }}
+            className="nf-btn nf-btn--neutral"
+            style={btnNeutral}
           >
             <Lock size={13} aria-hidden />
             Change Password
@@ -655,7 +656,8 @@ export default function Profile() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-end', width: '100%' }}>
             <button
               onClick={() => setPhotoViewerOpen(false)}
-              style={{ padding: '7px 14px', background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 6, fontSize: 12.5, color: 'var(--txt-mut)', cursor: 'pointer' }}
+              className="nf-btn nf-btn--neutral"
+              style={btnNeutral}
             >
               Close
             </button>
@@ -663,7 +665,8 @@ export default function Profile() {
               <button
                 onClick={handlePhotoRemove}
                 disabled={uploading}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'transparent', border: '1px solid rgba(228,55,61,.4)', borderRadius: 6, fontSize: 12.5, fontWeight: 600, color: 'var(--risk)', cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? .6 : 1 }}
+                className="nf-btn nf-btn--danger"
+                style={btnDanger}
               >
                 <Trash2 size={13} aria-hidden />
                 Delete image
@@ -673,7 +676,8 @@ export default function Profile() {
               <button
                 onClick={() => photoInputRef.current?.click()}
                 disabled={uploading}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', background: 'var(--brand)', border: 'none', borderRadius: 6, fontSize: 12.5, fontWeight: 600, color: '#fff', cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? .7 : 1 }}
+                className="nf-btn nf-btn--primary"
+                style={btnPrimary}
               >
                 {uploading ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Camera size={13} aria-hidden />}
                 {uploading ? 'Working…' : profile.photoDataUrl ? 'Change image' : 'Upload image'}
@@ -725,7 +729,8 @@ export default function Profile() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-end', width: '100%' }}>
             <button
               onClick={() => setBannerViewerOpen(false)}
-              style={{ padding: '7px 14px', background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 6, fontSize: 12.5, color: 'var(--txt-mut)', cursor: 'pointer' }}
+              className="nf-btn nf-btn--neutral"
+              style={btnNeutral}
             >
               Close
             </button>
@@ -733,7 +738,8 @@ export default function Profile() {
               <button
                 onClick={handleBannerRemove}
                 disabled={uploadingBanner}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'transparent', border: '1px solid rgba(228,55,61,.4)', borderRadius: 6, fontSize: 12.5, fontWeight: 600, color: 'var(--risk)', cursor: uploadingBanner ? 'not-allowed' : 'pointer', opacity: uploadingBanner ? .6 : 1 }}
+                className="nf-btn nf-btn--danger"
+                style={btnDanger}
               >
                 <Trash2 size={13} aria-hidden />
                 Remove banner
@@ -743,7 +749,8 @@ export default function Profile() {
               <button
                 onClick={() => bannerInputRef.current?.click()}
                 disabled={uploadingBanner}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', background: 'var(--brand)', border: 'none', borderRadius: 6, fontSize: 12.5, fontWeight: 600, color: '#fff', cursor: uploadingBanner ? 'not-allowed' : 'pointer', opacity: uploadingBanner ? .7 : 1 }}
+                className="nf-btn nf-btn--primary"
+                style={btnPrimary}
               >
                 {uploadingBanner ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <ImagePlus size={13} aria-hidden />}
                 {uploadingBanner ? 'Working…' : profile.bannerDataUrl ? 'Change banner' : 'Upload banner'}

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  FileText, RefreshCw,
+  RefreshCw,
   ChevronDown, ChevronUp, ChevronsUpDown, X,
   ListChecks, PlusCircle, PencilLine, Trash2, PowerCircle, PauseCircle, MoreHorizontal,
 } from 'lucide-react';
@@ -17,6 +17,10 @@ import {
   roleLabel, AUDIT_ACTION_OPTIONS, AUDIT_CATEGORY_LABELS,
 } from '../../lib/auditLog';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { EmptyState } from '../../components/EmptyState';
+import { PageHeader } from '../../components/PageHeader';
+import { tableThStyle, tableTdStyle, tableCardStyle } from '../../lib/tableStyles';
+import { btnNeutral, btnPrimary, btnSecondary, btnSm, fieldStyle, selectStyle, statusPillStyle } from '../../lib/uiStyles';
 
 // The 3 entity types the backend actually writes today — see writeAudit call sites in
 // UserService/ApprovalService/BusinessRuleService.
@@ -80,14 +84,9 @@ function EntityCell({ entityType }: { entityType: string }) {
 }
 
 function ActionPill({ entry }: { entry: AuditLogDto }) {
-  const { label, bg, color } = auditActionDisplay(entry);
+  const { label, color } = auditActionDisplay(entry);
   return (
-    <span style={{
-      display: 'inline-block', fontSize: 10.5, fontWeight: 600,
-      padding: '3px 9px', borderRadius: 20,
-      background: bg, color,
-      letterSpacing: '0.03em', whiteSpace: 'nowrap',
-    }}>
+    <span style={statusPillStyle(color)}>
       {label}
     </span>
   );
@@ -174,7 +173,7 @@ function DetailField({ label, value }: { label: string; value: React.ReactNode }
 }
 
 function DetailDrawer({ entry, onClose }: { entry: AuditLogDto; onClose: () => void }) {
-  const { label, bg, color } = auditActionDisplay(entry);
+  const { label, color } = auditActionDisplay(entry);
   const meta = entityTypeMeta(entry.entityType);
   const display = describeAuditEvent(entry);
   const actorName = entry.actorName ?? 'System';
@@ -183,7 +182,7 @@ function DetailDrawer({ entry, onClose }: { entry: AuditLogDto; onClose: () => v
     <div style={{ position: 'sticky', top: 72 }}>
       <Card style={{ padding: 0, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 88px)', overflow: 'hidden', width: 320 }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ display: 'inline-block', fontSize: 10.5, fontWeight: 600, padding: '3px 9px', borderRadius: 20, background: bg, color, letterSpacing: '0.03em' }}>
+          <span style={statusPillStyle(color)}>
             {label}
           </span>
           <button onClick={onClose} aria-label="Close detail" style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', display: 'flex', padding: 2 }}>
@@ -296,24 +295,10 @@ export default function AuditLog() {
     <div style={{ display: 'grid', gridTemplateColumns: selectedEntry ? '1fr 320px' : '1fr', gap: 16, alignItems: 'start' }}>
       <div style={{ minWidth: 0 }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 10, background: 'rgba(99,102,241,.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <FileText size={19} style={{ color: '#818CF8' }} aria-hidden="true" />
-            </div>
-            <div>
-              <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-                Audit Log
-              </h1>
-              <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0, maxWidth: 520 }}>
-                Track and monitor system activities for compliance, troubleshooting and accountability.
-              </p>
-            </div>
-          </div>
-        </div>
+        <PageHeader
+          title="Audit Log"
+          subtitle="Track and monitor system activities for compliance, troubleshooting and accountability."
+        />
 
         {/* KPI strip */}
         {summary && (
@@ -336,14 +321,14 @@ export default function AuditLog() {
         }}>
           <div>
             <label style={labelStyle} htmlFor="et-filter">Entity Type</label>
-            <select id="et-filter" value={draft.entityType} onChange={e => setDraft(d => ({ ...d, entityType: e.target.value }))} style={selectStyle}>
+            <select id="et-filter" value={draft.entityType} onChange={e => setDraft(d => ({ ...d, entityType: e.target.value }))} style={filterSelectStyle}>
               <option value="">All Entities</option>
               {ENTITY_TYPES.map(et => <option key={et} value={et}>{entityTypeMeta(et).label}</option>)}
             </select>
           </div>
           <div>
             <label style={labelStyle} htmlFor="action-filter">Action</label>
-            <select id="action-filter" value={draft.actionKey} onChange={e => setDraft(d => ({ ...d, actionKey: e.target.value }))} style={selectStyle}>
+            <select id="action-filter" value={draft.actionKey} onChange={e => setDraft(d => ({ ...d, actionKey: e.target.value }))} style={filterSelectStyle}>
               <option value="">All Actions</option>
               {AUDIT_ACTION_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
             </select>
@@ -353,7 +338,7 @@ export default function AuditLog() {
             <input
               id="actor-filter" type="text" placeholder="Enter user name"
               value={draft.actorName} onChange={e => setDraft(d => ({ ...d, actorName: e.target.value }))}
-              style={{ ...selectStyle, minWidth: 160 }}
+              style={{ ...filterInputStyle, minWidth: 160 }}
             />
           </div>
           <div>
@@ -361,7 +346,7 @@ export default function AuditLog() {
             <select
               id="range-filter" value={draft.rangePreset}
               onChange={e => setDraft(d => ({ ...d, rangePreset: e.target.value as DateRangePreset, rawFrom: undefined }))}
-              style={selectStyle}
+              style={filterSelectStyle}
             >
               <option value="">All time</option>
               <option value="7">Last 7 days</option>
@@ -374,27 +359,28 @@ export default function AuditLog() {
             <>
               <div>
                 <label style={labelStyle}>From</label>
-                <DatePicker value={draft.customFrom} onChange={v => setDraft(d => ({ ...d, customFrom: v, rawFrom: undefined }))} clearable inputStyle={selectStyle} />
+                <DatePicker value={draft.customFrom} onChange={v => setDraft(d => ({ ...d, customFrom: v, rawFrom: undefined }))} clearable inputStyle={filterInputStyle} />
               </div>
               <div>
                 <label style={labelStyle}>To</label>
-                <DatePicker value={draft.customTo} onChange={v => setDraft(d => ({ ...d, customTo: v, rawFrom: undefined }))} clearable inputStyle={selectStyle} />
+                <DatePicker value={draft.customTo} onChange={v => setDraft(d => ({ ...d, customTo: v, rawFrom: undefined }))} clearable inputStyle={filterInputStyle} />
               </div>
             </>
           )}
-          <button onClick={clearFilters} style={{ ...selectStyle, cursor: 'pointer', color: 'var(--txt-mut)', border: '1px solid var(--line2)', background: 'transparent' }}>
+          <button onClick={clearFilters} className="nf-btn nf-btn--neutral" style={{ ...btnNeutral, height: 42 }}>
             Clear Filters
           </button>
           <button
             onClick={applyFilters}
-            style={{ ...selectStyle, cursor: 'pointer', color: '#fff', background: 'var(--brand)', border: '1px solid var(--brand)', fontWeight: 600 }}
+            className="nf-btn nf-btn--primary"
+            style={{ ...btnPrimary, height: 42 }}
           >
             Apply Filters
           </button>
         </div>
 
         {/* Table */}
-        <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={tableCardStyle}>
           {isPending && (
             <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[...Array(8)].map((_, i) => <div key={i} className="skeleton" style={{ height: 44, borderRadius: 6 }} />)}
@@ -404,7 +390,7 @@ export default function AuditLog() {
           {isError && (
             <div style={{ padding: '40px 20px', textAlign: 'center' }}>
               <div style={{ fontSize: 13, color: 'var(--risk)', marginBottom: 12 }}>Failed to load audit log.</div>
-              <button onClick={() => refetch()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 12, cursor: 'pointer' }}>
+              <button onClick={() => refetch()} className="nf-btn nf-btn--secondary" style={{ ...btnSecondary, ...btnSm }}>
                 <RefreshCw size={13} aria-hidden="true" /> Retry
               </button>
             </div>
@@ -412,7 +398,7 @@ export default function AuditLog() {
 
           {data && (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+              <table className="nf-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
                 <thead>
                   <tr style={{ background: 'var(--raised)', borderBottom: '1px solid var(--line)' }}>
                     <th style={thStyle}>
@@ -434,8 +420,8 @@ export default function AuditLog() {
                 <tbody>
                   {data.content.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
-                        No audit events match your filters.
+                      <td colSpan={7} style={{ padding: 16 }}>
+                        <EmptyState icon={ListChecks} title="No audit events match your filters." hint="Try clearing the filters." />
                       </td>
                     </tr>
                   ) : (
@@ -448,7 +434,7 @@ export default function AuditLog() {
                           onClick={() => selectRow(entry)}
                           style={{
                             borderBottom: '1px solid var(--line)', cursor: 'pointer',
-                            background: selected ? 'color-mix(in srgb, var(--brand) 8%, transparent)' : 'transparent',
+                            background: selected ? 'color-mix(in srgb, var(--brand) 8%, transparent)' : undefined,
                           }}
                         >
                           <td style={tdStyle}>
@@ -502,24 +488,13 @@ const labelStyle: React.CSSProperties = {
   color: 'var(--txt-dim)', marginBottom: 4, letterSpacing: '0.04em',
 };
 
-const selectStyle: React.CSSProperties = {
-  padding: '7px 10px',
-  background: 'var(--shell)',
-  border: '1px solid var(--line2)',
-  borderRadius: 6,
-  color: 'var(--txt)',
-  fontSize: 12,
-  outline: 'none',
-  fontFamily: 'Inter, sans-serif',
-};
+const filterSelectStyle: React.CSSProperties = { ...selectStyle, width: 'auto', minWidth: 150 };
 
-const thStyle: React.CSSProperties = {
-  padding: '10px 16px', fontSize: 11, fontWeight: 600, color: 'var(--txt-dim)',
-  textAlign: 'left', letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap',
-};
+const filterInputStyle: React.CSSProperties = { ...fieldStyle, width: 'auto' };
+
+const thStyle: React.CSSProperties = tableThStyle;
 
 const tdStyle: React.CSSProperties = {
-  padding: '12px 16px',
-  fontSize: 12,
+  ...tableTdStyle,
   verticalAlign: 'top',
 };
