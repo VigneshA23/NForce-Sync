@@ -9,6 +9,7 @@
  * "How it works" popover beside the title (dailyLogParts.tsx).
  */
 import { DateStepper } from '../../components/DateStepper';
+import { PageBackdrop, pageBackdropWrapperStyle } from '../../components/PageBackdrop';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -538,7 +539,12 @@ export default function DailyLogForm() {
   // ── Loading ───────────────────────────────────────────────────────────────
 
   if (loadingEntry || loadingDD) {
-    return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:300, color:'var(--txt-dim)', fontSize:13 }}>Loading…</div>;
+    return (
+      <div className="nf-dl-page" style={pageBackdropWrapperStyle}>
+        <PageBackdrop />
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:300, color:'var(--txt-dim)', fontSize:13 }}>Loading…</div>
+      </div>
+    );
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -546,7 +552,8 @@ export default function DailyLogForm() {
   return (
     // Full content width, like Submit EOD and the other pages (the Shell's own padding is the gutter); see the
     // .nf-dl-* rules in index.css.
-    <div className="nf-dl-page">
+    <div className="nf-dl-page" style={pageBackdropWrapperStyle}>
+      <PageBackdrop />
 
       {/* ── Header (SubmitEOD PageHeader style) ── */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:12 }}>
