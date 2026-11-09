@@ -109,11 +109,16 @@ export interface CreateAllocationPayload {
   allocationPct: number;
 }
 
-/** In-place edit of an allocation's dates and capacity share. Employee and project are not changeable. */
+/**
+ * Edit of an allocation's dates and capacity share. The employee is not changeable. `projectId` is
+ * sent only when the project is being changed: the server repoints an allocation that has not
+ * started, and for one that has, ends it the day before `effectiveFrom` and creates a new row.
+ */
 export interface UpdateAllocationPayload {
   effectiveFrom: string;
   effectiveTo?: string | null;
   allocationPct: number;
+  projectId?: number;
 }
 
 export async function listAllProjects(): Promise<ProjectFullDto[]> {
