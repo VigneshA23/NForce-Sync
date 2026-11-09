@@ -49,6 +49,10 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/login", "/api/auth/forgot-password",
                         "/api/auth/reset-password-token-status",
                         "/error").permitAll()
+                // Public liveness/readiness probe for browser checks and deploy health checks.
+                // ONLY health — every other /actuator/** path falls through to authenticated(),
+                // and is not exposed anyway (management.endpoints.web.exposure.include=health).
+                .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex

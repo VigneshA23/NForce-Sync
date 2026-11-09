@@ -53,6 +53,17 @@ spring:
       max-file-size: 10MB
       max-request-size: 45MB
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health        # health only — no env, beans, metrics, etc.
+  endpoint:
+    health:
+      show-details: never      # response is just {"status":"UP"|"DOWN"}
+      show-components: never
+  # The default db indicator stays on, so status reflects database reachability.
+
 server:
   port: 8080
   error:

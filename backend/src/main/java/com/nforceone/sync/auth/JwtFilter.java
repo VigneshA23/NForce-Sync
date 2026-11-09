@@ -24,6 +24,14 @@ public class JwtFilter extends OncePerRequestFilter {
         this.jwtService = jwtService;
     }
 
+    // The public health probe never needs a token. Skipping it entirely means no Authorization
+    // header (or a stale/invalid/must-change-password one) can make this filter answer for it.
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        return "/actuator/health".equals(uri) || uri.startsWith("/actuator/health/");
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
