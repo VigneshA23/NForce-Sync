@@ -142,29 +142,60 @@ public class AllocationService {
     }
 
     /**
-     * Edits an allocation's date range in place. The employee and project are never reassigned —
-     * that would misattribute any EOD hours logged under the original pairing.
+     * Edits an allocation in place — always the same row, whatever changes. The employee is never
+     * reassigned. The project changes only when the request carries a different {@code projectId}, and
+     * then it is the row's own project that is repointed (same id, dates and share unless also edited):
+     * the whole allocation period moves to the new project, past dates included, and no row is ended or
+     * created. Everything is validated against the project the row will hold afterwards — ACTIVE status,
+     * project start date, duplicate overlap, and the employee's capacity (excluding this row, which is
+     * being replaced rather than stacked on itself).
      */
     public AllocationDto update(Long id, UpdateAllocationRequest req) {
         Allocation allocation = allocationRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Allocation not found"));
+        AppUser employee = allocation.getEmployee();
 
         requirePctValid(req.allocationPct());
         requireDateOrder(req.effectiveFrom(), req.effectiveTo());
-        requireNotBeforeProjectStart(allocation.getProject(), req.effectiveFrom());
-        lockEmployeeAllocations(allocation.getEmployee().getId());
-        // Excludes itself, so re-sending a row's own dates is not a conflict with itself. The
-        // employee and project come from the row because this endpoint never reassigns them.
-        requireNoOverlap(allocation.getEmployee(), allocation.getProject(),
-                req.effectiveFrom(), req.effectiveTo(), allocation.getId());
-        requireWithinCapacity(allocation.getEmployee(), req.effectiveFrom(), req.effectiveTo(),
+
+        Project project = allocation.getProject();
+        boolean projectChanging = req.projectId() != null && !req.projectId().equals(project.getId());
+        if (projectChanging) {
+            Project target = projectRepository.findById(req.projectId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
+            requireNotTeamLeadOf(employee, project);
+            requireProjectActive(target);
+            project = target;
+        }
+
+        requireNotBeforeProjectStart(project, req.effectiveFrom());
+        lockEmployeeAllocations(employee.getId());
+        // Excludes itself, so re-sending a row's own dates is not a conflict with itself.
+        requireNoOverlap(employee, project, req.effectiveFrom(), req.effectiveTo(), allocation.getId());
+        requireWithinCapacity(employee, req.effectiveFrom(), req.effectiveTo(),
                 req.allocationPct(), allocation.getId());
 
+        allocation.setProject(project);
         allocation.setEffectiveFrom(req.effectiveFrom());
         allocation.setEffectiveTo(req.effectiveTo());
         allocation.setAllocationPct(req.allocationPct());
 
         return AllocationDto.from(saveGuarded(allocation));
+    }
+
+    /**
+     * Moving an allocation away from a project whose Team Lead is this employee would leave the
+     * project with a lead who is no longer allocated to it — the state ProjectService#assignLead
+     * refuses to create. Blocked outright rather than silently changing who approves that project's
+     * EOD entries; the admin reassigns or clears the lead first.
+     */
+    private void requireNotTeamLeadOf(AppUser employee, Project project) {
+        AppUser lead = project.getLead();
+        if (lead != null && lead.getId().equals(employee.getId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "%s is the Team Lead of %s. Assign another Team Lead (or clear it) before moving this allocation."
+                            .formatted(employee.getFullName(), project.getCode()));
+        }
     }
 
     public void delete(Long id) {
