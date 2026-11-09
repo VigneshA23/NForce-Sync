@@ -6,7 +6,7 @@ import { AccentColorProvider } from './lib/accentColor';
 import { DensityProvider } from './lib/density';
 import { FontSizeProvider } from './lib/fontSize';
 import { AccessibilityProvider } from './lib/accessibility';
-import { AuthProvider, useAuth, ROLE_LANDING } from './lib/auth';
+import { AuthProvider, useAuth, ROLE_LANDING, resolveAllowedRoute } from './lib/auth';
 import { ToastProvider } from './lib/toast';
 import { todayISO } from './lib/date';
 import { prefetchTeamLeadLanding } from './api/teamLead';
@@ -139,8 +139,10 @@ function ChunkPrefetcher() {
 }
 
 function RequireAuth() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const location = useLocation();
+  // Saved role/capabilities may be stale until getMe resolves — don't evaluate route guards yet.
+  if (loading) return <GlobalLoader />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.mustChangePassword && location.pathname !== '/force-change-password') {
     return <Navigate to="/force-change-password" replace />;
@@ -170,6 +172,13 @@ function RedirectAuth() {
 function RoleLanding() {
   const { user } = useAuth();
   return <Navigate to={ROLE_LANDING[user!.role]} replace />;
+}
+
+/** Legacy /projects URLs: PM dashboard for users who can open it, else the user's own landing page. */
+function ProjectsDashboardRedirect() {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  return <Navigate to={resolveAllowedRoute(user.role, user.capabilities, '/projects/dashboard')} replace />;
 }
 
 /** Routes /eod/submit to the correct form based on the user's computed eodForm capability. */
@@ -228,8 +237,8 @@ function AppRoutes() {
             {/* ── Project Manager ────────────────────── */}
             <Route path="/projects/dashboard"      element={<ProjectDashboard />} />
             {/* Projects & Allocation is Admin-only (/admin/projects); old PM URLs go to the PM dashboard. */}
-            <Route path="/projects"                element={<Navigate to="/projects/dashboard" replace />} />
-            <Route path="/projects/allocation"     element={<Navigate to="/projects/dashboard" replace />} />
+            <Route path="/projects"                element={<ProjectsDashboardRedirect />} />
+            <Route path="/projects/allocation"     element={<ProjectsDashboardRedirect />} />
             <Route path="/projects/utilization"     element={<ProjectsUtilization />} />
             <Route path="/projects/blockers"       element={<PmBlockers />} />
             <Route path="/projects/eod-inbox"      element={<PmEodInbox />} />
