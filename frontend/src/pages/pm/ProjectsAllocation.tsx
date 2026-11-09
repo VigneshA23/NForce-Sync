@@ -21,6 +21,9 @@ import {
   useAssignableProjectManagers,
 } from '../../api/projects';
 import type { ProjectFullDto, AllocationDto } from '../../api/projects';
+import {
+  windowsOverlap, overlappingAllocations, overlappingAllocationTotal, findAllocationClash, hasStarted,
+} from '../../lib/allocationHelpers';
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
@@ -246,20 +249,6 @@ function fmtDateDMY(iso: string | null | undefined): string {
   return y && m && d ? `${d}-${m}-${y}` : iso;
 }
 
-/** Blank or null end date = open-ended; mirrors Allocation.OPEN_ENDED and V54's 9999-12-31. */
-const OPEN_ENDED_ISO = '9999-12-31';
-
-/**
- * Whether two allocation windows overlap. Both are inclusive at each end, so windows that merely
- * touch — one ends 31-07, the next starts 01-08 — do not overlap and a re-assignment is allowed.
- *
- * ISO `yyyy-MM-dd` sorts lexicographically, so these are plain string compares: no Date parsing and
- * so no timezone shift. Advisory only — AllocationService enforces the same rule server-side.
- */
-function windowsOverlap(aFrom: string, aTo: string | null, bFrom: string, bTo: string | null): boolean {
-  return aFrom <= (bTo || OPEN_ENDED_ISO) && (aTo || OPEN_ENDED_ISO) >= bFrom;
-}
-
 /** The only allocation % values the form accepts — multiples of 10 from 10 through 100. */
 const ALLOCATION_PCT_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
@@ -279,22 +268,16 @@ function describeClash(a: AllocationDto): string {
 }
 
 /**
- * Sum of allocation % across every one of this employee's allocations (any project) whose window
- * overlaps [from, to] — the "current allocation" the PM is stacking a new/edited row on top of.
- * `excludeId` drops the row being edited so it isn't counted against itself.
+ * Shared "Current / New / Total Allocation" summary shown in both allocation modals. When
+ * `currentItems` / `incomingLabel` are given (Edit), each row names its project; otherwise it
+ * shows the bare percentages (Create).
  */
-function overlappingAllocationTotal(
-  allocations: AllocationDto[], employeeId: number, from: string, to: string | null, excludeId?: number,
-): number {
-  return allocations
-    .filter(a => a.employeeId === employeeId
-      && a.id !== excludeId
-      && windowsOverlap(a.effectiveFrom, a.effectiveTo, from, to))
-    .reduce((sum, a) => sum + a.allocationPct, 0);
-}
-
-/** Shared "Current / New / Total Allocation" summary shown in both allocation modals. */
-function AllocationTotalSummary({ current, incoming }: { current: number; incoming: number }) {
+function AllocationTotalSummary({ current, incoming, currentItems, incomingLabel }: {
+  current: number;
+  incoming: number;
+  currentItems?: Array<{ key: number; label: string; pct: number }>;
+  incomingLabel?: string;
+}) {
   const total = current + incoming;
   const over = total > 100;
   return (
@@ -305,11 +288,25 @@ function AllocationTotalSummary({ current, incoming }: { current: number; incomi
       border: `1px solid ${over ? 'rgba(224,169,59,.35)' : 'var(--line)'}`,
       fontSize: 12,
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--txt-mut)' }}>
-        <span>Current Allocation</span><span>{current}%</span>
+      {/* Project names sit beside the label on the same row ("Name – 50%"), not on lines below it.
+          Several current allocations stack inside the value cell, right-aligned. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, color: 'var(--txt-mut)' }}>
+        <span style={{ flexShrink: 0 }}>Current Allocation</span>
+        {currentItems && currentItems.length > 0 ? (
+          <span style={{ textAlign: 'right', minWidth: 0, overflowWrap: 'anywhere' }}>
+            {currentItems.map(item => (
+              <span key={item.key} style={{ display: 'block' }}>{item.label} – {item.pct}%</span>
+            ))}
+          </span>
+        ) : (
+          <span>{current}%</span>
+        )}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--txt-mut)' }}>
-        <span>New Allocation</span><span>{incoming}%</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, color: 'var(--txt-mut)' }}>
+        <span style={{ flexShrink: 0 }}>New Allocation</span>
+        <span style={{ textAlign: 'right', minWidth: 0, overflowWrap: 'anywhere' }}>
+          {incomingLabel ? `${incomingLabel} – ${incoming}%` : `${incoming}%`}
+        </span>
       </div>
       <div style={{
         display: 'flex', justifyContent: 'space-between', fontWeight: 600, paddingTop: 4,
@@ -353,13 +350,17 @@ function FieldError({ msg }: { msg?: string }) {
 /**
  * Combobox that filters a list of options by free-text search. Replaces plain <select> where
  * the list is long enough that scrolling is impractical (leads, managers, employees).
+ *
+ * `clearable` (opt-in) shows a × button while a value is selected; it calls onChange('') so the
+ * caller can treat the field as empty. Other selects are unchanged.
  */
-function SearchableSelect({ value, onChange, options, placeholder, autoFocus }: {
+function SearchableSelect({ value, onChange, options, placeholder, autoFocus, clearable }: {
   value: string;
   onChange: (id: string) => void;
   options: Array<{ id: number | string; label: string }>;
   placeholder?: string;
   autoFocus?: boolean;
+  clearable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -391,7 +392,7 @@ function SearchableSelect({ value, onChange, options, placeholder, autoFocus }: 
   return (
     <div style={{ position: 'relative' }}>
       <input
-        style={inputStyle}
+        style={clearable && value !== '' ? { ...inputStyle, paddingRight: 34 } : inputStyle}
         value={displayValue}
         onChange={e => { setQuery(e.target.value); setOpen(true); }}
         onFocus={handleFocus}
@@ -400,6 +401,22 @@ function SearchableSelect({ value, onChange, options, placeholder, autoFocus }: 
         placeholder={placeholder}
         autoComplete="off"
       />
+      {clearable && value !== '' && (
+        <button
+          type="button"
+          aria-label="Clear selection"
+          // mouse-down, not click: the input's blur would otherwise close the list and swallow the click
+          onMouseDown={e => { e.preventDefault(); handleSelect(''); }}
+          style={{
+            position: 'absolute', top: '50%', right: 8, transform: 'translateY(-50%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 22, height: 22, padding: 0, border: 'none', borderRadius: 4,
+            background: 'transparent', color: 'var(--txt-mut)', cursor: 'pointer',
+          }}
+        >
+          <X size={14} aria-hidden="true" />
+        </button>
+      )}
       {open && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1000,
@@ -1463,6 +1480,7 @@ function EditAllocationModal({ allocation, onClose, projects }: {
   const [effectiveFrom, setEffectiveFrom] = useState('');
   const [effectiveTo, setEffectiveTo] = useState('');
   const [allocationPct, setAllocationPct] = useState('');
+  const [projectId, setProjectId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [effectiveFromInvalid, setEffectiveFromInvalid] = useState(false);
   const [effectiveToInvalid, setEffectiveToInvalid] = useState(false);
@@ -1473,52 +1491,75 @@ function EditAllocationModal({ allocation, onClose, projects }: {
     setEffectiveFrom(allocation.effectiveFrom);
     setEffectiveTo(allocation.effectiveTo ?? '');
     setAllocationPct(String(allocation.allocationPct));
+    setProjectId(String(allocation.projectId));
     setError(null);
     setEffectiveFromInvalid(false);
     setEffectiveToInvalid(false);
   }, [allocation]);
+
+  // Active projects, plus this row's own project even if it is no longer active, so the field
+  // always opens on the current value. (The server still only accepts an ACTIVE project for a change.)
+  const projectOptions = useMemo(
+    () => projects
+      .filter(p => p.status === 'ACTIVE' || p.id === allocation?.projectId)
+      .map(p => ({ id: p.id, label: `${p.code}: ${p.name}` })),
+    [projects, allocation],
+  );
+  const selectedProject = useMemo(
+    () => projects.find(p => String(p.id) === projectId),
+    [projects, projectId],
+  );
+  const projectChanged = allocation != null && projectId !== '' && Number(projectId) !== allocation.projectId;
+  // A project change always edits this same row, so on a running allocation it also re-labels its
+  // past dates — worth a heads-up (not a block).
+  const changesPastDates = projectChanged && allocation != null && hasStarted(allocation, todayISO());
+  const projectMissing = projectId === '';
 
   const badDateOrder = effectiveTo !== '' && effectiveTo < effectiveFrom;
   const dateFormatInvalid = effectiveFromInvalid || effectiveToInvalid;
   const pctNum = allocationPct === '' ? null : Number(allocationPct);
   const badPct = pctNum !== null && !isValidAllocationPct(pctNum);
 
-  // Mirrors AllocationService.requireNotBeforeProjectStart — the project itself is fixed on edit,
-  // but a moved Effective From must still not land before it officially started.
-  const projectStartDate = useMemo(
-    () => (allocation ? projects.find(p => p.id === allocation.projectId)?.startDate || undefined : undefined),
-    [projects, allocation],
-  );
+  // Mirrors AllocationService.requireNotBeforeProjectStart — checked against the SELECTED project,
+  // since a project change is re-validated against the new one.
+  const projectStartDate = selectedProject?.startDate || undefined;
   const badEffectiveFromBeforeStart =
     effectiveFrom !== '' && projectStartDate != null && effectiveFrom < projectStartDate;
 
-  // Widening a window can collide with another allocation of the same pair. Excludes this row, so
-  // re-saving its own dates is never a conflict with itself.
+  // The duplicate guard, for the selected project. Excludes this row, so re-saving its own dates
+  // is never a conflict with itself.
   const clash = useMemo(() => {
-    if (!allocation || !effectiveFrom || badDateOrder) return null;
-    return (allAllocations ?? []).find(a =>
-      a.id !== allocation.id
-      && a.employeeId === allocation.employeeId
-      && a.projectId === allocation.projectId
-      && windowsOverlap(a.effectiveFrom, a.effectiveTo, effectiveFrom, effectiveTo || null)) ?? null;
-  }, [allAllocations, allocation, effectiveFrom, effectiveTo, badDateOrder]);
+    if (!allocation || !effectiveFrom || badDateOrder || projectId === '') return null;
+    return findAllocationClash(allAllocations ?? [], {
+      employeeId: allocation.employeeId, projectId: Number(projectId),
+      from: effectiveFrom, to: effectiveTo || null, excludeId: allocation.id,
+    });
+  }, [allAllocations, allocation, projectId, effectiveFrom, effectiveTo, badDateOrder]);
 
-  // This row's own (old) percentage is excluded from "Current Allocation" — it is being replaced
-  // by whatever is typed into the field below, not stacked on top of itself.
-  const currentAllocationTotal = useMemo(() => {
-    if (!allocation || !effectiveFrom || badDateOrder) return 0;
-    return overlappingAllocationTotal(
+  // The employee's OTHER allocations overlapping the new window. This row is excluded: it is being
+  // replaced (in place) or ended before the new window starts (end-and-create), so it never stacks
+  // on top of itself — matching the server's capacity check.
+  const otherAllocations = useMemo(() => {
+    if (!allocation || !effectiveFrom || badDateOrder) return [];
+    return overlappingAllocations(
       allAllocations ?? [], allocation.employeeId, effectiveFrom, effectiveTo || null, allocation.id);
   }, [allAllocations, allocation, effectiveFrom, effectiveTo, badDateOrder]);
+  const currentAllocationTotal = useMemo(
+    () => otherAllocations.reduce((sum, a) => sum + a.allocationPct, 0),
+    [otherAllocations],
+  );
 
   // Mirrors AllocationService.requireWithinCapacity — advisory here (the server enforces it), but
   // blocking submission client-side saves a round trip for the by-far most common case.
   const wouldExceedCapacity = pctNum !== null && currentAllocationTotal + pctNum > 100;
 
+  const cannotSave = !effectiveFrom || badDateOrder || dateFormatInvalid || projectMissing
+    || badEffectiveFromBeforeStart || clash != null
+    || pctNum === null || badPct || wouldExceedCapacity;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!allocation || !effectiveFrom || badDateOrder || dateFormatInvalid
-      || badEffectiveFromBeforeStart || clash || pctNum === null || badPct || wouldExceedCapacity) return;
+    if (!allocation || cannotSave || pctNum === null) return;
     setError(null);
     try {
       await updateMutation.mutateAsync({
@@ -1527,6 +1568,7 @@ function EditAllocationModal({ allocation, onClose, projects }: {
           effectiveFrom,
           effectiveTo: effectiveTo || null,
           allocationPct: pctNum,
+          ...(projectChanged ? { projectId: Number(projectId) } : {}),
         },
       });
       showToast('success', 'Allocation updated');
@@ -1542,27 +1584,35 @@ function EditAllocationModal({ allocation, onClose, projects }: {
         <form onSubmit={handleSubmit} noValidate>
           {error && <ErrorBanner message={error} />}
 
-          {/* Employee and project are fixed — reassigning either is a different allocation. */}
-          <div className="nf-r-stack-sm" style={{
-            display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14,
-            padding: '10px 14px', borderRadius: 7,
+          {/* The employee is fixed — reassigning that is a different allocation. */}
+          <div style={{
+            marginBottom: 14, padding: '10px 14px', borderRadius: 7,
             background: 'var(--raised)', border: '1px solid var(--line)',
           }}>
-            <div>
-              <div style={labelStyle}>Employee</div>
-              <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
-                {allocation.employeeName}{' '}
-                <span style={{ color: 'var(--txt-dim)', fontSize: 11 }}>
-                  {allocation.employeeCode}
-                </span>
-              </div>
+            <div style={labelStyle}>Employee</div>
+            <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
+              {allocation.employeeName}{' '}
+              <span style={{ color: 'var(--txt-dim)', fontSize: 11 }}>
+                {allocation.employeeCode}
+              </span>
             </div>
-            <div>
-              <div style={labelStyle}>Project</div>
-              <div style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
-                {allocation.projectCode}: {allocation.projectName}
-              </div>
-            </div>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelStyle}>Project *</label>
+            <SearchableSelect
+              value={projectId}
+              onChange={v => { setError(null); setProjectId(v); }}
+              options={projectOptions}
+              placeholder="Search projects…"
+              clearable
+            />
+            <FieldError msg={projectMissing ? 'Project is required' : undefined} />
+            {changesPastDates && (
+              <p style={{ fontSize: 11, color: 'var(--warn)', margin: '5px 0 0', lineHeight: 1.5 }}>
+                This changes the project for the entire allocation period, including past dates.
+              </p>
+            )}
           </div>
 
           <div className="nf-r-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
@@ -1573,7 +1623,7 @@ function EditAllocationModal({ allocation, onClose, projects }: {
                 value={effectiveFrom}
                 min={projectStartDate}
                 autoFocus
-                onChange={setEffectiveFrom}
+                onChange={v => { setError(null); setEffectiveFrom(v); }}
                 onInvalidChange={setEffectiveFromInvalid}
               />
               {badEffectiveFromBeforeStart && (
@@ -1589,7 +1639,7 @@ function EditAllocationModal({ allocation, onClose, projects }: {
                 ariaLabel="Effective To"
                 value={effectiveTo}
                 min={effectiveFrom || undefined}
-                onChange={setEffectiveTo}
+                onChange={v => { setError(null); setEffectiveTo(v); }}
                 onInvalidChange={setEffectiveToInvalid}
               />
               <p style={{ fontSize: 11, color: badDateOrder ? 'var(--risk)' : 'var(--txt-dim)', margin: '5px 0 0' }}>
@@ -1616,7 +1666,7 @@ function EditAllocationModal({ allocation, onClose, projects }: {
             <select
               style={{ ...inputStyle, width: 140 }}
               value={allocationPct}
-              onChange={e => setAllocationPct(e.target.value)}
+              onChange={e => { setError(null); setAllocationPct(e.target.value); }}
             >
               <option value="">Select %…</option>
               {ALLOCATION_PCT_OPTIONS.map(pct => <option key={pct} value={pct}>{pct}%</option>)}
@@ -1629,7 +1679,14 @@ function EditAllocationModal({ allocation, onClose, projects }: {
           </div>
 
           {effectiveFrom && !badDateOrder && (
-            <AllocationTotalSummary current={currentAllocationTotal} incoming={pctNum ?? 0} />
+            <AllocationTotalSummary
+              current={currentAllocationTotal}
+              incoming={pctNum ?? 0}
+              currentItems={otherAllocations.map(a => ({
+                key: a.id, label: a.projectName, pct: a.allocationPct,
+              }))}
+              incomingLabel={selectedProject?.name}
+            />
           )}
           {wouldExceedCapacity && (
             <p style={{ fontSize: 11, color: 'var(--risk)', margin: '0 0 14px' }} role="alert">
@@ -1647,8 +1704,7 @@ function EditAllocationModal({ allocation, onClose, projects }: {
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="submit"
-              disabled={updateMutation.isPending || !effectiveFrom || badDateOrder || dateFormatInvalid
-                || badEffectiveFromBeforeStart || clash != null || pctNum === null || badPct || wouldExceedCapacity}
+              disabled={updateMutation.isPending || cannotSave}
               style={{
                 padding: '9px 20px', background: 'var(--brand)', border: 'none', borderRadius: 7,
                 color: '#fff', fontSize: 13, fontWeight: 600,
