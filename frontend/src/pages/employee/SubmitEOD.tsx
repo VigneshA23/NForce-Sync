@@ -1,4 +1,5 @@
 import { DateStepper } from '../../components/DateStepper';
+import { PageBackdrop, pageBackdropWrapperStyle } from '../../components/PageBackdrop';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -13,11 +14,13 @@ import { useMyEmployeeProjects } from '../../api/employeeProjects';
 import { useEntryPieces } from '../../api/approvalPieces';
 import { listTaskCategories } from '../../api/taskCategories';
 import {
-  saveDraft, submitEntry, listEntries, getDayDefaults,
+  saveDraft, submitEntry, listEntries, getDayDefaults, markHoliday, clearHoliday, isAutoHolidayEntry,
   uploadEodAttachment, deleteEodAttachment, getEodAttachmentDataUrl,
 } from '../../api/eod';
 import { DatePicker } from '../../components/DatePicker';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { HOLIDAY_MESSAGE } from './dailyLogParts';
+import { ConfirmModal } from '../../components/ConfirmModal';
 import { TimeAdjustmentSection } from '../../components/timeAdjustment/TimeAdjustmentSection';
 import { useTimeAdjustment } from '../../components/timeAdjustment/useTimeAdjustment';
 import { BlockerReasonField, TaskStatusField } from '../../components/taskStatus/TaskStatusFields';
@@ -217,7 +220,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-mut)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 5 }}>
+    <div className="eod-form-label">
       {children}
     </div>
   );
@@ -225,7 +228,7 @@ function Label({ children }: { children: React.ReactNode }) {
 
 /** Required-field marker, matching the asterisk already used on the blocker-reason label. */
 function Req() {
-  return <span style={{ color: '#E4373D' }}>*</span>;
+  return <span style={{ color: 'var(--brand-bright)' }}>*</span>;
 }
 
 /**
@@ -258,26 +261,25 @@ function AddTaskButton({ onClick, style }: { onClick: () => void; style?: React.
   );
 }
 
+// Hover/focus/placeholder/disabled live in the .eod-form-field class (index.css). The base values are
+// inlined here too because read-only divs and DatePicker reuse inputStyle and cannot take the class.
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '8px 10px',
-  background: 'var(--raised2)', border: '1px solid var(--line2)',
-  borderRadius: 6, color: 'var(--txt)', fontSize: 13,
+  width: '100%', padding: '10px 12px', minHeight: 44,
+  background: 'var(--eod-field-bg)', border: '1px solid var(--eod-field-border)',
+  borderRadius: 10, color: 'var(--txt)', fontSize: 14,
   outline: 'none', boxSizing: 'border-box',
 };
 
-const disabledInputStyle: React.CSSProperties = {
-  ...inputStyle,
-  opacity: 0.45,
-  cursor: 'not-allowed',
-};
+// Disabled look comes from .eod-form-field:disabled; no opacity so the text stays legible.
+const disabledInputStyle: React.CSSProperties = inputStyle;
 
 function Inp(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} style={{ ...(props.disabled ? disabledInputStyle : inputStyle), ...props.style }} />;
+  return <input {...props} className={`eod-form-field ${props.className ?? ''}`} style={{ ...(props.disabled ? disabledInputStyle : inputStyle), ...props.style }} />;
 }
 
 function Sel(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select {...props} style={{ ...(props.disabled ? disabledInputStyle : inputStyle), ...props.style }}>
+    <select {...props} className={`eod-form-field ${props.className ?? ''}`} style={{ ...(props.disabled ? disabledInputStyle : inputStyle), ...props.style }}>
       {props.children}
     </select>
   );
@@ -285,7 +287,7 @@ function Sel(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
 
 function Txt(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
-    <textarea {...props} style={{ ...inputStyle, resize: 'vertical', minHeight: 70, lineHeight: 1.5, ...props.style }} />
+    <textarea {...props} className={`eod-form-field ${props.className ?? ''}`} style={{ ...inputStyle, resize: 'vertical', minHeight: 70, lineHeight: 1.5, ...props.style }} />
   );
 }
 
@@ -303,12 +305,8 @@ function CharCount({ value, max = MAX_TEXT_LEN }: { value: string; max?: number 
   return (
     <div
       aria-live="polite"
-      style={{
-        fontSize: 11,
-        color: atLimit ? 'var(--warn)' : 'var(--txt-dim)',
-        textAlign: 'right',
-        marginTop: 4,
-      }}
+      className="eod-form-count"
+      data-state={atLimit ? 'limit' : used >= max * 0.9 ? 'near' : undefined}
     >
       {used}/{max} characters used
     </div>
@@ -430,6 +428,14 @@ export default function SubmitEOD() {
   // Entry state — updated from backend responses
   const [entryId, setEntryId] = useState<number | null>(null);
   const [entryStatus, setEntryStatus] = useState<string | null>(null);
+  // True while the saved entry is a holiday the system recorded itself (APPROVED, never submitted). It is
+  // not "submitted" in any sense, so it must not lock the form: the Day Type stays changeable.
+  const [autoHoliday, setAutoHoliday] = useState(false);
+  // The date for which the user deliberately moved off the calendar's Holiday. Stops the populate effect
+  // from snapping the form back to Holiday (and re-recording it) while no entry exists for that date yet.
+  const holidayOptOutDate = useRef<string | null>(null);
+  // Open while the "discard what you have entered?" prompt is showing for a switch to Holiday.
+  const [confirmHoliday, setConfirmHoliday] = useState(false);
 
   // Form fields
   const [dayType,      setDayType]      = useState('WORKING_DAY');
@@ -462,6 +468,32 @@ export default function SubmitEOD() {
   // updatedAt changes on every server-side mutation, so a genuinely newer entry re-populates
   // while a redundant refetch of identical state leaves in-progress edits alone.
   const appliedRef = useRef<string | null>(null);
+  const selectedDateRef = useRef(selectedDate);
+  useEffect(() => { selectedDateRef.current = selectedDate; }, [selectedDate]);
+
+  // Records the day as a holiday without Save Draft / Submit. Idempotent on the server, so a refresh or a
+  // repeated trigger returns the same entry instead of creating another.
+  const holidayMutation = useMutation({
+    mutationFn: (date: string) => markHoliday(date),
+    onSuccess: (entry, date) => {
+      // Ignore a late response for a date the user has already moved away from.
+      if (date !== selectedDateRef.current) return;
+      setEntryId(entry.id);
+      setEntryStatus(entry.status);
+      setAutoHoliday(true);
+      appliedRef.current = entrySignature(date, entry);
+      qc.invalidateQueries({ queryKey: ['eod'] });
+    },
+    onError: (err: unknown) => toast(extractError(err), 'error'),
+  });
+
+  const clearHolidayMutation = useMutation({
+    mutationFn: (date: string) => clearHoliday(date),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['eod'] }),
+    onError: (err: unknown) => toast(extractError(err), 'error'),
+  });
+
+  function recordHoliday() { holidayMutation.mutate(selectedDate); }
 
   // ── Backend queries ───────────────────────────────────────────────────────
 
@@ -535,6 +567,7 @@ export default function SubmitEOD() {
     if (entry) {
       setEntryId(entry.id);
       setEntryStatus(entry.status);
+      setAutoHoliday(isAutoHolidayEntry(entry));
       // The server rejects any day type but WEEKEND on a locked weekend date, so an editable
       // entry that predates the lock is shown (and re-saved) as Weekend. A submitted one keeps
       // the day type it was actually filed under.
@@ -554,13 +587,19 @@ export default function SubmitEOD() {
       );
       // Entries saved before weekend_worked existed carry only their tasks, so fall back to that.
       setWeekendWorked(entry.weekendWorked === true || entry.tasks.length > 0);
+      // A holiday still sitting as an editable draft (saved before holidays were automatic) is recorded now.
+      if (entryEditable && entry.dayType === 'HOLIDAY') recordHoliday();
     } else {
       setEntryId(null);
       setEntryStatus(null);
+      setAutoHoliday(false);
       // No saved entry for this date yet — auto-populate from the resolved source of truth
       // (holiday calendar today) rather than hardcoding, falling back to Working day/Office
       // when nothing overrides it for this date.
-      setDayType(dayDefaults?.dayType ?? 'WORKING_DAY');
+      // The user may have moved this date off a calendar holiday; that choice stands until a date change.
+      const optedOut = holidayOptOutDate.current === selectedDate && dayDefaults?.dayType === 'HOLIDAY';
+      const defaultDayType = optedOut ? 'WORKING_DAY' : (dayDefaults?.dayType ?? 'WORKING_DAY');
+      setDayType(defaultDayType);
       ta.reset();
       setWorkLocation(dayDefaults?.workLocation ?? '');
       setNextDayPlan('');
@@ -568,6 +607,8 @@ export default function SubmitEOD() {
       setReviewerComment(null);
       setTasks([newRow()]);
       setWeekendWorked(false);
+      // Calendar holiday: record it straight away, no Save Draft / Submit.
+      if (defaultDayType === 'HOLIDAY') recordHoliday();
     }
     setErrors([]);
   }, [entries, loadingEntry, selectedDate, categories, dayDefaults, loadingDayDefaults]); // eslint-disable-line react-hooks/exhaustive-deps -- ta.load/reset only set state
@@ -575,11 +616,47 @@ export default function SubmitEOD() {
   // Clear the applied signature when the date changes so the next query result repopulates
   function handleDateChange(d: string) {
     appliedRef.current = null;
+    holidayOptOutDate.current = null;
     setSelectedDate(d);
     setErrors([]);
   }
 
+  /** Anything on screen that switching to Holiday would throw away. */
+  function hasEnteredContent(): boolean {
+    return nextDayPlan.trim() !== '' || remarks.trim() !== '' || tasks.some(t =>
+      t.projectId != null || t.taskCategoryId != null || t.description.trim() !== ''
+      || t.hours !== '' || t.attachments.length > 0);
+  }
+
+  function applyHoliday() {
+    holidayOptOutDate.current = null;
+    setDayType('HOLIDAY');
+    setTasks([newRow()]);
+    setNextDayPlan('');
+    setRemarks('');
+    setWorkLocation('');
+    setWeekendWorked(false);
+    ta.reset();
+    setErrors([]);
+    recordHoliday();
+  }
+
   function handleDayTypeChange(next: string) {
+    if (next === 'HOLIDAY' && dayType !== 'HOLIDAY') {
+      if (hasEnteredContent()) { setConfirmHoliday(true); return; }
+      applyHoliday();
+      return;
+    }
+    if (dayType === 'HOLIDAY' && next !== 'HOLIDAY') {
+      // Leaving Holiday: drop the auto-recorded entry so the normal flow starts from a clean slate.
+      holidayOptOutDate.current = selectedDate;
+      if (entryId != null) clearHolidayMutation.mutate(selectedDate);
+      setEntryId(null);
+      setEntryStatus(null);
+      setAutoHoliday(false);
+      setReviewerComment(null);
+      appliedRef.current = entrySignature(selectedDate, undefined);
+    }
     setDayType(next);
     // A fresh switch into (or out of) Weekend starts as a no-work day again.
     setWeekendWorked(false);
@@ -595,7 +672,8 @@ export default function SubmitEOD() {
 
   // ── Derived state ─────────────────────────────────────────────────────────
 
-  const isReadOnly   = entryStatus === 'SUBMITTED' || entryStatus === 'APPROVED' || entryStatus === 'MISSED' || entryStatus === 'PARTIALLY_APPROVED';
+  // An auto-recorded holiday is APPROVED but was never submitted, so it must not lock the Day Type dropdown.
+  const isReadOnly   = !autoHoliday && (entryStatus === 'SUBMITTED' || entryStatus === 'APPROVED' || entryStatus === 'MISSED' || entryStatus === 'PARTIALLY_APPROVED');
   const isEditable   = !isReadOnly;
   const isDateLocked = false;
   // A submitted entry is already fully locked by isReadOnly above (isEditable() on the backend
@@ -1010,17 +1088,23 @@ export default function SubmitEOD() {
 
   if (loadingProjects || loadingCategories) {
     return (
-      <div>
+      <div style={pageBackdropWrapperStyle}>
+        <PageBackdrop />
         <PageHeader selectedDate={selectedDate} onDateChange={handleDateChange} entryStatus={null} />
         <GlobalLoader fullScreen={false} label="Loading EOD form..." />
       </div>
     );
   }
 
+  // Submit is only "highlighted" once every mandatory field passes the same validation Submit runs.
+  // Not disabled when merely incomplete (except hoursShort, as before) so a click still lists what is missing.
+  const submitReady = !hoursShort && validate().length === 0;
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div>
+    <div style={pageBackdropWrapperStyle}>
+      <PageBackdrop />
       {/* Page header */}
       <PageHeader
         selectedDate={selectedDate}
@@ -1110,6 +1194,15 @@ export default function SubmitEOD() {
         </div>
       )}
 
+      <ConfirmModal
+        open={confirmHoliday}
+        onClose={() => setConfirmHoliday(false)}
+        onConfirm={() => { setConfirmHoliday(false); applyHoliday(); }}
+        title="Mark this day as a holiday?"
+        message="Everything you have entered for this date (tasks, plan, remarks and attachments) will be discarded. The day is recorded as a holiday automatically."
+        confirmLabel="Mark as holiday"
+      />
+
       {/* Validation errors */}
       {errors.length > 0 && (
         <div ref={errorRef} style={{
@@ -1194,11 +1287,7 @@ export default function SubmitEOD() {
             recapNote={<>{minutesLabel(adjMins)} counted toward this day's logged hours - the {expectedHrs.toFixed(1)}h target is unchanged.</>}
           />
 
-          {/* Holiday, Leave and Weekend — nothing REQUIRED to log, so this banner always shows
-              for them. Holiday/Leave also replace the whole Tasks section with this (see
-              isNonWorkDay below); a Weekend keeps the Tasks section too, so the Add-task button
-              stays available right underneath for optional overtime logging. Reuses the same
-              banner shape and the existing --ok role as the approved banner above; no new colors. */}
+          {/* Holiday, Leave and Weekend information banner */}
           {(isNonWorkDay || isWeekend) && (
             <div style={{
               display: 'flex', gap: 10, alignItems: 'flex-start',
@@ -1207,12 +1296,14 @@ export default function SubmitEOD() {
             }}>
               <CheckCircle size={15} style={{ color: 'var(--ok)', flexShrink: 0, marginTop: 1 }} aria-hidden />
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ok)', marginBottom: 2 }}>
-                  No tasks required
-                </div>
+                {!isHoliday && (
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ok)', marginBottom: 2 }}>
+                    No tasks required
+                  </div>
+                )}
                 <div style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5 }}>
                   {isHoliday
-                    ? 'This is a company holiday. Hours and project fields are skipped.'
+                    ? HOLIDAY_MESSAGE
                     : isLeaveDay
                       ? 'You are on leave. Hours and project fields are skipped.'
                       : weekendWorked
@@ -1379,6 +1470,7 @@ export default function SubmitEOD() {
 
           {/* Next-day plan — required everywhere except Weekend, where it stays optional even
               once an OT task is added (see the matching skip in validate()). */}
+          {!isHoliday && (<>
           <div style={{ marginTop: 24 }}>
             <Label>Next-day plan {!isWeekend && <Req />}</Label>
             {isReadOnly
@@ -1399,26 +1491,36 @@ export default function SubmitEOD() {
                   <CharCount value={remarks} />
                 </>}
           </div>
+          </>)}
 
-          {/* Action buttons */}
-          {isEditable && (
+          {/* Action buttons. A holiday is recorded automatically, so there is nothing to save or submit. */}
+          {isEditable && !isHoliday && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, marginTop: 28 }}>
               {/* Submit stays disabled (not just an error after clicking) until logged hours meet
                   the day's required target — see hoursShort above. */}
               {hoursShort && (
-                <div style={{ fontSize: 12, color: 'var(--warn)', fontWeight: 500 }}>
-                  Log {hoursShortBy.toFixed(1)} more hour{hoursShortBy > 1.001 ? 's' : ''} to submit
-                  {' '}({effectiveLoggedHours.toFixed(1)} / {expectedHrs.toFixed(1)} hrs)
+                <div role="alert" style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 12px', borderRadius: 8,
+                  fontSize: 13, color: 'var(--warn)', fontWeight: 600,
+                  background: 'color-mix(in srgb, var(--warn) 12%, var(--raised))',
+                  border: '1px solid color-mix(in srgb, var(--warn) 40%, transparent)',
+                }}>
+                  <AlertTriangle size={14} style={{ flexShrink: 0 }} aria-hidden />
+                  <span>
+                    Log {hoursShortBy.toFixed(1)} more hour{hoursShortBy > 1.001 ? 's' : ''} to submit
+                    {' '}({effectiveLoggedHours.toFixed(1)} / {expectedHrs.toFixed(1)} hrs)
+                  </span>
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <div className="eod-form-actions">
                 <button
                   onClick={handleSaveDraft}
                   disabled={draftMutation.isPending || submitMutation.isPending}
                   style={{
-                    padding: '9px 20px', borderRadius: 6,
-                    background: 'var(--raised2)', border: '1px solid var(--line2)',
-                    color: 'var(--txt)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                    padding: '9px 20px', borderRadius: 10,
+                    background: 'var(--eod-field-bg)', border: '1px solid var(--eod-field-border-hover)',
+                    color: 'var(--eod-btn-text)', fontSize: 14, fontWeight: 700, cursor: 'pointer',
                     opacity: draftMutation.isPending ? 0.6 : 1,
                   }}
                 >
@@ -1429,14 +1531,14 @@ export default function SubmitEOD() {
                   disabled={draftMutation.isPending || submitMutation.isPending || hoursShort}
                   title={hoursShort ? `Log ${hoursShortBy.toFixed(1)} more hour(s) to submit` : undefined}
                   style={{
-                    padding: '9px 22px', borderRadius: 6,
-                    background: hoursShort ? 'var(--raised2)' : 'var(--brand)',
-                    border: `1px solid ${hoursShort ? 'var(--line2)' : 'var(--brand-deep)'}`,
-                    color: hoursShort ? 'var(--txt-dim)' : '#fff',
-                    fontSize: 13, fontWeight: 600,
+                    padding: '9px 22px', borderRadius: 10,
+                    background: !submitReady ? 'var(--raised2)' : 'var(--brand)',
+                    border: `1px solid ${!submitReady ? 'var(--line2)' : 'var(--brand-deep)'}`,
+                    color: submitReady ? '#fff' : 'var(--txt)',
+                    fontSize: 14, fontWeight: 700,
                     cursor: hoursShort ? 'not-allowed' : 'pointer',
                     opacity: submitMutation.isPending ? 0.6 : 1,
-                    boxShadow: hoursShort ? 'none' : '0 2px 8px color-mix(in srgb, var(--brand) 35%, transparent)',
+                    boxShadow: !submitReady ? 'none' : '0 2px 8px color-mix(in srgb, var(--brand) 35%, transparent)',
                   }}
                 >
                   {submitMutation.isPending ? 'Submitting…' : 'Submit report'}

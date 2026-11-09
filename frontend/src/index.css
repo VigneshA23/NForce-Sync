@@ -7,6 +7,11 @@
 /* ─── Design tokens — dark (default) ──────────────────────────── */
 :root,
 [data-theme="dark"] {
+  --pb-g1: color-mix(in srgb, var(--brand-bright) 10%, #0E0F12); --pb-g2: color-mix(in srgb, var(--brand-bright) 4%, #0E0F12); --pb-g3: #0E0F12;
+  --pb-tile: color-mix(in srgb, var(--brand-bright) 18%, #0E0F12); --pb-pink: var(--brand-bright); --pb-crimson: var(--brand-bright);
+  --eod-label: #E2E8F0; --eod-field-bg: #0E1A2F; --eod-field-border: #3A4A68; --eod-field-border-hover: #6B7FA3; --eod-placeholder: #8B9AB5;
+  --eod-dis-bg: #17233A; --eod-dis-text: #8B9AB5; --eod-count: #94A3B8; --eod-btn-text: #E2E8F0;
+  --eod-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23E2E8F0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --shell:       #0E0F12;
   --panel:       #16181D;
   --raised:      #1E2128;
@@ -94,6 +99,11 @@
  *                                      normal-size text; same token, same fix as dark)
  */
 [data-theme="light"] {
+  --pb-g1: color-mix(in srgb, var(--brand-bright) 6%, #fff); --pb-g2: color-mix(in srgb, var(--brand-bright) 2%, #fff); --pb-g3: #FFFFFF;
+  --pb-tile: #FFFFFF; --pb-pink: color-mix(in srgb, var(--brand-bright) 45%, #fff); --pb-crimson: var(--brand-bright);
+  --eod-label: #1F2937; --eod-field-bg: #FFFFFF; --eod-field-border: #C9CED8; --eod-field-border-hover: #8A93A6; --eod-placeholder: #6B7280;
+  --eod-dis-bg: #EEF0F4; --eod-dis-text: #6B7280; --eod-count: #4B5563; --eod-btn-text: #1F2937;
+  --eod-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%231F2937' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --shell:       #F7F8FA;
   --panel:       #FFFFFF;
   --raised:      #FFFFFF;
@@ -358,11 +368,12 @@ textarea:-webkit-autofill:focus {
   .shell-hamburger { display: flex; }
 }
 
-.shell-main-content {
-  margin-left: 236px;
-}
+:root { --sidebar-w: 236px; --header-h: 56px; }
 @media (max-width: 900px) {
-  .shell-main-content { margin-left: 0; }
+  :root { --sidebar-w: 0px; }
+}
+.shell-main-content {
+  margin-left: var(--sidebar-w);
 }
 
 /* Breadcrumb — hide on small screens where space is tight */
@@ -733,23 +744,22 @@ textarea:-webkit-autofill:focus {
 }
 
 /* ─── Profile page — cover banner header ────────────────────────── */
-/* The avatar overlaps the banner's bottom-left corner at a fixed offset
-   tuned for its 88px desktop size (top: -44, exactly half its height, left:
-   24 matching the content padding) — shrinking the avatar without shrinking
-   that offset would leave it floating above the banner instead of sitting
-   on its edge, so avatar size, position and the details block's clearing
-   padding-top all move together at each step down. */
+/* Identity row: avatar overlaps the cover's bottom edge, name / designation / email / chips sit to its right
+   (OneHR's My Profile arrangement). Wraps instead of overflowing: the Edit/Save group drops below when the
+   row is too narrow, and on phones the avatar shrinks and the name steps down. */
 @media (max-width: 640px) {
-  .nf-r-profile-details { flex-direction: column !important; align-items: flex-start !important; }
+  .nf-r-profile-actions-wrap { width: 100%; padding-top: 0 !important; }
   .nf-r-profile-actions { width: 100%; }
   .nf-r-profile-actions > button { flex: 1; }
+  .nf-r-profile-name { font-size: 22px !important; }
 }
 @media (max-width: 480px) {
-  .nf-r-profile-content { padding: 0 16px 16px !important; }
+  .nf-r-profile-content { padding: 0 16px 16px !important; gap: 14px !important; }
   .nf-r-profile-banner { height: 88px !important; }
-  .nf-r-profile-avatar { top: -32px !important; left: 16px !important; }
-  .nf-r-profile-avatar-img { width: 64px !important; height: 64px !important; }
-  .nf-r-profile-details { padding-top: 40px !important; }
+  .nf-r-profile-avatar { margin-top: -26px !important; }
+  .nf-r-profile-avatar-img { width: 72px !important; height: 72px !important; }
+  .nf-r-profile-info { padding-top: 0 !important; }
+  .nf-r-profile-name { font-size: 19px !important; }
 }
 /* Quick-facts contact chips — own breakpoints rather than reusing
    .nf-r-stack-sm, since 3 columns of icon+label+value chips need a tablet
@@ -1064,3 +1074,19 @@ html[data-high-contrast="true"][data-status-cues="true"][data-theme="light"] {
 @media (prefers-reduced-motion: reduce) {
   [aria-busy="true"] [role="status"] { animation: none !important; }
 }
+
+/* ─── Submit EOD form controls (.eod-form-*) — fields, labels, counters, buttons ─── */
+.eod-form-label { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--eod-label); margin-bottom: 8px; }
+.eod-form-field { background: var(--eod-field-bg); border: 1px solid var(--eod-field-border); border-radius: 10px; min-height: 44px; font-size: 14px; color: var(--txt); transition: border-color .12s, box-shadow .12s; }
+.eod-form-field:hover:not(:disabled) { border-color: var(--eod-field-border-hover) !important; }
+.eod-form-field:focus, .eod-form-field:focus-visible { border-color: var(--brand-bright) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-bright) 25%, transparent); outline: none; }
+.eod-form-field::placeholder { color: var(--eod-placeholder); opacity: 1; }
+textarea.eod-form-field { min-height: 70px; }
+select.eod-form-field { appearance: none; -webkit-appearance: none; padding-right: 38px !important; background-image: var(--eod-chevron); background-repeat: no-repeat; background-position: right 14px center; background-size: 14px; }
+select.eod-form-field option { color: var(--txt); background: var(--eod-field-bg); }
+.eod-form-field:disabled { background-color: var(--eod-dis-bg) !important; border: 1px dashed var(--eod-field-border) !important; color: var(--eod-dis-text); -webkit-text-fill-color: var(--eod-dis-text); cursor: not-allowed; }
+.eod-form-count { font-size: 12px; color: var(--eod-count); text-align: right; margin-top: 4px; }
+.eod-form-count[data-state="near"] { color: var(--warn); }
+.eod-form-count[data-state="limit"] { color: var(--brand-bright); }
+.eod-form-actions { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
+.eod-form-actions button { min-height: 44px; }

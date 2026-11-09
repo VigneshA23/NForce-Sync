@@ -50,4 +50,9 @@ public interface EodAttachmentRepository extends JpaRepository<EodAttachment, Lo
     // rows is SQL NULL, which would otherwise unbox to a NullPointerException here.
     @Query("SELECT COALESCE(SUM(a.fileSize), 0) FROM EodAttachment a")
     long sumFileSize();
+
+    /** Every attachment (entry- and task-level) of one entry, in one statement and without loading file bytes. */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("DELETE FROM EodAttachment a WHERE a.eodEntry.id = :entryId")
+    void deleteAllByEntryId(@Param("entryId") Long entryId);
 }

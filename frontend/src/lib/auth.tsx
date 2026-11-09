@@ -4,6 +4,7 @@ import type { Role } from './types';
 import { getMe, toRole } from '../api/auth';
 import type { ServerUser, ServerUserCapabilities } from '../api/auth';
 import { clearStoredDateFilter } from './teamDashboardDateFilter';
+import { getNavPaths } from './nav';
 
 const SESSION_KEY = 'nfsync_session';
 
@@ -79,6 +80,8 @@ export function buildAuthUser(serverUser: ServerUser, mustChangePassword?: boole
 interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
+  /** True while a saved session is still being re-validated with getMe (its role/capabilities may be stale). */
+  loading: boolean;
   loginWithCredentials: (token: string, user: AuthUser) => void;
   logout: () => void;
 }
@@ -97,12 +100,23 @@ export function getHomeRouteForRole(role: Role): string {
   return ROLE_LANDING[role];
 }
 
+/**
+ * `preferred` when this user can actually open it, otherwise their role's landing page — so a
+ * legacy/shared URL never sends someone to a screen that would only show "Not authorized".
+ */
+export function resolveAllowedRoute(role: Role, capabilities: ServerUserCapabilities, preferred: string): string {
+  return getNavPaths(role, capabilities).includes(preferred) ? preferred : ROLE_LANDING[role];
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const initSession = useRef(loadSession());
   const [user, setUser]   = useState<AuthUser | null>(initSession.current?.user ?? null);
   const [token, setToken] = useState<string | null>(initSession.current?.token ?? null);
+  // A saved session's role/capabilities can be out of date (e.g. the account was promoted since
+  // last login). Hold protected routes until getMe has confirmed or replaced them.
+  const [loading, setLoading] = useState<boolean>(!!initSession.current?.token);
 
   useEffect(() => {
     const savedToken = initSession.current?.token;
@@ -123,10 +137,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         saveSession(null);
         setUser(null);
         setToken(null);
-      });
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   function loginWithCredentials(newToken: string, newUser: AuthUser) {
+    setLoading(false);
     saveSession({ token: newToken, user: newUser });
     setToken(newToken);
     setUser(newUser);
@@ -140,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, loginWithCredentials, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, loginWithCredentials, logout }}>
       {children}
     </AuthContext.Provider>
   );

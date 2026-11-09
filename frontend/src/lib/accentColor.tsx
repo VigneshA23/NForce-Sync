@@ -1,5 +1,10 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useTheme } from './theme';
+import bannerRed from '../assets/profile-banner-red.png';
+import bannerBlue from '../assets/profile-banner-blue.png';
+import bannerPink from '../assets/profile-banner-pink.png';
+import bannerGreen from '../assets/profile-banner-green.png';
+import bannerPurple from '../assets/profile-banner-purple.png';
 
 export type AccentColor = 'red' | 'purple' | 'blue' | 'green' | 'pink';
 
@@ -35,6 +40,12 @@ export { ACCENT_SWATCHES };
 // the matching band; the PNG itself is never re-cropped per accent.
 export const ACCENT_BAND_POSITION_X: Record<AccentColor, string> = {
   red: '0%', blue: '25%', pink: '50%', purple: '75%', green: '100%',
+};
+
+/** Profile cover artwork per accent (same images OneHR's My Profile uses). Picked from the live accent, so it
+ *  follows the existing accent state and its localStorage persistence — no separate mechanism. */
+export const ACCENT_PROFILE_BANNER: Record<AccentColor, string> = {
+  red: bannerRed, blue: bannerBlue, pink: bannerPink, purple: bannerPurple, green: bannerGreen,
 };
 
 function hexToRgb(hex: string): string {

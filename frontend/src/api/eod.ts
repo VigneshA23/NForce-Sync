@@ -287,3 +287,27 @@ export async function getEodAttachmentDataUrl(attachmentId: number): Promise<str
     reader.readAsDataURL(blob);
   });
 }
+
+// ── Automatic holiday handling ───────────────────────────────────────────────
+
+/**
+ * Records the date as a holiday with no Save Draft / Submit — the server writes the entry straight to
+ * APPROVED with no approval pieces or notifications. Idempotent: repeating it returns the same entry.
+ */
+export async function markHoliday(entryDate: string, entryForm?: 'PROJECT_GROUPED' | 'PLAIN_LOG'): Promise<EodEntryDto> {
+  const res = await api.post<EodEntryDto>('/eod/holiday', { entryDate, entryForm });
+  return res.data;
+}
+
+/** Undoes an auto-recorded holiday when the user switches the Day Type away from Holiday. Idempotent. */
+export async function clearHoliday(date: string): Promise<void> {
+  await api.delete('/eod/holiday', { params: { date } });
+}
+
+/**
+ * A holiday the system recorded itself: Holiday, APPROVED, never submitted. A holiday filed through the old
+ * Submit flow carries a submittedAt and stays locked like any approved entry.
+ */
+export function isAutoHolidayEntry(e: Pick<EodEntryDto, 'dayType' | 'status' | 'submittedAt'>): boolean {
+  return e.dayType === 'HOLIDAY' && e.status === 'APPROVED' && !e.submittedAt;
+}

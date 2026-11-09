@@ -72,6 +72,14 @@ export function SubmissionWindow({ state, editable }: { state: WindowState; edit
   );
 }
 
+/** The one holiday notice, shown by Submit EOD and the Daily Log alike (manual or Holiday Calendar). */
+export const HOLIDAY_MESSAGE =
+  'This day is recorded as a holiday automatically. No EOD submission is required. Change the Day Type above to log work instead.';
+
+/** Daily Log wording of the holiday notice (Submit EOD keeps HOLIDAY_MESSAGE). */
+export const DAILY_LOG_HOLIDAY_MESSAGE =
+  'This day is recorded as a holiday automatically. No Daily Log submission is required. Change the Day Type above to log work instead.';
+
 // ── Approval status line ──────────────────────────────────────────────────────
 
 export function ApprovalStatusLine({ pieces }: { pieces: ApprovalPieceDto[] }) {
@@ -108,7 +116,7 @@ const STEPS = [
   'Select your day type and work location.',
   'Add category line items for your time breakdown.',
   'Fill in your next-day plan, then submit.',
-  'Leave or holiday days are auto-approved instantly.',
+  'Leave days are auto-approved instantly; holidays are recorded automatically.',
   'Rejected logs can be edited and resubmitted.',
 ];
 

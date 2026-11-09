@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Camera, Lock, Shield, Loader2, AlertCircle, Trash2, Mail, Phone, MapPin, Hash, Building2, UserCircle2, ImagePlus } from 'lucide-react';
+import { Camera, Lock, Shield, Loader2, AlertCircle, Trash2, Mail, Phone, MapPin, Hash, Building2, UserCircle2, ImagePlus, Briefcase } from 'lucide-react';
 import { fetchProfile, updateProfile, uploadPhoto, deletePhoto, uploadBanner, deleteBanner, type ProfileDto, type UpdateProfilePayload } from '../api/profile';
 import { useAuth } from '../lib/auth';
+import { useAccentColor, ACCENT_PROFILE_BANNER } from '../lib/accentColor';
 import { useToast } from '../lib/toast';
 import { Modal } from '../components/Modal';
 import { ImageCropper } from '../components/ImageCropper';
@@ -180,6 +181,7 @@ function PhoneEditField({ label, dialCode, onDialCodeChange, number, onNumberCha
 
 export default function Profile() {
   const { user: authUser } = useAuth();
+  const { accent } = useAccentColor();
   const navigate    = useNavigate();
   const { showToast } = useToast();
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -401,21 +403,23 @@ export default function Profile() {
       {/* Banner + avatar + identity card — LinkedIn-style: avatar overlaps the banner's
           bottom-left corner, and the identity details sit below it (not beside it). */}
       <Card style={{ padding: 0, overflow: 'hidden', boxShadow: CARD_SHADOW }}>
-        {/* Cover banner — the user's own uploaded image if set, otherwise a brand-red gradient
-            with a diagonal glossy highlight (theme-independent, same recipe as the topbar's
-            always-brand gradient in Shell.tsx). */}
+        {/* Cover banner — the user's own uploaded image if set, otherwise the artwork for the selected accent
+            colour (same images and bottom fade as OneHR's My Profile). The artwork comes from the existing
+            accent state, so changing the theme colour swaps it immediately and it persists with the accent. */}
         <div
           className="nf-r-profile-banner"
-          style={{
-            position: 'relative', height: 120,
-            background: profile.bannerDataUrl
-              ? `center / cover no-repeat url(${profile.bannerDataUrl})`
-              : 'linear-gradient(135deg, var(--brand-deep) 0%, var(--brand) 55%, var(--brand-bright) 100%)',
-          }}
+          style={{ position: 'relative', height: 'clamp(130px, 14vw, 160px)' }}
         >
-          {!profile.bannerDataUrl && (
-            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(120deg, transparent 40%, rgba(255,255,255,.14) 50%, transparent 60%)' }} />
-          )}
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute', inset: 0,
+              background: profile.bannerDataUrl
+                ? `center / cover no-repeat url(${profile.bannerDataUrl})`
+                : `url(${ACCENT_PROFILE_BANNER[accent]}) center top / cover no-repeat`,
+            }}
+          />
+          <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 85%, var(--panel) 100%)' }} />
           {profile.hasEmployeeRecord && (
             <button
               type="button"
@@ -435,10 +439,11 @@ export default function Profile() {
           )}
         </div>
 
-        {/* Avatar — overlaps the banner's bottom-left corner. Clicking it (or the camera badge)
-            opens the viewer below, which is where uploading and removing live. */}
-        <div className="nf-r-profile-content" style={{ position: 'relative', padding: '0 24px 20px' }}>
-          <div className="nf-r-profile-avatar" style={{ position: 'absolute', top: -44, left: 24 }}>
+        {/* Identity row — same arrangement as OneHR's My Profile: the avatar overlaps the cover's bottom edge,
+            and name / designation / email / role · status · ID sit to its right. Edit/Save stays at the far
+            right and wraps below on narrow screens. One block, so it is identical for every role. */}
+        <div className="nf-r-profile-content" style={{ display: 'flex', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap', padding: '0 24px 20px' }}>
+          <div className="nf-r-profile-avatar" style={{ position: 'relative', flexShrink: 0, marginTop: -10 }}>
             <button
               type="button"
               onClick={() => setPhotoViewerOpen(true)}
@@ -447,9 +452,9 @@ export default function Profile() {
               style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer', display: 'block', borderRadius: '50%' }}
             >
               {profile.photoDataUrl ? (
-                <img src={profile.photoDataUrl} alt="Profile" className="nf-r-profile-avatar-img" style={{ width: 88, height: 88, borderRadius: '50%', objectFit: 'cover', border: '4px solid var(--panel)', display: 'block' }} />
+                <img src={profile.photoDataUrl} alt="Profile" className="nf-r-profile-avatar-img" style={{ width: 104, height: 104, borderRadius: '50%', objectFit: 'cover', border: '4px solid var(--panel)', display: 'block' }} />
               ) : (
-                <div className="nf-r-profile-avatar-img" style={{ width: 88, height: 88, borderRadius: '50%', background: 'var(--brand)', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 26, fontWeight: 700, border: '4px solid var(--panel)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif' }}>
+                <div className="nf-r-profile-avatar-img" style={{ width: 104, height: 104, borderRadius: '50%', background: 'var(--brand)', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 30, fontWeight: 700, border: '4px solid var(--panel)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif' }}>
                   {initials}
                 </div>
               )}
@@ -460,9 +465,9 @@ export default function Profile() {
                 onClick={() => setPhotoViewerOpen(true)}
                 aria-label="Change profile photo"
                 title="Change profile photo"
-                style={{ position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, borderRadius: '50%', background: 'var(--brand)', border: '2px solid var(--panel)', display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0 }}
+                style={{ position: 'absolute', bottom: 0, right: 0, width: 30, height: 30, borderRadius: '50%', background: 'var(--brand)', border: '2px solid var(--panel)', display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0 }}
               >
-                <Camera size={12} color="#fff" aria-hidden />
+                <Camera size={14} color="#fff" aria-hidden />
               </button>
             )}
             {uploading && (
@@ -472,28 +477,30 @@ export default function Profile() {
             )}
           </div>
 
-          {/* Details — sit below the avatar, full width, with Edit/Save floated to the right. */}
-          <div className="nf-r-profile-details" style={{ paddingTop: 52, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.fullName}</div>
-              {profile.designationName && (
-                <div style={{ fontSize: 13, color: 'var(--txt-mut)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.designationName}</div>
-              )}
-              <div style={{ fontSize: 12, color: 'var(--txt-mut)', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.email}</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'color-mix(in srgb, var(--brand) 18%, transparent)', color: 'var(--brand-bright)' }}>
-                  {ROLE_LABELS[profile.role] ?? profile.role}
-                </span>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: profile.active ? 'rgba(47,182,124,.15)' : 'rgba(107,114,128,.15)', color: profile.active ? 'var(--ok)' : 'var(--txt-dim)' }}>
-                  {profile.active ? 'Active' : 'Inactive'}
-                </span>
-                <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 20, background: 'rgba(107,114,128,.15)', color: 'var(--txt-dim)' }}>
-                  {profile.employeeCode}
-                </span>
+          <div className="nf-r-profile-info" style={{ flex: '1 1 220px', minWidth: 0, paddingTop: 0 }}>
+            <div className="nf-r-profile-name" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.5, color: 'var(--txt)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', marginBottom: 3, overflowWrap: 'anywhere' }}>{profile.fullName}</div>
+            {profile.designationName && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13.5, color: 'var(--txt-mut)', marginBottom: 3, minWidth: 0 }}>
+                <Briefcase size={14} aria-hidden style={{ flexShrink: 0 }} />
+                <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{profile.designationName}</span>
               </div>
+            )}
+            <div style={{ fontSize: 13, color: 'var(--txt-mut)', marginBottom: 8, overflowWrap: 'anywhere' }}>{profile.email}</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'color-mix(in srgb, var(--brand) 18%, transparent)', color: 'var(--brand-bright)' }}>
+                {ROLE_LABELS[profile.role] ?? profile.role}
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: profile.active ? 'rgba(47,182,124,.15)' : 'rgba(107,114,128,.15)', color: profile.active ? 'var(--ok)' : 'var(--txt-dim)' }}>
+                {profile.active ? 'Active' : 'Inactive'}
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 20, background: 'rgba(107,114,128,.15)', color: 'var(--txt-dim)' }}>
+                {profile.employeeCode}
+              </span>
             </div>
+          </div>
 
-            {/* Edit / Save buttons */}
+          {/* Edit / Save buttons */}
+          <div style={{ paddingTop: 14, flexShrink: 0 }} className="nf-r-profile-actions-wrap">
             {profile.hasEmployeeRecord && (
               <div className="nf-r-profile-actions" style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                 {editing ? (

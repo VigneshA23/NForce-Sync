@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Menu, X, Search, Bell, LogOut, UserCircle2, HelpCircle, FolderKanban, ChevronDown, KeyRound, Settings } from 'lucide-react';
@@ -7,7 +7,7 @@ import { BrandMark } from './BrandMark';
 import { ROLE_COLORS, ROLE_LABELS, getNavPaths, getNavItem, navPathFor, getNavSections, navSubItemPath, isNavGroup, hasEmployeeEodItems } from '../lib/nav';
 import type { NavItem } from '../lib/nav';
 import { inboxBadgeFor, blockersBadgeFor } from '../lib/inboxBadge';
-import { useAuth, getHomeRouteForRole } from '../lib/auth';
+import { useAuth, getHomeRouteForRole, ROLE_LANDING } from '../lib/auth';
 import { useAccentColor, ACCENT_BAND_POSITION_X } from '../lib/accentColor';
 import sidebarDecoration from '../assets/sidebar-decoration.png';
 import { NotAuthorized } from '../pages/NotAuthorized';
@@ -794,6 +794,10 @@ export function Shell() {
     // Drill-through target for the Executive Dashboard's "Unallocated Resources" KPI tile —
     // no sidebar entry of its own, same pattern as the exceptions above.
     || location.pathname === '/admin/unallocated-resources';
+  // A blocked route bounces to the user's own landing page when that is openable (never to itself,
+  // so no redirect loop); NotAuthorized is only the last resort.
+  const landing        = ROLE_LANDING[role];
+  const landingAllowed = allowedPaths.includes(landing);
 
   // FIX 4: derive breadcrumb label from nav map
   const navInfo  = getNavItem(role, navPathFor(location.pathname), userCaps);
@@ -1248,7 +1252,11 @@ export function Shell() {
             background: 'var(--shell)',
           }}
         >
-          {isAllowed ? <Outlet /> : <NotAuthorized />}
+          {isAllowed
+            ? <Outlet />
+            : landingAllowed && location.pathname !== landing
+              ? <Navigate to={landing} replace />
+              : <NotAuthorized />}
         </main>
       </div>
 
