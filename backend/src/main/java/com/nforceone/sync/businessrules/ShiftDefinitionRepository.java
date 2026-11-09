@@ -11,10 +11,9 @@ public interface ShiftDefinitionRepository extends JpaRepository<ShiftDefinition
     List<ShiftDefinition> findAllByActiveTrueOrderByStartTimeAsc();
     boolean existsByName(String name);
 
-    // Legacy `employee` table (no JPA entity — predates the AppUser-based employee
-    // model and isn't otherwise read/written by this app) is still the only place a
-    // shift assignment is recorded. Matched by name since there's no FK to shift_definition.id.
+        // Counts active users assigned to the shift with this name, via app_user.shift_id.
     // Used only to warn admins before deleting a shift; not a live/enforced relationship.
-    @Query(value = "SELECT COUNT(*) FROM employee WHERE UPPER(shift) = UPPER(:name)", nativeQuery = true)
+    @Query(value = "SELECT COUNT(*) FROM app_user u JOIN shift_definition s ON s.id = u.shift_id "
+            + "WHERE UPPER(s.name) = UPPER(:name) AND u.deleted_at IS NULL", nativeQuery = true)
     long countEmployeesAssigned(@Param("name") String name);
 }
