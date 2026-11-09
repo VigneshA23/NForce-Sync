@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react';
 import axios from 'axios';
 import { AuthLayout } from './AuthLayout';
+import { LoginHeroBackdrop } from './LoginHeroBackdrop';
 import { useAuth, ROLE_LANDING, buildAuthUser } from '../../lib/auth';
 import { login, asLockedError, attemptsRemainingFrom, checkResetTokenValid } from '../../api/auth';
 import { useCountdown, formatCountdown } from '../../lib/useCountdown';
@@ -140,7 +141,7 @@ export default function Login() {
 
   if (resetLinkNotice) {
     return (
-      <AuthLayout leftHeadline="Centralized Work & Utilization Management" showStats>
+      <AuthLayout leftHeadline="Centralized Work & Utilization Management" showStats heroBackdrop={<LoginHeroBackdrop />} cardTheme="light" heroFullBleed hideFeatureBadges hideEyebrow>
         <motion.div
           variants={reduced ? undefined : containerVariants}
           initial={reduced ? undefined : 'hidden'}
@@ -179,7 +180,7 @@ export default function Login() {
   }
 
   return (
-    <AuthLayout leftHeadline="Centralized Work & Utilization Management" showStats>
+    <AuthLayout leftHeadline="Centralized Work & Utilization Management" showStats heroBackdrop={<LoginHeroBackdrop />} cardTheme="light" heroFullBleed hideFeatureBadges hideEyebrow>
       <motion.div
         variants={reduced ? undefined : containerVariants}
         initial={reduced ? undefined : 'hidden'}
@@ -187,9 +188,8 @@ export default function Login() {
       >
         {/* Header */}
         <motion.div variants={reduced ? undefined : itemVariants} style={{ marginBottom: 32 }}>
-          <div style={accentLineStyle} />
           <h1 style={headingStyle}>Welcome back</h1>
-          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.42)', lineHeight: 1.58, margin: 0 }}>
+          <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.58, margin: 0 }}>
             Sign in to submit and review EOD reports.
           </p>
         </motion.div>
@@ -275,7 +275,8 @@ export default function Login() {
                   onChange={(e) => setEmail(e.target.value)}
                   aria-invalid={hasError}
                   aria-describedby={hasError ? errorId : undefined}
-                  className="nf-input-inner"
+                  className="nf-input-inner nf-input-inner--light"
+                  style={lightInputStyle}
                 />
               </div>
             </div>
@@ -298,8 +299,8 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     aria-invalid={hasError}
                     aria-describedby={hasError ? errorId : undefined}
-                    className="nf-input-inner"
-                    style={{ paddingRight: 46 }}
+                    className="nf-input-inner nf-input-inner--light"
+                    style={{ ...lightInputStyle, paddingRight: 46 }}
                   />
                   <button
                     type="button"
@@ -308,7 +309,7 @@ export default function Login() {
                     aria-pressed={showPass}
                     title={showPass ? 'Hide password' : 'Show password'}
                     style={eyeButtonStyle}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.95)')}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}
                     onMouseLeave={(e) => (e.currentTarget.style.color = eyeButtonStyle.color as string)}
                   >
                     {showPass
@@ -334,15 +335,15 @@ export default function Login() {
                 onChange={(e) => setRememberMe(e.target.checked)}
                 style={{ accentColor: '#E4373D', width: 14, height: 14, cursor: 'pointer' }}
               />
-              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)', userSelect: 'none' }}>Remember me</span>
+              <span style={{ fontSize: 12, color: '#6B7280', userSelect: 'none' }}>Remember me</span>
             </label>
             <a
               href="/forgot"
               onClick={(e) => { e.preventDefault(); navigate('/forgot'); }}
               className="nf-link"
               style={mutedLinkStyle}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.72)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.38)')}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#C8282E')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#E4373D')}
             >
               Forgot password?
             </a>
@@ -370,7 +371,11 @@ export default function Login() {
             >
               {isLocked
                 ? `Locked · ${formatCountdown(lockRemaining)}`
-                : submitting ? 'Signing in…' : 'Sign in'}
+                : submitting ? 'Signing in…' : (
+                  <>
+                    Sign in <ArrowRight size={16} aria-hidden="true" />
+                  </>
+                )}
             </button>
           </motion.div>
         </form>
@@ -380,7 +385,7 @@ export default function Login() {
           <p
             style={{
               fontSize: 11,
-              color: 'rgba(255,255,255,0.32)',
+              color: '#9CA3AF',
               textAlign: 'center',
               marginTop: 14,
               fontVariantNumeric: 'tabular-nums',
@@ -408,21 +413,30 @@ const accentLineStyle: React.CSSProperties = {
 
 const headingStyle: React.CSSProperties = {
   fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-  fontSize: 26,
-  fontWeight: 700,
-  letterSpacing: '-0.03em',
-  color: '#fff',
+  fontSize: 28,
+  fontWeight: 800,
+  letterSpacing: '-0.02em',
+  color: '#111827',
   margin: '0 0 6px',
 };
 
 const labelStyle: React.CSSProperties = {
   display: 'block',
-  fontSize: 11,
+  fontSize: 13,
   fontWeight: 600,
-  color: 'rgba(255,255,255,0.45)',
+  color: '#1F2937',
   marginBottom: 8,
-  letterSpacing: '0.07em',
-  textTransform: 'uppercase',
+  letterSpacing: '0',
+  textTransform: 'none',
+};
+
+// Belt-and-suspenders: inline style so these fields render white/dark-text on the
+// light Login card regardless of CSS cascade/caching, in addition to the
+// .nf-input-inner--light class rule.
+const lightInputStyle: React.CSSProperties = {
+  background: '#fff',
+  color: '#111827',
+  boxShadow: 'none',
 };
 
 
@@ -437,7 +451,7 @@ const eyeButtonStyle: React.CSSProperties = {
   background: 'none',
   border: 'none',
   cursor: 'pointer',
-  color: 'rgba(255,255,255,0.65)',
+  color: '#6B7280',
   display: 'flex',
   alignItems: 'center',
   padding: 4,
@@ -446,9 +460,10 @@ const eyeButtonStyle: React.CSSProperties = {
 
 const mutedLinkStyle: React.CSSProperties = {
   fontSize: 12,
-  color: 'rgba(255,255,255,0.38)',
+  color: '#E4373D',
   textDecoration: 'none',
   cursor: 'pointer',
+  fontWeight: 600,
   transition: 'color 0.14s',
 };
 
@@ -484,9 +499,9 @@ const ssoButtonStyle: React.CSSProperties = {
   justifyContent: 'center',
   gap: 10,
   padding: '13px 16px',
-  background: '#8B1A1A',
-  color: 'rgba(255,255,255,0.65)',
-  border: '1px solid rgba(228,55,61,0.3)',
+  background: '#F9FAFB',
+  color: '#6B7280',
+  border: '1px solid #E5E7EB',
   borderRadius: 8,
   fontSize: 14,
   fontWeight: 600,
@@ -494,7 +509,7 @@ const ssoButtonStyle: React.CSSProperties = {
   marginBottom: 4,
   fontFamily: 'Inter, sans-serif',
   letterSpacing: '0.01em',
-  opacity: 0.75,
+  opacity: 0.85,
 };
 
 const dividerStyle: React.CSSProperties = {
@@ -507,13 +522,13 @@ const dividerStyle: React.CSSProperties = {
 const dividerLineStyle: React.CSSProperties = {
   flex: 1,
   height: 1,
-  background: 'rgba(255,255,255,0.07)',
+  background: '#E5E7EB',
   display: 'block',
 };
 
 const dividerTextStyle: React.CSSProperties = {
   fontSize: 11,
-  color: 'rgba(255,255,255,0.22)',
+  color: '#9CA3AF',
   letterSpacing: '0.1em',
   textTransform: 'uppercase',
 };
@@ -524,9 +539,9 @@ const errorBannerStyle: React.CSSProperties = {
   gap: 9,
   padding: '11px 13px',
   borderRadius: 7,
-  background: 'rgba(228,55,61,0.08)',
-  border: '1px solid rgba(228,55,61,0.2)',
-  color: 'var(--risk)',
+  background: 'rgba(228,55,61,0.07)',
+  border: '1px solid rgba(228,55,61,0.22)',
+  color: '#B1111E',
   fontSize: 13,
   marginBottom: 18,
   lineHeight: 1.45,
