@@ -37,6 +37,11 @@ function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
   return [h * 60, s, l];
 }
 
+// The masks are soft where the figure meets the backdrop; only recolor where they are clearly
+// opaque, so skin along that soft edge (hairline, jaw, fingers) is never partly tinted.
+const MASK_NONE = 0.55;
+const MASK_FULL = 0.92;
+
 function hue2rgb(p: number, q: number, t: number): number {
   if (t < 0) t += 1;
   if (t > 1) t -= 1;
@@ -70,15 +75,17 @@ export function redWeight(hueDeg: number, sat: number, light = 0.4): number {
   return hueW * smooth(SAT_NONE, SAT_FULL, sat) * lightW;
 }
 
-/** Recolor RGBA pixel data in place, moving red hues to `targetHex`'s hue. */
-export function recolorPixels(data: Uint8ClampedArray, targetHex: string): void {
+/** Recolor RGBA pixel data in place, moving red hues to `targetHex`'s hue. `mask` (RGBA pixels of
+ *  the same size) limits the recolor to where its alpha is set — OneHR's accent masks are clear
+ *  over the person, so skin can never be tinted whatever its hue. */
+export function recolorPixels(data: Uint8ClampedArray, targetHex: string, mask?: Uint8ClampedArray): void {
   const n = parseInt(targetHex.slice(1), 16);
   const [targetHue, targetSat] = rgbToHsl((n >> 16) & 255, (n >> 8) & 255, n & 255);
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] === 0) continue;
     const r = data[i], g = data[i + 1], b = data[i + 2];
     const [h, s, l] = rgbToHsl(r, g, b);
-    const w = redWeight(h, s, l);
+    const w = redWeight(h, s, l) * (mask ? smooth(MASK_NONE, MASK_FULL, mask[i + 3] / 255) : 1);
     if (w <= 0) continue;
     // Keep the pixel's own lightness (the art's shading); take the target's hue, and pull
     // saturation toward the target's so muted accents (e.g. purple) don't come out neon.
@@ -91,32 +98,42 @@ export function recolorPixels(data: Uint8ClampedArray, targetHex: string): void 
 
 const cache = new Map<string, Promise<string>>();
 
-/** Object URL of `src` recolored to `targetHex` — computed once per (src, color) and cached. */
-export function recoloredImageUrl(src: string, targetHex: string): Promise<string> {
-  const key = `${src}|${targetHex}`;
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('image failed to load'));
+    img.src = src;
+  });
+}
+
+/** Object URL of `src` recolored to `targetHex` — computed once per (src, color) and cached.
+ *  With `maskSrc`, only the area the mask's alpha covers is recolored. */
+export function recoloredImageUrl(src: string, targetHex: string, maskSrc?: string): Promise<string> {
+  const key = `${src}|${targetHex}|${maskSrc ?? ''}`;
   let p = cache.get(key);
   if (!p) {
-    p = new Promise<string>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) throw new Error('2d context unavailable');
-          ctx.drawImage(img, 0, 0);
-          const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          recolorPixels(pixels.data, targetHex);
-          ctx.putImageData(pixels, 0, 0);
-          canvas.toBlob(blob => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error('toBlob failed'))), 'image/png');
-        } catch (e) {
-          reject(e);
-        }
-      };
-      img.onerror = () => reject(new Error('image failed to load'));
-      img.src = src;
-    });
+    p = (async () => {
+      const [img, maskImg] = await Promise.all([loadImage(src), maskSrc ? loadImage(maskSrc) : null]);
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('2d context unavailable');
+      let mask: Uint8ClampedArray | undefined;
+      if (maskImg) {
+        ctx.drawImage(maskImg, 0, 0, w, h);
+        mask = ctx.getImageData(0, 0, w, h).data;
+        ctx.clearRect(0, 0, w, h);
+      }
+      ctx.drawImage(img, 0, 0);
+      const pixels = ctx.getImageData(0, 0, w, h);
+      recolorPixels(pixels.data, targetHex, mask);
+      ctx.putImageData(pixels, 0, 0);
+      return new Promise<string>((resolve, reject) =>
+        canvas.toBlob(blob => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error('toBlob failed'))), 'image/png'));
+    })();
     p.catch(() => cache.delete(key)); // let a later render retry
     cache.set(key, p);
   }

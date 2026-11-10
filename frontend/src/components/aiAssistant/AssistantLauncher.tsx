@@ -5,7 +5,7 @@ import { useAuth } from '../../lib/auth';
 import { AssistantPanel } from './AssistantPanel';
 import { LAUNCHER_Z, launcherButtonStyle } from './assistantStyles';
 import { useDraggablePosition } from './useDraggablePosition';
-import botAvatar from '../../assets/Bot Image.png';
+import { NisaRobot } from './NisaRobot';
 
 /**
  * Mounted once inside Shell's root, after the main column — renders nothing unless
@@ -60,15 +60,10 @@ export function AssistantLauncher() {
             cursor: dragging ? 'grabbing' : 'pointer',
             touchAction: 'none',
             overflow: 'hidden',
-            padding: 4,
+            padding: 0,
           }}
         >
-          <img
-            src={botAvatar}
-            alt=""
-            draggable={false}
-            style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', pointerEvents: 'none' }}
-          />
+          <NisaRobot style={{ pointerEvents: 'none' }} />
         </button>
       </div>
       <AssistantPanel

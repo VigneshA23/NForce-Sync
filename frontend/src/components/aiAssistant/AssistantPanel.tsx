@@ -30,7 +30,7 @@ import {
   panelContainerStyle,
 } from './assistantStyles';
 import { useDraggablePosition } from './useDraggablePosition';
-import botAvatar from '../../assets/Bot Image.png';
+import { NisaRobot } from './NisaRobot';
 
 interface AssistantPanelProps {
   open: boolean;
@@ -200,14 +200,9 @@ export function AssistantPanel({ open, onClose, currentPathname, health }: Assis
             onPointerCancel={panelDragHandlers.onPointerCancel}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <img
-                src={botAvatar}
-                alt=""
-                width={32}
-                height={32}
-                draggable={false}
-                style={{ borderRadius: '50%', objectFit: 'cover', flexShrink: 0, pointerEvents: 'none' }}
-              />
+              <span style={{ width: 32, height: 32, flexShrink: 0, display: 'block' }}>
+                <NisaRobot style={{ pointerEvents: 'none' }} />
+              </span>
               <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
                 <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--txt)' }}>NISA</span>
                 <span style={{ fontSize: 10.5, color: 'var(--txt-dim)' }}>NForce Intelligent Sync Assistant</span>
