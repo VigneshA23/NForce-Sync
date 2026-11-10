@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Calendar, ChevronDown, RefreshCw, X } from 'lucide-react';
 import type { DateRange } from '../api/teamLead';
 import { todayISO as localTodayISO, toLocalISODate } from '../lib/date';
+import { btnPrimary, btnSm, chipStyle, fieldStyle } from '../lib/uiStyles';
 
 // ── Shared Blockers-style date/calendar filter ───────────────────────────────────
 // Extracted from the three Blockers pages (pages/lead/Blockers.tsx, pages/pm/Blockers.tsx,
@@ -98,9 +99,8 @@ export function DateFilterButton({
         disabled={loading}
         onClick={openPicker}
         style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px',
-          fontSize: 12.5, fontWeight: 600, color: 'var(--txt)', background: 'var(--raised)',
-          border: '1px solid var(--line)', borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer',
+          ...fieldStyle, width: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8,
+          fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
           whiteSpace: 'nowrap', opacity: loading ? 0.7 : 1,
         }}
       >
@@ -129,39 +129,33 @@ export function DateFilterButton({
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
           <div className="nf-r-popover" style={{
             position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 300,
-            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
-            boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
+            background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 12, padding: 14,
+            boxShadow: '0 16px 40px rgba(0,0,0,.35)',
           }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
               {showAllOption && (
                 <button
                   onClick={() => { onChange('all', { from: '', to: '' }); setOpen(false); }}
-                  style={{
-                    flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                    background: mode === 'all' ? 'var(--info)' : 'var(--raised2)',
-                    color: mode === 'all' ? '#fff' : 'var(--txt)', border: '1px solid var(--line2)',
-                  }}
+                  aria-pressed={mode === 'all'}
+                  className="nf-chip"
+                  style={{ ...chipStyle(mode === 'all'), flex: 1, justifyContent: 'center', padding: '7px 0' }}
                 >
                   All time
                 </button>
               )}
               <button
                 onClick={() => { onChange('today', { from: todayISO, to: todayISO }); setOpen(false); }}
-                style={{
-                  flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                  background: mode === 'today' ? 'var(--info)' : 'var(--raised2)',
-                  color: mode === 'today' ? '#fff' : 'var(--txt)', border: '1px solid var(--line2)',
-                }}
+                aria-pressed={mode === 'today'}
+                className="nf-chip"
+                style={{ ...chipStyle(mode === 'today'), flex: 1, justifyContent: 'center', padding: '7px 0' }}
               >
                 Today
               </button>
               <button
                 onClick={() => { const y = yesterdayISODate(); onChange('yesterday', { from: y, to: y }); setOpen(false); }}
-                style={{
-                  flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                  background: mode === 'yesterday' ? 'var(--info)' : 'var(--raised2)',
-                  color: mode === 'yesterday' ? '#fff' : 'var(--txt)', border: '1px solid var(--line2)',
-                }}
+                aria-pressed={mode === 'yesterday'}
+                className="nf-chip"
+                style={{ ...chipStyle(mode === 'yesterday'), flex: 1, justifyContent: 'center', padding: '7px 0' }}
               >
                 Yesterday
               </button>
@@ -177,11 +171,7 @@ export function DateFilterButton({
                     type="date" value={draftFrom} max={enforceNotFuture ? undefined : todayISO}
                     onChange={(e) => setDraftFrom(e.target.value)}
                     onInvalid={(e) => e.preventDefault()}
-                    style={{
-                      width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
-                      background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                      boxSizing: 'border-box', paddingRight: 44,
-                    }}
+                    style={{ ...fieldStyle, height: 34, minWidth: 0, padding: '0 8px', fontSize: 12, paddingRight: 44 }}
                   />
                   {draftFrom && (
                     <button
@@ -206,11 +196,7 @@ export function DateFilterButton({
                     type="date" value={draftTo} max={enforceNotFuture ? undefined : todayISO}
                     onChange={(e) => setDraftTo(e.target.value)}
                     onInvalid={(e) => e.preventDefault()}
-                    style={{
-                      width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6,
-                      background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-                      boxSizing: 'border-box', paddingRight: 44,
-                    }}
+                    style={{ ...fieldStyle, height: 34, minWidth: 0, padding: '0 8px', fontSize: 12, paddingRight: 44 }}
                   />
                   {draftTo && (
                     <button
@@ -242,11 +228,8 @@ export function DateFilterButton({
             <button
               onClick={applyDraft}
               disabled={rangeInvalid}
-              style={{
-                width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
-                background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                cursor: rangeInvalid ? 'not-allowed' : 'pointer', opacity: rangeInvalid ? 0.6 : 1,
-              }}
+              className="nf-btn nf-btn--primary"
+              style={{ ...btnPrimary, ...btnSm, width: '100%' }}
             >
               Apply
             </button>

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Shield } from 'lucide-react';
 import { listAssignableLeads, listAssignableProjectManagers } from '../api/projects';
+import { selectStyle } from '../lib/uiStyles';
 
 /**
  * Super Admin-only control shown at the top of a reused PM/Team Lead operational page. Lets a
@@ -50,11 +51,7 @@ export function ReporteeScopePicker({ role, label, value, onChange }: {
         aria-label={`Filter by ${label}`}
         value={value ?? ''}
         onChange={e => onChange(e.target.value ? Number(e.target.value) : null)}
-        style={{
-          background: 'var(--shell)', border: '1px solid var(--line2)', borderRadius: 6,
-          padding: '6px 10px', color: 'var(--txt)', fontSize: 12.5, outline: 'none',
-          fontFamily: 'Inter, sans-serif',
-        }}
+        style={{ ...selectStyle, width: 'auto', maxWidth: '100%' }}
       >
         <option value="">All {label}s (system-wide)</option>
         {(data ?? []).map(u => (

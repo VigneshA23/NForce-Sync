@@ -1,6 +1,7 @@
 import {
   REPORT_PRESET_LABELS, REPORT_PRESET_ORDER, daysInRange, formatDayCount, type ReportRangePreset,
 } from '../lib/dateRange';
+import { chipStyle } from '../lib/uiStyles';
 
 /**
  * Preset buttons for the Super Admin EOD Reports date range (This week / This month / Last month /
@@ -22,12 +23,8 @@ export function ReportRangePresets({ active, onSelect }: {
             type="button"
             onClick={() => onSelect(p)}
             aria-pressed={on}
-            style={{
-              padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              border: `1px solid ${on ? 'var(--brand)' : 'var(--line2)'}`,
-              background: on ? 'var(--brand)' : 'var(--raised2)',
-              color: on ? '#fff' : 'var(--txt-dim)',
-            }}
+            className="nf-chip"
+            style={chipStyle(on)}
           >
             {REPORT_PRESET_LABELS[p]}
           </button>

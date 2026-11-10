@@ -20,6 +20,9 @@ import { formatDate, formatDateTime, formatTime12h, toLocalISODate, todayISO, ye
 import { resolveNotificationPriority, type NotificationPriority } from '../lib/notificationPriority';
 import { markReadOnOpen, resolveRelatedPageHref } from '../lib/notificationLinks';
 import { GlobalLoader } from '../components/GlobalLoader';
+import { EmptyState } from '../components/EmptyState';
+import { PageHeader } from '../components/PageHeader';
+import { btnPrimary, btnSecondary, fieldStyle, selectStyle, statusPillStyle } from '../lib/uiStyles';
 
 // ── Notification metadata ───────────────────────────────────────────────────
 // Category/generated-by are derived client-side from `type` — the backend
@@ -189,10 +192,7 @@ function useIsWide(breakpoint = 900): boolean {
 
 function Pill({ color, bg, children }: { color: string; bg: string; children: React.ReactNode }) {
   return (
-    <span style={{
-      fontSize: 10, fontWeight: 600, color, background: bg,
-      padding: '2px 7px', borderRadius: 20, lineHeight: 1.6, whiteSpace: 'nowrap', flexShrink: 0,
-    }}>
+    <span style={{ ...statusPillStyle(color), background: bg, flexShrink: 0 }}>
       {children}
     </span>
   );
@@ -332,19 +332,15 @@ function NotificationDetailPane({ n, onMarkRead }: { n: NotificationDto | null; 
   if (!n) {
     return (
       <div style={{
-        height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: 40, textAlign: 'center',
+        height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 24,
       }}>
-        <div style={{
-          width: 56, height: 56, borderRadius: '50%', background: 'var(--raised2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14,
-        }}>
-          <Inbox size={24} style={{ color: 'var(--txt-dim)' }} />
-        </div>
-        <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--txt-mut)', marginBottom: 4 }}>No notification selected</div>
-        <div style={{ fontSize: 12, color: 'var(--txt-dim)', maxWidth: 240 }}>
-          Choose a notification from the list to view its full details here.
-        </div>
+        <EmptyState
+          icon={Inbox}
+          title="No notification selected"
+          hint="Choose a notification from the list to view its full details here."
+          style={{ width: '100%', maxWidth: 420 }}
+        />
       </div>
     );
   }
@@ -398,12 +394,8 @@ function NotificationDetailPane({ n, onMarkRead }: { n: NotificationDto | null; 
         <Link
           to={relatedHref}
           onClick={() => markReadOnOpen(n, onMarkRead)}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '9px 16px', borderRadius: 8,
-            background: 'var(--brand)', color: '#fff', textDecoration: 'none',
-            fontSize: 12.5, fontWeight: 600,
-          }}
+          className="nf-btn nf-btn--primary"
+          style={{ ...btnPrimary, textDecoration: 'none' }}
         >
           Open related page <ArrowUpRight size={14} aria-hidden="true" />
         </Link>
@@ -418,16 +410,8 @@ const PAGE_SIZE = 20;
 type StatusFilter = 'all' | 'unread' | 'read';
 type SortOrder = 'newest' | 'oldest';
 
-const selectStyle: React.CSSProperties = {
-  padding: '7px 10px',
-  background: 'var(--shell)',
-  border: '1px solid var(--line2)',
-  borderRadius: 6,
-  color: 'var(--txt)',
-  fontSize: 12,
-  outline: 'none',
-  fontFamily: 'Inter, sans-serif',
-};
+// Compact toolbar select — the shared field frame at toolbar height.
+const toolbarSelectStyle: React.CSSProperties = { ...selectStyle, width: 'auto', height: 34 };
 
 export default function Notifications() {
   // PM: no "open related page" action anywhere on this page — see NotificationDetailPane's own
@@ -508,14 +492,11 @@ export default function Notifications() {
     <div style={{ display: 'flex', flexDirection: 'column' }} className="nf-notif-page">
 
       {/* Title row */}
-      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{
-            fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-            fontSize: 22, fontWeight: 700, color: 'var(--txt)',
-            margin: '0 0 4px', letterSpacing: '-0.01em',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
+      <PageHeader
+        icon={Bell}
+        style={{ marginBottom: 14 }}
+        title={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             Notifications
             {unread > 0 && (
               <span style={{
@@ -530,27 +511,32 @@ export default function Notifications() {
                 {unread} unread
               </span>
             )}
-          </h1>
-          <p style={{ fontSize: 12.5, color: 'var(--txt-mut)', margin: 0 }}>
-            {total > 0 ? `${total} total notification${total !== 1 ? 's' : ''}` : 'All caught up'}
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          </span>
+        }
+        subtitle={total > 0 ? `${total} total notification${total !== 1 ? 's' : ''}` : 'All caught up'}
+        actions={<>
+          <button
+            onClick={handleRefresh}
+            disabled={isFetching}
+            aria-label="Refresh notifications"
+            title="Refresh"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 34, height: 34, background: 'transparent',
+              border: '1px solid var(--line)', borderRadius: 8,
+              cursor: isFetching ? 'default' : 'pointer', color: 'var(--txt-mut)',
+            }}
+            onMouseEnter={(e) => { if (!isFetching) { e.currentTarget.style.borderColor = 'var(--brand-bright)'; e.currentTarget.style.color = 'var(--txt)'; } }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--txt-mut)'; }}
+          >
+            <RefreshCw size={14} style={isFetching ? { animation: 'spin 1s linear infinite' } : undefined} />
+          </button>
           {unread > 0 && (
             <button
               onClick={() => markAll.mutate()}
               disabled={markAll.isPending}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
-                padding: '8px 16px', background: 'transparent',
-                border: '1px solid var(--line)', borderRadius: 8,
-                cursor: 'pointer', color: 'var(--txt-mut)',
-                fontSize: 12, fontWeight: 500, fontFamily: 'Inter, sans-serif',
-                transition: 'border-color 120ms, color 120ms',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--brand-bright)'; e.currentTarget.style.color = 'var(--txt)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--txt-mut)'; }}
+              className="nf-btn nf-btn--secondary"
+              style={{ ...btnSecondary, flexShrink: 0 }}
             >
               {markAll.isPending
                 ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
@@ -558,8 +544,8 @@ export default function Notifications() {
               Mark all read
             </button>
           )}
-        </div>
-      </div>
+        </>}
+      />
 
       {/* Toolbar: search, filter, sort */}
       <div style={{
@@ -568,8 +554,8 @@ export default function Notifications() {
         border: '1px solid var(--line)', borderRadius: 10,
       }}>
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 200px', maxWidth: 320,
-          background: 'var(--shell)', border: '1px solid var(--line2)', borderRadius: 6, padding: '6px 10px',
+          ...fieldStyle, display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 200px', maxWidth: 320,
+          height: 34, padding: '0 12px',
         }}>
           <Search size={13} style={{ color: 'var(--txt-dim)', flexShrink: 0 }} aria-hidden="true" />
           <input
@@ -586,7 +572,7 @@ export default function Notifications() {
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
           aria-label="Filter by status"
-          style={selectStyle}
+          style={toolbarSelectStyle}
         >
           <option value="all">All notifications</option>
           <option value="unread">Unread only</option>
@@ -597,7 +583,7 @@ export default function Notifications() {
           value={sortOrder}
           onChange={(e) => setSortOrder(e.target.value as SortOrder)}
           aria-label="Sort order"
-          style={selectStyle}
+          style={toolbarSelectStyle}
         >
           <option value="newest">Newest first</option>
           <option value="oldest">Oldest first</option>
@@ -620,22 +606,15 @@ export default function Notifications() {
         </div>
       ) : notifications.length === 0 ? (
         <div style={{
-          padding: '64px 20px', textAlign: 'center',
+          padding: 16,
           background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10,
         }}>
-          <div style={{
-            width: 64, height: 64, borderRadius: '50%',
-            background: 'linear-gradient(135deg, color-mix(in srgb, var(--brand-bright) 14%, transparent), color-mix(in srgb, var(--brand-bright) 3%, transparent))',
-            border: '1px solid var(--line)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 18px',
-          }}>
-            <Bell size={26} style={{ color: 'var(--brand-bright)' }} />
-          </div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)', marginBottom: 5 }}>You're all caught up</div>
-          <div style={{ fontSize: 12.5, color: 'var(--txt-dim)', maxWidth: 300, margin: '0 auto' }}>
-            EOD approvals, reminders, and account updates will show up here as they happen.
-          </div>
+          <EmptyState
+            icon={CheckCheck}
+            tone="var(--ok)"
+            title="You're all caught up"
+            hint="EOD approvals, reminders, and account updates will show up here as they happen."
+          />
         </div>
       ) : (
         <div className="nf-notif-body" style={{
@@ -645,8 +624,8 @@ export default function Notifications() {
           {/* Master pane */}
           <div className="nf-notif-list-pane" style={{ overflowY: 'auto', padding: '8px 8px 8px 10px', minWidth: 0 }}>
             {groups.length === 0 ? (
-              <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 12.5, color: 'var(--txt-dim)' }}>
-                No notifications match your search or filter.
+              <div style={{ padding: '8px 2px' }}>
+                <EmptyState icon={Search} title="No notifications match your search or filter." />
               </div>
             ) : (
               groups.map((group) => (

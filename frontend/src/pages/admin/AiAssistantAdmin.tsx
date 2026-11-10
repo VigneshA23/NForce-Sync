@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Activity, AlertTriangle, Bot, DollarSign, RefreshCw, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, DollarSign, RefreshCw, Zap } from 'lucide-react';
 import {
   fetchBilling,
   fetchBillingSettings,
@@ -16,18 +16,13 @@ import {
 } from '../../api/aiAssistant';
 import { Card, KpiCard } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { PageHeader } from '../../components/PageHeader';
 import { extractApiError } from '../../api/admin';
 import { useToast } from '../../lib/toast';
+import { EmptyState } from '../../components/EmptyState';
+import { btnPrimary, chipStyle, fieldStyle } from '../../lib/uiStyles';
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: 'var(--shell)',
-  border: '1px solid var(--line2)',
-  borderRadius: 6,
-  padding: '9px 12px',
-  color: 'var(--txt)',
-  fontSize: 13,
-};
+const inputStyle: React.CSSProperties = { ...fieldStyle };
 
 const labelStyle: React.CSSProperties = {
   fontSize: 12,
@@ -64,14 +59,11 @@ export default function AiAssistantAdmin() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Bot size={24} /> AI & Automation
-        </h1>
-        <p style={{ color: 'var(--txt-mut)', fontSize: 13, marginTop: 6 }}>
-          Operational controls for the NForce Sync AI support assistant.
-        </p>
-      </div>
+      <PageHeader
+        title="AI & Automation"
+        subtitle="Operational controls for the NForce Sync AI support assistant."
+        style={{ marginBottom: 0 }}
+      />
 
       {/* Status */}
       <Card>
@@ -87,12 +79,8 @@ export default function AiAssistantAdmin() {
             <button
               onClick={() => reindexMutation.mutate()}
               disabled={reindexMutation.isPending}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px',
-                borderRadius: 8, border: 'none', background: 'var(--brand)', color: '#fff',
-                fontSize: 13, fontWeight: 600, cursor: reindexMutation.isPending ? 'not-allowed' : 'pointer',
-                marginLeft: 'auto',
-              }}
+              className="nf-btn nf-btn--primary"
+              style={{ ...btnPrimary, marginLeft: 'auto' }}
             >
               <RefreshCw size={14} className={reindexMutation.isPending ? 'nf-r-spin' : undefined} />
               {reindexMutation.isPending ? 'Re-indexing…' : 'Re-index knowledge'}
@@ -112,11 +100,9 @@ export default function AiAssistantAdmin() {
               <button
                 key={d}
                 onClick={() => setDays(d)}
-                style={{
-                  padding: '6px 12px', borderRadius: 6, border: '1px solid var(--line)',
-                  background: days === d ? 'var(--brand)' : 'transparent',
-                  color: days === d ? '#fff' : 'var(--txt-mut)', fontSize: 12.5, cursor: 'pointer',
-                }}
+                className="nf-chip"
+                aria-pressed={days === d}
+                style={chipStyle(days === d)}
               >
                 {d}d
               </button>
@@ -190,7 +176,7 @@ function BreakdownList({ title, points }: { title: string; points: { key: string
     <div>
       <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--txt-mut)', marginBottom: 10 }}>{title}</div>
       {points.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>No data in this window.</div>
+        <EmptyState icon={Activity} title="No data in this window." />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {points.map((p) => (
@@ -267,6 +253,7 @@ function BillingCard({ billing, settings }: { billing: import('../../api/aiAssis
       <button
         onClick={() => mutation.mutate(form)}
         disabled={mutation.isPending}
+        className="nf-btn nf-btn--primary"
         style={saveButtonStyle}
       >
         {mutation.isPending ? 'Saving…' : 'Save billing settings'}
@@ -320,6 +307,7 @@ function RateLimitCard({ settings }: { settings: AiRateLimitSettings }) {
       <button
         onClick={() => mutation.mutate(form)}
         disabled={mutation.isPending}
+        className="nf-btn nf-btn--primary"
         style={saveButtonStyle}
       >
         {mutation.isPending ? 'Saving…' : 'Save rate limit settings'}
@@ -338,13 +326,6 @@ function NumberField({ label, value, onChange, step = 1 }: { label: string; valu
 }
 
 const saveButtonStyle: React.CSSProperties = {
+  ...btnPrimary,
   marginTop: 16,
-  padding: '9px 16px',
-  borderRadius: 8,
-  border: 'none',
-  background: 'var(--brand)',
-  color: '#fff',
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: 'pointer',
 };

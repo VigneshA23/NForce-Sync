@@ -26,10 +26,10 @@ export function ActivityCard({
   return (
     <ListPanelCard title={title} icon={ActivityIcon} viewAllPath={viewAllPath} maxHeight={320}>
       {items.length === 0 ? (
-        <ListPanelEmpty>{emptyLabel}</ListPanelEmpty>
+        <ListPanelEmpty icon={ActivityIcon}>{emptyLabel}</ListPanelEmpty>
       ) : (
         items.map(({ id, icon: Icon, text, time, accent = 'var(--txt-mut)' }) => (
-          <ListPanelRow key={id} style={{ alignItems: 'flex-start' }}>
+          <ListPanelRow key={id} color={accent} style={{ alignItems: 'flex-start' }}>
             <span style={{
               width: 26, height: 26, borderRadius: 7, flexShrink: 0, marginTop: 1,
               background: `color-mix(in srgb, ${accent} 14%, transparent)`,

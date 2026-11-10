@@ -3,9 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, ClipboardList, AlertTriangle, Gauge, TrendingUp, TrendingDown, RefreshCw,
+  UserCheck, FolderKanban, Network, Lightbulb, Activity, CheckCircle2,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { EmptyState } from '../../components/EmptyState';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Card, KpiCard, ClickableKpi } from '../../components/KpiCard';
+import { Card, CardTitle, KpiCard, ClickableKpi } from '../../components/KpiCard';
+import { tableThStyle, tableTdStyle } from '../../lib/tableStyles';
 import { KPI_GRID_STYLE } from '../../lib/kpiGrid';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { DateRangeFilter } from '../../components/DateRangeFilter';
@@ -19,16 +23,13 @@ import { describeAuditEvent, formatRelative, AUDIT_CATEGORY_ICONS, AUDIT_CATEGOR
 import { Pagination } from '../../components/Pagination';
 import type { AuditLogDto } from '../../api/admin';
 import { getExecutiveDashboard } from '../../api/executive';
+import { btnSecondary } from '../../lib/uiStyles';
 import type { ProjectAttentionDto, EmployeeUtilizationDto, ProjectAllocationDto } from '../../api/executive';
 
 // ── Shared primitives (mirrors Admin Dashboard's own local copies) ────────────
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)', marginBottom: 16 }}>{children}</div>;
-}
-
-function EmptyNote({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 12, color: 'var(--txt-dim)' }}>{children}</div>;
+function EmptyNote({ children, icon, tone }: { children: React.ReactNode; icon?: LucideIcon; tone?: string }) {
+  return <EmptyState icon={icon} title={children} tone={tone} />;
 }
 
 function fmtPct(v: number | null | undefined): string {
@@ -118,7 +119,7 @@ function UtilList({ title, rows, accent }: { title: string; rows: EmployeeUtiliz
     <div>
       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-mut)', marginBottom: 10 }}>{title}</div>
       <div style={{ minHeight: UTIL_LIST_HEIGHT }}>
-        {rows.length === 0 ? <EmptyNote>No data for this period.</EmptyNote> : slice.map(r => (
+        {rows.length === 0 ? <EmptyNote icon={Gauge}>No data for this period.</EmptyNote> : slice.map(r => (
           <div key={r.employeeId} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, color: 'var(--txt)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.fullName}</div>
@@ -253,7 +254,8 @@ export default function ExecutiveDashboard() {
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load Executive Dashboard data.</div>
           <button
             onClick={() => refetch()}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 13, cursor: 'pointer' }}
+            className="nf-btn nf-btn--secondary"
+            style={btnSecondary}
           >
             <RefreshCw size={14} aria-hidden="true" /> Retry
           </button>
@@ -291,15 +293,15 @@ export default function ExecutiveDashboard() {
           {/* Workforce Overview / Project Portfolio */}
           <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 16 }}>
             <Card>
-              <SectionTitle>Workforce: Users by Role</SectionTitle>
+              <CardTitle icon={Users}>Workforce: Users by Role</CardTitle>
               {Object.entries(data.workforce.usersByRole).filter(([, v]) => v > 0).length === 0
-                ? <EmptyNote>No data</EmptyNote>
+                ? <EmptyNote icon={Users}>No data</EmptyNote>
                 : Object.entries(data.workforce.usersByRole).filter(([, v]) => v > 0).map(([role, count]) => (
                   <RoleBar key={role} roleKey={role} count={count} total={data.workforce.totalUsers} />
                 ))}
             </Card>
             <Card>
-              <SectionTitle>Active vs Inactive Users</SectionTitle>
+              <CardTitle icon={UserCheck}>Active vs Inactive Users</CardTitle>
               <CenterDonut
                 centerValue={String(data.workforce.totalUsers)}
                 centerLabel="Total"
@@ -314,7 +316,7 @@ export default function ExecutiveDashboard() {
           {/* Project Portfolio */}
           <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 16 }}>
             <Card>
-              <SectionTitle>Project Portfolio</SectionTitle>
+              <CardTitle icon={FolderKanban}>Project Portfolio</CardTitle>
               <CenterDonut
                 centerValue={String(data.projects.totalProjects)}
                 centerLabel="Projects"
@@ -327,7 +329,7 @@ export default function ExecutiveDashboard() {
               />
             </Card>
             <Card>
-              <SectionTitle>Resource Allocation Overview</SectionTitle>
+              <CardTitle icon={Network}>Resource Allocation Overview</CardTitle>
               <div style={{ display: 'flex', gap: 24, marginBottom: 18 }}>
                 <div>
                   <div style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)' }}>{data.allocation.totalAllocatedResources}</div>
@@ -339,7 +341,7 @@ export default function ExecutiveDashboard() {
                 </div>
               </div>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--txt-dim)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>By Project</div>
-              {data.allocation.byProject.length === 0 ? <EmptyNote>No active allocations for this period.</EmptyNote> : (
+              {data.allocation.byProject.length === 0 ? <EmptyNote icon={Network}>No active allocations for this period.</EmptyNote> : (
                 <div style={{ maxHeight: 180, overflowY: 'auto', paddingRight: 10 }}>
                   {data.allocation.byProject.map((p: ProjectAllocationDto) => (
                     <div key={p.projectId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
@@ -355,42 +357,42 @@ export default function ExecutiveDashboard() {
           {/* Utilization detail */}
           <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16, marginBottom: 16 }}>
             <Card>
-              <SectionTitle>Highest Utilized Resources</SectionTitle>
+              <CardTitle icon={TrendingUp}>Highest Utilized Resources</CardTitle>
               <UtilList title="" rows={data.utilization.topUtilized} accent="var(--risk)" />
             </Card>
             <Card>
-              <SectionTitle>Lowest Utilized Resources</SectionTitle>
+              <CardTitle icon={TrendingDown}>Lowest Utilized Resources</CardTitle>
               <UtilList title="" rows={data.utilization.bottomUtilized} accent="var(--warn)" />
             </Card>
           </div>
 
           {/* Projects Requiring Attention */}
           <Card style={{ marginBottom: 16 }}>
-            <SectionTitle>Projects Requiring Attention</SectionTitle>
+            <CardTitle icon={AlertTriangle}>Projects Requiring Attention</CardTitle>
             {data.projectsRequiringAttention.length === 0 ? (
-              <EmptyNote>No projects currently require attention.</EmptyNote>
+              <EmptyNote icon={CheckCircle2} tone="var(--ok)">No projects currently require attention.</EmptyNote>
             ) : (
               <div style={{ overflow: 'auto', maxHeight: 448 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <table className="nf-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                    <tr>
                       {['Project', 'Project Manager', 'Status', 'Metric', 'Reason'].map(h => (
                         <th key={h} style={{
-                          textAlign: 'left', padding: '6px 10px', color: 'var(--txt-dim)', fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em',
+                          ...tableThStyle,
                           // Stays visible while the capped table body scrolls past it.
-                          position: 'sticky', top: 0, zIndex: 1, background: 'var(--panel)',
+                          position: 'sticky', top: 0, zIndex: 1,
                         }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {data.projectsRequiringAttention.map((p: ProjectAttentionDto) => (
-                      <tr key={p.projectId} style={{ borderBottom: '1px solid var(--line)' }}>
-                        <td style={{ padding: '8px 10px', color: 'var(--txt)' }}>{p.projectName}</td>
-                        <td style={{ padding: '8px 10px', color: 'var(--txt-mut)' }}>{p.pmName ?? '—'}</td>
-                        <td style={{ padding: '8px 10px', color: 'var(--txt-mut)' }}>{p.status}</td>
-                        <td style={{ padding: '8px 10px', color: 'var(--txt-mut)' }}>{p.metric}</td>
-                        <td style={{ padding: '8px 10px', color: 'var(--txt-mut)' }}>{p.reason}</td>
+                      <tr key={p.projectId}>
+                        <td style={{ ...tableTdStyle, color: 'var(--txt)' }}>{p.projectName}</td>
+                        <td style={{ ...tableTdStyle, color: 'var(--txt-mut)' }}>{p.pmName ?? '—'}</td>
+                        <td style={{ ...tableTdStyle, color: 'var(--txt-mut)' }}>{p.status}</td>
+                        <td style={{ ...tableTdStyle, color: 'var(--txt-mut)' }}>{p.metric}</td>
+                        <td style={{ ...tableTdStyle, color: 'var(--txt-mut)' }}>{p.reason}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -402,8 +404,8 @@ export default function ExecutiveDashboard() {
           {/* Executive Insights / Recent Activity */}
           <div className="nf-r-stack" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 16 }}>
             <Card>
-              <SectionTitle>Executive Insights</SectionTitle>
-              {insights.length === 0 ? <EmptyNote>No insights available for this period.</EmptyNote> : (
+              <CardTitle icon={Lightbulb}>Executive Insights</CardTitle>
+              {insights.length === 0 ? <EmptyNote icon={Lightbulb}>No insights available for this period.</EmptyNote> : (
                 <ul style={{ margin: 0, padding: '0 10px 0 18px', display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 180, overflowY: 'auto' }}>
                   {insights.map((line, i) => (
                     <li key={i} style={{ fontSize: 12, color: 'var(--txt-mut)', lineHeight: 1.5 }}>{line}</li>
@@ -412,8 +414,8 @@ export default function ExecutiveDashboard() {
               )}
             </Card>
             <Card>
-              <SectionTitle>Recent Activity</SectionTitle>
-              {data.recentActivity.length === 0 ? <EmptyNote>No recent activity</EmptyNote> : (
+              <CardTitle icon={Activity}>Recent Activity</CardTitle>
+              {data.recentActivity.length === 0 ? <EmptyNote icon={Activity}>No recent activity</EmptyNote> : (
                 // Keyed on the event ids so fresh data (e.g. after a date-range change) resets to page 1.
                 <RecentActivityList key={data.recentActivity.map(e => e.id).join(',')} events={data.recentActivity} />
               )}

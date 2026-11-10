@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
-import { RefreshCw, AlertTriangle, Search, X } from 'lucide-react';
+import { RefreshCw, AlertTriangle, FolderOpen, Search, SearchX, X } from 'lucide-react';
 import type { ProjectFullDto } from '../../api/projects';
 import { GlobalLoader } from '../GlobalLoader';
 import { Pagination } from '../Pagination';
+import { tableThStyle, tableTdStyle, tableCardStyle } from '../../lib/tableStyles';
+import { btnNeutral, btnSecondary, btnSm, fieldStyle, statusPillStyle } from '../../lib/uiStyles';
+import { EmptyState } from '../EmptyState';
 
 const PROJECTS_PAGE_SIZE = 7;
 
@@ -14,17 +17,11 @@ const PROJECTS_PAGE_SIZE = 7;
 
 export type ProjectStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ON_HOLD' | 'COMPLETED';
 
+/** OneHR field frame; padding-sized (not fixed-height) so it also fits textareas and selects. */
 export const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: 'var(--shell)',
-  border: '1px solid var(--line2)',
-  borderRadius: 6,
-  padding: '9px 12px',
-  color: 'var(--txt)',
-  fontSize: 13,
-  outline: 'none',
-  fontFamily: 'Inter, sans-serif',
-  boxSizing: 'border-box',
+  ...fieldStyle,
+  height: 'auto',
+  padding: '11px 14px',
 };
 
 export const labelStyle: React.CSSProperties = {
@@ -32,26 +29,10 @@ export const labelStyle: React.CSSProperties = {
   color: 'var(--txt-mut)', marginBottom: 5, letterSpacing: '0.03em',
 };
 
-export const thStyle: React.CSSProperties = {
-  padding: '10px 16px',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--txt-dim)',
-  textAlign: 'left',
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  background: 'var(--raised)',
-  borderBottom: '1px solid var(--line)',
-  whiteSpace: 'nowrap',
-};
+// Kept as named exports (other My Projects pages import them) — now just the shared table look.
+export const thStyle: React.CSSProperties = { ...tableThStyle };
 
-export const tdStyle: React.CSSProperties = {
-  padding: '12px 16px',
-  verticalAlign: 'middle',
-  borderBottom: '1px solid var(--line)',
-  fontSize: 13,
-  color: 'var(--txt)',
-};
+export const tdStyle: React.CSSProperties = { ...tableTdStyle };
 
 export const detailLabelStyle: React.CSSProperties = { ...labelStyle, marginBottom: 0 };
 export const detailValueStyle: React.CSSProperties = { fontSize: 13, color: 'var(--txt)' };
@@ -66,13 +47,7 @@ const STATUS_CFG: Record<string, { color: string; label: string }> = {
 export function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CFG[status] ?? { color: '#9BA1AC', label: status };
   return (
-    <span style={{
-      display: 'inline-block', padding: '3px 8px', borderRadius: 20,
-      fontSize: 11, fontWeight: 500,
-      background: `color-mix(in srgb, ${cfg.color} 14%, transparent)`,
-      border: `1px solid color-mix(in srgb, ${cfg.color} 30%, transparent)`,
-      color: cfg.color,
-    }}>
+    <span style={statusPillStyle(cfg.color)}>
       {cfg.label}
     </span>
   );
@@ -178,11 +153,8 @@ export function StatusFilterSelect({ value, onChange, options, ariaLabel, defaul
           type="button"
           onClick={() => onChange(defaultValue)}
           aria-label="Clear status filter"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 12px',
-            background: 'transparent', border: '1px solid var(--line2)', borderRadius: 7,
-            color: 'var(--txt-mut)', fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap',
-          }}
+          className="nf-btn nf-btn--neutral"
+          style={{ ...btnNeutral, ...btnSm }}
           onMouseEnter={e => { e.currentTarget.style.color = 'var(--txt)'; }}
           onMouseLeave={e => { e.currentTarget.style.color = 'var(--txt-mut)'; }}
         >
@@ -258,7 +230,7 @@ export function ProjectsPanel({
   }
 
   return (
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
+    <div style={tableCardStyle}>
       <div style={{
         padding: '14px 20px', borderBottom: '1px solid var(--line)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
@@ -319,11 +291,8 @@ export function ProjectsPanel({
               type="button"
               onClick={clearFilters}
               aria-label="Clear all filters"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 12px',
-                background: 'transparent', border: '1px solid var(--line2)', borderRadius: 7,
-                color: 'var(--txt-mut)', fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap',
-              }}
+              className="nf-btn nf-btn--neutral"
+              style={{ ...btnNeutral, ...btnSm }}
               onMouseEnter={e => { e.currentTarget.style.color = 'var(--txt)'; }}
               onMouseLeave={e => { e.currentTarget.style.color = 'var(--txt-mut)'; }}
             >
@@ -340,11 +309,7 @@ export function ProjectsPanel({
       {isError && (
         <div style={{ padding: '40px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 13, color: 'var(--risk)', marginBottom: 12 }}>Failed to load your projects.</div>
-          <button onClick={onRefresh} disabled={isRefreshing} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-            background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6,
-            color: 'var(--txt)', fontSize: 12, cursor: isRefreshing ? 'not-allowed' : 'pointer',
-          }}>
+          <button onClick={onRefresh} disabled={isRefreshing} className="nf-btn nf-btn--secondary" style={btnSecondary}>
             <RefreshCw size={13} aria-hidden="true" style={isRefreshing ? { animation: 'spin 0.8s linear infinite' } : undefined} />
             {isRefreshing ? 'Retrying…' : 'Retry'}
           </button>
@@ -353,7 +318,7 @@ export function ProjectsPanel({
 
       {!isPending && !isError && (
         <div className="nf-r-scroll">
-        <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '760px' } as React.CSSProperties}>
+        <table className="nf-r-scroll-inner nf-table" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '760px' } as React.CSSProperties}>
           <thead>
             <tr>
               <th style={thStyle}>Project</th>
@@ -367,14 +332,14 @@ export function ProjectsPanel({
           <tbody>
             {projects.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
-                  No projects are currently assigned to you.
+                <td colSpan={6} style={{ padding: 16 }}>
+                  <EmptyState icon={FolderOpen} title="No projects are currently assigned to you." />
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
-                  No matching projects found.
+                <td colSpan={6} style={{ padding: 16 }}>
+                  <EmptyState icon={SearchX} title="No matching projects found." hint="Try clearing the filters." />
                 </td>
               </tr>
             ) : (

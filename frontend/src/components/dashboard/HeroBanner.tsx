@@ -58,6 +58,10 @@ export function HeroBanner({ subtitle = "Stay focused, you're making great progr
     staleTime: 300_000,
     enabled: !!user,
   });
+  const illustration = resolveIllustrationKey(profile?.gender);
+  // The male variant is OneHR's full-bleed banner artwork, so it takes a much wider panel (and the
+  // text column keeps clear of its opaque part); the female photo keeps the original 260px slot.
+  const wideArt = illustration === 'male';
 
   return (
     <div
@@ -90,7 +94,7 @@ export function HeroBanner({ subtitle = "Stay focused, you're making great progr
       className="nf-hero"
     >
       <HeroSparkles />
-      <div style={{ flex: 1, minWidth: 0, paddingRight: 220, position: 'relative', zIndex: 1 }}>
+      <div className={wideArt ? 'nf-hero-text--wide' : undefined} style={{ flex: 1, minWidth: 0, paddingRight: wideArt ? 'min(34%, 380px)' : 220, position: 'relative', zIndex: 1 }}>
         <h1 style={{
           margin: '0 0 6px', fontSize: 24, fontWeight: 700, color: '#fff',
           fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
@@ -114,8 +118,11 @@ export function HeroBanner({ subtitle = "Stay focused, you're making great progr
       {/* Bleeds to the card's own edges (right/top/bottom), overlapping the outer padding, so it
           reads as a full illustration panel rather than a small inset thumbnail. Omitted entirely
           (no placeholder graphic) when the profile has no recognized gender. */}
-      {resolveIllustrationKey(profile?.gender) !== 'neutral' && (
-        <div className="nf-hero-illustration" style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 260, zIndex: 1 }}>
+      {illustration !== 'neutral' && (
+        <div
+          className={wideArt ? 'nf-hero-illustration nf-hero-illustration--wide' : 'nf-hero-illustration'}
+          style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: wideArt ? 'min(56%, 640px)' : 260, zIndex: wideArt ? 0 : 1 }}
+        >
           <HeroIllustration gender={profile?.gender} />
         </div>
       )}

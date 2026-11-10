@@ -7,12 +7,10 @@ import {
   PRESET_LABELS, PRESET_ORDER, clampRange, formatRangeLabel, resolvePreset, sameRange,
 } from '../lib/dateRange';
 import type { DateRange, RangePreset } from '../lib/dateRange';
+import { chipStyle, fieldStyle } from '../lib/uiStyles';
 
 // Same theme-aware input box the other DatePicker call sites supply (DatePicker itself is unstyled).
-const dateInputStyle: React.CSSProperties = {
-  background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 8,
-  color: 'var(--txt)', fontSize: 12.5, padding: '7px 10px', boxSizing: 'border-box',
-};
+const dateInputStyle: React.CSSProperties = { ...fieldStyle, width: 'auto' };
 
 /**
  * Quick-preset chip bar (Today / Last 7 days / Last 30 days / This month) plus an optional Custom
@@ -33,7 +31,6 @@ export function DateRangeFilter({
   defaultPreset?: RangePreset;
 }) {
   const [preset, setPreset] = useState<RangePreset>(defaultPreset);
-  const [hovered, setHovered] = useState<RangePreset | null>(null);
   // A cleared picker shows empty, but the effective range (and data) stays on the previous valid one.
   const [cleared, setCleared] = useState({ from: false, to: false });
   const max = maxDate ?? todayISO();
@@ -68,30 +65,16 @@ export function DateRangeFilter({
     <div role="group" aria-label="Date range" className="nf-range-grid" style={{ ...KPI_GRID_STYLE, margin: '0 -1px', alignItems: 'center' }}>
       {PRESET_ORDER.map(p => {
         const active = preset === p;
-        const isHover = hovered === p && !active;
         return (
           <button
             key={p}
             type="button"
-            className="nf-range-chip"
+            className="nf-range-chip nf-chip"
             aria-pressed={active}
             onClick={() => selectPreset(p)}
             // Keeps a mouse click from focusing the chip (no focus ring after click); keyboard focus is unaffected.
             onMouseDown={e => e.preventDefault()}
-            onMouseEnter={() => setHovered(p)}
-            onMouseLeave={() => setHovered(null)}
-            style={{
-              justifySelf: 'center',
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-              fontSize: 12.5, fontWeight: 500, lineHeight: 1, cursor: 'pointer',
-              padding: '8px 14px', borderRadius: 999, whiteSpace: 'nowrap',
-              border: `1px solid ${active ? 'var(--brand)' : 'var(--line2)'}`,
-              background: active ? 'var(--brand)' : isHover ? 'var(--raised)' : 'transparent',
-              color: active ? '#fff' : 'var(--txt-mut)',
-              boxShadow: isHover ? '0 1px 3px rgba(0,0,0,.25)' : 'none',
-              transition: 'background .15s, border-color .15s, color .15s',
-            }}
+            style={{ ...chipStyle(active), justifySelf: 'center' }}
           >
             {p === 'custom' && <CalendarDays size={14} aria-hidden="true" />}
             {PRESET_LABELS[p]}

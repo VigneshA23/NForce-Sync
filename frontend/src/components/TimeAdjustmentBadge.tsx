@@ -1,5 +1,6 @@
 import { Clock } from 'lucide-react';
 import { timeAdjustmentLabel } from '../pages/approvals/shared';
+import { statusPillStyle } from '../lib/uiStyles';
 
 /**
  * The day's approved time adjustment, e.g. "2h early log-off".
@@ -25,11 +26,8 @@ export function TimeAdjustmentBadge({ entry }: {
     <span
       title={`Approved time adjustment: ${label}`}
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 4,
-        marginTop: 3, padding: '1px 6px 1px 5px', borderRadius: 4,
-        background: 'color-mix(in srgb, var(--info) 12%, transparent)',
-        color: 'var(--info)', fontSize: 10, fontWeight: 700,
-        whiteSpace: 'nowrap', lineHeight: 1.5,
+        ...statusPillStyle('var(--info)'),
+        gap: 4, marginTop: 3, padding: '1px 7px 1px 6px', fontSize: 10, fontWeight: 700, lineHeight: 1.5,
       }}
     >
       <Clock size={9} style={{ flexShrink: 0 }} aria-hidden="true" />

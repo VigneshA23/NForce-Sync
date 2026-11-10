@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Calendar, ChevronDown } from 'lucide-react';
 import { DatePicker } from './DatePicker';
+import { chipStyle, fieldStyle } from '../lib/uiStyles';
 
 // Single-day counterpart of DateRangeSelector: Yesterday / Today quick picks plus one calendar
 // input. There is deliberately no range option — the Team EOD Status page is a one-day snapshot.
@@ -27,10 +28,7 @@ export function SingleDateSelector({
   }
 
   const quickStyle = (active: boolean): React.CSSProperties => ({
-    flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-    background: active ? 'var(--info)' : 'var(--raised2)',
-    color: active ? '#fff' : 'var(--txt)',
-    border: '1px solid var(--line2)',
+    ...chipStyle(active), flex: 1, justifyContent: 'center', padding: '7px 0',
   });
 
   return (
@@ -40,10 +38,8 @@ export function SingleDateSelector({
         aria-haspopup="dialog"
         aria-expanded={open}
         style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '9px 14px', fontSize: 12.5, fontWeight: 600,
-          color: 'var(--txt)', background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8,
-          cursor: 'pointer', whiteSpace: 'nowrap',
+          ...fieldStyle, width: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8,
+          fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
         }}
       >
         <Calendar size={13} aria-hidden="true" />
@@ -56,12 +52,12 @@ export function SingleDateSelector({
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
           <div className="nf-r-popover" role="dialog" aria-label="Choose a date" style={{
             position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 240,
-            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
-            boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
+            background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 12, padding: 14,
+            boxShadow: '0 16px 40px rgba(0,0,0,.35)',
           }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-              <button onClick={() => commit(yesterdayISO)} style={quickStyle(date === yesterdayISO)}>Yesterday</button>
-              <button onClick={() => commit(todayISO)} style={quickStyle(date === todayISO)}>Today</button>
+              <button onClick={() => commit(yesterdayISO)} aria-pressed={date === yesterdayISO} className="nf-chip" style={quickStyle(date === yesterdayISO)}>Yesterday</button>
+              <button onClick={() => commit(todayISO)} aria-pressed={date === todayISO} className="nf-chip" style={quickStyle(date === todayISO)}>Today</button>
             </div>
             <div style={{ fontSize: 11, color: 'var(--txt-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
               Pick a date
@@ -71,10 +67,7 @@ export function SingleDateSelector({
               max={todayISO}
               onChange={commit}
               quickNav
-              inputStyle={{
-                width: '100%', padding: '7px 8px', fontSize: 12, borderRadius: 6, boxSizing: 'border-box',
-                background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)',
-              }}
+              inputStyle={{ ...fieldStyle, height: 34, padding: '0 8px', fontSize: 12 }}
             />
           </div>
         </>

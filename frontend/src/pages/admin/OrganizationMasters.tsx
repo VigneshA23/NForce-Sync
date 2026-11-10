@@ -1,6 +1,6 @@
 import { useState, useId } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, AlertTriangle, RefreshCw, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
+import { Plus, AlertTriangle, RefreshCw, ToggleLeft, ToggleRight, Trash2, Inbox, Tags } from 'lucide-react';
 import {
   listDepartments, createDepartment, toggleDepartment, deleteDepartment,
   listDesignations, createDesignation, toggleDesignation, deleteDesignation,
@@ -16,49 +16,26 @@ import type {
 } from '../../api/admin';
 import { categoryScopeLabel, initialAddScope, productiveLocked } from './categoryScope';
 import { Modal } from '../../components/Modal';
+import { EmptyState } from '../../components/EmptyState';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { Pagination } from '../../components/Pagination';
+import { PageHeader } from '../../components/PageHeader';
+import { tableThStyle, tableTdStyle, tableCardStyle } from '../../lib/tableStyles';
 import { useToast } from '../../lib/toast';
+import {
+  btnDanger, btnNeutral, btnPrimary, btnSecondary, btnSm, btnSuccess,
+  chipStyle, fieldLabelStyle, fieldStyle, selectStyle, statusPillStyle,
+  tabBarStyle, tabStyle,
+} from '../../lib/uiStyles';
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: 'var(--shell)',
-  border: '1px solid var(--line2)',
-  borderRadius: 6,
-  padding: '9px 12px',
-  color: 'var(--txt)',
-  fontSize: 13,
-  outline: 'none',
-  fontFamily: 'Inter, sans-serif',
-  boxSizing: 'border-box',
-};
+// Single-line inputs — the shared OneHR field frame (hover/focus ring comes from index.css).
+const inputStyle: React.CSSProperties = { ...fieldStyle };
 
-const inputFocus: React.CSSProperties = {
-  ...inputStyle,
-  borderColor: 'var(--brand-bright)',
-  boxShadow: '0 0 0 3px color-mix(in srgb, var(--brand-bright) 14%, transparent)',
-};
+const thStyle: React.CSSProperties = tableThStyle;
 
-const thStyle: React.CSSProperties = {
-  padding: '10px 16px',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--txt-dim)',
-  textAlign: 'left',
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  background: 'var(--raised)',
-  borderBottom: '1px solid var(--line)',
-  whiteSpace: 'nowrap',
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '12px 16px',
-  verticalAlign: 'middle',
-  borderBottom: '1px solid var(--line)',
-};
+const tdStyle: React.CSSProperties = tableTdStyle;
 
 type Tab = 'departments' | 'designations' | 'locations' | 'project-types' | 'task-categories';
 
@@ -66,16 +43,7 @@ type Tab = 'departments' | 'designations' | 'locations' | 'project-types' | 'tas
 
 function ActiveBadge({ active }: { active: boolean }) {
   return (
-    <span style={{
-      display: 'inline-block',
-      padding: '3px 8px',
-      borderRadius: 20,
-      fontSize: 11,
-      fontWeight: 500,
-      background: active ? 'rgba(47,182,124,.12)' : 'rgba(107,114,128,.12)',
-      border: `1px solid ${active ? 'rgba(47,182,124,.3)' : 'rgba(107,114,128,.3)'}`,
-      color: active ? 'var(--ok)' : 'var(--txt-dim)',
-    }}>
+    <span style={statusPillStyle(active ? 'var(--ok)' : 'var(--txt-dim)')}>
       {active ? 'Active' : 'Inactive'}
     </span>
   );
@@ -121,36 +89,17 @@ function ConfirmModal({ open, onClose, onConfirm, title, message, confirmLabel, 
         <div style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.7, marginBottom: 20 }}>
           {message}
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} className="nf-btn nf-btn--neutral" style={btnNeutral}>
+            Cancel
+          </button>
           <button
             onClick={onConfirm}
             disabled={isPending}
-            style={{
-              padding: '9px 20px',
-              background: danger ? 'rgba(228,55,61,.15)' : 'rgba(47,182,124,.15)',
-              border: `1px solid ${danger ? 'rgba(228,55,61,.4)' : 'rgba(47,182,124,.4)'}`,
-              borderRadius: 7,
-              color: danger ? 'var(--risk)' : 'var(--ok)',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: isPending ? 'not-allowed' : 'pointer',
-            }}
+            className={danger ? 'nf-btn nf-btn--danger' : 'nf-btn nf-btn--primary'}
+            style={danger ? btnDanger : btnPrimary}
           >
             {isPending ? 'Working…' : confirmLabel}
-          </button>
-          <button
-            onClick={onClose}
-            style={{
-              padding: '9px 16px',
-              background: 'transparent',
-              border: '1px solid var(--line2)',
-              borderRadius: 7,
-              color: 'var(--txt-mut)',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            Cancel
           </button>
         </div>
       </div>
@@ -198,10 +147,7 @@ function DeleteConfirmModal({ open, onClose, onConfirm, itemName, isPending = fa
           </div>
         </div>
         {error && <ErrorBanner message={error} />}
-        <label style={{
-          display: 'block', fontSize: 11, fontWeight: 600,
-          color: 'var(--txt-mut)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.06em',
-        }}>
+        <label style={fieldLabelStyle}>
           Type the name to confirm
         </label>
         <input
@@ -220,27 +166,14 @@ function DeleteConfirmModal({ open, onClose, onConfirm, itemName, isPending = fa
           Must match exactly: <code style={{ color: 'var(--txt-mut)' }}>{itemName}</code>
         </p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button
-            onClick={handleClose}
-            style={{
-              background: 'transparent', color: 'var(--txt-mut)',
-              border: '1px solid var(--line2)', borderRadius: 7,
-              padding: '9px 18px', fontSize: 13, cursor: 'pointer',
-            }}
-          >
+          <button onClick={handleClose} className="nf-btn nf-btn--neutral" style={btnNeutral}>
             Cancel
           </button>
           <button
             onClick={() => { if (match) onConfirm(); }}
             disabled={!match || isPending}
-            style={{
-              background: match ? '#C0392B' : 'var(--raised2)',
-              color: match ? '#fff' : 'var(--txt-dim)',
-              border: `1px solid ${match ? 'transparent' : 'var(--line2)'}`,
-              borderRadius: 7, padding: '9px 20px', fontSize: 13, fontWeight: 600,
-              cursor: !match || isPending ? 'not-allowed' : 'pointer',
-              opacity: isPending ? 0.7 : 1,
-            }}
+            className="nf-btn nf-btn--danger"
+            style={btnDanger}
           >
             {isPending ? 'Deleting…' : 'Delete Permanently'}
           </button>
@@ -284,14 +217,7 @@ function AddModal({ open, onClose, title, fieldLabel, placeholder, onSubmit, isP
       <form onSubmit={handleSubmit} noValidate>
         {error && <ErrorBanner message={error} />}
         <div style={{ marginBottom: 16 }}>
-          <label htmlFor={fieldId} style={{
-            display: 'block',
-            fontSize: 11,
-            fontWeight: 550,
-            color: 'var(--txt-mut)',
-            marginBottom: 5,
-            letterSpacing: '0.03em',
-          }}>
+          <label htmlFor={fieldId} style={fieldLabelStyle}>
             {fieldLabel} *
           </label>
           <input
@@ -301,43 +227,20 @@ function AddModal({ open, onClose, title, fieldLabel, placeholder, onSubmit, isP
             value={value}
             onChange={(e) => setValue(e.target.value)}
             style={inputStyle}
-            onFocus={(e) => Object.assign(e.target.style, inputFocus)}
-            onBlur={(e) => Object.assign(e.target.style, inputStyle)}
             autoFocus
           />
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button type="button" onClick={handleClose} className="nf-btn nf-btn--neutral" style={btnNeutral}>
+            Cancel
+          </button>
           <button
             type="submit"
             disabled={isPending || !value.trim()}
-            style={{
-              padding: '9px 20px',
-              background: isPending ? 'var(--brand-deep)' : 'var(--brand)',
-              border: 'none',
-              borderRadius: 7,
-              color: '#fff',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: (isPending || !value.trim()) ? 'not-allowed' : 'pointer',
-              transition: 'background 0.14s',
-            }}
+            className="nf-btn nf-btn--primary"
+            style={btnPrimary}
           >
             {isPending ? 'Adding…' : 'Add'}
-          </button>
-          <button
-            type="button"
-            onClick={handleClose}
-            style={{
-              padding: '9px 16px',
-              background: 'transparent',
-              border: '1px solid var(--line2)',
-              borderRadius: 7,
-              color: 'var(--txt-mut)',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            Cancel
           </button>
         </div>
       </form>
@@ -376,12 +279,7 @@ function OrgTable<T extends { id: number; active: boolean }>({
   const totalPages = Math.max(1, Math.ceil((data?.length ?? 0) / ORG_TABLE_PAGE_SIZE));
   const pageSafe = Math.min(page, totalPages);
   return (
-    <div style={{
-      background: 'var(--panel)',
-      border: '1px solid var(--line)',
-      borderRadius: 10,
-      overflow: 'hidden',
-    }}>
+    <div style={tableCardStyle}>
       <div style={{
         padding: '14px 20px',
         borderBottom: '1px solid var(--line)',
@@ -405,12 +303,7 @@ function OrgTable<T extends { id: number; active: boolean }>({
       {isError && (
         <div style={{ padding: '40px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 13, color: 'var(--risk)', marginBottom: 12 }}>Failed to load data.</div>
-          <button onClick={onRefetch} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', background: 'var(--raised2)',
-            border: '1px solid var(--line2)', borderRadius: 6,
-            color: 'var(--txt)', fontSize: 12, cursor: 'pointer',
-          }}>
+          <button onClick={onRefetch} className="nf-btn nf-btn--secondary" style={{ ...btnSecondary, ...btnSm }}>
             <RefreshCw size={13} aria-hidden="true" /> Retry
           </button>
         </div>
@@ -418,7 +311,7 @@ function OrgTable<T extends { id: number; active: boolean }>({
 
       {data && (
         <div className="nf-r-scroll">
-        <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '620px' } as React.CSSProperties}>
+        <table className="nf-r-scroll-inner nf-table" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '620px' } as React.CSSProperties}>
           <thead>
             <tr>
               <th style={thStyle}>{nameLabel}</th>
@@ -430,18 +323,13 @@ function OrgTable<T extends { id: number; active: boolean }>({
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan={columnCount} style={{ padding: '40px 20px', textAlign: 'center', fontSize: 13, color: 'var(--txt-dim)' }}>
-                  No entries yet. Add one above.
+                <td colSpan={columnCount} style={{ padding: 16 }}>
+                  <EmptyState icon={Inbox} title="No entries yet. Add one above." />
                 </td>
               </tr>
             ) : (
               data.slice((pageSafe - 1) * ORG_TABLE_PAGE_SIZE, pageSafe * ORG_TABLE_PAGE_SIZE).map((item) => (
-                <tr
-                  key={item.id}
-                  style={{ transition: 'background 0.1s' }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--raised)'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = ''; }}
-                >
+                <tr key={item.id}>
                   <td style={tdStyle}>
                     <span style={{ fontSize: 13, color: 'var(--txt)', fontWeight: 500 }}>
                       {String(item[nameKey])}
@@ -463,28 +351,8 @@ function OrgTable<T extends { id: number; active: boolean }>({
                         disabled={isTogglePending}
                         aria-label={item.active ? 'Deactivate' : 'Activate'}
                         title={item.active ? 'Deactivate' : 'Activate'}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 5,
-                          padding: '5px 10px',
-                          background: 'transparent',
-                          border: `1px solid ${item.active ? 'rgba(228,55,61,.3)' : 'rgba(47,182,124,.3)'}`,
-                          borderRadius: 6,
-                          color: item.active ? 'var(--risk)' : 'var(--ok)',
-                          fontSize: 11,
-                          fontWeight: 500,
-                          cursor: isTogglePending ? 'not-allowed' : 'pointer',
-                          transition: 'background 0.14s',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isTogglePending) {
-                            e.currentTarget.style.background = item.active
-                              ? 'rgba(228,55,61,.08)'
-                              : 'rgba(47,182,124,.08)';
-                          }
-                        }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                        className={item.active ? 'nf-btn nf-btn--danger' : 'nf-btn nf-btn--success'}
+                        style={{ ...(item.active ? btnDanger : btnSuccess), ...btnSm }}
                       >
                         {item.active
                           ? <><ToggleLeft size={13} aria-hidden="true" /> Deactivate</>
@@ -574,17 +442,12 @@ function AddProjectTypeModal({ open, onClose, onSubmit, isPending, error }: {
       <form onSubmit={handleSubmit} noValidate>
         {error && <ErrorBanner message={error} />}
         <div style={{ marginBottom: 16 }}>
-          <label htmlFor={fieldId} style={{
-            display: 'block', fontSize: 11, fontWeight: 550,
-            color: 'var(--txt-mut)', marginBottom: 5, letterSpacing: '0.03em',
-          }}>
+          <label htmlFor={fieldId} style={fieldLabelStyle}>
             Project Type Name *
           </label>
           <input
             id={fieldId} type="text" placeholder="e.g. Retainer" value={name}
             onChange={(e) => setName(e.target.value)} style={inputStyle}
-            onFocus={(e) => Object.assign(e.target.style, inputFocus)}
-            onBlur={(e) => Object.assign(e.target.style, inputStyle)}
             autoFocus
           />
         </div>
@@ -600,22 +463,16 @@ function AddProjectTypeModal({ open, onClose, onSubmit, isPending, error }: {
           </span>
         </label>
 
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button type="button" onClick={handleClose} className="nf-btn nf-btn--neutral" style={btnNeutral}>
+            Cancel
+          </button>
           <button
             type="submit" disabled={isPending || !name.trim()}
-            style={{
-              padding: '9px 20px', background: isPending ? 'var(--brand-deep)' : 'var(--brand)',
-              border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 600,
-              cursor: (isPending || !name.trim()) ? 'not-allowed' : 'pointer',
-            }}
+            className="nf-btn nf-btn--primary"
+            style={btnPrimary}
           >
             {isPending ? 'Adding…' : 'Add'}
-          </button>
-          <button type="button" onClick={handleClose} style={{
-            padding: '9px 16px', background: 'transparent', border: '1px solid var(--line2)',
-            borderRadius: 7, color: 'var(--txt-mut)', fontSize: 13, cursor: 'pointer',
-          }}>
-            Cancel
           </button>
         </div>
       </form>
@@ -691,11 +548,8 @@ function ProjectTypesTab() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
         <button
           onClick={() => { setAddError(null); setAddOpen(true); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', background: 'var(--brand)', border: 'none',
-            borderRadius: 7, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-          }}
+          className="nf-btn nf-btn--primary"
+          style={btnPrimary}
         >
           <Plus size={13} aria-hidden="true" />
           Add Project Type
@@ -819,11 +673,8 @@ function DepartmentsTab() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
         <button
           onClick={() => { setAddError(null); setAddOpen(true); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', background: 'var(--brand)', border: 'none',
-            borderRadius: 7, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-          }}
+          className="nf-btn nf-btn--primary"
+          style={btnPrimary}
         >
           <Plus size={13} aria-hidden="true" />
           Add Department
@@ -950,11 +801,8 @@ function DesignationsTab() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
         <button
           onClick={() => { setAddError(null); setAddOpen(true); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', background: 'var(--brand)', border: 'none',
-            borderRadius: 7, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-          }}
+          className="nf-btn nf-btn--primary"
+          style={btnPrimary}
         >
           <Plus size={13} aria-hidden="true" />
           Add Designation
@@ -1079,11 +927,8 @@ function LocationsTab() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
         <button
           onClick={() => { setAddError(null); setAddOpen(true); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', background: 'var(--brand)', border: 'none',
-            borderRadius: 7, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-          }}
+          className="nf-btn nf-btn--primary"
+          style={btnPrimary}
         >
           <Plus size={13} aria-hidden="true" />
           Add Location
@@ -1216,23 +1061,29 @@ function TaskCategoriesTab() {
     <div>
       {/* toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
           {(['ALL', 'EMPLOYEE', 'MANAGEMENT', 'BENCH'] as const).map(s => (
-            <button key={s} onClick={() => { setScopeFilter(s); setPage(1); }} style={{
-              padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-              border: '1px solid var(--line)',
-              background: scopeFilter === s ? 'var(--brand)' : 'var(--raised2)',
-              color: scopeFilter === s ? '#fff' : 'var(--txt)',
-              cursor: 'pointer',
-            }}>{s === 'ALL' ? 'All' : categoryScopeLabel(s)}</button>
+            <button
+              key={s}
+              onClick={() => { setScopeFilter(s); setPage(1); }}
+              className="nf-chip"
+              aria-pressed={scopeFilter === s}
+              style={chipStyle(scopeFilter === s)}
+            >
+              {s === 'ALL' ? 'All' : categoryScopeLabel(s)}
+            </button>
           ))}
         </div>
         <div style={{ marginLeft: 'auto' }}>
-          <button onClick={() => { setAddOpen(true); setAddError(null); setAddScope(initialAddScope(scopeFilter, addScope)); }} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '7px 14px', borderRadius: 7, fontSize: 13, fontWeight: 600,
-            background: 'var(--brand)', border: 'none', color: '#fff', cursor: 'pointer',
-          }}>
+          <button
+            onClick={() => {
+              setAddOpen(true);
+              setAddError(null);
+              setAddScope(initialAddScope(scopeFilter, addScope));
+            }}
+            className="nf-btn nf-btn--primary"
+            style={btnPrimary}
+          >
             <Plus size={14} /> Add category
           </button>
         </div>
@@ -1240,7 +1091,7 @@ function TaskCategoriesTab() {
 
       {/* table */}
       <div style={{ border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
-        <table className="nf-r-scroll-inner" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '560px' } as React.CSSProperties}>
+        <table className="nf-r-scroll-inner nf-table" style={{ width: '100%', borderCollapse: 'collapse', '--nf-r-min': '560px' } as React.CSSProperties}>
           <thead>
             <tr>
               <th style={thStyle}>Category Name</th>
@@ -1252,13 +1103,10 @@ function TaskCategoriesTab() {
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={5} style={{ ...tdStyle, color: 'var(--txt-dim)', textAlign: 'center' }}>No categories found.</td></tr>
+              <tr><td colSpan={5} style={{ padding: 16 }}><EmptyState icon={Tags} title="No categories found." /></td></tr>
             )}
             {paged.map(cat => (
-              <tr key={cat.id} style={showPager ? { height: CATEGORY_ROW_HEIGHT } : undefined}
-                onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--raised)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = ''; }}
-              >
+              <tr key={cat.id} style={showPager ? { height: CATEGORY_ROW_HEIGHT } : undefined}>
                 <td style={tdStyle}>
                   {renamingId === cat.id ? (
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -1269,16 +1117,18 @@ function TaskCategoriesTab() {
                           if (e.key === 'Enter') renameMut.mutate({ id: cat.id, name: renameText });
                           if (e.key === 'Escape') { setRenamingId(null); setRenameError(null); }
                         }}
-                        style={{ ...inputStyle, fontSize: 13, padding: '5px 8px' }}
+                        style={{ ...inputStyle, height: 34, padding: '0 10px' }}
                         autoFocus
                       />
                       <button onClick={() => renameMut.mutate({ id: cat.id, name: renameText })}
                         disabled={renameMut.isPending}
-                        style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'var(--ok)', border: 'none', color: '#fff', cursor: 'pointer' }}>
+                        className="nf-btn nf-btn--primary"
+                        style={{ ...btnPrimary, ...btnSm }}>
                         Save
                       </button>
                       <button onClick={() => { setRenamingId(null); setRenameError(null); }}
-                        style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line)', color: 'var(--txt)', cursor: 'pointer' }}>
+                        className="nf-btn nf-btn--neutral"
+                        style={{ ...btnNeutral, ...btnSm }}>
                         Cancel
                       </button>
                       {renameError && <span style={{ fontSize: 12, color: 'var(--risk)' }}>{renameError}</span>}
@@ -1288,13 +1138,10 @@ function TaskCategoriesTab() {
                   )}
                 </td>
                 <td style={tdStyle}>
-                  <span style={{
-                    fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                    background: cat.scope === 'MANAGEMENT' ? 'rgba(99,102,241,0.12)'
-                      : cat.scope === 'BENCH' ? 'rgba(47,182,124,0.12)' : 'rgba(14,165,233,0.12)',
-                    color: cat.scope === 'MANAGEMENT' ? 'var(--info)'
-                      : cat.scope === 'BENCH' ? 'var(--ok)' : 'var(--brand)',
-                  }}>
+                  <span style={statusPillStyle(
+                    cat.scope === 'MANAGEMENT' ? 'var(--info)'
+                      : cat.scope === 'BENCH' ? 'var(--ok)' : 'var(--brand)'
+                  )}>
                     {categoryScopeLabel(cat.scope)}
                   </span>
                 </td>
@@ -1306,16 +1153,15 @@ function TaskCategoriesTab() {
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                     <button
                       onClick={() => { setRenamingId(cat.id); setRenameText(cat.name); setRenameError(null); }}
-                      style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line)', color: 'var(--txt)', cursor: 'pointer' }}>
+                      className="nf-btn nf-btn--neutral"
+                      style={{ ...btnNeutral, ...btnSm }}>
                       Rename
                     </button>
                     <button
                       onClick={() => toggleMut.mutate(cat.id)}
                       disabled={toggleMut.isPending}
-                      style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--line)', cursor: 'pointer',
-                        background: cat.active ? 'rgba(228,55,61,0.08)' : 'rgba(47,182,124,0.08)',
-                        color: cat.active ? 'var(--risk)' : 'var(--ok)',
-                      }}>
+                      className={cat.active ? 'nf-btn nf-btn--danger' : 'nf-btn nf-btn--secondary'}
+                      style={{ ...(cat.active ? btnDanger : btnSecondary), ...btnSm }}>
                       {cat.active ? 'Deactivate' : 'Activate'}
                     </button>
                   </div>
@@ -1342,7 +1188,7 @@ function TaskCategoriesTab() {
         <Modal open={addOpen} title="Add category" onClose={() => { setAddOpen(false); setAddError(null); }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-mut)', display: 'block', marginBottom: 5 }}>Name</label>
+              <label style={fieldLabelStyle}>Name</label>
               <input
                 value={addName}
                 onChange={e => setAddName(e.target.value)}
@@ -1352,9 +1198,12 @@ function TaskCategoriesTab() {
               />
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt-mut)', display: 'block', marginBottom: 5 }}>Scope</label>
-              <select value={addScope} onChange={e => setAddScope(e.target.value as TaskCategoryScope)}
-                style={inputStyle}>
+              <label style={fieldLabelStyle}>Scope</label>
+              <select
+                value={addScope}
+                onChange={e => setAddScope(e.target.value as TaskCategoryScope)}
+                style={selectStyle}
+              >
                 <option value="EMPLOYEE">Employee (Submit EOD)</option>
                 <option value="MANAGEMENT">Daily Log</option>
                 <option value="BENCH">Bench Log</option>
@@ -1376,15 +1225,15 @@ function TaskCategoriesTab() {
               )}
             </div>
             {addError && <ErrorBanner message={addError} />}
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button onClick={() => { setAddOpen(false); setAddError(null); }}
-                style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid var(--line)', background: 'var(--raised2)', color: 'var(--txt)', cursor: 'pointer', fontSize: 13 }}>
+                className="nf-btn nf-btn--neutral" style={btnNeutral}>
                 Cancel
               </button>
               <button
                 onClick={() => createMut.mutate({ name: addName, scope: addScope, isProductive: productiveLocked(addScope) ? false : addProductive })}
                 disabled={createMut.isPending || !addName.trim()}
-                style={{ padding: '8px 16px', borderRadius: 7, border: 'none', background: 'var(--brand)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                className="nf-btn nf-btn--primary" style={btnPrimary}>
                 {createMut.isPending ? 'Adding…' : 'Add'}
               </button>
             </div>
@@ -1411,47 +1260,24 @@ export default function OrganizationMasters() {
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{
-          fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-          fontSize: 24,
-          fontWeight: 700,
-          color: 'var(--txt)',
-          margin: '0 0 4px',
-          letterSpacing: '-0.01em',
-        }}>
-          Organization Masters
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-          Manage departments, designations, locations, project types, and Daily Log categories used across the platform.
-        </p>
-      </div>
+      <PageHeader
+        title="Organization Masters"
+        subtitle="Manage departments, designations, locations, project types, and Daily Log categories used across the platform."
+        style={{ marginBottom: 24 }}
+      />
 
       {/* Tab bar */}
-      <div style={{
-        display: 'flex',
-        gap: 2,
-        borderBottom: '1px solid var(--line)',
-        marginBottom: 20,
-      }}>
+      <div role="tablist" style={{ ...tabBarStyle, marginBottom: 20 }}>
         {TABS.map((tab) => {
           const isActive = tab.key === activeTab;
           return (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              style={{
-                padding: '9px 18px',
-                background: 'transparent',
-                border: 'none',
-                borderBottom: isActive ? '2px solid var(--brand)' : '2px solid transparent',
-                marginBottom: -1,
-                color: isActive ? 'var(--brand)' : 'var(--txt-mut)',
-                fontSize: 13,
-                fontWeight: isActive ? 600 : 400,
-                cursor: 'pointer',
-                transition: 'color 0.14s',
-              }}
+              role="tab"
+              aria-selected={isActive}
+              className="nf-tab"
+              style={tabStyle(isActive)}
             >
               {tab.label}
             </button>

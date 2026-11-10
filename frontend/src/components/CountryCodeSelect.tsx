@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
 import { COUNTRY_CODES, flagEmoji } from '../lib/countryCodes';
+import { fieldStyle } from '../lib/uiStyles';
 
 /**
  * Compact country-dial-code picker — closed state is just a flag + code chip (e.g. "🇮🇳 +91"),
@@ -76,10 +77,9 @@ export function CountryCodeSelect({ value, onChange, ariaLabel }: {
         aria-expanded={open}
         title={selected?.name}
         style={{
+          ...fieldStyle, width: 'auto', height: '100%', minHeight: 34,
           display: 'flex', alignItems: 'center', gap: 4,
-          height: '100%', boxSizing: 'border-box',
-          padding: '7px 8px', background: 'var(--raised)', border: '1px solid var(--line2)',
-          borderRadius: 6, color: 'var(--txt)', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
+          padding: '0 10px', cursor: 'pointer', whiteSpace: 'nowrap',
         }}
       >
         <span aria-hidden="true">{selected ? flagEmoji(selected.iso2) : '🏳️'}</span>
@@ -90,8 +90,8 @@ export function CountryCodeSelect({ value, onChange, ariaLabel }: {
       {open && (
         <div className="nf-r-popover" style={{
           position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50, width: 240,
-          background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 10,
-          boxShadow: '0 12px 28px rgba(0,0,0,.35)', overflow: 'hidden',
+          background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 12,
+          boxShadow: '0 16px 40px rgba(0,0,0,.35)', overflow: 'hidden',
         }}>
           <div style={{ position: 'relative', padding: 8, borderBottom: '1px solid var(--line)' }}>
             <Search size={13} aria-hidden="true" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-dim)' }} />
@@ -100,11 +100,7 @@ export function CountryCodeSelect({ value, onChange, ariaLabel }: {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search country or code…"
-              style={{
-                width: '100%', boxSizing: 'border-box', background: 'var(--raised2)',
-                border: '1px solid var(--line2)', borderRadius: 6, padding: '6px 9px 6px 26px',
-                fontSize: 12.5, color: 'var(--txt)', outline: 'none', fontFamily: 'Inter, sans-serif',
-              }}
+              style={{ ...fieldStyle, height: 34, padding: '0 9px 0 26px', fontSize: 12.5 }}
             />
           </div>
           {/* ~7 rows before scrolling (28px row + a hair of padding), per the "6-8 rows" ask. */}

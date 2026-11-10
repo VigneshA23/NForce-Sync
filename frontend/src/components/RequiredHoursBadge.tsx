@@ -1,4 +1,5 @@
 import { requiredHoursForDay, HALF_LEAVE_LABELS } from '../lib/requiredHours';
+import { statusPillStyle } from '../lib/uiStyles';
 
 /**
  * Names WHICH half of the day a half-day leave covers (First/Second), shown once per day next
@@ -21,11 +22,8 @@ export function RequiredHoursBadge({ dayType, workingHoursPerDay, loggedHours }:
     <span
       title={`${halfLeaveLabel} — required ${required.toFixed(1)}h${short ? `, logged ${loggedHours.toFixed(1)}h` : ''}`}
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 4,
-        marginTop: 3, padding: '1px 6px 1px 5px', borderRadius: 4,
-        background: `color-mix(in srgb, var(${short ? '--warn' : '--txt-dim'}) 12%, transparent)`,
-        color: short ? 'var(--warn)' : 'var(--txt-dim)', fontSize: 10, fontWeight: 700,
-        whiteSpace: 'nowrap', lineHeight: 1.5,
+        ...statusPillStyle(short ? 'var(--warn)' : 'var(--txt-dim)'),
+        gap: 4, marginTop: 3, padding: '1px 7px', fontSize: 10, fontWeight: 700, lineHeight: 1.5,
       }}
     >
       {halfLeaveLabel}

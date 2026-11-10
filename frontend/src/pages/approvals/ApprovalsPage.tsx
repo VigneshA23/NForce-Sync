@@ -31,12 +31,21 @@ import { formatDate } from '../../lib/date';
 export { splitPendingPieces };
 import { FilterDropdown, toggleFilterVal } from '../../components/FilterDropdown';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { EmptyState } from '../../components/EmptyState';
+import { PageHeader } from '../../components/PageHeader';
 import { Pagination } from '../../components/Pagination';
 import { useToast } from '../../lib/toast';
 import { Card, Chip, extractError, initials } from './shared';
 import { EodReviewModal } from '../../components/EodReviewModal';
 import { LogLinesTable, TaskLinesTable } from '../../components/EodLinesTables';
-import { dayTypeLabel, fmtDate, fmtHours, fmtInactivity, fmtRelative, totalHours } from '../../lib/eodFormat';
+import {
+  dayTypeLabel, fmtDate, fmtHours, fmtInactivity, fmtRelative, totalHours,
+} from '../../lib/eodFormat';
+import {
+  btnPrimary, btnSecondary, btnNeutral, btnDanger, btnSuccess, btnSm,
+  textareaStyle, selectStyle,
+  tabBarStyle, tabStyle, tabCountStyle,
+} from '../../lib/uiStyles';
 
 // ── PieceCard ─────────────────────────────────────────────────────────────────
 
@@ -186,14 +195,8 @@ function PieceCard({
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <button
             onClick={() => onOpenModal('view')}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
-              padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-              background: (tab === 'pending' || tab === 'escalated') ? 'var(--brand)' : 'var(--raised2)',
-              border: `1px solid ${(tab === 'pending' || tab === 'escalated') ? 'var(--brand)' : 'var(--line2)'}`,
-              color: (tab === 'pending' || tab === 'escalated') ? '#fff' : 'var(--txt-dim)',
-              cursor: 'pointer',
-            }}
+            className={(tab === 'pending' || tab === 'escalated') ? 'nf-btn nf-btn--primary' : 'nf-btn nf-btn--neutral'}
+            style={{ ...((tab === 'pending' || tab === 'escalated') ? btnPrimary : btnNeutral), ...btnSm }}
           >
             Review
           </button>
@@ -463,10 +466,10 @@ export default function ApprovalsPage({
   if (pendingError) {
     return (
       <div>
-        <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 20px' }}>{title}</h1>
+        <PageHeader title={title} />
         <Card style={{ textAlign: 'center', padding: '40px 20px' }}>
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load approvals.</div>
-          <button onClick={onRefetch} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 13, cursor: 'pointer' }}>
+          <button onClick={onRefetch} className="nf-btn nf-btn--secondary" style={btnSecondary}>
             <RefreshCw size={14} aria-hidden="true" /> Retry
           </button>
         </Card>
@@ -477,14 +480,7 @@ export default function ApprovalsPage({
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 14, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-            {title}
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>{subtitle}</p>
-        </div>
-      </div>
+      <PageHeader title={title} subtitle={subtitle} />
 
       {deepLinkNote && (
         <div role="status" style={{
@@ -500,18 +496,11 @@ export default function ApprovalsPage({
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div role="tablist" style={{ ...tabBarStyle, marginBottom: 16 }}>
         {tabs.map(t => (
-          <button key={t} onClick={() => switchTab(t)} style={{
-            padding: '8px 15px', borderRadius: 20,
-            border: `1px solid ${tab === t ? 'var(--brand)' : 'var(--line2)'}`,
-            background: tab === t ? 'var(--brand)' : 'var(--raised2)',
-            color: tab === t ? '#fff' : 'var(--txt-dim)',
-            fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 7,
-          }}>
+          <button key={t} onClick={() => switchTab(t)} className="nf-tab" role="tab" aria-selected={tab === t} style={tabStyle(tab === t)}>
             {tabLabel(t)}
-            <span style={{ background: tab === t ? 'rgba(255,255,255,.25)' : 'rgba(255,255,255,.1)', padding: '1px 7px', borderRadius: 20, fontSize: 11.5 }}>
+            <span style={tabCountStyle(tab === t)}>
               {tabCount(t)}
             </span>
           </button>
@@ -520,7 +509,7 @@ export default function ApprovalsPage({
 
       {/* Toolbar */}
       <div className="nf-r-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
-        <div style={{ width: 220, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 8, padding: '7px 12px', marginRight: 14 }}>
+        <div style={{ width: 220, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 9, height: 34, padding: '0 12px', boxSizing: 'border-box', marginRight: 14 }}>
           <Search size={13} style={{ color: 'var(--txt-dim)' }} aria-hidden="true" />
           <input
             value={search}
@@ -562,12 +551,12 @@ export default function ApprovalsPage({
             />
           )}
           {hasActiveFilters && (
-            <button onClick={clearAllFilters} style={{ background: 'none', border: '1px solid var(--line2)', borderRadius: 8, color: 'var(--brand-bright)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '7px 12px' }}>
+            <button onClick={clearAllFilters} className="nf-btn nf-btn--neutral" style={{ ...btnNeutral, ...btnSm }}>
               Clear all filters
             </button>
           )}
         </div>
-        <select value={sort} onChange={e => setSort(e.target.value as SortMode)} style={{ background: 'var(--raised2)', color: 'var(--txt)', border: '1px solid var(--line2)', borderRadius: 8, padding: '7px 10px', fontSize: 12.5 }}>
+        <select value={sort} onChange={e => setSort(e.target.value as SortMode)} style={{ ...selectStyle, width: 'auto', height: 34 }}>
           <option value="oldest">Sort: Oldest first</option>
           <option value="latest">Sort: Latest first</option>
           <option value="hours">Sort: Most hours</option>
@@ -581,10 +570,13 @@ export default function ApprovalsPage({
           <GlobalLoader fullScreen={false} compact label="Loading approvals…" />
         </Card>
       ) : visible.length === 0 ? (
-        <Card style={{ textAlign: 'center', padding: '48px 20px' }}>
-          <CheckCheck size={28} style={{ color: 'var(--ok)', marginBottom: 12 }} aria-hidden="true" />
-          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)', marginBottom: 6 }}>{emptyHeading(tab)}</div>
-          <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>{emptyBody(tab)}</div>
+        <Card style={{ padding: 16 }}>
+          <EmptyState
+            icon={CheckCheck}
+            tone={tab === 'pending' || tab === 'escalated' ? 'var(--ok)' : undefined}
+            title={emptyHeading(tab)}
+            hint={emptyBody(tab)}
+          />
         </Card>
       ) : (
         <Card style={{ padding: 0, overflow: 'hidden' }}>

@@ -14,6 +14,7 @@ import { extractError } from '../lib/extractError';
 import { formatDate } from '../lib/date';
 import { scopeFor } from '../lib/clarificationGate';
 import { CLARIFICATION_STATUS_META, CLARIFICATION_STATUS_OPTIONS } from '../lib/clarificationStatus';
+import { btnNeutral, btnSm, btnSuccess } from '../lib/uiStyles';
 
 /**
  * Floating chat box (bottom-right), styled like the Blockers conversation panel, for one entry's EOD Clarification conversation — the single
@@ -182,7 +183,8 @@ export function ClarificationChatPopup({
                 type="button"
                 onClick={() => setConfirmingResolve(false)}
                 disabled={setStatus.isPending}
-                style={{ padding: '4px 11px', borderRadius: 6, fontSize: 12, border: '1px solid var(--line2)', background: 'none', color: 'var(--txt-dim)', cursor: 'pointer' }}
+                className="nf-btn nf-btn--neutral"
+                style={{ ...btnNeutral, ...btnSm }}
               >
                 Cancel
               </button>
@@ -190,11 +192,8 @@ export function ClarificationChatPopup({
                 type="button"
                 onClick={() => void handleResolve()}
                 disabled={setStatus.isPending}
-                style={{
-                  padding: '4px 11px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                  border: '1px solid rgba(47,182,124,.5)', background: 'rgba(47,182,124,.15)', color: 'var(--ok)',
-                  cursor: setStatus.isPending ? 'not-allowed' : 'pointer', opacity: setStatus.isPending ? 0.6 : 1,
-                }}
+                className="nf-btn nf-btn--success"
+                style={{ ...btnSuccess, ...btnSm }}
               >
                 {setStatus.isPending ? 'Resolving…' : 'Yes, Resolve'}
               </button>

@@ -438,15 +438,99 @@ textarea:-webkit-autofill:focus {
   background: #1E2128 !important;
   color: #FFFFFF !important;
 }
+/*     Active: OneHR's tinted wash + a 3px crimson edge bar (a span in Shell's NavLinkItem). */
 .nf-sidebar-item[aria-current="page"] {
-  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-deep) 100%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 22%, transparent), color-mix(in srgb, var(--brand) 5%, transparent));
   color: #FFFFFF;
-  box-shadow: 0 0 0 1px rgba(237,48,85,.35), 0 2px 10px rgba(237,48,85,.35);
 }
 .nf-sidebar-item[aria-current="page"]:hover {
-  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-deep) 100%) !important;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 30%, transparent), color-mix(in srgb, var(--brand) 8%, transparent)) !important;
   color: #FFFFFF !important;
 }
+
+/* ─── Page header card (components/PageHeader.tsx) — OneHR nf-pd-header ─ */
+@media (max-width: 767px) {
+  .nf-page-header { flex-direction: column; align-items: stretch !important; padding: 18px !important; }
+  .nf-page-header-art { opacity: .7; width: 260px !important; }
+  .nf-page-header-icon { width: 44px !important; height: 44px !important; border-radius: 12px !important; }
+  .nf-page-header-title { font-size: 20px !important; }
+}
+
+/* ─── Data tables (lib/tableStyles.ts) — OneHR nf-pd-table row hover ─ */
+.nf-table tbody tr { transition: background-color .12s; }
+.nf-table tbody tr:hover { background: color-mix(in srgb, var(--brand) 4%, transparent); }
+.nf-table tbody tr:last-child td { border-bottom: none; }
+@media (prefers-reduced-motion: reduce) {
+  .nf-table tbody tr { transition: none; }
+  .nf-kpi-tile { transform: none !important; }
+}
+
+/* KPI tile icon (components/KpiCard.tsx) — callers pass 18px icons; the compact 30px tile wants 16. */
+.nf-kpi-ico svg { width: 16px; height: 16px; }
+
+/* ─── Controls (lib/uiStyles.ts) — OneHR buttons / fields / tabs / chips ─
+   The base look is inline (uiStyles.ts); these add the states inline styles can't express.
+   `!important` is needed to beat the inline base — scoped to hover/focus/disabled only. */
+.nf-btn { transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, filter .15s; }
+.nf-btn:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 2px; }
+.nf-btn:disabled { opacity: .55; cursor: not-allowed !important; }
+.nf-btn--primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--brand) 28%, transparent) !important;
+}
+.nf-btn--secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand) 8%, var(--panel)) !important;
+  border-color: var(--brand) !important;
+}
+.nf-btn--neutral:hover:not(:disabled) { color: var(--txt) !important; border-color: var(--txt-dim) !important; }
+.nf-btn--success:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--ok) 28%, transparent) !important;
+}
+.nf-btn--warn:hover:not(:disabled) { background: color-mix(in srgb, var(--warn) 22%, var(--panel)) !important; border-color: var(--warn) !important; }
+.nf-btn--danger:hover:not(:disabled) { background: color-mix(in srgb, var(--risk) 22%, var(--panel)) !important; border-color: var(--risk) !important; }
+
+.nf-tab { transition: color .15s, border-color .15s; }
+.nf-tab:hover:not(:disabled):not([aria-selected="true"]) { color: var(--txt) !important; }
+.nf-tab:focus-visible, .nf-chip:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: -2px; }
+.nf-chip { transition: color .15s, border-color .15s, background-color .15s; }
+.nf-chip:hover:not(:disabled):not([aria-pressed="true"]) { color: var(--txt) !important; border-color: var(--txt-dim) !important; }
+
+/* Every bordered text field / select / textarea in the app body and in dialogs gets OneHR's
+   crimson hover + focus ring — no per-page opt-in needed, so it holds for every role. Borderless
+   inputs that sit inside their own framed wrapper (search boxes, steppers) are left alone. */
+:is(.shell-main, .nf-modal, .nf-field) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select, textarea):not([style*="border: none"]):not([style*="border: 0"]):not(:disabled),
+.nf-field:not(:disabled) {
+  transition: border-color .15s, box-shadow .15s;
+}
+:is(.shell-main, .nf-modal) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select, textarea):not([style*="border: none"]):not([style*="border: 0"]):not(:disabled):not(:focus):hover,
+.nf-field:not(:disabled):not(:focus):hover {
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--line2)) !important;
+}
+:is(.shell-main, .nf-modal) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]), select, textarea):not([style*="border: none"]):not([style*="border: 0"]):focus,
+.nf-field:focus {
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 16%, transparent) !important;
+  outline: none !important;
+}
+.nf-field::placeholder { color: var(--txt-dim); }
+/* Framed wrappers (search box with an icon, joined composer) whose inner input is borderless:
+   the wrapper carries the field frame, so it takes the hover/focus ring instead. */
+:is(.shell-main, .nf-modal) [style*="border: 1px solid var(--line2)"]:has(> input[style*="border: none"], > textarea[style*="border: none"]) {
+  transition: border-color .15s, box-shadow .15s;
+}
+:is(.shell-main, .nf-modal) [style*="border: 1px solid var(--line2)"]:has(> input[style*="border: none"], > textarea[style*="border: none"]):hover:not(:focus-within) {
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--line2)) !important;
+}
+:is(.shell-main, .nf-modal) [style*="border: 1px solid var(--line2)"]:has(> input[style*="border: none"]:focus, > textarea[style*="border: none"]:focus) {
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 16%, transparent) !important;
+}
+:is(.shell-main, .nf-modal) :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--brand); }
+select option { background: var(--panel); color: var(--txt); }
+
+/* Dialog footer (components/Modal.tsx) — OneHR nf-modal-actions lift */
+.nf-modal-footer { box-shadow: 0 -8px 18px rgba(16,24,40,.06); }
 
 /* ─── Topbar items — always dark frame ─────────────────────────── */
 .nf-topbar-item {
@@ -570,7 +654,7 @@ textarea:-webkit-autofill:focus {
 /* Shared filter row (components/FilterField.tsx): a full-width grid, search column wider than the dropdowns.
    Reflows at the app's existing 1024 / 768 / 480 breakpoints; the last control spans the row when it would
    otherwise sit alone in a 2-column layout. */
-.nf-filter-grid { display: grid; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+.nf-filter-grid { display: grid; gap: 12px; padding: 18px; border-bottom: 1px solid var(--line); }
 .nf-filter-grid--n2 { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
 .nf-filter-grid--n3 { grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)); }
 .nf-filter-grid--n4 { grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)); }
@@ -587,11 +671,11 @@ textarea:-webkit-autofill:focus {
 }
 .nf-filter-field { position: relative; display: flex; align-items: center; min-width: 0; }
 .nf-filter-control:focus { outline: none; }
-.nf-filter-control:focus-visible { border-color: var(--brand); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 35%, transparent); }
+.nf-filter-control:focus-visible { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 16%, transparent); }
 .nf-filter-control::-webkit-search-cancel-button { display: none; }
 .nf-filter-select option { background: var(--panel); color: var(--txt); }
-.nf-filter-chevron { position: absolute; right: 10px; color: var(--txt-dim); pointer-events: none; }
-.nf-filter-search-icon { position: absolute; left: 10px; color: var(--txt-dim); pointer-events: none; }
+.nf-filter-chevron { position: absolute; right: 13px; color: var(--txt-dim); pointer-events: none; }
+.nf-filter-search-icon { position: absolute; left: 13px; color: var(--txt-dim); pointer-events: none; }
 .nf-filter-clear {
   position: absolute; display: flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; padding: 0; border: none; border-radius: 5px;
@@ -879,6 +963,12 @@ textarea:-webkit-autofill:focus {
 @media (max-width: 720px) {
   .nf-hero { flex-direction: column; align-items: flex-start !important; }
   .nf-hero-illustration { width: 120px !important; height: 100px !important; align-self: center; }
+}
+/* OneHR banner artwork (male variant) is a wide scene, not a portrait — it can't shrink to the
+   120px slot, so below tablet width it steps aside and the text gets the full card. */
+@media (max-width: 900px) {
+  .nf-hero-illustration--wide { display: none; }
+  .nf-hero-text--wide { padding-right: 0 !important; }
 }
 @media (max-width: 480px) {
   .nf-hero { padding: 18px 18px !important; }

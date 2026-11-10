@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { maskDateInput, parseStrictDDMMYYYY, isoToDDMMYYYY, MIN_ISO_DATE, MAX_ISO_DATE } from '../lib/strictDate';
+import { fieldStyle } from '../lib/uiStyles';
 
 // Same masked-text-input + hidden-native-date-picker pattern as the "From"/"To" fields on
 // Employee → My EOD History (pages/employee/EodHistory.tsx): manual typing is a plain DD-MM-YYYY
@@ -14,16 +15,12 @@ import { maskDateInput, parseStrictDDMMYYYY, isoToDDMMYYYY, MIN_ISO_DATE, MAX_IS
 // cleared) — an invalid or incomplete edit is surfaced via `onInvalidChange` and never reaches
 // the caller's committed value, mirroring EodHistory's own commit-only-when-valid behavior.
 
+// OneHR field frame; tighter side padding so DD-MM-YYYY still fits the fixed 128px width.
 const BASE_STYLE: React.CSSProperties = {
-  padding: '7px 10px',
-  background: 'var(--shell)',
-  border: '1px solid var(--line2)',
-  borderRadius: 6,
-  color: 'var(--txt)',
+  ...fieldStyle,
+  padding: '0 10px',
   fontSize: 12,
-  outline: 'none',
   cursor: 'text',
-  fontFamily: 'Inter, sans-serif',
 };
 
 export interface StrictDateInputProps {

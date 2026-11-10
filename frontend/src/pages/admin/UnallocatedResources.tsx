@@ -1,10 +1,14 @@
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw, Users } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Users, CheckCircle2 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { PageHeader } from '../../components/PageHeader';
+import { tableThStyle, tableTdStyle, tableCardStyle } from '../../lib/tableStyles';
 import { formatDate, toLocalISODate, todayISO } from '../../lib/date';
 import { getExecutiveDashboard } from '../../api/executive';
+import { btnSecondary, viewAllLinkStyle } from '../../lib/uiStyles';
+import { EmptyState } from '../../components/EmptyState';
 
 function firstOfMonthISO(): string {
   const now = new Date();
@@ -32,14 +36,17 @@ export default function UnallocatedResources() {
 
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-          Unallocated Resources
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-          Active employees with no active project allocation, {formatDate(from)} – {formatDate(to)}.
-        </p>
-      </div>
+      <button
+        onClick={() => navigate('/admin/executive-dashboard')}
+        style={{ ...viewAllLinkStyle, gap: 6, marginBottom: 16, fontSize: 13 }}
+      >
+        <ArrowLeft size={14} aria-hidden="true" /> Back to Executive Dashboard
+      </button>
+
+      <PageHeader
+        title="Unallocated Resources"
+        subtitle={<>Active employees with no active project allocation, {formatDate(from)} – {formatDate(to)}.</>}
+      />
 
       {isPending && <GlobalLoader fullScreen={false} />}
 
@@ -48,7 +55,8 @@ export default function UnallocatedResources() {
           <div style={{ color: 'var(--risk)', fontSize: 13, marginBottom: 12 }}>Failed to load unallocated resources.</div>
           <button
             onClick={() => refetch()}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 13, cursor: 'pointer' }}
+            className="nf-btn nf-btn--secondary"
+            style={btnSecondary}
           >
             <RefreshCw size={14} aria-hidden="true" /> Retry
           </button>
@@ -58,7 +66,7 @@ export default function UnallocatedResources() {
       {data && (() => {
         const unallocated = data.allocation.unallocatedResources ?? [];
         return (
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
+        <Card style={{ ...tableCardStyle, padding: 0 }}>
           <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <Users size={14} color="var(--txt-mut)" aria-hidden="true" />
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
@@ -66,28 +74,28 @@ export default function UnallocatedResources() {
             </div>
           </div>
           {unallocated.length === 0 ? (
-            <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: 13 }}>
-              Every active employee has an active project allocation in this range.
+            <div style={{ padding: 16 }}>
+              <EmptyState icon={CheckCircle2} tone="var(--ok)" title="Every active employee has an active project allocation in this range." />
             </div>
           ) : (
             <div style={{ overflow: 'auto', maxHeight: 560 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <table className="nf-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                    {['Employee Name', 'Employee ID', 'Role'].map(h => (
+                    {['Employee', 'Employee Code', 'Role'].map(h => (
                       <th key={h} style={{
-                        textAlign: 'left', padding: '8px 20px', color: 'var(--txt-dim)', fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em',
-                        position: 'sticky', top: 0, zIndex: 1, background: 'var(--panel)',
+                        ...tableThStyle,
+                        position: 'sticky', top: 0, zIndex: 1,
                       }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {unallocated.map(r => (
-                    <tr key={r.employeeId} style={{ borderBottom: '1px solid var(--line)' }}>
-                      <td style={{ padding: '10px 20px', color: 'var(--txt)', fontWeight: 500 }}>{r.employeeName}</td>
-                      <td style={{ padding: '10px 20px', color: 'var(--txt-mut)' }}>{r.employeeCode}</td>
-                      <td style={{ padding: '10px 20px', color: 'var(--txt-mut)' }}>{ROLE_LABEL[r.role] ?? r.role}</td>
+                    <tr key={r.employeeId}>
+                      <td style={{ ...tableTdStyle, color: 'var(--txt)', fontWeight: 500 }}>{r.employeeName}</td>
+                      <td style={{ ...tableTdStyle, color: 'var(--txt-mut)' }}>{r.employeeCode}</td>
+                      <td style={{ ...tableTdStyle, color: 'var(--txt-mut)' }}>{ROLE_LABEL[r.role] ?? r.role}</td>
                     </tr>
                   ))}
                 </tbody>
