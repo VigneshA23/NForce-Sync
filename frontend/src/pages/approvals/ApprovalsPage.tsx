@@ -38,13 +38,9 @@ import { useToast } from '../../lib/toast';
 import { Card, Chip, extractError, initials } from './shared';
 import { EodReviewModal } from '../../components/EodReviewModal';
 import { LogLinesTable, TaskLinesTable } from '../../components/EodLinesTables';
+import { dayTypeLabel, fmtDate, fmtHours, fmtInactivity, fmtRelative, totalHours } from '../../lib/eodFormat';
 import {
-  dayTypeLabel, fmtDate, fmtHours, fmtInactivity, fmtRelative, totalHours,
-} from '../../lib/eodFormat';
-import {
-  btnPrimary, btnSecondary, btnNeutral, btnDanger, btnSuccess, btnSm,
-  textareaStyle, selectStyle,
-  tabBarStyle, tabStyle, tabCountStyle,
+  btnPrimary, btnSecondary, btnNeutral, btnSm, selectStyle, tabBarStyle, tabStyle, tabCountStyle,
 } from '../../lib/uiStyles';
 
 // ── PieceCard ─────────────────────────────────────────────────────────────────

@@ -88,7 +88,9 @@ export function KpiCard({ icon, label, value, accent = 'var(--txt)', trend, load
   const edge = accent === 'var(--txt)' ? 'var(--brand)' : accent;
   return (
     <div
-
+      title={title}
+      aria-busy={loading || undefined}
+      className="nf-kpi-tile"
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{

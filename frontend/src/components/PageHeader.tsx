@@ -1,4 +1,3 @@
-import { useLocation } from 'react-router-dom';
 import { LayoutDashboard } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/auth';
@@ -13,6 +12,16 @@ import { getNavItem, navPathFor } from '../lib/nav';
  * breadcrumb uses), so the header and the sidebar entry can never disagree. Pass one explicitly
  * for pages that aren't in the nav (detail routes, settings pages).
  */
+/** The signed-in user, or undefined when rendered outside an AuthProvider. useAuth reads its context
+ *  before it throws, so the hook order is the same either way. */
+function useSignedInUser() {
+  try {
+    return useAuth().user;
+  } catch {
+    return undefined;
+  }
+}
+
 export function PageHeader({ title, subtitle, meta, icon, actions, style }: {
   title: React.ReactNode;
   subtitle?: React.ReactNode;
@@ -22,8 +31,11 @@ export function PageHeader({ title, subtitle, meta, icon, actions, style }: {
   actions?: React.ReactNode;
   style?: React.CSSProperties;
 }) {
-  const { user } = useAuth();
-  const { pathname } = useLocation();
+  // Optional on purpose: the header is presentational, and pages are also rendered on their own (unit
+  // tests) without the auth/router providers. Pages remount on navigation, so reading the path
+  // directly stays in step with the route.
+  const user = useSignedInUser();
+  const pathname = window.location.pathname;
   const navIcon = user ? getNavItem(user.role, navPathFor(pathname), user.capabilities)?.item.icon : undefined;
   const Icon = icon ?? navIcon ?? LayoutDashboard;
 

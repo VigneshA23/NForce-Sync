@@ -16,10 +16,7 @@ import {
 import { ClarificationChatPopup } from '../components/ClarificationChatPopup';
 import { ReviewButton } from '../components/ReviewButton';
 import { EodReviewModal } from '../components/EodReviewModal';
-import { DropdownMenu, type DropdownMenuItem } from '../components/DropdownMenu';
-import { ConfirmModal } from '../components/ConfirmModal';
 import { PageHeader } from '../components/PageHeader';
-import { useAuth } from '../lib/auth';
 import {
   CLARIFICATION_BLOCKS_DECISION_REASON, isPieceClarified,
 } from '../lib/clarificationGate';
@@ -41,10 +38,6 @@ import { EmptyState } from '../components/EmptyState';
 import { Pagination } from '../components/Pagination';
 import { DateRangeSelector, type QuickRangeMode } from '../components/DateRangeSelector';
 import { LineStatusBadge } from '../components/taskStatus/LineStatusBadge';
-import {
-  btnPrimary, btnNeutral, btnDanger, btnSecondary, btnSm, textareaStyle, selectStyle,
-  tabBarStyle, tabStyle, tabCountStyle,
-} from '../lib/uiStyles';
 
 // Pending-tab equivalents of entryProjects/entryCategories — a pending ApprovalPieceDto has no
 // `.tasks` array, so its projects/categories live in taskLines (PROJECT_GROUPED) or logLines
@@ -61,6 +54,10 @@ function pieceCategories(p: ApprovalPieceDto): string[] {
   }
   return [...new Set(p.logLines.map(l => l.categoryName).filter((c): c is string => !!c))];
 }
+import {
+  btnNeutral, btnSecondary, btnSm, selectStyle, tabBarStyle, tabStyle, tabCountStyle,
+} from '../lib/uiStyles';
+
 // Matches the PM Approvals page's helper of the same name, so the two screens describe the same
 // stretch of inactivity identically.
 function formatInactivity(hoursSince: number | null | undefined): string {
@@ -214,13 +211,7 @@ function EntryRow({
             this explicit Review button (not a whole-card click, which risked opening the modal
             on an accidental tap anywhere in the row). */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-          <button
-            onClick={onOpenDetails}
-            className="nf-btn nf-btn--primary"
-            style={{ ...btnPrimary, ...btnSm }}
-          >
-            Review
-          </button>
+          <ReviewButton onClick={onOpenDetails} />
           <button
             onClick={onToggleExpand}
             title="View audit trail"
@@ -437,39 +428,6 @@ function PieceCard({ piece, clarificationOpen, onOpenChat }: {
         onOpenChat={onOpenChat}
         clarificationReadOnly={false}
       />
-      {/* Expanded area — rejection form in same zone as EntryRow's AuditTrail */}
-      {expanded && rejecting && (
-        <div style={{ borderTop: '1px solid var(--line)', padding: '12px 16px', background: 'var(--raised)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)' }}>
-            Rejection reason <span style={{ color: 'var(--risk)' }}>*</span>
-          </div>
-          <textarea
-            rows={3}
-            placeholder="Explain why this piece is being rejected…"
-            value={comment}
-            onChange={e => setComment(e.target.value)}
-            style={textareaStyle}
-          />
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button
-              onClick={() => { setRejecting(false); setComment(''); }}
-              className="nf-btn nf-btn--neutral"
-              style={{ ...btnNeutral, ...btnSm }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleReject}
-              disabled={!comment.trim() || busy || blocked}
-              title={blockedReason}
-              className="nf-btn nf-btn--danger"
-              style={{ ...btnDanger, ...btnSm }}
-            >
-              Confirm Reject
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
