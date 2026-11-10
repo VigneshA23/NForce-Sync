@@ -11,6 +11,7 @@ import {
   type EodInboxFilter, type EodInboxFilterGroup, type EodInboxRowView, type EodInboxSort,
 } from '../lib/eodInboxFilter';
 import { formatDate as fmtDate } from '../lib/date';
+import { btnNeutral, chipStyle, statusPillStyle } from '../lib/uiStyles';
 
 // Shared card-list building blocks for the EOD Inbox redesign — used identically by all three
 // role variants (pages/lead/EodInbox.tsx, pages/employee/EodInbox.tsx, pages/pm/EodInbox.tsx),
@@ -35,14 +36,11 @@ export function EodInboxStatusPills({ filter, onFilterChange, counts }: {
             type="button"
             onClick={() => onFilterChange(f)}
             aria-pressed={active}
-            style={{
-              padding: '7px 14px', borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-              background: active ? color : 'transparent',
-              color: active ? '#fff' : color,
-              border: `1px solid ${active ? color : `color-mix(in srgb, ${color} 40%, transparent)`}`,
-              whiteSpace: 'nowrap',
-            }}
+            className="nf-chip"
+            style={chipStyle(active)}
           >
+            {/* Status colour kept as a dot so the chip still carries the filter's meaning. */}
+            <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
             {EOD_INBOX_FILTER_LABEL[f]} ({counts[f]})
           </button>
         );
@@ -83,14 +81,14 @@ export function EodInboxFilterToolbar({
         padding: '10px 12px', marginBottom: 14,
       }}
     >
-      <div style={{ flex: '0 1 220px', minWidth: 90, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 8, padding: '7px 10px' }}>
+      <div style={{ flex: '0 1 220px', minWidth: 90, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 9, height: 42, boxSizing: 'border-box', padding: '0 12px' }}>
         <Search size={13} style={{ color: 'var(--txt-dim)', flexShrink: 0 }} aria-hidden="true" />
         <input
           value={search}
           onChange={e => onSearchChange(e.target.value)}
           placeholder="Search by employee..."
           title="Search by employee"
-          style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--txt)', fontSize: 12.5, width: '100%', minWidth: 0 }}
+          style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--txt)', fontSize: 13, fontFamily: 'inherit', width: '100%', minWidth: 0 }}
         />
         {search && (
           <button onClick={() => onSearchChange('')} aria-label="Clear search" style={{ background: 'none', border: 'none', color: 'var(--txt-dim)', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
@@ -119,7 +117,8 @@ export function EodInboxFilterToolbar({
           <button
             onClick={clearAllFilters}
             title="Clear all filters"
-            style={{ background: 'none', border: '1px solid var(--line2)', borderRadius: 8, color: 'var(--brand-bright)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '7px 10px', whiteSpace: 'nowrap', flexShrink: 0 }}
+            className="nf-btn nf-btn--neutral"
+            style={{ ...btnNeutral, padding: '8px 12px', flexShrink: 0 }}
           >
             <span className="nf-fd-label">Clear all filters</span>
             <XIcon className="nf-fd-icon-only" size={13} aria-hidden="true" />

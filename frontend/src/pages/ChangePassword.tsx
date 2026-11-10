@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Eye, EyeOff, CheckCircle, Circle } from 'lucide-react';
+import { Lock, Eye, EyeOff, CheckCircle, Circle, KeyRound } from 'lucide-react';
 import { changePassword } from '../api/auth';
 import { useAuth, buildAuthUser } from '../lib/auth';
 import { useToast } from '../lib/toast';
+import { PageHeader } from '../components/PageHeader';
+import { btnNeutral, btnPrimary, fieldLabelStyle, fieldStyle } from '../lib/uiStyles';
 
 const CRITERIA = [
   { label: 'Uppercase letter',    test: (p: string) => /[A-Z]/.test(p) },
@@ -30,7 +32,7 @@ function PasswordInput({ id, label, value, onChange, autoComplete }: {
   const [show, setShow] = useState(false);
   return (
     <div>
-      <label htmlFor={id} style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--txt-mut)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>
+      <label htmlFor={id} style={fieldLabelStyle}>
         {label}
       </label>
       <div style={{ position: 'relative' }}>
@@ -40,13 +42,7 @@ function PasswordInput({ id, label, value, onChange, autoComplete }: {
           value={value}
           onChange={e => onChange(e.target.value)}
           autoComplete={autoComplete}
-          style={{
-            width: '100%', boxSizing: 'border-box',
-            background: 'var(--raised)', border: '1px solid var(--line2)',
-            borderRadius: 6, padding: '9px 38px 9px 10px',
-            fontSize: 13, color: 'var(--txt)', outline: 'none',
-            fontFamily: 'Inter, sans-serif',
-          }}
+          style={{ ...fieldStyle, paddingRight: 38 }}
         />
         <button
           type="button"
@@ -103,10 +99,12 @@ export default function ChangePassword() {
     <div style={{ maxWidth: 480 }}>
 
       {/* Page header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, marginBottom: 4, fontSize: 20, fontWeight: 700, color: 'var(--txt)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif' }}>Change Password</h1>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--txt-mut)' }}>Update your account password. You will remain signed in.</p>
-      </div>
+      <PageHeader
+        icon={KeyRound}
+        title="Change Password"
+        subtitle="Update your account password. You will remain signed in."
+        style={{ marginBottom: 24 }}
+      />
 
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: '24px' }}>
 
@@ -165,7 +163,8 @@ export default function ChangePassword() {
             <button
               type="submit"
               disabled={loading}
-              style={{ flex: 1, padding: '9px 16px', background: loading ? 'var(--brand)' : 'var(--brand)', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? .7 : 1 }}
+              className="nf-btn nf-btn--primary"
+              style={{ ...btnPrimary, flex: 1 }}
             >
               {loading ? 'Updating…' : 'Update Password'}
             </button>
@@ -173,7 +172,8 @@ export default function ChangePassword() {
               type="button"
               onClick={() => navigate('/profile')}
               disabled={loading}
-              style={{ padding: '9px 16px', background: 'var(--raised)', border: '1px solid var(--line2)', borderRadius: 7, fontSize: 13, color: 'var(--txt-mut)', cursor: 'pointer' }}
+              className="nf-btn nf-btn--neutral"
+              style={btnNeutral}
             >
               Cancel
             </button>

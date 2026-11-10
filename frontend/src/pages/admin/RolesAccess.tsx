@@ -3,8 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Check, Minus, ShieldCheck, Monitor } from 'lucide-react';
 import { listRoles } from '../../api/admin';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { PageHeader } from '../../components/PageHeader';
+import { tableThStyle, tableTdStyle } from '../../lib/tableStyles';
 import { toRole } from '../../api/auth';
 import { ROLE_COLORS, ROLE_LABELS } from '../../lib/nav';
+import { btnSecondary, btnSm, statusPillStyle } from '../../lib/uiStyles';
 
 // ── Data derived from grep -rn "@PreAuthorize" backend/src ────────────────────
 //
@@ -124,19 +127,10 @@ export default function RolesAccess() {
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{
-          fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-          fontSize: 24, fontWeight: 700,
-          color: 'var(--txt)', margin: '0 0 4px',
-          letterSpacing: '-0.01em',
-        }}>
-          Roles &amp; Access
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--txt-mut)', margin: 0 }}>
-          What each role can do. Permissions are defined in code and cannot be changed from this screen.
-        </p>
-      </div>
+      <PageHeader
+        title="Roles & Access"
+        subtitle="What each role can do. Permissions are defined in code and cannot be changed from this screen."
+      />
 
       {/* Legend */}
       <div style={{
@@ -165,7 +159,7 @@ export default function RolesAccess() {
       {isError && (
         <div style={{ padding: '32px 20px', textAlign: 'center', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10 }}>
           <div style={{ fontSize: 13, color: 'var(--risk)', marginBottom: 12 }}>Failed to load roles.</div>
-          <button onClick={() => refetch()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 12, cursor: 'pointer' }}>
+          <button onClick={() => refetch()} className="nf-btn nf-btn--secondary" style={{ ...btnSecondary, ...btnSm }}>
             <RefreshCw size={13} /> Retry
           </button>
         </div>
@@ -187,11 +181,11 @@ export default function RolesAccess() {
                 maxHeight: tableMaxHeight != null ? tableMaxHeight : 'calc(100vh - var(--nf-table-chrome))',
               }}
             >
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 740 }}>
+              <table className="nf-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: 740 }}>
                 <thead>
                   <tr style={{ background: 'var(--raised)', borderBottom: '2px solid var(--line)' }}>
                     <th style={thLeft}>Permission / Route</th>
-                    <th style={{ ...thLeft, width: 180, color: 'var(--txt-dim)', fontSize: 10 }}>Endpoint / Path</th>
+                    <th style={{ ...thLeft, width: 180 }}>Endpoint / Path</th>
                     {ROLE_ORDER.map((key) => {
                       const color = roleMeta[key]?.color ?? 'var(--txt-dim)';
                       const label = roleMeta[key]?.label ?? key;
@@ -222,16 +216,11 @@ export default function RolesAccess() {
                         </td>
                       </tr>
                       {group.rows.map((row, ri) => (
-                        <tr
-                          key={`r-${gi}-${ri}`}
-                          style={{ borderBottom: '1px solid var(--line)' }}
-                          onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--raised2)'; }}
-                          onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = ''; }}
-                        >
-                          <td style={{ padding: '10px 16px', fontSize: 12, color: 'var(--txt-mut)', whiteSpace: 'nowrap' }}>
+                        <tr key={`r-${gi}-${ri}`}>
+                          <td style={{ ...tableTdStyle, whiteSpace: 'nowrap' }}>
                             {row.label}
                           </td>
-                          <td style={{ padding: '10px 16px' }}>
+                          <td style={tableTdStyle}>
                             <code style={{ fontSize: 10, color: 'var(--txt-dim)' }}>
                               {row.endpoint}
                             </code>
@@ -240,7 +229,7 @@ export default function RolesAccess() {
                             const granted = row.roles.includes(roleKey);
                             const color   = roleMeta[roleKey]?.color ?? 'var(--txt-dim)';
                             return (
-                              <td key={roleKey} style={{ padding: '10px 6px', textAlign: 'center' }}>
+                              <td key={roleKey} style={{ ...tableTdStyle, padding: '14px 6px', textAlign: 'center' }}>
                                 {granted ? (
                                   <span style={{
                                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -256,26 +245,14 @@ export default function RolesAccess() {
                               </td>
                             );
                           })}
-                          <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                          <td style={{ ...tableTdStyle, padding: '14px 6px', textAlign: 'center' }}>
                             {row.tier === 'api' ? (
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 4,
-                                fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
-                                padding: '2px 6px', borderRadius: 4,
-                                background: 'rgba(47,182,124,.12)', color: 'var(--ok)',
-                                border: '1px solid rgba(47,182,124,.25)',
-                              }}>
-                                <ShieldCheck size={9} /> API
+                              <span style={statusPillStyle('var(--ok)')}>
+                                <ShieldCheck size={11} /> API
                               </span>
                             ) : (
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 4,
-                                fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
-                                padding: '2px 6px', borderRadius: 4,
-                                background: 'rgba(76,141,214,.12)', color: 'var(--info)',
-                                border: '1px solid rgba(76,141,214,.25)',
-                              }}>
-                                <Monitor size={9} /> UI
+                              <span style={statusPillStyle('var(--info)')}>
+                                <Monitor size={11} /> UI
                               </span>
                             )}
                           </td>
@@ -327,7 +304,7 @@ export default function RolesAccess() {
                       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--txt)', marginBottom: 2 }}>
                         {role.displayName}
                         {role.isReadOnly && (
-                          <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 4, background: 'rgba(224,169,59,.12)', border: '1px solid rgba(224,169,59,.3)', color: 'var(--warn)' }}>
+                          <span style={{ ...statusPillStyle('var(--warn)'), marginLeft: 6 }}>
                             VIEW ONLY
                           </span>
                         )}
@@ -350,11 +327,9 @@ export default function RolesAccess() {
 // it. Needs its own opaque background (not just the parent <tr>'s) so scrolled-under rows
 // don't show through once the header detaches into its stuck position.
 const thLeft: React.CSSProperties = {
-  padding: '10px 16px', fontSize: 10, fontWeight: 700,
-  color: 'var(--txt-dim)', textAlign: 'left',
-  letterSpacing: '0.06em', textTransform: 'uppercase',
-  whiteSpace: 'nowrap', minWidth: 160,
-  position: 'sticky', top: 0, zIndex: 1, background: 'var(--raised)',
+  ...tableThStyle,
+  minWidth: 160,
+  position: 'sticky', top: 0, zIndex: 1,
 };
 
 const thCenter: React.CSSProperties = {

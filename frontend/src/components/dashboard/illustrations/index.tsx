@@ -1,8 +1,10 @@
-import { Component, useId, useState } from 'react';
+import { Component, useEffect, useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { resolveIllustrationKey } from '../../../lib/illustration';
+import { ACCENT_SWATCHES, useAccentColor, type AccentColor } from '../../../lib/accentColor';
+import { recoloredImageUrl } from './recolorArt';
 import femalePhoto from '../../../assets/hero-illustration-female.png';
-import malePhoto from '../../../assets/hero-illustration-male.png';
+import oneHrMaleArt from '../../../assets/hero-person-male-onehr.png';
 
 /** A soft-edged ellipse, in fractions (0–1) of the photo's own box — used to carve a
  *  "leave this alone" hole out of the accent-color tint (see `IllustrationPhoto`). Found by
@@ -132,13 +134,56 @@ function IllustrationPhoto({ src, alt, zones }: { src: string; alt: string; zone
  * Neutral has no illustration at all — the slot is simply left empty rather than shown with a
  * placeholder figure.
  */
+/** NForce OneHR's own hero artwork (person at an NF laptop on a red backdrop), used as-is for
+ *  parity with OneHR's dashboard. It is a full-bleed banner image, so it is right-anchored and
+ *  cropped by `cover`, with the left edge faded out so it melts into the hero's dark base and the
+ *  greeting text never sits on a hard image edge.
+ *
+ *  The art is drawn in OneHR red; for any other accent preference its red parts are re-tinted to
+ *  that accent (recolorArt.ts) so the banner follows the user's colour choice. Until the tinted
+ *  copy is ready the image stays transparent rather than flashing red. */
+function OneHrHeroArt({ src }: { src: string }) {
+  const { accent } = useAccentColor();
+  const [failed, setFailed] = useState(false);
+  const [tinted, setTinted] = useState<{ accent: AccentColor; url: string } | null>(null);
+
+  useEffect(() => {
+    if (accent === 'red') return;
+    let live = true;
+    recoloredImageUrl(src, ACCENT_SWATCHES[accent].brand)
+      .then(url => { if (live) setTinted({ accent, url }); })
+      .catch(() => { /* recolor unavailable — the original art still shows */ });
+    return () => { live = false; };
+  }, [src, accent]);
+
+  if (failed) return null;
+  const ready = accent === 'red' || tinted?.accent === accent;
+  const shownSrc = accent !== 'red' && tinted?.accent === accent ? tinted.url : src;
+  return (
+    <img
+      src={shownSrc}
+      alt=""
+      draggable={false}
+      onError={() => setFailed(true)}
+      style={{
+        display: 'block', width: '100%', height: '100%',
+        opacity: ready ? 1 : 0, transition: 'opacity .25s ease',
+        objectFit: 'cover', objectPosition: 'right center',
+        maskImage: 'linear-gradient(90deg, transparent 0%, transparent 16%, rgba(0,0,0,.4) 40%, #000 56%)',
+        WebkitMaskImage: 'linear-gradient(90deg, transparent 0%, transparent 16%, rgba(0,0,0,.4) 40%, #000 56%)',
+        pointerEvents: 'none',
+      }}
+    />
+  );
+}
+
 export function HeroIllustration({ gender }: { gender: string | null | undefined }) {
   const key = resolveIllustrationKey(gender);
   if (key === 'neutral') return null;
   return (
     <IllustrationErrorBoundary>
       {key === 'female' ? <IllustrationPhoto src={femalePhoto} alt="" zones={SKIN_ZONES.female} />
-        : <IllustrationPhoto src={malePhoto} alt="" zones={SKIN_ZONES.male} />}
+        : <OneHrHeroArt src={oneHrMaleArt} />}
     </IllustrationErrorBoundary>
   );
 }

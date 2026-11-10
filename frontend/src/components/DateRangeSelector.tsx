@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Calendar, ChevronDown, Loader2 } from 'lucide-react';
+import { btnPrimary, btnSm, chipStyle, fieldStyle } from '../lib/uiStyles';
 
 // ── Shared "date range" toolbar control ──────────────────────────────────────
 // Extracted from pages/lead/TeamDashboard.tsx's date filter (Today / Yesterday quick-select +
@@ -54,10 +55,8 @@ export function DateRangeSelector({
       <button
         onClick={() => (open ? setOpen(false) : openPicker())}
         style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '9px 14px', fontSize: 12.5, fontWeight: 600,
-          color: 'var(--txt)', background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 8,
-          cursor: 'pointer', whiteSpace: 'nowrap',
+          ...fieldStyle, width: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8,
+          fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
         }}
       >
         <Calendar size={13} aria-hidden="true" />
@@ -72,29 +71,23 @@ export function DateRangeSelector({
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
           <div className="nf-r-popover" style={{
             position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 20, minWidth: 260,
-            background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, padding: 14,
-            boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
+            background: 'var(--panel)', border: '1px solid var(--line2)', borderRadius: 12, padding: 14,
+            boxShadow: '0 16px 40px rgba(0,0,0,.35)',
           }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
               <button
                 onClick={() => selectQuick('today')}
-                style={{
-                  flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                  background: mode === 'today' ? 'var(--info)' : 'var(--raised2)',
-                  color: mode === 'today' ? '#fff' : 'var(--txt)',
-                  border: '1px solid var(--line2)',
-                }}
+                aria-pressed={mode === 'today'}
+                className="nf-chip"
+                style={{ ...chipStyle(mode === 'today'), flex: 1, justifyContent: 'center', padding: '7px 0' }}
               >
                 Today
               </button>
               <button
                 onClick={() => selectQuick('yesterday')}
-                style={{
-                  flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer',
-                  background: mode === 'yesterday' ? 'var(--info)' : 'var(--raised2)',
-                  color: mode === 'yesterday' ? '#fff' : 'var(--txt)',
-                  border: '1px solid var(--line2)',
-                }}
+                aria-pressed={mode === 'yesterday'}
+                className="nf-chip"
+                style={{ ...chipStyle(mode === 'yesterday'), flex: 1, justifyContent: 'center', padding: '7px 0' }}
               >
                 Yesterday
               </button>
@@ -109,7 +102,7 @@ export function DateRangeSelector({
                 <input
                   type="date" value={draftFrom} max={todayISO}
                   onChange={(e) => setDraftFrom(e.target.value)}
-                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
+                  style={{ ...fieldStyle, height: 34, minWidth: 0, padding: '0 8px', fontSize: 12 }}
                 />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -117,7 +110,7 @@ export function DateRangeSelector({
                 <input
                   type="date" value={draftTo} max={todayISO}
                   onChange={(e) => setDraftTo(e.target.value)}
-                  style={{ width: '100%', minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 6, background: 'var(--raised2)', border: '1px solid var(--line2)', color: 'var(--txt)', boxSizing: 'border-box' }}
+                  style={{ ...fieldStyle, height: 34, minWidth: 0, padding: '0 8px', fontSize: 12 }}
                 />
               </div>
             </div>
@@ -129,11 +122,8 @@ export function DateRangeSelector({
             <button
               onClick={applyRange}
               disabled={rangeInvalid}
-              style={{
-                width: '100%', padding: '8px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
-                background: 'var(--brand)', border: '1px solid var(--brand)', color: '#fff',
-                cursor: rangeInvalid ? 'not-allowed' : 'pointer', opacity: rangeInvalid ? 0.6 : 1,
-              }}
+              className="nf-btn nf-btn--primary"
+              style={{ ...btnPrimary, ...btnSm, width: '100%' }}
             >
               Apply
             </button>

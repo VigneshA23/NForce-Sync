@@ -4,6 +4,10 @@ import type { ApprovalPieceDto } from '../../api/approvalPieces';
 import { formatDate } from '../../lib/date';
 import { timeAdjustmentLabel } from './shared';
 import { LineStatusBadge } from '../../components/taskStatus/LineStatusBadge';
+import {
+  btnSuccess, btnNeutral, btnDanger, btnSm,
+  textareaStyle, statusPillStyle,
+} from '../../lib/uiStyles';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -65,11 +69,6 @@ export function PieceCard({ piece, mode, onApprove, onReject, busy = false }: Pi
     ? 'linear-gradient(90deg, color-mix(in srgb, var(--warn) 7%, transparent), transparent 45%)'
     : undefined;
 
-  const decidedChipStyle: React.CSSProperties = {
-    display: 'inline-block',
-    fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
-  };
-
   return (
     <div style={{ borderBottom: '1px solid var(--line)', background: rowBg }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 16px' }}>
@@ -100,24 +99,18 @@ export function PieceCard({ piece, mode, onApprove, onReject, busy = false }: Pi
             </span>
             {isEscalated && (
               <span title={piece.approverName ? `${piece.approverName} hasn't acted within SLA` : 'Escalated to you'}>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
-                  background: 'color-mix(in srgb, var(--warn) 14%, transparent)',
-                  border: '1px solid color-mix(in srgb, var(--warn) 30%, transparent)',
-                  color: 'var(--warn)',
-                }}>
+                <span style={statusPillStyle('var(--warn)')}>
                   <AlertTriangle size={10} aria-hidden="true" /> Escalated
                 </span>
               </span>
             )}
             {mode === 'decided' && (
               piece.status === 'APPROVED' ? (
-                <span style={{ ...decidedChipStyle, background: 'color-mix(in srgb, var(--ok) 12%, transparent)', color: 'var(--ok)', border: '1px solid color-mix(in srgb, var(--ok) 25%, transparent)' }}>
+                <span style={statusPillStyle('var(--ok)')}>
                   Approved
                 </span>
               ) : (
-                <span style={{ ...decidedChipStyle, background: 'color-mix(in srgb, var(--risk) 10%, transparent)', color: 'var(--risk)', border: '1px solid color-mix(in srgb, var(--risk) 25%, transparent)' }}>
+                <span style={statusPillStyle('var(--risk)')}>
                   Rejected
                 </span>
               )
@@ -164,28 +157,16 @@ export function PieceCard({ piece, mode, onApprove, onReject, busy = false }: Pi
               <button
                 onClick={handleApprove}
                 disabled={busy}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
-                  padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                  border: '1px solid rgba(47,182,124,.4)', background: 'rgba(47,182,124,.08)',
-                  color: 'var(--ok)', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, outline: 'none',
-                }}
-                onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px var(--ok)'; }}
-                onBlur={e => { e.currentTarget.style.boxShadow = 'none'; }}
+                className="nf-btn nf-btn--success"
+                style={{ ...btnSuccess, ...btnSm }}
               >
                 Approve
               </button>
               <button
                 onClick={() => { setRejecting(true); setExpanded(true); }}
                 disabled={busy}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
-                  padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                  border: '1px solid rgba(228,55,61,.3)', background: 'rgba(228,55,61,.06)',
-                  color: 'var(--risk)', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, outline: 'none',
-                }}
-                onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px var(--risk)'; }}
-                onBlur={e => { e.currentTarget.style.boxShadow = 'none'; }}
+                className="nf-btn nf-btn--danger"
+                style={{ ...btnDanger, ...btnSm }}
               >
                 Reject
               </button>
@@ -224,39 +205,21 @@ export function PieceCard({ piece, mode, onApprove, onReject, busy = false }: Pi
             placeholder="Explain why this piece is being rejected…"
             value={comment}
             onChange={e => setComment(e.target.value)}
-            style={{
-              width: '100%', resize: 'vertical', padding: '8px 10px', boxSizing: 'border-box',
-              background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6,
-              color: 'var(--txt)', fontSize: 12.5, outline: 'none', fontFamily: 'inherit',
-            }}
-            onFocus={e => { e.currentTarget.style.borderColor = 'var(--brand)'; }}
-            onBlur={e => { e.currentTarget.style.borderColor = 'var(--line2)'; }}
+            style={textareaStyle}
           />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button
               onClick={() => { setRejecting(false); setComment(''); setExpanded(false); }}
-              style={{
-                padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 500,
-                border: '1px solid var(--line2)', background: 'none',
-                color: 'var(--txt-dim)', cursor: 'pointer', outline: 'none',
-              }}
+              className="nf-btn nf-btn--neutral"
+              style={{ ...btnNeutral, ...btnSm }}
             >
               Cancel
             </button>
             <button
               onClick={handleReject}
               disabled={!comment.trim() || busy}
-              style={{
-                padding: '6px 13px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                border: '1px solid rgba(228,55,61,.4)', background: 'rgba(228,55,61,.1)',
-                color: 'var(--risk)',
-                cursor: (!comment.trim() || busy) ? 'not-allowed' : 'pointer',
-                opacity: (!comment.trim() || busy) ? 0.5 : 1, outline: 'none',
-              }}
-              onFocus={e => {
-                if (comment.trim() && !busy) e.currentTarget.style.boxShadow = '0 0 0 2px var(--risk)';
-              }}
-              onBlur={e => { e.currentTarget.style.boxShadow = 'none'; }}
+              className="nf-btn nf-btn--danger"
+              style={{ ...btnDanger, ...btnSm }}
             >
               Confirm Reject
             </button>

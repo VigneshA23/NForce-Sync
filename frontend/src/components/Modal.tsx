@@ -97,6 +97,7 @@ export function Modal({ open, title, onClose, children, width = 440, height, foo
           {/* Panel */}
           <motion.div
             role="dialog"
+            className="nf-modal"
             aria-modal="true"
             aria-labelledby="modal-title"
             initial={{ opacity: 0, scale: reduced ? 1 : 0.96, y: reduced ? 0 : 8 }}
@@ -110,9 +111,9 @@ export function Modal({ open, title, onClose, children, width = 440, height, foo
               display: 'flex',
               flexDirection: 'column',
               background: 'var(--panel)',
-              border: '1px solid var(--line)',
-              borderRadius: 12,
-              boxShadow: '0 24px 60px rgba(0,0,0,.7)',
+              border: '1px solid var(--line2)',
+              borderRadius: 20,
+              boxShadow: '0 28px 70px rgba(0,0,0,.45)',
               overflow: 'hidden',
               pointerEvents: 'auto',
             }}
@@ -124,16 +125,18 @@ export function Modal({ open, title, onClose, children, width = 440, height, foo
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '16px 20px',
+                padding: '18px 22px',
                 borderBottom: '1px solid var(--line)',
+                background: 'linear-gradient(180deg, color-mix(in srgb, var(--brand) 4%, var(--panel)) 0%, var(--panel) 100%)',
               }}
             >
               <h2
                 id="modal-title"
                 style={{
                   fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-                  fontSize: 15,
-                  fontWeight: 600,
+                  fontSize: 16,
+                  fontWeight: 700,
+                  letterSpacing: '-0.01em',
                   color: 'var(--txt)',
                   margin: 0,
                 }}
@@ -148,21 +151,21 @@ export function Modal({ open, title, onClose, children, width = 440, height, foo
                   border: 'none',
                   cursor: 'pointer',
                   color: 'var(--txt-dim)',
-                  padding: 4,
+                  padding: 6,
                   display: 'flex',
                   alignItems: 'center',
-                  borderRadius: 4,
-                  transition: 'color 0.14s',
+                  borderRadius: 8,
+                  transition: 'color 0.14s, background-color 0.14s',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--txt)')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--txt-dim)')}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--txt)'; e.currentTarget.style.background = 'var(--raised)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--txt-dim)'; e.currentTarget.style.background = 'transparent'; }}
               >
                 <X size={16} aria-hidden="true" />
               </button>
             </div>
             {/* Body — scrolls internally so footer buttons stay reachable when content exceeds viewport height */}
             <div style={{
-              padding: '20px', flex: 1, minHeight: 0, overflowY: 'auto',
+              padding: '20px 22px', flex: 1, minHeight: 0, overflowY: 'auto',
               // Don't hand a wheel gesture off to an ancestor scroller once this
               // region hits its top/bottom edge.
               overscrollBehavior: 'contain',
@@ -170,10 +173,12 @@ export function Modal({ open, title, onClose, children, width = 440, height, foo
             {/* Footer — sticky, never scrolls or gets clipped */}
             {footer && (
               <div
+                className="nf-modal-footer"
                 style={{
                   flexShrink: 0,
-                  padding: '14px 20px',
+                  padding: '14px 22px 18px',
                   borderTop: '1px solid var(--line)',
+                  background: 'var(--panel)',
                   display: 'flex',
                   gap: 10,
                 }}

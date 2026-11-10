@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { StatusGlyph } from '../lib/statusCues';
+import { statusPillStyle } from '../lib/uiStyles';
 
 export interface StatusMeta { label: string; color: string; }
 
@@ -80,13 +81,7 @@ export function StatusDropdown<T extends string>({ status, options, meta, onChan
 export function StatusBadge<T extends string>({ status, meta }: { status: T; meta: Record<T, StatusMeta> }) {
   const { label, color } = meta[status];
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 20,
-      fontSize: 11, fontWeight: 700, color,
-      background: `color-mix(in srgb, ${color} 16%, transparent)`,
-      border: `1px solid color-mix(in srgb, ${color} 32%, transparent)`,
-      whiteSpace: 'nowrap',
-    }}>
+    <span style={statusPillStyle(color)}>
       <StatusGlyph color={color} size={11} />
       {label}
     </span>

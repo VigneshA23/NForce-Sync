@@ -9,6 +9,9 @@ import {
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { GlobalLoader } from '../../components/GlobalLoader';
+import { EmptyState } from '../../components/EmptyState';
+import { PageHeader } from '../../components/PageHeader';
+import { tableThStyle, tableTdStyle, tableCardStyle } from '../../lib/tableStyles';
 import { Avatar, avatarColor } from '../../components/BlockerThread';
 import { formatDate, formatTime12h } from '../../lib/date';
 import {
@@ -33,6 +36,10 @@ import { focusNextOnEnter } from '../../lib/formFocus';
 import { GENDER_OPTIONS } from '../../lib/illustration';
 import { inactiveNames, pickerItems, withInactiveSuffix } from '../../lib/masterOptions';
 import { useAssignableMaster } from '../../lib/useAssignableMaster';
+import {
+  btnPrimary, btnSecondary, btnNeutral, btnDanger, btnSm,
+  fieldStyle, selectStyle as sharedSelectStyle, fieldLabelStyle, statusPillStyle,
+} from '../../lib/uiStyles';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -120,22 +127,11 @@ function formatNameInput(value: string): string {
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
-const inputStyle: React.CSSProperties = {
-  width: '100%', background: 'var(--shell)', border: '1px solid var(--line2)',
-  borderRadius: 6, padding: '9px 12px', color: 'var(--txt)', fontSize: 13,
-  outline: 'none', fontFamily: 'Inter, sans-serif', boxSizing: 'border-box',
-};
-const inputFocusStyle: React.CSSProperties = {
-  ...inputStyle, borderColor: 'var(--brand-bright)',
-  boxShadow: '0 0 0 3px color-mix(in srgb, var(--brand-bright) 14%, transparent)',
-};
+// Field frame comes from the shared OneHR control styles; hover/focus ring is global CSS.
+const inputStyle: React.CSSProperties = { ...fieldStyle };
 // Employee ID's "NF-" prefix is rendered as a separate, absolutely-positioned label rather
-// than editable text in the input, so this reserves the same amount of left padding in both
-// its resting and focused state — using plain inputStyle/inputFocusStyle on focus/blur (as
-// every other field does) would reset padding-left back to 12px on blur, sliding typed
-// digits underneath the "NF-" label.
-const employeeIdInputStyle: React.CSSProperties = { ...inputStyle, padding: '9px 12px 9px 44px' };
-const employeeIdInputFocusStyle: React.CSSProperties = { ...inputFocusStyle, padding: '9px 12px 9px 44px' };
+// than editable text in the input, so this reserves left padding for it.
+const employeeIdInputStyle: React.CSSProperties = { ...inputStyle, paddingLeft: 44 };
 // The closed <select> box renders using the <select> element's OWN color (confirmed via
 // computed styles — it does not pick up the currently-selected <option>'s style), so the
 // muted placeholder look requires dimming the <select> itself while unselected. That color
@@ -144,15 +140,11 @@ const employeeIdInputFocusStyle: React.CSSProperties = { ...inputFocusStyle, pad
 // (realOptionStyle) to opt back out of the inherited dimming; only the placeholder
 // <option> is left to inherit (or duplicate) the dim color.
 function selectStyle(hasValue: boolean): React.CSSProperties {
-  return { ...inputStyle, cursor: 'pointer', color: hasValue ? 'var(--txt)' : 'var(--txt-dim)' };
+  return { ...sharedSelectStyle, color: hasValue ? 'var(--txt)' : 'var(--txt-dim)' };
 }
 const placeholderOptionStyle: React.CSSProperties = { color: 'var(--txt-dim)' };
 const realOptionStyle: React.CSSProperties = { color: 'var(--txt)' };
-const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: 11, fontWeight: 600,
-  color: 'var(--txt-mut)', marginBottom: 5,
-  textTransform: 'uppercase' as const, letterSpacing: '.06em',
-};
+const labelStyle: React.CSSProperties = fieldLabelStyle;
 const overlayStyle: React.CSSProperties = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)',
   display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500,
@@ -174,12 +166,7 @@ function RoleBadge({ backendRole }: { backendRole: string }) {
   const color = ROLE_COLORS[role] ?? '#6B7280';
   const label = ROLE_LABELS[role] ?? backendRole;
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      padding: '3px 8px', borderRadius: 20,
-      background: `${color}18`, border: `1px solid ${color}40`,
-      fontSize: 11, fontWeight: 500, color, whiteSpace: 'nowrap',
-    }}>
+    <span style={statusPillStyle(color)}>
       <span style={{ width: 5, height: 5, borderRadius: '50%', background: color, flexShrink: 0 }} />
       {label}
     </span>
@@ -189,13 +176,7 @@ function RoleBadge({ backendRole }: { backendRole: string }) {
 function StatusBadge({ status }: { status: string }) {
   const active = status === 'ACTIVE';
   return (
-    <span style={{
-      display: 'inline-block', padding: '3px 8px', borderRadius: 20,
-      fontSize: 11, fontWeight: 500,
-      background: active ? 'rgba(47,182,124,.12)' : 'rgba(107,114,128,.12)',
-      border: `1px solid ${active ? 'rgba(47,182,124,.3)' : 'rgba(107,114,128,.3)'}`,
-      color: active ? '#2FB67C' : '#9BA1AC',
-    }}>
+    <span style={statusPillStyle(active ? '#2FB67C' : '#9BA1AC')}>
       {active ? 'Active' : 'Inactive'}
     </span>
   );
@@ -484,6 +465,7 @@ function PlainSelect({
         aria-expanded={open}
         onClick={() => (open ? setOpen(false) : openList())}
         onKeyDown={onKeyDown}
+        className="nf-field"
         style={{
           ...inputStyle, cursor: 'pointer', textAlign: 'left', paddingRight: 32,
           color: currentLabel ? 'var(--txt)' : 'var(--txt-dim)',
@@ -798,7 +780,8 @@ function AddModal({
             </div>
             <button
               onClick={() => { onCreated(created.tempPassword); onClose(); }}
-              style={{ marginTop: 20, width: '100%', background: 'var(--brand)', color: '#fff', border: 'none', borderRadius: 7, padding: '10px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+              className="nf-btn nf-btn--primary"
+              style={{ ...btnPrimary, marginTop: 20, width: '100%' }}
             >
               Done
             </button>
@@ -828,8 +811,6 @@ function AddModal({
                 placeholder="Enter name"
                 onChange={e => set('fullName', formatNameInput(e.target.value))}
                 onKeyDown={focusNextOnEnter}
-                onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-                onBlur={e => Object.assign(e.target.style, inputStyle)}
               />
               <FieldError msg={errors.fullName} />
             </Field>
@@ -845,8 +826,7 @@ function AddModal({
                 placeholder="Enter email"
                 onChange={e => set('email', e.target.value.toLowerCase())}
                 onKeyDown={focusNextOnEnter}
-                onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-                onBlur={e => { Object.assign(e.target.style, inputStyle); set('email', form.email.trim().toLowerCase()); }}
+                onBlur={() => { set('email', form.email.trim().toLowerCase()); }}
               />
               <FieldError msg={errors.email} />
             </Field>
@@ -876,7 +856,7 @@ function AddModal({
               <span
                 aria-hidden="true"
                 style={{
-                  position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+                  position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
                   color: 'var(--txt)', fontSize: 13, fontFamily: 'Inter, sans-serif', pointerEvents: 'none',
                 }}
               >
@@ -889,8 +869,6 @@ function AddModal({
                 inputMode="numeric"
                 onChange={e => set('employeeCode', EMPLOYEE_ID_PREFIX + e.target.value.replace(/\D/g, '').slice(0, 8))}
                 onKeyDown={focusNextOnEnter}
-                onFocus={e => Object.assign(e.target.style, employeeIdInputFocusStyle)}
-                onBlur={e => Object.assign(e.target.style, employeeIdInputStyle)}
               />
             </div>
             <FieldError msg={errors.employeeCode} />
@@ -1047,14 +1025,16 @@ function AddModal({
             <button
               type="button"
               onClick={onClose}
-              style={{ background: 'transparent', color: 'var(--txt-mut)', border: '1px solid var(--line2)', borderRadius: 7, padding: '9px 18px', fontSize: 13, cursor: 'pointer' }}
+              className="nf-btn nf-btn--neutral"
+              style={btnNeutral}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={mutation.isPending}
-              style={{ background: 'var(--brand)', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 20px', fontSize: 13, fontWeight: 600, cursor: mutation.isPending ? 'not-allowed' : 'pointer', opacity: mutation.isPending ? 0.7 : 1 }}
+              className="nf-btn nf-btn--primary"
+              style={btnPrimary}
             >
               {mutation.isPending ? 'Creating…' : 'Create User'}
             </button>
@@ -1190,8 +1170,6 @@ function EditModal({
                 style={inputStyle}
                 value={form.fullName}
                 onChange={e => set('fullName', formatNameInput(e.target.value))}
-                onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
-                onBlur={e => Object.assign(e.target.style, inputStyle)}
                 autoFocus
               />
             </Field>
@@ -1303,14 +1281,16 @@ function EditModal({
             <button
               type="button"
               onClick={onClose}
-              style={{ background: 'transparent', color: 'var(--txt-mut)', border: '1px solid var(--line2)', borderRadius: 7, padding: '9px 18px', fontSize: 13, cursor: 'pointer' }}
+              className="nf-btn nf-btn--neutral"
+              style={btnNeutral}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={mutation.isPending}
-              style={{ background: 'var(--brand)', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 20px', fontSize: 13, fontWeight: 600, cursor: mutation.isPending ? 'not-allowed' : 'pointer', opacity: mutation.isPending ? 0.7 : 1 }}
+              className="nf-btn nf-btn--primary"
+              style={btnPrimary}
             >
               {mutation.isPending ? 'Saving…' : 'Save Changes'}
             </button>
@@ -1379,27 +1359,22 @@ function StatusModal({
               Reactivate <b style={{ color: 'var(--txt)' }}>{user.fullName}</b>? They will be able to log in again.
             </p>
           )}
-          <div style={{ display: 'flex', gap: 10 }}>
+          {/* OneHR dialog order: dismiss on the left, the action on the right. */}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button
+              onClick={onClose}
+              className="nf-btn nf-btn--neutral"
+              style={btnNeutral}
+            >
+              Cancel
+            </button>
             <button
               onClick={handleConfirm}
               disabled={mutation.isPending}
-              style={{
-                padding: '9px 20px',
-                background: isDeactivating ? 'rgba(228,55,61,.15)' : 'rgba(47,182,124,.15)',
-                border: `1px solid ${isDeactivating ? 'rgba(228,55,61,.4)' : 'rgba(47,182,124,.4)'}`,
-                borderRadius: 7,
-                color: isDeactivating ? '#E4373D' : '#2FB67C',
-                fontSize: 13, fontWeight: 600,
-                cursor: mutation.isPending ? 'not-allowed' : 'pointer',
-              }}
+              className={isDeactivating ? 'nf-btn nf-btn--danger' : 'nf-btn nf-btn--primary'}
+              style={isDeactivating ? btnDanger : btnPrimary}
             >
               {mutation.isPending ? 'Working…' : action}
-            </button>
-            <button
-              onClick={onClose}
-              style={{ padding: '9px 16px', background: 'transparent', border: '1px solid var(--line2)', borderRadius: 7, color: 'var(--txt-mut)', fontSize: 13, cursor: 'pointer' }}
-            >
-              Cancel
             </button>
           </div>
         </div>
@@ -1467,7 +1442,8 @@ function TempPasswordModal({
         <button
           type="button"
           onClick={onClose}
-          style={{ width: '100%', padding: '9px 0', background: 'var(--brand)', border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          className="nf-btn nf-btn--primary"
+          style={{ ...btnPrimary, width: '100%' }}
         >
           Done
         </button>
@@ -1522,17 +1498,19 @@ function ResetPasswordModal({
             They will be required to change it on next login.
           </p>
           {error && <ErrorBanner message={error} />}
-          <div style={{ display: 'flex', gap: 10 }}>
+          {/* OneHR dialog order: dismiss on the left, the action on the right. */}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={handleClose} className="nf-btn nf-btn--neutral" style={btnNeutral}>
+              Cancel
+            </button>
             <button
               type="button"
               onClick={() => { setError(null); mutation.mutate({ id: user.id }); }}
               disabled={mutation.isPending}
-              style={{ padding: '9px 20px', background: mutation.isPending ? 'var(--brand-deep)' : 'var(--brand)', border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 600, cursor: mutation.isPending ? 'not-allowed' : 'pointer' }}
+              className="nf-btn nf-btn--primary"
+              style={btnPrimary}
             >
               {mutation.isPending ? 'Resetting…' : 'Generate Temp Password'}
-            </button>
-            <button type="button" onClick={handleClose} style={{ padding: '9px 16px', background: 'transparent', border: '1px solid var(--line2)', borderRadius: 7, color: 'var(--txt-mut)', fontSize: 13, cursor: 'pointer' }}>
-              Cancel
             </button>
           </div>
         </div>
@@ -1613,20 +1591,14 @@ function DeleteModal({
           </p>
           {error && <div style={{ color: 'var(--risk)', marginBottom: 12, fontSize: 13 }}>{error}</div>}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            <button onClick={onClose} style={{ background: 'transparent', color: 'var(--txt-mut)', border: '1px solid var(--line2)', borderRadius: 7, padding: '9px 18px', fontSize: 13, cursor: 'pointer' }}>
+            <button onClick={onClose} className="nf-btn nf-btn--neutral" style={btnNeutral}>
               Cancel
             </button>
             <button
               onClick={handleConfirm}
               disabled={!match || mutation.isPending}
-              style={{
-                background: match ? '#C0392B' : 'var(--raised2)',
-                color: match ? '#fff' : 'var(--txt-dim)',
-                border: `1px solid ${match ? 'transparent' : 'var(--line2)'}`,
-                borderRadius: 7, padding: '9px 20px', fontSize: 13, fontWeight: 600,
-                cursor: !match || mutation.isPending ? 'not-allowed' : 'pointer',
-                opacity: mutation.isPending ? 0.7 : 1,
-              }}
+              className="nf-btn nf-btn--danger"
+              style={btnDanger}
             >
               {mutation.isPending ? 'Deleting…' : 'Delete Permanently'}
             </button>
@@ -1865,11 +1837,8 @@ function FilterPill({
                 onChange={e => setQ(e.target.value)}
                 placeholder={`Search ${(searchNoun ?? label).toLowerCase()}…`}
                 aria-label={`Search ${label}`}
-                style={{
-                  width: '100%', boxSizing: 'border-box', background: 'var(--shell)', border: '1px solid var(--line2)',
-                  borderRadius: 6, padding: '6px 8px', color: 'var(--txt)', fontSize: 12, outline: 'none',
-                  fontFamily: 'Inter, sans-serif',
-                }}
+                className="nf-field"
+                style={{ ...fieldStyle, height: 34, padding: '0 10px', fontSize: 12 }}
               />
             </div>
           )}
@@ -2147,14 +2116,10 @@ export default function UserManagement() {
   // that container's own bottom edge always sits near the top of the viewport, not
   // hundreds of pixels down past 56 rows.
   const thStyle: React.CSSProperties = {
-    padding: '10px 16px', fontSize: 11, fontWeight: 600, color: 'var(--txt-dim)',
-    textAlign: 'left', letterSpacing: '0.06em', textTransform: 'uppercase',
-    background: 'var(--raised)', borderBottom: '1px solid var(--line)', whiteSpace: 'nowrap',
+    ...tableThStyle,
     position: 'sticky', top: 0, zIndex: 2,
   };
-  const tdStyle: React.CSSProperties = {
-    padding: '12px 16px', verticalAlign: 'middle', borderBottom: '1px solid var(--line)',
-  };
+  const tdStyle: React.CSSProperties = tableTdStyle;
 
   // Helper: resolve department/designation name from id
   function deptName(id: number | null): string {
@@ -2173,38 +2138,33 @@ export default function UserManagement() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
-        <div>
-          <h1 style={{ fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', fontSize: 22, fontWeight: 700, color: 'var(--txt)', margin: 0, letterSpacing: '-0.01em' }}>
-            User Management
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--txt-mut)', marginTop: 4, margin: '4px 0 0' }}>
-            All users across all roles. Manage access, roles, and account status.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+      <PageHeader
+        title="User Management"
+        subtitle="All users across all roles. Manage access, roles, and account status."
+        style={{ marginBottom: 22 }}
+        actions={<>
           {filteredUsers && filteredUsers.length > 0 && (
             <button
               onClick={() => exportUsersCsv(filteredUsers, departments, locations, users ?? [])}
               title={`Export ${filteredUsers.length} user${filteredUsers.length !== 1 ? 's' : ''} to CSV`}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', color: 'var(--txt-mut)', border: '1px solid var(--line2)', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--txt-dim)'; e.currentTarget.style.color = 'var(--txt)'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line2)'; e.currentTarget.style.color = 'var(--txt-mut)'; }}
+              className="nf-btn nf-btn--secondary"
+              style={btnSecondary}
             >
               <Download size={13} aria-hidden="true" /> Export CSV
             </button>
           )}
           <button
             onClick={() => setShowAdd(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'var(--brand)', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            className="nf-btn nf-btn--primary"
+            style={btnPrimary}
           >
             <UserPlus size={14} /> Add User
           </button>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* Users Table */}
-      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
+      <div style={tableCardStyle}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--line)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--txt)' }}>
@@ -2223,11 +2183,7 @@ export default function UserManagement() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Filter this list…"
-                style={{
-                  width: '100%', boxSizing: 'border-box', background: 'var(--shell)', border: '1px solid var(--line2)',
-                  borderRadius: 6, padding: '7px 10px 7px 30px', color: 'var(--txt)', fontSize: 12, outline: 'none',
-                  fontFamily: 'Inter, sans-serif',
-                }}
+                style={{ ...fieldStyle, height: 34, padding: '0 10px 0 30px', fontSize: 12 }}
               />
             </div>
 
@@ -2263,7 +2219,7 @@ export default function UserManagement() {
         {isError && (
           <div style={{ padding: '40px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: 13, color: 'var(--risk)', marginBottom: 12 }}>Failed to load users.</div>
-            <button onClick={() => refetch()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 12, cursor: 'pointer' }}>
+            <button onClick={() => refetch()} className="nf-btn nf-btn--secondary" style={{ ...btnSecondary, ...btnSm }}>
               <RefreshCw size={13} aria-hidden="true" /> Retry
             </button>
           </div>
@@ -2288,7 +2244,7 @@ export default function UserManagement() {
               maxHeight: tableMaxHeight != null ? tableMaxHeight : 'calc(100vh - var(--nf-table-chrome))',
             }}
           >
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
+            <table className="nf-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
               <thead>
                 <tr>
                   <th style={thStyle}>
@@ -2320,22 +2276,27 @@ export default function UserManagement() {
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: '48px 20px', textAlign: 'center' }}>
+                    <td colSpan={8} style={{ padding: 16 }}>
                       {users && users.length === 0 ? (
-                        <>
-                          <div style={{ fontSize: 15, color: 'var(--txt-mut)', marginBottom: 8 }}>No users yet</div>
-                          <div style={{ fontSize: 13, color: 'var(--txt-dim)' }}>Click "Add User" to create the first account.</div>
-                        </>
+                        <EmptyState
+                          icon={UserPlus}
+                          title="No users yet"
+                          hint={'Click "Add User" to create the first account.'}
+                        />
                       ) : (
-                        <>
-                          <div style={{ fontSize: 15, color: 'var(--txt-mut)', marginBottom: 8 }}>No users match the selected filters</div>
-                          <button
-                            onClick={clearAllFilters}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--raised2)', border: '1px solid var(--line2)', borderRadius: 6, color: 'var(--txt)', fontSize: 12, cursor: 'pointer' }}
-                          >
-                            Clear filters
-                          </button>
-                        </>
+                        <EmptyState
+                          icon={Search}
+                          title="No users match the selected filters"
+                          action={
+                            <button
+                              onClick={clearAllFilters}
+                              className="nf-btn nf-btn--neutral"
+                              style={{ ...btnNeutral, ...btnSm }}
+                            >
+                              Clear filters
+                            </button>
+                          }
+                        />
                       )}
                     </td>
                   </tr>

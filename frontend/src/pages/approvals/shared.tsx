@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Check, X, Paperclip, MessageCircleQuestion } from 'lucide-react';
+import { Check, X, Paperclip, MessageCircleQuestion, ClipboardList } from 'lucide-react';
+import { EmptyState } from '../../components/EmptyState';
 import {
   useApprovalHistory, useApprove, useReject,
 } from '../../api/approvals';
@@ -15,6 +16,10 @@ import { useClarificationStatusForApprovals } from '../../api/eodClarification';
 import { useAuth } from '../../lib/auth';
 import { clarificationMenuState } from '../../lib/clarificationGate';
 import { extractError } from '../../lib/extractError';
+import {
+  btnPrimary, btnNeutral, btnDanger, btnSuccess, btnWarn, btnSm, textareaStyle, fieldLabelStyle, statusPillStyle,
+  viewAllLinkStyle,
+} from '../../lib/uiStyles';
 
 // Shared between the Team Lead's and the Project Manager's Approvals pages — the submission
 // detail modal is correctness-sensitive and must not fork between the two roles, so both pages
@@ -151,23 +156,22 @@ export function Btn({
   style?: React.CSSProperties;
   title?: string;
 }) {
-  const bg = { default: 'var(--raised2)', danger: 'var(--raised2)', warn: 'var(--raised2)', primary: 'var(--brand)', success: 'var(--ok)' }[variant];
-  const border = { default: 'var(--line2)', danger: 'rgba(228,55,61,.4)', warn: 'rgba(224,169,59,.4)', primary: 'var(--brand)', success: 'var(--ok)' }[variant];
-  const color = { default: 'var(--txt)', danger: 'var(--risk)', warn: 'var(--warn)', primary: '#fff', success: '#fff' }[variant];
+  // Approve keeps green and Request clarification keeps amber: in a review flow the colour is
+  // the decision's meaning, so they use the success/warn primitives rather than crimson primary.
+  const [cls, base] = ({
+    default: ['nf-btn nf-btn--neutral', btnNeutral],
+    danger: ['nf-btn nf-btn--danger', btnDanger],
+    warn: ['nf-btn nf-btn--warn', btnWarn],
+    primary: ['nf-btn nf-btn--primary', btnPrimary],
+    success: ['nf-btn nf-btn--success', btnSuccess],
+  } as Record<string, [string, React.CSSProperties]>)[variant];
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       title={title}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 500,
-        border: `1px solid ${border}`, background: bg, color,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-        transition: 'opacity 0.14s',
-        ...style,
-      }}
+      className={cls}
+      style={{ ...base, ...style }}
     >
       {children}
     </button>
@@ -182,11 +186,8 @@ export function Chip({ children, tone = 'neutral', dashed = false }: {
   const color = { neutral: 'var(--txt-dim)', warn: 'var(--warn)', info: 'var(--info)', ok: 'var(--ok)', risk: 'var(--risk)' }[tone];
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '2px 9px', borderRadius: 20, fontSize: 11, fontWeight: 600,
-      color,
-      background: dashed ? 'transparent' : `color-mix(in srgb, ${color} 14%, transparent)`,
-      border: dashed ? `1px dashed var(--line2)` : `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
+      ...statusPillStyle(color),
+      ...(dashed ? { background: 'transparent', border: '1px dashed var(--line2)', padding: '3px 10px' } : null),
     }}>
       {tone !== 'neutral' && <StatusGlyph tone={tone} size={11} />}
       {children}
@@ -248,18 +249,17 @@ export function ActionPanel({ type, entryId, onClose }: ActionPanelProps) {
           value={comment}
           onChange={e => setComment(e.target.value)}
           style={{
-            width: '100%', resize: 'vertical', padding: '8px 10px',
-            background: 'var(--panel)', border: `1px solid ${commentEmpty ? 'var(--risk)' : 'var(--line2)'}`,
-            borderRadius: 6, color: 'var(--txt)', fontSize: 12, fontFamily: '"Inter", sans-serif',
-            outline: 'none', boxSizing: 'border-box',
+            ...textareaStyle,
+            minHeight: 0,
+            border: `1px solid ${commentEmpty ? 'var(--risk)' : 'var(--line2)'}`,
           }}
         />
       )}
       <div style={{ display: 'flex', gap: 8 }}>
-        <Btn variant={type === 'approve' ? 'success' : type === 'reject' ? 'danger' : 'warn'} onClick={submit} disabled={busy || commentEmpty}>
+        <Btn variant={type === 'approve' ? 'success' : type === 'reject' ? 'danger' : 'warn'} onClick={submit} disabled={busy || commentEmpty} style={btnSm}>
           {busy ? 'Saving…' : type === 'approve' ? 'Confirm Approve' : type === 'reject' ? 'Confirm Reject' : 'Request Changes'}
         </Btn>
-        <Btn onClick={onClose}>Cancel</Btn>
+        <Btn onClick={onClose} style={btnSm}>Cancel</Btn>
       </div>
     </div>
   );
@@ -340,7 +340,7 @@ function EodAttachmentChips({ attachments }: { attachments: EodAttachmentDto[] }
         >
           <Paperclip size={11} aria-hidden="true" style={{ color: 'var(--txt-dim)', flexShrink: 0 }} />
           {a.fileName}
-          <span style={{ color: 'var(--info)' }}>Preview</span>
+          <span style={{ ...viewAllLinkStyle, fontSize: 11.5 }}>Preview</span>
         </button>
       ))}
     </div>
@@ -358,7 +358,7 @@ export function EodEntryBody({ entry }: { entry: EodEntryDto }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <FieldLabel>Tasks</FieldLabel>
       {entry.tasks.length === 0 && (entry.otherProjectsHours ?? 0) > 0 && (
-        <div style={{ fontSize: 12.5, color: 'var(--txt-dim)' }}>No tasks on your projects.</div>
+        <EmptyState icon={ClipboardList} title="No tasks on your projects." />
       )}
       {entry.tasks.map(t => (
         <div key={t.id} style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '12px 14px' }}>
@@ -465,7 +465,7 @@ export function SubmissionDetailModal({
       height={640}
       footer={entry && editable ? (
         rejecting ? (
-          <>
+          <div style={{ display: 'flex', gap: 10, marginLeft: 'auto' }}>
             <Btn onClick={() => { setRejecting(false); setReason(''); }} disabled={rejectBusy}>Cancel</Btn>
             <Btn
               variant="danger"
@@ -475,7 +475,7 @@ export function SubmissionDetailModal({
             >
               {rejectBusy ? 'Rejecting…' : <><X size={12} aria-hidden="true" /> Reject</>}
             </Btn>
-          </>
+          </div>
         ) : (
           // space-between: Reject+Approve grouped on the left, Request Clarification alone on
           // the right — same single row, just reordered/regrouped (Modal's own footer container
@@ -519,7 +519,7 @@ export function SubmissionDetailModal({
               work they are judging while writing why. */}
           {rejecting && editable && (
             <div>
-              <FieldLabel>Rejection reason *</FieldLabel>
+              <div style={fieldLabelStyle}>Rejection reason *</div>
               <textarea
                 rows={3}
                 autoFocus
@@ -527,10 +527,8 @@ export function SubmissionDetailModal({
                 onChange={e => setReason(e.target.value)}
                 placeholder="e.g. Missing task description for the overtime hours logged"
                 style={{
-                  width: '100%', resize: 'vertical', padding: 10, background: 'var(--raised2)',
+                  ...textareaStyle,
                   border: `1px solid ${reasonEmpty ? 'color-mix(in srgb, var(--risk) 45%, var(--line2))' : 'var(--line2)'}`,
-                  borderRadius: 8, color: 'var(--txt)', fontSize: 12.5, fontFamily: 'inherit',
-                  boxSizing: 'border-box',
                 }}
               />
               <div style={{ fontSize: 11, color: 'var(--txt-dim)', marginTop: 4 }}>
