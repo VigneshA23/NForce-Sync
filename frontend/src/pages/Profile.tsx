@@ -477,25 +477,25 @@ export default function Profile() {
             )}
           </div>
 
-          {/* Details — sit below the avatar, full width, with Edit/Save floated to the right. */}
-          <div className="nf-r-profile-details" style={{ paddingTop: 52, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--txt)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.fullName}</div>
-              {profile.designationName && (
-                <div style={{ fontSize: 13, color: 'var(--txt-mut)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.designationName}</div>
-              )}
-              <div style={{ fontSize: 12, color: 'var(--txt-mut)', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.email}</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <span style={statusPillStyle('var(--brand-bright)')}>
-                  {ROLE_LABELS[profile.role] ?? profile.role}
-                </span>
-                <span style={statusPillStyle(profile.active ? 'var(--ok)' : 'var(--txt-dim)')}>
-                  {profile.active ? 'Active' : 'Inactive'}
-                </span>
-                <span style={{ ...statusPillStyle('var(--txt-dim)'), fontWeight: 500 }}>
-                  {profile.employeeCode}
-                </span>
+          <div className="nf-r-profile-info" style={{ flex: '1 1 220px', minWidth: 0, paddingTop: 0 }}>
+            <div className="nf-r-profile-name" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.5, color: 'var(--txt)', fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif', marginBottom: 3, overflowWrap: 'anywhere' }}>{profile.fullName}</div>
+            {profile.designationName && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13.5, color: 'var(--txt-mut)', marginBottom: 3, minWidth: 0 }}>
+                <Briefcase size={14} aria-hidden style={{ flexShrink: 0 }} />
+                <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{profile.designationName}</span>
               </div>
+            )}
+            <div style={{ fontSize: 13, color: 'var(--txt-mut)', marginBottom: 8, overflowWrap: 'anywhere' }}>{profile.email}</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={statusPillStyle('var(--brand-bright)')}>
+                {ROLE_LABELS[profile.role] ?? profile.role}
+              </span>
+              <span style={statusPillStyle(profile.active ? 'var(--ok)' : 'var(--txt-dim)')}>
+                {profile.active ? 'Active' : 'Inactive'}
+              </span>
+              <span style={{ ...statusPillStyle('var(--txt-dim)'), fontWeight: 500 }}>
+                {profile.employeeCode}
+              </span>
             </div>
           </div>
 

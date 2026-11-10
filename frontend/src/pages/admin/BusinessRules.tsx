@@ -18,45 +18,16 @@ import { Pagination } from '../../components/Pagination';
 import { PageHeader } from '../../components/PageHeader';
 import { tableThStyle, tableTdStyle } from '../../lib/tableStyles';
 import { useToast } from '../../lib/toast';
-<<<<<<< HEAD
 import { FieldError, UnitField } from './businessRules/formParts';
 import {
-  inputStyle, labelStyle, primaryButtonStyle, secondaryButtonStyle,
+  inputStyle, labelStyle,
 } from './businessRules/formStyles';
 import { HolidayFormModal } from './businessRules/HolidayFormModal';
 import { ShiftFormModal } from './businessRules/ShiftFormModal';
 import { serverErrorsFor } from './businessRules/businessRulesValidation';
 import { cutoffLabel } from './businessRules/shiftTime';
-=======
-import { btnDanger, btnNeutral, btnPrimary, fieldLabelStyle, fieldStyle, statusPillStyle } from '../../lib/uiStyles';
+import { btnDanger, btnNeutral, btnPrimary, statusPillStyle } from '../../lib/uiStyles';
 import { EmptyState } from '../../components/EmptyState';
-
-// ── Shared styles (matches OrganizationMasters.tsx idiom) ──────────────────────
-
-// Single-line inputs only (text / number / date) — the shared OneHR field frame.
-const inputStyle: React.CSSProperties = { ...fieldStyle };
-
-const labelStyle: React.CSSProperties = fieldLabelStyle;
-
-function ErrorBanner({ message }: { message: string }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'flex-start', gap: 8,
-      padding: '10px 14px', borderRadius: 7, marginBottom: 14,
-      background: 'rgba(228,55,61,.10)', border: '1px solid rgba(228,55,61,.25)',
-      fontSize: 12, color: 'var(--risk)',
-    }} role="alert">
-      <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
-      {message}
-    </div>
-  );
-}
-
-function FieldError({ msg }: { msg?: string }) {
-  if (!msg) return null;
-  return <p style={{ fontSize: 11, color: 'var(--risk)', margin: '5px 0 0' }}>{msg}</p>;
-}
->>>>>>> 5cfaf10 (Apply OneHR styling to admin, approvals and account pages)
 
 // ── Card shell ───────────────────────────────────────────────────────────────
 
@@ -946,179 +917,6 @@ function HolidayTable({ data, isPending, isError, onEdit, onDelete, openMenuId, 
   );
 }
 
-<<<<<<< HEAD
-=======
-// ── Shift add/edit modal (uses Modal's sticky footer) ───────────────────────
-
-type ShiftModalState = { mode: 'create' } | { mode: 'edit'; shift: ShiftDefinitionDto } | null;
-
-interface ShiftFormModalProps {
-  state: ShiftModalState;
-  onClose: () => void;
-  onSubmit: (payload: { name: string; startTime: string; endTime: string; eodCutoffHours: number | null }) => void;
-  isPending: boolean;
-  error: string | null;
-  fieldErrors: Record<string, string>;
-}
-
-function ShiftFormModal({ state, onClose, onSubmit, isPending, error, fieldErrors }: ShiftFormModalProps) {
-  const nameId = useId();
-  const [name, setName] = useState('');
-  const [start, setStart] = useState('09:00');
-  const [end, setEnd] = useState('18:00');
-  const [cutoff, setCutoff] = useState('');
-
-  useEffect(() => {
-    if (state?.mode === 'edit') {
-      setName(state.shift.name);
-      setStart(toHm(state.shift.startTime));
-      setEnd(toHm(state.shift.endTime));
-      setCutoff(state.shift.eodCutoffHours == null ? '' : String(state.shift.eodCutoffHours));
-    } else if (state?.mode === 'create') {
-      setName(''); setStart('09:00'); setEnd('18:00'); setCutoff('');
-    }
-  }, [state]);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || !start || !end) return;
-    // Blank is a deliberate value, not a zero: it means "no deadline for this shift".
-    const trimmed = cutoff.trim();
-    onSubmit({
-      name: name.trim(),
-      startTime: `${start}:00`,
-      endTime: `${end}:00`,
-      eodCutoffHours: trimmed === '' ? null : Number(trimmed),
-    });
-  }
-
-  return (
-    <Modal
-      open={state != null}
-      title={state?.mode === 'edit' ? 'Edit Shift' : 'Add Shift'}
-      onClose={onClose}
-      width={420}
-      footer={
-        <div style={{ display: 'flex', gap: 10, marginLeft: 'auto' }}>
-          <button type="button" onClick={onClose} className="nf-btn nf-btn--neutral" style={btnNeutral}>Cancel</button>
-          <button type="submit" form="shift-form" disabled={isPending || !name.trim()} className="nf-btn nf-btn--primary" style={btnPrimary}>
-            {isPending ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-      }
-    >
-      <form id="shift-form" onSubmit={handleSubmit} noValidate>
-        {error && <ErrorBanner message={error} />}
-        <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle} htmlFor={nameId}>Shift Name *</label>
-          <input id={nameId} type="text" placeholder="e.g. General" value={name} onChange={(e) => setName(capitalizeFirst(e.target.value))} style={inputStyle} autoFocus />
-          <FieldError msg={fieldErrors.name} />
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12, marginBottom: 4 }}>
-          <div style={{ minWidth: 0 }}>
-            <label style={labelStyle} id="shift-start-label">Start Time *</label>
-            <TimeStepperInput id="shift-start" label="Start time" value={start} onChange={setStart} compact />
-            <FieldError msg={fieldErrors.startTime} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <label style={labelStyle} id="shift-end-label">End Time *</label>
-            <TimeStepperInput id="shift-end" label="End time" value={end} onChange={setEnd} compact />
-            <FieldError msg={fieldErrors.endTime} />
-          </div>
-        </div>
-        <div style={{ marginTop: 14 }}>
-          <label style={labelStyle} htmlFor="shift-cutoff">EOD cutoff</label>
-          <UnitField unit="hrs after end">
-            <input
-              id="shift-cutoff"
-              type="number"
-              min={0}
-              max={24}
-              step={0.5}
-              placeholder="e.g. 3"
-              value={cutoff}
-              onChange={(e) => setCutoff(e.target.value)}
-              style={{ ...inputStyle, paddingRight: 96 }}
-            />
-          </UnitField>
-          <FieldError msg={fieldErrors.eodCutoffHours} />
-          <p style={{ fontSize: 11, color: 'var(--txt-dim)', margin: '6px 0 0' }}>
-            {cutoff.trim() === ''
-              ? 'Leave blank for no deadline, so no reminder will be sent for this shift.'
-              : `EOD due ${cutoffLabel(`${start}:00`, `${end}:00`, Number(cutoff))}. A reminder is sent once it passes.`}
-          </p>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-// ── Holiday add modal (uses Modal's sticky footer) ──────────────────────────
-
-type HolidayModalState = { mode: 'create' } | { mode: 'edit'; holiday: HolidayDto } | null;
-
-interface HolidayFormModalProps {
-  state: HolidayModalState;
-  onClose: () => void;
-  onSubmit: (payload: { name: string; holidayDate: string }) => void;
-  isPending: boolean;
-  error: string | null;
-  fieldErrors: Record<string, string>;
-}
-
-function HolidayFormModal({ state, onClose, onSubmit, isPending, error, fieldErrors }: HolidayFormModalProps) {
-  const nameId = useId();
-  const [name, setName] = useState('');
-  const [date, setDate] = useState('');
-
-  useEffect(() => {
-    if (state?.mode === 'edit') {
-      setName(state.holiday.name);
-      setDate(state.holiday.holidayDate);
-    } else if (state?.mode === 'create') {
-      setName(''); setDate('');
-    }
-  }, [state]);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || !date) return;
-    onSubmit({ name: name.trim(), holidayDate: date });
-  }
-
-  return (
-    <Modal
-      open={state != null}
-      title={state?.mode === 'edit' ? 'Edit Holiday' : 'Add Holiday'}
-      onClose={onClose}
-      width={420}
-      footer={
-        <div style={{ display: 'flex', gap: 10, marginLeft: 'auto' }}>
-          <button type="button" onClick={onClose} className="nf-btn nf-btn--neutral" style={btnNeutral}>Cancel</button>
-          <button type="submit" form="holiday-form" disabled={isPending || !name.trim() || !date} className="nf-btn nf-btn--primary" style={btnPrimary}>
-            {isPending ? 'Saving…' : state?.mode === 'edit' ? 'Save' : 'Add'}
-          </button>
-        </div>
-      }
-    >
-      <form id="holiday-form" onSubmit={handleSubmit} noValidate>
-        {error && <ErrorBanner message={error} />}
-        <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle} htmlFor={nameId}>Holiday Name *</label>
-          <input id={nameId} type="text" placeholder="e.g. Independence Day" value={name} onChange={(e) => setName(capitalizeFirst(e.target.value))} style={inputStyle} autoFocus />
-          <FieldError msg={fieldErrors.name} />
-        </div>
-        <div>
-          <label style={labelStyle} htmlFor="holiday-date">Date *</label>
-          <input id="holiday-date" type="date" lang="en-GB" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
-          <FieldError msg={fieldErrors.holidayDate} />
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
->>>>>>> 5cfaf10 (Apply OneHR styling to admin, approvals and account pages)
 // ── Generic confirm modal ────────────────────────────────────────────────────
 
 interface ConfirmModalProps {

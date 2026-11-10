@@ -212,10 +212,8 @@ function EodInboxTableRow({ row, index, selected, onClick, capacityLabel }: {
         <div style={{ ...ellipsis, maxWidth: '100%' }}>{item.pieceProjectName ?? item.projectName ?? '—'}</div>
         {capacityLabel && (
           <span title={capacityLabel} style={{
-            display: 'block', maxWidth: '100%', boxSizing: 'border-box', padding: '1px 7px', borderRadius: 10, fontSize: 10.5, fontWeight: 600,
-            color: 'var(--info)', ...ellipsis,
-            background: 'color-mix(in srgb, var(--info) 14%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--info) 28%, transparent)',
+            ...statusPillStyle('var(--info)'), display: 'block', maxWidth: '100%', boxSizing: 'border-box',
+            padding: '1px 7px', fontSize: 10.5, ...ellipsis,
           }}>{capacityLabel}</span>
         )}
       </div>

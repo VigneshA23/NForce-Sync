@@ -515,22 +515,6 @@ export default function Notifications() {
         }
         subtitle={total > 0 ? `${total} total notification${total !== 1 ? 's' : ''}` : 'All caught up'}
         actions={<>
-          <button
-            onClick={handleRefresh}
-            disabled={isFetching}
-            aria-label="Refresh notifications"
-            title="Refresh"
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 34, height: 34, background: 'transparent',
-              border: '1px solid var(--line)', borderRadius: 8,
-              cursor: isFetching ? 'default' : 'pointer', color: 'var(--txt-mut)',
-            }}
-            onMouseEnter={(e) => { if (!isFetching) { e.currentTarget.style.borderColor = 'var(--brand-bright)'; e.currentTarget.style.color = 'var(--txt)'; } }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.color = 'var(--txt-mut)'; }}
-          >
-            <RefreshCw size={14} style={isFetching ? { animation: 'spin 1s linear infinite' } : undefined} />
-          </button>
           {unread > 0 && (
             <button
               onClick={() => markAll.mutate()}

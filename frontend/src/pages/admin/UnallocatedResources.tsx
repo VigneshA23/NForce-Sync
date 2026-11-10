@@ -1,13 +1,13 @@
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, RefreshCw, Users, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Users, CheckCircle2 } from 'lucide-react';
 import { Card } from '../../components/KpiCard';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { PageHeader } from '../../components/PageHeader';
 import { tableThStyle, tableTdStyle, tableCardStyle } from '../../lib/tableStyles';
 import { formatDate, toLocalISODate, todayISO } from '../../lib/date';
 import { getExecutiveDashboard } from '../../api/executive';
-import { btnSecondary, viewAllLinkStyle } from '../../lib/uiStyles';
+import { btnSecondary } from '../../lib/uiStyles';
 import { EmptyState } from '../../components/EmptyState';
 
 function firstOfMonthISO(): string {
@@ -36,13 +36,6 @@ export default function UnallocatedResources() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate('/admin/executive-dashboard')}
-        style={{ ...viewAllLinkStyle, gap: 6, marginBottom: 16, fontSize: 13 }}
-      >
-        <ArrowLeft size={14} aria-hidden="true" /> Back to Executive Dashboard
-      </button>
-
       <PageHeader
         title="Unallocated Resources"
         subtitle={<>Active employees with no active project allocation, {formatDate(from)} – {formatDate(to)}.</>}
@@ -81,8 +74,8 @@ export default function UnallocatedResources() {
             <div style={{ overflow: 'auto', maxHeight: 560 }}>
               <table className="nf-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                    {['Employee', 'Employee Code', 'Role'].map(h => (
+                  <tr>
+                    {['Employee Name', 'Employee ID', 'Role'].map(h => (
                       <th key={h} style={{
                         ...tableThStyle,
                         position: 'sticky', top: 0, zIndex: 1,
