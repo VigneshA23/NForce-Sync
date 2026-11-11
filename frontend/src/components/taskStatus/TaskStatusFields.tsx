@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { Dropdown } from '../Dropdown';
 import { MAX_BLOCKER_REASON, TASK_STATUSES, TASK_STATUS_COLOR, taskStatusLabel } from './taskStatus';
 
 /**
@@ -48,22 +49,17 @@ export function TaskStatusField({ value, onChange, readOnly = false, disabled = 
           {taskStatusLabel(value) ?? '-'}
         </div>
       ) : (
-        <select
+        <Dropdown
           id={id}
           value={value}
           disabled={disabled}
-          onChange={e => onChange(e.target.value)}
-          aria-required="true"
-          aria-invalid={error ? true : undefined}
-          style={{
-            ...controlBase,
-            ...(disabled ? { opacity: 0.45, cursor: 'not-allowed' } : null),
-            ...(error ? { borderColor: 'rgba(228,55,61,.6)' } : null),
-            ...controlStyle,
-          }}
-        >
-          {TASK_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
+          onChange={onChange}
+          placeholder="Status"
+          error={!!error}
+          aria-required={true}
+          style={{ ...(disabled ? { opacity: 0.45 } : null), ...controlStyle }}
+          options={TASK_STATUSES.map(s => ({ value: s.value, label: s.label }))}
+        />
       )}
       {error && <div role="alert" style={{ fontSize: 11, color: 'var(--risk)', marginTop: 4 }}>{error}</div>}
     </div>
