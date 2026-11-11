@@ -4,7 +4,6 @@ import { useAuth } from '../../lib/auth';
 import { useGreeting, useLiveClock } from '../../lib/useGreeting';
 import { dashboardQuoteFor } from '../../lib/dashboardQuotes';
 import { fetchProfile } from '../../api/profile';
-import { resolveIllustrationKey } from '../../lib/illustration';
 import { HeroIllustration } from './illustrations';
 import { HeroSparkles } from './HeroSparkles';
 
@@ -58,10 +57,10 @@ export function HeroBanner({ subtitle = "Stay focused, you're making great progr
     staleTime: 300_000,
     enabled: !!user,
   });
-  const illustration = resolveIllustrationKey(profile?.gender);
-  // The male variant is OneHR's full-bleed banner artwork, so it takes a much wider panel (and the
-  // text column keeps clear of its opaque part); the female photo keeps the original 260px slot.
-  const wideArt = illustration === 'male';
+  // Every variant (all genders and the neutral scene) is OneHR's full-bleed banner artwork, so it
+  // takes a wide panel (and the text column keeps clear of its opaque part). Nothing is drawn until
+  // the profile has loaded.
+  const wideArt = !!profile;
 
   return (
     <div
@@ -117,13 +116,13 @@ export function HeroBanner({ subtitle = "Stay focused, you're making great progr
 
       {/* Bleeds to the card's own edges (right/top/bottom), overlapping the outer padding, so it
           reads as a full illustration panel rather than a small inset thumbnail. Omitted entirely
-          (no placeholder graphic) when the profile has no recognized gender. */}
-      {illustration !== 'neutral' && (
+          until the profile has loaded. */}
+      {profile && (
         <div
           className={wideArt ? 'nf-hero-illustration nf-hero-illustration--wide' : 'nf-hero-illustration'}
           style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: wideArt ? 'min(56%, 640px)' : 260, zIndex: wideArt ? 0 : 1 }}
         >
-          <HeroIllustration gender={profile?.gender} />
+          <HeroIllustration gender={profile.gender} label={date} />
         </div>
       )}
     </div>
