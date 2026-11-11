@@ -1,8 +1,9 @@
 import { useId, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
 import { AuthLayout } from './AuthLayout';
+import { LoginHeroBackdrop } from './LoginHeroBackdrop';
 import { api } from '../../api/client';
 
 const containerVariants = {
@@ -58,6 +59,11 @@ export default function Forgot() {
   return (
     <AuthLayout
       leftHeadline="Forgot your password?"
+      heroBackdrop={<LoginHeroBackdrop />}
+      cardTheme="light"
+      heroFullBleed
+      hideFeatureBadges
+      hideEyebrow
     >
       <motion.div
         variants={reduced ? undefined : containerVariants}
@@ -68,16 +74,16 @@ export default function Forgot() {
           <h1
             style={{
               fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
-              fontSize: 26,
-              fontWeight: 700,
-              letterSpacing: '-0.01em',
-              color: 'var(--txt)',
+              fontSize: 28,
+              fontWeight: 800,
+              letterSpacing: '-0.02em',
+              color: '#111827',
               marginBottom: 6,
             }}
           >
             Forgot password
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--txt-mut)', lineHeight: 1.5 }}>
+          <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>
             We'll email a temporary password to your registered company address.
           </p>
         </motion.div>
@@ -98,81 +104,59 @@ export default function Forgot() {
                   role="alert"
                   aria-live="polite"
                   id={errorId}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 10,
-                    padding: '12px 14px',
-                    borderRadius: 8,
-                    background: 'rgba(228,55,61,.10)',
-                    border: '1px solid rgba(228,55,61,.25)',
-                    color: 'var(--risk)',
-                    fontSize: 13,
-                    marginBottom: 16,
-                  }}
+                  style={errorBannerStyle}
                 >
-                  <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1, color: 'var(--risk)' }} aria-hidden="true" />
+                  <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1, color: '#B1111E' }} aria-hidden="true" />
                   <span>{fieldError}</span>
                 </div>
               )}
 
-              <label
-                htmlFor={emailId}
-                style={{
-                  display: 'block',
-                  fontSize: 12,
-                  fontWeight: 550,
-                  color: 'var(--txt-mut)',
-                  marginBottom: 6,
-                }}
-              >
-                Company email <span style={{ color: 'var(--brand-bright)' }} aria-label="required">*</span>
-              </label>
-              <input
-                id={emailId}
-                type="email"
-                autoComplete="email"
-                placeholder="you@nforce.one"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                aria-invalid={Boolean(fieldError)}
-                aria-describedby={fieldError ? errorId : undefined}
-                style={inputStyle}
-                onFocus={(e) => Object.assign(e.target.style, inputFocusStyle)}
-                onBlur={(e) => Object.assign(e.target.style, inputStyle)}
-                autoFocus
-              />
+              <div className="nf-field" style={{ marginBottom: 16 }}>
+                <label htmlFor={emailId} style={labelStyle} className="nf-label">
+                  Company email <span style={{ color: '#E4373D' }} aria-label="required">*</span>
+                </label>
+                <div className="nf-input-wrap">
+                  <input
+                    id={emailId}
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@nforce.one"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    aria-invalid={Boolean(fieldError)}
+                    aria-describedby={fieldError ? errorId : undefined}
+                    className="nf-input-inner nf-input-inner--light"
+                    style={lightInputStyle}
+                    autoFocus
+                  />
+                </div>
+              </div>
             </motion.div>
 
             <motion.div variants={reduced ? undefined : itemVariants} style={{ marginTop: 20 }}>
               <button
                 type="submit"
+                className="nf-submit-btn"
                 disabled={sending}
                 style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '12px 16px',
-                  background: sending ? 'var(--brand-deep)' : 'var(--brand)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: sending ? 'not-allowed' : 'pointer',
+                  ...submitButtonStyle,
                   opacity: sending ? 0.75 : 1,
-                  transition: 'all 0.14s',
-                  fontFamily: 'Inter, sans-serif',
+                  cursor: sending ? 'not-allowed' : 'pointer',
                 }}
                 onMouseEnter={(e) => {
-                  if (!sending) e.currentTarget.style.background = 'var(--brand-bright)';
+                  if (!sending) Object.assign(e.currentTarget.style, submitButtonHoverStyle);
                 }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = sending ? 'var(--brand-deep)' : 'var(--brand)';
-                }}
+                onMouseLeave={(e) => Object.assign(e.currentTarget.style, {
+                  ...submitButtonStyle,
+                  opacity: sending ? 0.75 : 1,
+                  cursor: sending ? 'not-allowed' : 'pointer',
+                })}
               >
-                {sending ? 'Sending…' : 'Send temporary password'}
+                {sending ? 'Sending…' : (
+                  <>
+                    Send temporary password <ArrowRight size={16} aria-hidden="true" />
+                  </>
+                )}
               </button>
             </motion.div>
 
@@ -194,8 +178,8 @@ function ConfirmationCard({ onBack }: { onBack: () => void }) {
     <div
       style={{
         padding: '20px 16px',
-        background: 'rgba(47,182,124,.08)',
-        border: '1px solid rgba(47,182,124,.22)',
+        background: 'rgba(15,122,66,.07)',
+        border: '1px solid rgba(15,122,66,.2)',
         borderRadius: 10,
         marginBottom: 24,
       }}
@@ -203,14 +187,14 @@ function ConfirmationCard({ onBack }: { onBack: () => void }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <CheckCircle2
           size={18}
-          style={{ color: 'var(--ok)', flexShrink: 0, marginTop: 1 }}
+          style={{ color: '#0F7A42', flexShrink: 0, marginTop: 1 }}
           aria-hidden="true"
         />
         <div>
-          <p style={{ fontSize: 13, color: '#8fe0bd', lineHeight: 1.5, marginBottom: 4 }}>
+          <p style={{ fontSize: 13, color: '#0F7A42', lineHeight: 1.5, marginBottom: 4, fontWeight: 600 }}>
             If an account exists for that address, a temporary password is on its way.
           </p>
-          <p style={{ fontSize: 12, color: 'var(--txt-dim)' }}>
+          <p style={{ fontSize: 12, color: '#4B5563' }}>
             Check your inbox. Sign in with it, then you'll be prompted to set a new password.
           </p>
         </div>
@@ -231,33 +215,69 @@ function BackLink({ onClick }: { onClick: () => void }) {
         background: 'none',
         border: 'none',
         fontSize: 12,
-        color: 'var(--txt-mut)',
+        color: '#6B7280',
         cursor: 'pointer',
         fontFamily: 'Inter, sans-serif',
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--brand-bright)')}
-      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--txt-mut)')}
+      onMouseEnter={(e) => (e.currentTarget.style.color = '#E4373D')}
+      onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
     >
       ← Back to sign in
     </button>
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: 'var(--shell)',
-  border: '1px solid var(--line2)',
-  borderRadius: 6,
-  padding: '10px 12px',
-  color: 'var(--txt)',
-  fontSize: 14,
-  outline: 'none',
-  transition: 'border-color 0.15s, box-shadow 0.15s',
-  fontFamily: 'Inter, sans-serif',
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: 13,
+  fontWeight: 600,
+  color: '#1F2937',
+  marginBottom: 8,
+  letterSpacing: '0',
+  textTransform: 'none',
 };
 
-const inputFocusStyle: React.CSSProperties = {
-  ...inputStyle,
-  borderColor: 'var(--brand-bright)',
-  boxShadow: '0 0 0 3px color-mix(in srgb, var(--brand-bright) 14%, transparent)',
+const lightInputStyle: React.CSSProperties = {
+  background: '#fff',
+  color: '#111827',
+  boxShadow: 'none',
+};
+
+const submitButtonStyle: React.CSSProperties = {
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  padding: '13px 16px',
+  background: '#E4373D',
+  border: 'none',
+  borderRadius: 8,
+  color: '#fff',
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: 'pointer',
+  transition: 'background 0.14s, transform 0.14s',
+  fontFamily: 'Inter, sans-serif',
+  letterSpacing: '0.01em',
+};
+
+const submitButtonHoverStyle: React.CSSProperties = {
+  ...submitButtonStyle,
+  background: '#C82026',
+  transform: 'translateY(-1px)',
+};
+
+const errorBannerStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 9,
+  padding: '11px 13px',
+  borderRadius: 7,
+  background: 'rgba(228,55,61,0.07)',
+  border: '1px solid rgba(228,55,61,0.22)',
+  color: '#B1111E',
+  fontSize: 13,
+  marginBottom: 18,
+  lineHeight: 1.45,
 };
