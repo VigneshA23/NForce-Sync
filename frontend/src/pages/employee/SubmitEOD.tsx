@@ -18,6 +18,7 @@ import {
   uploadEodAttachment, deleteEodAttachment, getEodAttachmentDataUrl,
 } from '../../api/eod';
 import { DatePicker } from '../../components/DatePicker';
+import { Dropdown } from '../../components/Dropdown';
 import { GlobalLoader } from '../../components/GlobalLoader';
 import { HOLIDAY_MESSAGE } from './dailyLogParts';
 import { ConfirmModal } from '../../components/ConfirmModal';
@@ -275,14 +276,6 @@ const disabledInputStyle: React.CSSProperties = inputStyle;
 
 function Inp(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`eod-form-field ${props.className ?? ''}`} style={{ ...(props.disabled ? disabledInputStyle : inputStyle), ...props.style }} />;
-}
-
-function Sel(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select {...props} className={`eod-form-field ${props.className ?? ''}`} style={{ ...(props.disabled ? disabledInputStyle : inputStyle), ...props.style }}>
-      {props.children}
-    </select>
-  );
 }
 
 function Txt(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -1253,9 +1246,12 @@ export default function SubmitEOD() {
                   {DAY_TYPES.find(d => d.value === dayType)?.label ?? dayType}
                 </div>
               ) : (
-                <Sel value={dayType} onChange={e => handleDayTypeChange(e.target.value)}>
-                  {DAY_TYPES.filter(d => d.value !== 'WEEKEND' || dayType === 'WEEKEND').map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-                </Sel>
+                <Dropdown
+                  value={dayType}
+                  onChange={handleDayTypeChange}
+                  options={DAY_TYPES.filter(d => d.value !== 'WEEKEND' || dayType === 'WEEKEND')
+                    .map(d => ({ value: d.value, label: d.label }))}
+                />
               )}
             </div>
             <div>
@@ -1265,14 +1261,13 @@ export default function SubmitEOD() {
               {isReadOnly ? (
                 <div style={{ ...inputStyle, opacity: 0.7 }}>{workLocation || '-'}</div>
               ) : (
-                <Sel
+                <Dropdown
                   value={workLocDisabled ? '' : workLocation}
-                  onChange={e => setWorkLocation(e.target.value)}
+                  onChange={setWorkLocation}
                   disabled={workLocDisabled}
-                >
-                  <option value="">Work Location</option>
-                  {WORK_LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
-                </Sel>
+                  placeholder="Work Location"
+                  options={WORK_LOCATIONS.map(l => ({ value: l, label: l }))}
+                />
               )}
             </div>
           </div>
@@ -1637,26 +1632,20 @@ function TaskCard({
                 {task.projectCode ?? projects.find(p => p.id === task.projectId)?.code ?? '-'}
               </div>
             ) : (
-              <Sel
-                value={isLeave ? '' : (task.projectId ?? '')}
-                onChange={e => {
-                  const nextId = e.target.value ? Number(e.target.value) : null;
-                  onUpdate({ projectId: nextId });
-                }}
+              <Dropdown
+                value={isLeave ? '' : String(task.projectId ?? '')}
+                onChange={v => onUpdate({ projectId: v ? Number(v) : null })}
                 disabled={isLeave}
-              >
-                <option value="">Project</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
-                ))}
-                {/* Saved project that is no longer in this user's allocations — keep it selectable
-                    so reopening a draft doesn't silently blank the field on the next save. */}
-                {task.projectId != null && !projects.some(p => p.id === task.projectId) && (
-                  <option value={task.projectId}>
-                    {task.projectCode ?? `Project #${task.projectId}`} (no longer allocated)
-                  </option>
-                )}
-              </Sel>
+                placeholder="Project"
+                options={[
+                  ...projects.map(p => ({ value: String(p.id), label: `${p.code} - ${p.name}` })),
+                  // Saved project that is no longer in this user's allocations — keep it selectable
+                  // so reopening a draft doesn't silently blank the field on the next save.
+                  ...(task.projectId != null && !projects.some(p => p.id === task.projectId)
+                    ? [{ value: String(task.projectId), label: `${task.projectCode ?? `Project #${task.projectId}`} (no longer allocated)` }]
+                    : []),
+                ]}
+              />
             )}
           </div>
           {/* Category */}
@@ -1665,12 +1654,12 @@ function TaskCard({
             {isReadOnly ? (
               <div style={{ ...inputStyle, fontSize: 12 }}>{task.categoryName ?? '-'}</div>
             ) : (
-              <Sel value={task.taskCategoryId ?? ''} onChange={e => onCategoryChange(e.target.value)}>
-                <option value="">Category</option>
-                {categories.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </Sel>
+              <Dropdown
+                value={String(task.taskCategoryId ?? '')}
+                onChange={onCategoryChange}
+                placeholder="Category"
+                options={categories.map(c => ({ value: String(c.id), label: c.name }))}
+              />
             )}
           </div>
           {/* Hours */}
