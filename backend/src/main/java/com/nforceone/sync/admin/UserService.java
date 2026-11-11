@@ -150,7 +150,8 @@ public class UserService {
 
         writeAudit("APP_USER", user.getId(), "CREATE", null, toJson(UserDto.from(user)), actor);
 
-        emailService.sendInviteEmail(user.getEmail(), user.getFullName(), tempPassword);
+        emailService.sendInviteEmail(user.getEmail(), user.getFullName(), tempPassword,
+                ROLE_LABELS.get(user.getRole()), actor.getFullName());
         notificationService.send(user.getId(), "ACCOUNT_CREATED",
                 "Welcome to NForce Sync",
                 "Your account has been created. Please log in and update your profile.",
@@ -162,6 +163,13 @@ public class UserService {
     private String generateTempPassword() {
         int digits = 100000 + RANDOM.nextInt(900000);
         return "NFSync@" + digits;
+    }
+
+    private static final java.time.format.DateTimeFormatter RESET_EXPIRY_FORMAT =
+            java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a");
+
+    private String formatExpiry(OffsetDateTime expiresAt) {
+        return expiresAt.format(RESET_EXPIRY_FORMAT);
     }
 
     /** Reset-link lifetime: long enough to open an email, short enough to bound exposure. */
@@ -404,8 +412,10 @@ public class UserService {
         user.setLockedUntil(null);
         userRepository.save(user);
 
+        OffsetDateTime expiresAt = OffsetDateTime.now().plusMinutes(RESET_TOKEN_TTL_MINUTES);
         String resetToken = createPasswordResetToken(user);
-        emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), tempPassword, resetToken);
+        emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), tempPassword, resetToken,
+                formatExpiry(expiresAt));
         notificationService.send(user.getId(), "PASSWORD_RESET",
                 "Password has been reset",
                 "An admin has reset your password. Check your email for the temporary password.",
@@ -435,9 +445,10 @@ public class UserService {
             if (user.getStatus() == AppUser.Status.ACTIVE && user.getDeletedAt() == null) {
                 String tempPassword = generateTempPassword();
                 String resetToken = generateResetTokenValue();
+                OffsetDateTime expiresAt = OffsetDateTime.now().plusMinutes(RESET_TOKEN_TTL_MINUTES);
 
                 if (!emailService.sendPasswordResetEmailSync(
-                        user.getEmail(), user.getFullName(), tempPassword, resetToken)) {
+                        user.getEmail(), user.getFullName(), tempPassword, resetToken, formatExpiry(expiresAt))) {
                     log.error("Password reset for {} abandoned — the email could not be sent, so the "
                             + "existing password was left in place.", user.getEmail());
                     return;
