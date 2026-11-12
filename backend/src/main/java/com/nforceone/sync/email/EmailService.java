@@ -56,7 +56,7 @@ public class EmailService {
     }
 
     public void sendInviteEmail(String toEmail, String fullName, String tempPassword, String role, String invitedBy) {
-        String subject = "Welcome to NForce Sync — your account is ready";
+        String subject = "Welcome to NForce Sync | your account is ready";
         String html = buildInviteHtml(fullName, toEmail, tempPassword, role, invitedBy);
         sendAsync(toEmail, subject, html);
     }
@@ -66,7 +66,7 @@ public class EmailService {
     }
 
     public void sendPasswordResetEmail(String toEmail, String fullName, String tempPassword, String resetToken, String expiryDate) {
-        String subject = "NForce Sync – Password Reset Request";
+        String subject = "NForce Sync | Password Reset Request";
         String html = buildResetHtml(fullName, toEmail, tempPassword, resetToken, expiryDate);
         sendAsync(toEmail, subject, html);
     }
@@ -86,7 +86,7 @@ public class EmailService {
     }
 
     public boolean sendPasswordResetEmailSync(String toEmail, String fullName, String tempPassword, String resetToken, String expiryDate) {
-        String subject = "NForce Sync – Password Reset Request";
+        String subject = "NForce Sync | Password Reset Request";
         String html = buildResetHtml(fullName, toEmail, tempPassword, resetToken, expiryDate);
         return sendBlocking(toEmail, subject, html);
     }
