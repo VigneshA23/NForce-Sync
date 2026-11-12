@@ -25,6 +25,7 @@ import { useEntryPieces } from '../../api/approvalPieces';
 import { useDashboardSummary } from '../../api/employee';
 import type { EodEntryDto, EodLogLineDto, SaveLogLineRequest } from '../../api/eod';
 import { DatePicker } from '../../components/DatePicker';
+import { Dropdown } from '../../components/Dropdown';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { TimeAdjustmentSection } from '../../components/timeAdjustment/TimeAdjustmentSection';
 import { useTimeAdjustment } from '../../components/timeAdjustment/useTimeAdjustment';
@@ -115,8 +116,6 @@ const inputStyle: React.CSSProperties = {
   outline: 'none', boxSizing: 'border-box',
 };
 
-const disabledInputStyle: React.CSSProperties = { ...inputStyle, opacity: 0.45, cursor: 'not-allowed' };
-
 function Label({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--txt-mut)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 5 }}>
@@ -126,10 +125,6 @@ function Label({ children }: { children: React.ReactNode }) {
 }
 
 function Req() { return <span style={{ color: '#E4373D' }}>*</span>; }
-
-function Sel(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} style={{ ...(props.disabled ? disabledInputStyle : inputStyle), ...props.style }}>{props.children}</select>;
-}
 
 function Txt(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...props} style={{ ...inputStyle, resize: 'vertical', minHeight: 70, lineHeight: 1.5, ...props.style }} />;
@@ -648,18 +643,23 @@ export default function DailyLogForm() {
               <Label>Day type <Req /></Label>
               {isReadOnly || (weekendLocked && isWeekend)
                 ? <div title={!isReadOnly ? 'Weekend dates are always logged as Weekend' : undefined} style={{ ...inputStyle, opacity:0.7 }}>{DAY_TYPES.find(d => d.value===dayType)?.label ?? dayType}</div>
-                : <Sel value={dayType} onChange={e => handleDayTypeChange(e.target.value)}>
-                    {DAY_TYPES.filter(d => d.value !== 'WEEKEND' || dayType === 'WEEKEND').map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-                  </Sel>}
+                : <Dropdown
+                    value={dayType}
+                    onChange={handleDayTypeChange}
+                    options={DAY_TYPES.filter(d => d.value !== 'WEEKEND' || dayType === 'WEEKEND').map(d => ({ value: d.value, label: d.label }))}
+                  />}
             </div>
             <div>
               <Label>Work location {!wLocDisabled && <Req />}</Label>
               {isReadOnly
                 ? <div style={{ ...inputStyle, opacity:0.7 }}>{workLocation || '-'}</div>
-                : <Sel value={wLocDisabled ? '' : workLocation} onChange={e => { setWorkLocation(e.target.value); setDirty(true); }} disabled={wLocDisabled}>
-                    <option value="">Select location</option>
-                    {WORK_LOCS.map(l => <option key={l} value={l}>{l}</option>)}
-                  </Sel>}
+                : <Dropdown
+                    value={wLocDisabled ? '' : workLocation}
+                    onChange={v => { setWorkLocation(v); setDirty(true); }}
+                    disabled={wLocDisabled}
+                    placeholder="Select location"
+                    options={WORK_LOCS.map(l => ({ value: l, label: l }))}
+                  />}
             </div>
           </div>
 
@@ -968,21 +968,24 @@ function LineRow({ line, index, categories, benchMode, maxHours, isReadOnly, sho
     borderRadius:6, color:'var(--txt)', fontSize:13, outline:'none', boxSizing:'border-box' as const,
   };
 
+  // No overflow:hidden on the card: it would clip the Status/Category dropdown panels that open below their field.
   return (
-    <div style={{ border:'1px solid var(--line2)', borderRadius:10, overflow:'hidden' }}>
+    <div style={{ border:'1px solid var(--line2)', borderRadius:10 }}>
       {/* Card header — index, category, hours, delete */}
-      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', background:'var(--raised)', borderBottom:'1px solid var(--line)' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', background:'var(--raised)', borderBottom:'1px solid var(--line)', borderRadius:'9px 9px 0 0' }}>
         <span style={{ fontSize:11, fontWeight:700, color:'var(--txt-dim)', minWidth:16, flexShrink:0 }}>{index+1}</span>
-        <select
-          id={lineFieldId(line.key, 'category')}
-          value={line.categoryId ?? ''}
-          disabled={isReadOnly || categories.length === 0}
-          onChange={e => onUpdate({ categoryId: e.target.value ? Number(e.target.value) : null })}
-          style={{ ...cellStyle, flex:1, cursor:(isReadOnly||categories.length===0)?'default':'pointer', borderColor:line.categoryId==null&&!isReadOnly?'rgba(228,55,61,.4)':'var(--line2)' }}
-        >
-          <option value="">{categories.length === 0 ? (benchMode ? 'No categories available' : 'No categories — configure in Org Masters') : 'Select category…'}</option>
-          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <div style={{ flex:1, minWidth:0 }}>
+          <Dropdown
+            id={lineFieldId(line.key, 'category')}
+            value={line.categoryId == null ? '' : String(line.categoryId)}
+            disabled={isReadOnly || categories.length === 0}
+            onChange={v => onUpdate({ categoryId: v ? Number(v) : null })}
+            placeholder={categories.length === 0 ? (benchMode ? 'No categories available' : 'No categories — configure in Org Masters') : 'Select category…'}
+            error={line.categoryId == null && !isReadOnly}
+            options={categories.map(c => ({ value: String(c.id), label: c.name }))}
+            style={{ minHeight:38 }}
+          />
+        </div>
         <input
           id={lineFieldId(line.key, 'hours')}
           type="number" min={QUARTER} max={maxHours} step={QUARTER}
