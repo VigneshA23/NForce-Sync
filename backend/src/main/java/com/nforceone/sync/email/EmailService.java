@@ -30,13 +30,18 @@ public class EmailService {
     // points at the one public deployment (already an allowed CORS origin — see
     // app.cors.allowed-origins in application.yml) so it renders regardless of which environment
     // sent the email.
-    private static final String LOGO_URL =
-            "https://nforce-sync-git-dev-nforce-one.vercel.app/nf1-logo.png";
+    private static final String ASSET_BASE = "https://nforce-sync-git-dev-nforce-one.vercel.app/";
+
+    // Rectangular "NF1 – Let's Do IT!" mark from the shared email design (frontend/public/email-logo.png).
+    private static final String LOGO_URL = ASSET_BASE + "email-logo.png";
 
     // Decorative red/grey stripes for the bottom of the dark sidebar (frontend/public/email-sidebar-art.png).
     // Same hosting rule as the logo: must be a public URL. Falls back to plain black if unreachable.
-    private static final String SIDEBAR_ART_URL =
-            "https://nforce-sync-git-dev-nforce-one.vercel.app/email-sidebar-art.png";
+    private static final String SIDEBAR_ART_URL = ASSET_BASE + "email-sidebar-art.png";
+
+    // Envelope badge beside the eyebrow, and the per-row icon badges (frontend/public/email-icon-*.png).
+    // PNG rather than inline SVG, which Gmail/Outlook strip.
+    private static final String MAIL_ICON_URL = ASSET_BASE + "email-icon-mail.png";
 
     @Value("${resend.api-key}")
     private String apiKey;
@@ -160,9 +165,10 @@ public class EmailService {
                 : ("Your account has been created in <strong>NForce Sync</strong> by <strong>" + escape(invitedBy)
                    + "</strong>. Use the temporary password below to sign in and start submitting your EOD status.");
 
-        String credentialRows = credentialRow("&#64;", "EMAIL", escape(email))
-                + credentialRow("&#8226;&#8226;&#8226;", "TEMPORARY PASSWORD", passwordPill(tempPassword))
-                + ((role == null || role.isBlank()) ? "" : credentialRow("&#9679;", "ROLE", escape(role)));
+        String credentialRows = credentialRow("email-icon-at.png", "EMAIL", escape(email), false)
+                + credentialRow("email-icon-password.png", "TEMPORARY PASSWORD", passwordPill(tempPassword),
+                        role == null || role.isBlank())
+                + ((role == null || role.isBlank()) ? "" : credentialRow("email-icon-role.png", "ROLE", escape(role), true));
 
         return emailShell(
                 "WELCOME",
@@ -178,9 +184,10 @@ public class EmailService {
     private String buildResetHtml(String fullName, String email, String tempPassword, String resetToken, String expiryDate) {
         String baseUrl = baseUrlResolver.resolve();
 
-        String credentialRows = credentialRow("&#64;", "EMAIL", escape(email))
-                + credentialRow("&#8226;&#8226;&#8226;", "TEMPORARY PASSWORD", passwordPill(tempPassword))
-                + ((expiryDate == null || expiryDate.isBlank()) ? "" : credentialRow("&#128337;", "EXPIRES ON", escape(expiryDate)));
+        String credentialRows = credentialRow("email-icon-at.png", "EMAIL", escape(email), false)
+                + credentialRow("email-icon-password.png", "TEMPORARY PASSWORD", passwordPill(tempPassword),
+                        expiryDate == null || expiryDate.isBlank())
+                + ((expiryDate == null || expiryDate.isBlank()) ? "" : credentialRow("email-icon-clock.png", "EXPIRES ON", escape(expiryDate), true));
 
         return emailShell(
                 "PASSWORD RESET",
@@ -195,20 +202,21 @@ public class EmailService {
     }
 
     /** One row of the light-gray credential card: a small circular glyph badge, an uppercase label, and a value. */
-    private String credentialRow(String glyph, String label, String valueHtml) {
+    private String credentialRow(String iconFile, String label, String valueHtml, boolean last) {
         return """
-                <tr><td style="padding:16px 20px;border-bottom:1px solid #E5E7EB;">
-                  <table cellpadding="0" cellspacing="0"><tr>
-                    <td style="width:40px;vertical-align:middle;">
-                      <table cellpadding="0" cellspacing="0"><tr><td style="width:32px;height:32px;border-radius:50%%;background:#E5E7EB;text-align:center;vertical-align:middle;font-size:13px;color:#6B7280;">%s</td></tr></table>
-                    </td>
+                <tr><td style="padding:14px 18px;%s">
+                  <table cellpadding="0" cellspacing="0" width="100%%"><tr>
+                    <td width="40" style="width:40px;vertical-align:middle;"><img src="%s" width="40" height="40" alt="" style="display:block;border:0;" /></td>
+                    <td width="19" style="width:19px;vertical-align:middle;"></td>
+                    <td width="1" style="width:1px;background:#cccccc;font-size:0;line-height:0;">&nbsp;</td>
+                    <td width="17" style="width:17px;vertical-align:middle;"></td>
                     <td style="vertical-align:middle;">
-                      <p style="margin:0 0 4px;font-size:10px;font-weight:700;color:#9CA3AF;letter-spacing:.06em;">%s</p>
-                      <p style="margin:0;font-size:16px;font-weight:600;color:#111827;">%s</p>
+                      <div style="margin:0 0 4px;font-size:10px;letter-spacing:1.5px;color:#666666;">%s</div>
+                      <div style="margin:0;font-size:14px;font-weight:700;color:#000000;">%s</div>
                     </td>
                   </tr></table>
                 </td></tr>
-                """.formatted(glyph, label, valueHtml);
+                """.formatted(last ? "" : "border-bottom:1px solid #e0e0e0;", ASSET_BASE + iconFile, label, valueHtml);
     }
 
     /** The temp password value: plain text, styled the same as every other credential value. */
@@ -228,55 +236,56 @@ public class EmailService {
                 <!DOCTYPE html>
                 <html lang="en">
                 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-                <body style="margin:0;padding:0;background:#EEF0F3;font-family:Inter,Arial,sans-serif;">
-                  <table width="100%%" cellpadding="0" cellspacing="0" style="background:#EEF0F3;padding:40px 16px;">
+                <body style="margin:0;padding:0;background:#ffffff;font-family:'Segoe UI',Montserrat,Arial,sans-serif;">
+                  <table width="100%%" cellpadding="0" cellspacing="0" style="background:#ffffff;padding:0;">
                     <tr><td align="center">
-                      <table width="680" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);">
+                      <table width="760" cellpadding="0" cellspacing="0" style="width:100%%;max-width:760px;background:#ffffff;border:1px solid #e2e2e2;overflow:hidden;">
                         <tr>
                           <!-- Dark sidebar -->
-                          <td width="100" valign="top" bgcolor="#000000" style="background:#000000;padding:0;">
-                            <table width="100" height="100%%" cellpadding="0" cellspacing="0" bgcolor="#000000"><tr><td valign="top" style="padding:28px 18px 24px;">
-                            <img src="%s" alt="NForce — Let's Do IT!" width="96" height="96" style="display:block;border-radius:50%%;margin:0 0 22px;" />
-                            <p style="margin:0 0 4px;font-size:11px;color:#9CA3AF;">Submit. Approve.</p>
-                            <p style="margin:0 0 22px;font-size:11px;color:#9CA3AF;">Track.</p>
-                            <div style="border-top:1px solid #E4373D;width:28px;margin-bottom:18px;"></div>
+                          <td width="150" valign="top" bgcolor="#000000" style="width:150px;background:#000000;padding:0;">
+                            <table width="150" height="100%%" cellpadding="0" cellspacing="0" bgcolor="#000000" style="width:150px;"><tr><td valign="top" style="padding:28px 18px 24px;">
+                            <img src="%s" alt="NF1 - Let's Do IT!" width="110" style="display:block;width:110px;max-width:100%%;height:auto;border:0;margin:0 0 10px;" />
+                            <div style="margin:0 0 18px;font-family:Montserrat,Arial,sans-serif;font-size:10px;line-height:1.4;color:#ffffff;">Submit. Approve. Track.</div>
+                            <div style="width:28px;height:2px;line-height:2px;font-size:0;background:#c0161d;margin-bottom:18px;">&nbsp;</div>
                             <table cellpadding="0" cellspacing="0">
-                              <tr><td style="padding:6px 0;"><a href="%s/eod/submit" style="font-size:11px;letter-spacing:.06em;color:#D1D5DB;text-decoration:none;font-weight:600;">EOD</a></td></tr>
-                              <tr><td style="padding:6px 0;"><a href="%s/blockers" style="font-size:11px;letter-spacing:.06em;color:#D1D5DB;text-decoration:none;font-weight:600;">BLOCKERS</a></td></tr>
-                              <tr><td style="padding:6px 0;"><a href="%s/team/approvals" style="font-size:11px;letter-spacing:.06em;color:#D1D5DB;text-decoration:none;font-weight:600;">APPROVALS</a></td></tr>
-                              <tr><td style="padding:6px 0;"><a href="%s/utilization" style="font-size:11px;letter-spacing:.06em;color:#D1D5DB;text-decoration:none;font-weight:600;">UTILIZATION</a></td></tr>
+                              <tr><td style="padding:3px 0;"><a href="%s/eod/submit" style="font-family:Montserrat,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;color:#bdbdbd;text-decoration:none;">EOD</a></td></tr>
+                              <tr><td style="padding:3px 0;"><a href="%s/blockers" style="font-family:Montserrat,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;color:#bdbdbd;text-decoration:none;">BLOCKERS</a></td></tr>
+                              <tr><td style="padding:3px 0;"><a href="%s/team/approvals" style="font-family:Montserrat,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;color:#bdbdbd;text-decoration:none;">APPROVALS</a></td></tr>
+                              <tr><td style="padding:3px 0;"><a href="%s/utilization" style="font-family:Montserrat,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;color:#bdbdbd;text-decoration:none;">UTILIZATION</a></td></tr>
                             </table>
                             </td></tr>
-                            <tr><td valign="bottom" style="padding:0;line-height:0;font-size:0;"><img src="%s" alt="" width="100" style="display:block;width:100px;height:auto;border:0;" /></td></tr></table>
+                            <tr><td valign="bottom" style="padding:0;line-height:0;font-size:0;"><img src="%s" alt="" width="150" style="display:block;width:150px;height:auto;border:0;" /></td></tr></table>
                           </td>
                           <!-- White content panel -->
-                          <td valign="top" style="padding:36px 46px;">
+                          <td valign="top" style="padding:32px 40px 16px;">
                             <table width="100%%" cellpadding="0" cellspacing="0"><tr>
                               <td style="vertical-align:top;">
-                                <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:.1em;color:#6B7280;">%s</p>
-                                <div style="border-top:2px solid #E4373D;width:30px;margin-bottom:22px;"></div>
+                                <div style="font-size:12px;font-weight:600;letter-spacing:3px;color:#666666;margin:0 0 8px;">%s</div>
+                                <div style="width:32px;height:3px;line-height:3px;font-size:0;background:#111111;margin-bottom:22px;">&nbsp;</div>
                               </td>
                               <td align="right" style="vertical-align:top;">
-                                <table cellpadding="0" cellspacing="0"><tr><td style="width:48px;height:48px;border-radius:50%%;background:#F3F4F6;text-align:center;vertical-align:middle;font-size:18px;color:#6B7280;">&#9993;</td></tr></table>
+                                <img src="%s" width="76" height="76" alt="" style="display:block;border:0;" />
                               </td>
                             </tr></table>
 
-                            <h1 style="font-family:Inter,Arial,sans-serif;font-size:26px;font-weight:800;color:#111827;margin:0 0 14px;letter-spacing:-0.01em;">%s</h1>
-                            <p style="color:#374151;font-size:14px;line-height:1.6;margin:0 0 24px;">%s</p>
+                            <h1 style="margin:4px 0 16px;font-size:30px;font-weight:800;color:#000000;">%s</h1>
+                            <p style="color:#222222;font-size:15px;line-height:1.5;margin:0 0 24px;">%s</p>
 
-                            <table width="100%%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;margin-bottom:22px;">
+                            <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f2f2f2;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:22px;">
                               %s
                             </table>
 
-                            <p style="margin:0 0 24px;font-size:13px;color:#B1111E;line-height:1.5;">%s</p>
+                            <p style="margin:0 0 24px;font-size:13px;color:#a3141b;line-height:1.5;">%s</p>
 
-                            <a href="%s" style="display:inline-block;background:#E4373D;color:#ffffff;font-weight:700;font-size:14px;text-decoration:none;padding:13px 28px;border-radius:8px;">Sign in to NForce Sync &#8594;</a>
+                            <table width="100%%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:0 0 20px;">
+                              <a href="%s" style="display:inline-block;background:#b84a4f;color:#ffffff;font-weight:600;font-size:15px;text-decoration:none;padding:14px 70px;border-radius:3px;">Sign in to NForce Sync &#8594;</a>
+                            </td></tr></table>
 
-                            <hr style="border:none;border-top:1px solid #E5E7EB;margin:28px 0 18px;" />
-                            <p style="margin:0 0 2px;font-size:13px;color:#374151;">Thank you,</p>
-                            <p style="margin:0 0 18px;font-size:13px;font-weight:700;color:#B1111E;">NForce Sync Team</p>
-                            <p style="margin:0 0 4px;font-size:11px;color:#9CA3AF;line-height:1.5;">%s</p>
-                            <p style="margin:0;font-size:11px;color:#9CA3AF;">This is an automated email. Please do not reply. &#169; %d NForce One</p>
+                            <div style="height:1px;line-height:1px;font-size:0;background:#e6e6e6;margin-bottom:20px;">&nbsp;</div>
+                            <div style="font-size:14px;color:#111111;">Thank you,</div>
+                            <div style="font-size:15px;font-weight:700;color:#a3141b;margin-top:4px;">NForce Sync Team</div>
+                            <div style="font-size:12px;color:#666666;margin-top:16px;line-height:1.5;">%s</div>
+                            <div style="font-size:12px;color:#666666;margin-top:4px;padding-bottom:16px;">This is an automated email. Please do not reply. &#169; %d NForce One</div>
                           </td>
                         </tr>
                       </table>
@@ -284,8 +293,8 @@ public class EmailService {
                   </table>
                 </body>
                 </html>
-                """.formatted(LOGO_URL, baseUrl, baseUrl, baseUrl, baseUrl, SIDEBAR_ART_URL, eyebrow, heading, bodyHtml,
-                        credentialRows, helperText, ctaHref, footerNote, year);
+                """.formatted(LOGO_URL, baseUrl, baseUrl, baseUrl, baseUrl, SIDEBAR_ART_URL, eyebrow, MAIL_ICON_URL,
+                        heading, bodyHtml, credentialRows, helperText, ctaHref, footerNote, year);
     }
 
     /** Minimal HTML escaping for values interpolated into the email body — all are plain text, never markup. */
