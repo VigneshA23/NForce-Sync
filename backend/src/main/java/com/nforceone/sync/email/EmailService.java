@@ -234,7 +234,8 @@ public class EmailService {
                       <table width="680" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);">
                         <tr>
                           <!-- Dark sidebar -->
-                          <td width="100" valign="top" bgcolor="#000000" background="%s" style="background:#000000 url(%s) no-repeat left bottom;background-size:100px auto;padding:28px 18px;">
+                          <td width="100" valign="top" bgcolor="#000000" style="background:#000000;padding:0;">
+                            <table width="100" height="100%%" cellpadding="0" cellspacing="0" bgcolor="#000000"><tr><td valign="top" style="padding:28px 18px 24px;">
                             <img src="%s" alt="NForce — Let's Do IT!" width="96" height="96" style="display:block;border-radius:50%%;margin:0 0 22px;" />
                             <p style="margin:0 0 4px;font-size:11px;color:#9CA3AF;">Submit. Approve.</p>
                             <p style="margin:0 0 22px;font-size:11px;color:#9CA3AF;">Track.</p>
@@ -245,6 +246,8 @@ public class EmailService {
                               <tr><td style="padding:6px 0;"><a href="%s/team/approvals" style="font-size:11px;letter-spacing:.06em;color:#D1D5DB;text-decoration:none;font-weight:600;">APPROVALS</a></td></tr>
                               <tr><td style="padding:6px 0;"><a href="%s/utilization" style="font-size:11px;letter-spacing:.06em;color:#D1D5DB;text-decoration:none;font-weight:600;">UTILIZATION</a></td></tr>
                             </table>
+                            </td></tr>
+                            <tr><td valign="bottom" style="padding:0;line-height:0;font-size:0;"><img src="%s" alt="" width="100" style="display:block;width:100px;height:auto;border:0;" /></td></tr></table>
                           </td>
                           <!-- White content panel -->
                           <td valign="top" style="padding:36px 46px;">
@@ -281,7 +284,7 @@ public class EmailService {
                   </table>
                 </body>
                 </html>
-                """.formatted(SIDEBAR_ART_URL, SIDEBAR_ART_URL, LOGO_URL, baseUrl, baseUrl, baseUrl, baseUrl, eyebrow, heading, bodyHtml,
+                """.formatted(LOGO_URL, baseUrl, baseUrl, baseUrl, baseUrl, SIDEBAR_ART_URL, eyebrow, heading, bodyHtml,
                         credentialRows, helperText, ctaHref, footerNote, year);
     }
 
