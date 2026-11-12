@@ -248,10 +248,10 @@ public class EmailService {
                             <div style="margin:0 0 18px;font-family:Montserrat,Arial,sans-serif;font-size:10px;line-height:1.4;color:#ffffff;">Submit. Approve. Track.</div>
                             <div style="width:28px;height:2px;line-height:2px;font-size:0;background:#c0161d;margin-bottom:18px;">&nbsp;</div>
                             <table cellpadding="0" cellspacing="0">
-                              <tr><td style="padding:3px 0;"><a href="%s/eod/submit" style="font-family:Montserrat,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;color:#bdbdbd;text-decoration:none;">EOD</a></td></tr>
-                              <tr><td style="padding:3px 0;"><a href="%s/blockers" style="font-family:Montserrat,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;color:#bdbdbd;text-decoration:none;">BLOCKERS</a></td></tr>
-                              <tr><td style="padding:3px 0;"><a href="%s/team/approvals" style="font-family:Montserrat,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;color:#bdbdbd;text-decoration:none;">APPROVALS</a></td></tr>
-                              <tr><td style="padding:3px 0;"><a href="%s/utilization" style="font-family:Montserrat,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;color:#bdbdbd;text-decoration:none;">UTILIZATION</a></td></tr>
+                              <tr><td style="padding:3px 0;"><span style="font-family:Montserrat,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;color:#ffffff;font-weight:600;">EOD</span></td></tr>
+                              <tr><td style="padding:3px 0;"><span style="font-family:Montserrat,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;color:#ffffff;font-weight:600;">BLOCKERS</span></td></tr>
+                              <tr><td style="padding:3px 0;"><span style="font-family:Montserrat,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;color:#ffffff;font-weight:600;">APPROVALS</span></td></tr>
+                              <tr><td style="padding:3px 0;"><span style="font-family:Montserrat,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;color:#ffffff;font-weight:600;">UTILIZATION</span></td></tr>
                             </table>
                             </td></tr>
                             <tr><td valign="bottom" style="padding:0;line-height:0;font-size:0;"><img src="%s" alt="" width="150" style="display:block;width:150px;height:auto;border:0;" /></td></tr></table>
@@ -293,7 +293,7 @@ public class EmailService {
                   </table>
                 </body>
                 </html>
-                """.formatted(LOGO_URL, baseUrl, baseUrl, baseUrl, baseUrl, SIDEBAR_ART_URL, eyebrow, MAIL_ICON_URL,
+                """.formatted(LOGO_URL, SIDEBAR_ART_URL, eyebrow, MAIL_ICON_URL,
                         heading, bodyHtml, credentialRows, helperText, ctaHref, footerNote, year);
     }
 
