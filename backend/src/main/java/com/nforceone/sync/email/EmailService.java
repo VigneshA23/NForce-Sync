@@ -226,23 +226,13 @@ public class EmailService {
                     <tr><td align="center" style="padding:17px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
                       <table width="634" cellpadding="0" cellspacing="0" style="width:100%%;max-width:634px;background:#fdfdfe;border:1px solid #a9adc4;border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(30,34,80,0.12);">
                         <tr><td style="padding:0;">
-                          <!-- Header banner — plain table layout (no CSS position/overflow, which
-                               Outlook's Word rendering engine drops entirely, text and all). The
-                               photo is set via the legacy HTML `background` attribute (works in
-                               Outlook, Apple Mail, Gmail/Yahoo webmail), with an inline
-                               background-image as a second attempt for clients that prefer CSS, and
-                               bgcolor as the fallback solid color wherever the image itself doesn't
-                               render. The wordmark sits in normal table flow, so it always shows. -->
-                          <table width="100%%" cellpadding="0" cellspacing="0" style="width:100%%;">
-                            <tr>
-                              <td height="110" bgcolor="#0c0c0f" background="%s" valign="middle"
-                                  style="height:110px;background-color:#0c0c0f;background-image:url('%s');background-size:cover;background-position:center;background-repeat:no-repeat;">
-                                <table cellpadding="0" cellspacing="0" style="width:100%%;"><tr>
-                                  <td style="padding-left:30px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:26px;font-weight:700;color:#ffffff;letter-spacing:0.2px;white-space:nowrap;">NForce&nbsp;<span style="color:#e8141c;">Sync</span></td>
-                                </tr></table>
-                              </td>
-                            </tr>
-                          </table>
+                          <!-- Header banner — a single flattened image (photo + "NForce Sync"
+                               wordmark baked in, see frontend/public/email-header-banner.jpg).
+                               Overlaying live HTML text on a CSS/table background (position:absolute
+                               divs, then a table `background` attribute) both got silently dropped by
+                               Outlook's Word rendering engine — an <img> is the only approach every
+                               client renders identically. -->
+                          <img src="%s" width="634" height="110" alt="NForce Sync" style="display:block;width:100%%;max-width:634px;height:auto;border:0;" />
                           <!-- Body -->
                           <div style="padding:44px 44px 0;">
                             <h1 style="margin:0 0 18px;font-size:28px;line-height:1.25;font-weight:700;color:#0b1330;">%s</h1>
@@ -263,7 +253,7 @@ public class EmailService {
                   </table>
                 </body>
                 </html>
-                """.formatted(HEADER_BANNER_URL, HEADER_BANNER_URL, heading, bodyHtml, credentialCard,
+                """.formatted(HEADER_BANNER_URL, heading, bodyHtml, credentialCard,
                         extraNote == null ? "" : extraNote, ctaHref, year);
     }
 
