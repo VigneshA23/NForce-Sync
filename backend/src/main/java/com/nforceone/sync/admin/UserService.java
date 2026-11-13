@@ -150,8 +150,7 @@ public class UserService {
 
         writeAudit("APP_USER", user.getId(), "CREATE", null, toJson(UserDto.from(user)), actor);
 
-        emailService.sendInviteEmail(user.getEmail(), user.getFullName(), tempPassword,
-                ROLE_LABELS.get(user.getRole()), actor.getFullName());
+        emailService.sendInviteEmail(user.getEmail(), user.getFullName(), tempPassword);
         notificationService.send(user.getId(), "ACCOUNT_CREATED",
                 "Welcome to NForce Sync",
                 "Your account has been created. Please log in and update your profile.",
