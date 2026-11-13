@@ -17,21 +17,21 @@ public class EmailService {
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
     private static final String RESEND_URL = "https://api.resend.com/emails";
 
-    // Same logo image the app itself renders (frontend/src/assets/nforce-logo.png, via
-    // BrandMark.tsx) — also served statically from frontend/public/nf1-logo.png at the app's own
-    // root path. Referenced as a normal hosted <img src>, not a base64 data URI: most mail
-    // clients (notably Outlook desktop) strip/ignore `data:` image sources.
+    // Referenced as a normal hosted <img src>, not a base64 data URI: most mail clients (notably
+    // Outlook desktop) strip/ignore `data:` image sources.
     //
     // Deliberately NOT built from baseUrlResolver.resolve(): that resolves per-request to
     // whichever origin triggered the call, which in local dev is http://localhost:5173 — fine for
-    // the CTA/nav links (the recipient opens those after this reaches their inbox, from their own
+    // the CTA link (the recipient opens that after this reaches their inbox, from their own
     // browser, so localhost only works when dev and recipient are on the same machine), but no
-    // mail client can ever fetch an *image* from localhost to render inline. The logo always
+    // mail client can ever fetch an *image* from localhost to render inline. The banner always
     // points at the one public deployment (already an allowed CORS origin — see
     // app.cors.allowed-origins in application.yml) so it renders regardless of which environment
     // sent the email.
-    private static final String LOGO_URL =
-            "https://nforce-sync-git-dev-nforce-one.vercel.app/nf1-logo.png";
+    private static final String ASSET_BASE = "https://nforce-sync-git-dev-nforce-one.vercel.app/";
+
+    // Decorative header photo behind the "NForce Sync" wordmark (frontend/public/email-header-banner.jpg).
+    private static final String HEADER_BANNER_URL = ASSET_BASE + "email-header-banner.jpg";
 
     @Value("${resend.api-key}")
     private String apiKey;
@@ -52,12 +52,8 @@ public class EmailService {
             .build();
 
     public void sendInviteEmail(String toEmail, String fullName, String tempPassword) {
-        sendInviteEmail(toEmail, fullName, tempPassword, null, null);
-    }
-
-    public void sendInviteEmail(String toEmail, String fullName, String tempPassword, String role, String invitedBy) {
         String subject = "Welcome to NForce Sync | your account is ready";
-        String html = buildInviteHtml(fullName, toEmail, tempPassword, role, invitedBy);
+        String html = buildInviteHtml(fullName, toEmail, tempPassword);
         sendAsync(toEmail, subject, html);
     }
 
@@ -148,136 +144,115 @@ public class EmailService {
                 });
     }
 
-    private String buildInviteHtml(String fullName, String email, String tempPassword, String role, String invitedBy) {
+    private String buildInviteHtml(String fullName, String email, String tempPassword) {
         String baseUrl = baseUrlResolver.resolve();
-        String intro = (invitedBy == null || invitedBy.isBlank())
-                ? "Your account has been created in <strong>NForce Sync</strong>. Use the temporary password below to sign in and start submitting your EOD status."
-                : ("Your account has been created in <strong>NForce Sync</strong> by <strong>" + escape(invitedBy)
-                   + "</strong>. Use the temporary password below to sign in and start submitting your EOD status.");
+        String body = "Hi " + escape(fullName) + ", Your NForce Sync account is ready. Use the temporary password "
+                + "below to sign in with <strong style=\"color:#0b1330;\">" + escape(email) + "</strong>. "
+                + "You'll be asked to create a new one on your first login.";
 
-        String credentialRows = credentialRow("&#64;", "EMAIL", escape(email))
-                + credentialRow("&#8226;&#8226;&#8226;", "TEMPORARY PASSWORD", passwordPill(tempPassword))
-                + ((role == null || role.isBlank()) ? "" : credentialRow("&#9679;", "ROLE", escape(role)));
+        String credentialCard = """
+                <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f5f5f9;border:1.5px dashed #b6bad0;border-radius:14px;margin-bottom:22px;">
+                  <tr><td height="128" align="center" valign="middle" style="height:128px;padding:16px 20px;">
+                    %s
+                  </td></tr>
+                </table>
+                """.formatted(passwordRow(tempPassword));
 
-        return emailShell(
-                "WELCOME",
-                "Welcome to NForce Sync",
-                "Hi " + escape(fullName) + ", " + intro,
-                credentialRows,
-                "You'll be asked to set a new password the first time you sign in. Don't share this password with anyone.",
-                baseUrl + "/login?newUser=1",
-                "If you weren't expecting this email, you can ignore it or contact your HR administrator.",
-                baseUrl);
+        return emailShell("Welcome, " + escape(fullName) + "!", body, credentialCard, null,
+                baseUrl + "/login?newUser=1");
     }
 
     private String buildResetHtml(String fullName, String email, String tempPassword, String resetToken, String expiryDate) {
         String baseUrl = baseUrlResolver.resolve();
+        String body = "Hi " + escape(fullName) + ", a password reset was requested for your NForce Sync account. "
+                + "Use the temporary password below to sign in with <strong style=\"color:#0b1330;\">" + escape(email) + "</strong>. "
+                + "You'll be asked to create a new one on sign-in.";
 
-        String credentialRows = credentialRow("&#64;", "EMAIL", escape(email))
-                + credentialRow("&#8226;&#8226;&#8226;", "TEMPORARY PASSWORD", passwordPill(tempPassword))
-                + ((expiryDate == null || expiryDate.isBlank()) ? "" : credentialRow("&#128337;", "EXPIRES ON", escape(expiryDate)));
+        String expiryRow = (expiryDate == null || expiryDate.isBlank()) ? "" : """
+                <div style="width:100%%;height:1px;background:#dcdee8;margin:14px 0 2px;">&nbsp;</div>
+                %s
+                """.formatted(credentialValueRow("EXPIRES ON", escape(expiryDate), false));
 
-        return emailShell(
-                "PASSWORD RESET",
-                "Reset your password",
-                "Hi " + escape(fullName) + ", A password reset was requested for your <strong>NForce Sync</strong> account. "
-                        + "Use the temporary password below to sign in.",
-                credentialRows,
-                "You'll be required to set a new password on sign-in. If you didn't request this, contact your HR administrator immediately.",
-                baseUrl + "/login?resetToken=" + resetToken,
-                "If you didn't request a password reset, you can ignore this email.",
-                baseUrl);
+        String credentialCard = """
+                <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f5f5f9;border:1.5px dashed #b6bad0;border-radius:14px;margin-bottom:22px;">
+                  <tr><td align="center" valign="middle" style="padding:26px 20px 22px;">
+                    %s
+                    %s
+                  </td></tr>
+                </table>
+                """.formatted(passwordRow(tempPassword), expiryRow);
+
+        String warning = """
+                <p style="margin:22px 0 0;font-size:14px;line-height:20px;color:#c4000e;text-align:center;">If you didn't request this, contact your HR administrator immediately.</p>
+                """;
+
+        return emailShell("Reset your password", body, credentialCard, warning,
+                baseUrl + "/login?resetToken=" + resetToken);
     }
 
-    /** One row of the light-gray credential card: a small circular glyph badge, an uppercase label, and a value. */
-    private String credentialRow(String glyph, String label, String valueHtml) {
+    /** The TEMPORARY PASSWORD row — monospace value, used by both emails' credential card. */
+    private String passwordRow(String tempPassword) {
+        return credentialValueRow("TEMPORARY PASSWORD",
+                "<span style=\"font-family:'Courier New',Courier,monospace;font-size:28px;font-weight:700;"
+                        + "letter-spacing:2px;color:#0b1330;\">" + escape(tempPassword) + "</span>",
+                true);
+    }
+
+    /** One label+value pair in the dashed credential card. */
+    private String credentialValueRow(String label, String valueHtml, boolean passwordSized) {
+        String valueStyle = passwordSized ? "" :
+                "font-size:17px;font-weight:600;color:#0b1330;";
         return """
-                <tr><td style="padding:16px 20px;border-bottom:1px solid #E5E7EB;">
-                  <table cellpadding="0" cellspacing="0"><tr>
-                    <td style="width:40px;vertical-align:middle;">
-                      <table cellpadding="0" cellspacing="0"><tr><td style="width:32px;height:32px;border-radius:50%%;background:#E5E7EB;text-align:center;vertical-align:middle;font-size:13px;color:#6B7280;">%s</td></tr></table>
-                    </td>
-                    <td style="vertical-align:middle;">
-                      <p style="margin:0 0 4px;font-size:10px;font-weight:700;color:#9CA3AF;letter-spacing:.06em;">%s</p>
-                      <p style="margin:0;font-size:16px;font-weight:600;color:#111827;">%s</p>
-                    </td>
-                  </tr></table>
-                </td></tr>
-                """.formatted(glyph, label, valueHtml);
-    }
-
-    /** The temp password value: plain text, styled the same as every other credential value. */
-    private String passwordPill(String tempPassword) {
-        return escape(tempPassword);
+                <div style="margin:0 0 4px;font-size:12px;letter-spacing:3.2px;color:#6b7287;">%s</div>
+                <div style="margin:0;%s">%s</div>
+                """.formatted(label, valueStyle, valueHtml);
     }
 
     /**
-     * The shared chrome for both emails: a dark left "sidebar" (brand mark + real nav links into
-     * the app) beside a white content panel (eyebrow, heading, body, credential card, CTA,
-     * sign-off, footer). Only the per-email pieces differ between invite and reset.
+     * The shared chrome for both emails: a single centered white card — header photo banner with
+     * the "NForce Sync" wordmark, heading, body paragraph, credential card, optional extra note
+     * (e.g. the reset email's red warning line), CTA button, helper text, footer. Only the
+     * per-email pieces (heading/body/credential card/extra note/CTA link) differ between invite
+     * and reset.
      */
-    private String emailShell(String eyebrow, String heading, String bodyHtml, String credentialRows,
-                               String helperText, String ctaHref, String footerNote, String baseUrl) {
+    private String emailShell(String heading, String bodyHtml, String credentialCard, String extraNote, String ctaHref) {
         int year = java.time.Year.now().getValue();
         return """
                 <!DOCTYPE html>
                 <html lang="en">
                 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-                <body style="margin:0;padding:0;background:#EEF0F3;font-family:Inter,Arial,sans-serif;">
-                  <table width="100%%" cellpadding="0" cellspacing="0" style="background:#EEF0F3;padding:40px 16px;">
-                    <tr><td align="center">
-                      <table width="680" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);">
-                        <tr>
-                          <!-- Dark sidebar -->
-                          <td width="100" valign="top" style="background:#0a0a0c;padding:28px 18px;">
-                            <img src="%s" alt="NForce — Let's Do IT!" width="96" height="96" style="display:block;border-radius:50%%;margin:0 0 22px;" />
-                            <p style="margin:0 0 4px;font-size:11px;color:#9CA3AF;">Submit. Approve.</p>
-                            <p style="margin:0 0 22px;font-size:11px;color:#9CA3AF;">Track.</p>
-                            <div style="border-top:1px solid #E4373D;width:28px;margin-bottom:18px;"></div>
-                            <table cellpadding="0" cellspacing="0">
-                              <tr><td style="padding:6px 0;"><a href="%s/eod/submit" style="font-size:11px;letter-spacing:.06em;color:#D1D5DB;text-decoration:none;font-weight:600;">EOD</a></td></tr>
-                              <tr><td style="padding:6px 0;"><a href="%s/blockers" style="font-size:11px;letter-spacing:.06em;color:#D1D5DB;text-decoration:none;font-weight:600;">BLOCKERS</a></td></tr>
-                              <tr><td style="padding:6px 0;"><a href="%s/team/approvals" style="font-size:11px;letter-spacing:.06em;color:#D1D5DB;text-decoration:none;font-weight:600;">APPROVALS</a></td></tr>
-                              <tr><td style="padding:6px 0;"><a href="%s/utilization" style="font-size:11px;letter-spacing:.06em;color:#D1D5DB;text-decoration:none;font-weight:600;">UTILIZATION</a></td></tr>
-                            </table>
-                          </td>
-                          <!-- White content panel -->
-                          <td valign="top" style="padding:36px 46px;">
-                            <table width="100%%" cellpadding="0" cellspacing="0"><tr>
-                              <td style="vertical-align:top;">
-                                <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:.1em;color:#6B7280;">%s</p>
-                                <div style="border-top:2px solid #E4373D;width:30px;margin-bottom:22px;"></div>
-                              </td>
-                              <td align="right" style="vertical-align:top;">
-                                <table cellpadding="0" cellspacing="0"><tr><td style="width:48px;height:48px;border-radius:50%%;background:#F3F4F6;text-align:center;vertical-align:middle;font-size:18px;color:#6B7280;">&#9993;</td></tr></table>
-                              </td>
-                            </tr></table>
-
-                            <h1 style="font-family:Inter,Arial,sans-serif;font-size:26px;font-weight:800;color:#111827;margin:0 0 14px;letter-spacing:-0.01em;">%s</h1>
-                            <p style="color:#374151;font-size:14px;line-height:1.6;margin:0 0 24px;">%s</p>
-
-                            <table width="100%%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;margin-bottom:22px;">
-                              %s
-                            </table>
-
-                            <p style="margin:0 0 24px;font-size:13px;color:#B1111E;line-height:1.5;">%s</p>
-
-                            <a href="%s" style="display:inline-block;background:#E4373D;color:#ffffff;font-weight:700;font-size:14px;text-decoration:none;padding:13px 28px;border-radius:8px;">Sign in to NForce Sync &#8594;</a>
-
-                            <hr style="border:none;border-top:1px solid #E5E7EB;margin:28px 0 18px;" />
-                            <p style="margin:0 0 2px;font-size:13px;color:#374151;">Thank you,</p>
-                            <p style="margin:0 0 18px;font-size:13px;font-weight:700;color:#B1111E;">NForce Sync Team</p>
-                            <p style="margin:0 0 4px;font-size:11px;color:#9CA3AF;line-height:1.5;">%s</p>
-                            <p style="margin:0;font-size:11px;color:#9CA3AF;">This is an automated email. Please do not reply. &#169; %d NForce One</p>
-                          </td>
-                        </tr>
+                <body style="margin:0;padding:0;background:#ffffff;">
+                  <table width="100%%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
+                    <tr><td align="center" style="padding:17px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+                      <table width="634" cellpadding="0" cellspacing="0" style="width:100%%;max-width:634px;background:#fdfdfe;border:1px solid #a9adc4;border-radius:16px;overflow:hidden;box-shadow:0 2px 10px rgba(30,34,80,0.12);">
+                        <tr><td style="padding:0;">
+                          <!-- Header banner -->
+                          <div style="position:relative;width:100%%;height:110px;background:#0c0c0f url('%s');background-size:cover;background-position:center;overflow:hidden;">
+                            <div style="position:absolute;left:0;top:0;width:100%%;height:110px;background:linear-gradient(100deg,#0a0a0c 0%%,#17181d 60%%,#0a0a0c 100%%);opacity:0.35;"></div>
+                            <div style="position:absolute;left:30px;top:0;height:110px;display:flex;align-items:center;font-size:26px;font-weight:700;color:#ffffff;letter-spacing:0.2px;white-space:nowrap;">NForce&nbsp;<span style="color:#e8141c;">Sync</span></div>
+                          </div>
+                          <!-- Body -->
+                          <div style="padding:44px 44px 0;">
+                            <h1 style="margin:0 0 18px;font-size:28px;line-height:1.25;font-weight:700;color:#0b1330;">%s</h1>
+                            <p style="font-size:16px;line-height:28px;color:#5a6275;margin:0 0 24px;">%s</p>
+                            %s
+                            %s
+                            <table width="100%%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:30px 0 20px;">
+                              <a href="%s" style="display:inline-block;width:242px;padding:16px 0;border-radius:10px;background:#c4000e;color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:700;text-align:center;text-decoration:none;">Sign in to NForce Sync</a>
+                            </td></tr></table>
+                            <p style="font-size:15px;line-height:20px;color:#5a6275;margin:0 0 4px;">Need help? Contact your manager or your HR administrator.</p>
+                            <p style="font-size:15px;line-height:20px;color:#5a6275;margin:0 0 24px;">This is an automated message, please do not reply.</p>
+                          </div>
+                          <!-- Footer -->
+                          <div style="border-top:1px solid #e4e6ee;background:#f7f8fa;padding:22px 24px;text-align:center;font-size:14px;color:#5d6479;">&#169; %d NForce Sync &middot; All rights reserved</div>
+                        </td></tr>
                       </table>
                     </td></tr>
                   </table>
                 </body>
                 </html>
-                """.formatted(LOGO_URL, baseUrl, baseUrl, baseUrl, baseUrl, eyebrow, heading, bodyHtml,
-                        credentialRows, helperText, ctaHref, footerNote, year);
+                """.formatted(HEADER_BANNER_URL, heading, bodyHtml, credentialCard,
+                        extraNote == null ? "" : extraNote, ctaHref, year);
     }
 
     /** Minimal HTML escaping for values interpolated into the email body — all are plain text, never markup. */
