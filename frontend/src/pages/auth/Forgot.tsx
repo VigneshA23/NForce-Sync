@@ -4,7 +4,8 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
 import { AuthLayout } from './AuthLayout';
 import { LoginHeroBackdrop } from './LoginHeroBackdrop';
-import { api } from '../../api/client';
+import { requestNewLink } from '../../api/auth';
+import { isValidEmail } from '../../lib/emailFormat';
 
 const containerVariants = {
   hidden: {},
@@ -16,7 +17,8 @@ const itemVariants = {
   show:   { opacity: 1, y: 0, transition: { duration: 0.28, ease: [0.23, 1, 0.32, 1] as const } },
 };
 
-export default function Forgot() {
+export default function Forgot({ variant = 'forgot' }: { variant?: 'forgot' | 'newLink' }) {
+  const isNewLink = variant === 'newLink';
   const navigate = useNavigate();
   const reduced  = useReducedMotion();
   const emailId  = useId();
@@ -40,25 +42,30 @@ export default function Forgot() {
       setFieldError('Enter your company email address.');
       return;
     }
-    if (!email.includes('@')) {
+    if (!isValidEmail(email)) {
       setFieldError('Enter a valid email address.');
       return;
     }
 
     setSending(true);
     try {
-      await api.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
-    } catch {
-      // Always show sent state — never reveal whether email exists
+      // Always the same confirmation, registered or not. Only a per-address throttle (429) is surfaced.
+      const result = await requestNewLink(email);
+      if (result === 'throttled') {
+        setFieldError('Too many requests. Please wait a few minutes before trying again.');
+      } else if (result === 'unreachable') {
+        setFieldError('Could not reach the server. Please try again.');
+      } else {
+        setSent(true);
+      }
     } finally {
       setSending(false);
-      setSent(true);
     }
   }
 
   return (
     <AuthLayout
-      leftHeadline="Forgot your password?"
+      leftHeadline={isNewLink ? 'Request a new link' : 'Forgot your password?'}
       heroBackdrop={<LoginHeroBackdrop />}
       cardTheme="light"
       heroFullBleed
@@ -81,10 +88,12 @@ export default function Forgot() {
               marginBottom: 6,
             }}
           >
-            Forgot password
+            {isNewLink ? 'Request new link' : 'Forgot password'}
           </h1>
           <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>
-            We'll email a temporary password to your registered company address.
+            {isNewLink
+              ? 'Enter your email and we\'ll send you a new link. Any earlier link stops working.'
+              : 'We\'ll email a temporary password to your registered company address.'}
           </p>
         </motion.div>
 
@@ -94,7 +103,7 @@ export default function Forgot() {
             animate={reduced ? undefined : { opacity: 1, scale: 1 }}
             transition={{ duration: 0.25 }}
           >
-            <ConfirmationCard onBack={() => navigate('/login')} />
+            <ConfirmationCard onBack={() => navigate('/login')} isNewLink={isNewLink} />
           </motion.div>
         ) : (
           <form onSubmit={handleSubmit} noValidate>
@@ -154,7 +163,7 @@ export default function Forgot() {
               >
                 {sending ? 'Sending…' : (
                   <>
-                    Send temporary password <ArrowRight size={16} aria-hidden="true" />
+                    {isNewLink ? 'Send new link' : 'Send temporary password'} <ArrowRight size={16} aria-hidden="true" />
                   </>
                 )}
               </button>
@@ -173,7 +182,7 @@ export default function Forgot() {
   );
 }
 
-function ConfirmationCard({ onBack }: { onBack: () => void }) {
+function ConfirmationCard({ onBack, isNewLink }: { onBack: () => void; isNewLink: boolean }) {
   return (
     <div
       style={{
@@ -192,7 +201,9 @@ function ConfirmationCard({ onBack }: { onBack: () => void }) {
         />
         <div>
           <p style={{ fontSize: 13, color: '#0F7A42', lineHeight: 1.5, marginBottom: 4, fontWeight: 600 }}>
-            If an account exists for that address, a temporary password is on its way.
+            {isNewLink
+              ? 'If this email is registered, a new link has been sent.'
+              : 'If an account exists for that address, a temporary password is on its way.'}
           </p>
           <p style={{ fontSize: 12, color: '#4B5563' }}>
             Check your inbox. Sign in with it, then you'll be prompted to set a new password.

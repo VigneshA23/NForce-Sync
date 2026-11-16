@@ -80,6 +80,15 @@ app:
     # from the deployed site links back to that site, one from local dev links to localhost.
     # Override per environment with FRONTEND_URL.
     allowed-origins: ${FRONTEND_URL:http://localhost:5173,https://nforce-sync-git-dev-nforce-one.vercel.app}
+  # Password reset: lifetime of the emailed link AND the temporary password, read by the backend checks and
+  # by the email template from one place (PasswordResetPolicy). Same defaults in every environment — QA and
+  # Prod need no override. The time shown in the email is formatted in app.business-zone (default Asia/Kolkata,
+  # label "IST"); set APP_BUSINESS_ZONE only if an environment must display a different zone.
+  password-reset:
+    ttl-minutes: ${PASSWORD_RESET_TTL_MINUTES:10}
+    rate-limit:
+      max-requests: ${PASSWORD_RESET_RATE_LIMIT_MAX:3}              # per email address…
+      window-minutes: ${PASSWORD_RESET_RATE_LIMIT_WINDOW_MINUTES:15} # …per this many minutes
   # EOD Supporting Attachments — change these to retune limits, no code change needed.
   # Mirrored on the frontend in lib/eodAttachments.ts's own constants; keep both sides in sync.
   # max-file-size-bytes and max-total-storage-bytes are also reused as-is by Blocker reply

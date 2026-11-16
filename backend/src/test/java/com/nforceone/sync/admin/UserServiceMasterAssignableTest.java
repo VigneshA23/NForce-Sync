@@ -86,7 +86,8 @@ class UserServiceMasterAssignableTest {
     void setUp() {
         service = new UserService(userRepository, auditLogRepository, passwordEncoder, new ObjectMapper(),
                 departmentRepository, designationRepository, locationRepository, shiftRepository,
-                emailService, notificationService, passwordResetTokenRepository);
+                emailService, notificationService, passwordResetTokenRepository,
+                new com.nforceone.sync.auth.PasswordResetPolicy(10, new com.nforceone.sync.config.BusinessClock(java.time.ZoneId.of("Asia/Kolkata"), java.time.Clock.systemUTC())));
         when(userRepository.findByEmailAndDeletedAtIsNull("admin@x.com"))
                 .thenReturn(Optional.of(user(1, AppUser.Role.ADMIN)));
         when(userRepository.save(any(AppUser.class))).thenAnswer(i -> i.getArgument(0));
