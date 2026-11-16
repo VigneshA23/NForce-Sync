@@ -1,5 +1,6 @@
 package com.nforceone.sync.email;
 
+import com.nforceone.sync.auth.PasswordResetPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +11,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 
 @Service
 public class EmailService {
@@ -43,8 +45,13 @@ public class EmailService {
     // end the user is actually on (local dev or the deployed site), not one fixed environment.
     private final AppBaseUrlResolver baseUrlResolver;
 
-    public EmailService(AppBaseUrlResolver baseUrlResolver) {
+    // Source of the validity length and the display zone for the reset email's expiry lines — the same
+    // object the backend validates against, so the email can never promise a different lifetime.
+    private final PasswordResetPolicy resetPolicy;
+
+    public EmailService(AppBaseUrlResolver baseUrlResolver, PasswordResetPolicy resetPolicy) {
         this.baseUrlResolver = baseUrlResolver;
+        this.resetPolicy = resetPolicy;
     }
 
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -57,13 +64,11 @@ public class EmailService {
         sendAsync(toEmail, subject, html);
     }
 
-    public void sendPasswordResetEmail(String toEmail, String fullName, String tempPassword, String resetToken) {
-        sendPasswordResetEmail(toEmail, fullName, tempPassword, resetToken, null);
-    }
-
-    public void sendPasswordResetEmail(String toEmail, String fullName, String tempPassword, String resetToken, String expiryDate) {
+    /** @param expiresAt the stored UTC expiry of the link/temp password; formatted here with an explicit zone. */
+    public void sendPasswordResetEmail(String toEmail, String fullName, String tempPassword, String resetToken,
+                                       OffsetDateTime expiresAt) {
         String subject = "NForce Sync | Password Reset Request";
-        String html = buildResetHtml(fullName, toEmail, tempPassword, resetToken, expiryDate);
+        String html = buildResetHtml(fullName, toEmail, tempPassword, resetToken, expiresAt);
         sendAsync(toEmail, subject, html);
     }
 
@@ -77,13 +82,10 @@ public class EmailService {
      *
      * @return true when Resend accepted the message (2xx)
      */
-    public boolean sendPasswordResetEmailSync(String toEmail, String fullName, String tempPassword, String resetToken) {
-        return sendPasswordResetEmailSync(toEmail, fullName, tempPassword, resetToken, null);
-    }
-
-    public boolean sendPasswordResetEmailSync(String toEmail, String fullName, String tempPassword, String resetToken, String expiryDate) {
+    public boolean sendPasswordResetEmailSync(String toEmail, String fullName, String tempPassword, String resetToken,
+                                              OffsetDateTime expiresAt) {
         String subject = "NForce Sync | Password Reset Request";
-        String html = buildResetHtml(fullName, toEmail, tempPassword, resetToken, expiryDate);
+        String html = buildResetHtml(fullName, toEmail, tempPassword, resetToken, expiresAt);
         return sendBlocking(toEmail, subject, html);
     }
 
@@ -162,16 +164,19 @@ public class EmailService {
                 baseUrl + "/login?newUser=1");
     }
 
-    private String buildResetHtml(String fullName, String email, String tempPassword, String resetToken, String expiryDate) {
+    String buildResetHtml(String fullName, String email, String tempPassword, String resetToken, OffsetDateTime expiresAt) {
         String baseUrl = baseUrlResolver.resolve();
         String body = "Hi " + escape(fullName) + ", a password reset was requested for your NForce Sync account. "
                 + "Use the temporary password below to sign in with <strong style=\"color:#0b1330;\">" + escape(email) + "</strong>. "
                 + "You'll be asked to create a new one on sign-in.";
 
-        String expiryRow = (expiryDate == null || expiryDate.isBlank()) ? "" : """
+        // Headline: how long the link lasts (from the shared policy). Sub line: the exact moment, always with
+        // AM/PM and a zone abbreviation, formatted from the stored UTC instant in an explicit zone.
+        String expiryRow = expiresAt == null ? "" : """
                 <div style="width:100%%;height:1px;background:#dcdee8;margin:14px 0 2px;">&nbsp;</div>
-                %s
-                """.formatted(credentialValueRow("EXPIRES ON", escape(expiryDate), false));
+                <div style="margin:0;font-size:17px;font-weight:600;color:#0b1330;">%s</div>
+                <div style="margin:4px 0 0;font-size:14px;color:#5a6275;">%s</div>
+                """.formatted(escape(expiresInText()), escape("Valid until " + resetPolicy.formatValidUntil(expiresAt)));
 
         String credentialCard = """
                 <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f5f5f9;border:1.5px dashed #b6bad0;border-radius:14px;margin-bottom:22px;">
@@ -188,6 +193,12 @@ public class EmailService {
 
         return emailShell("Reset your password", body, credentialCard, warning,
                 baseUrl + "/login?resetToken=" + resetToken);
+    }
+
+    /** "Expires in 10 minutes" — the minutes come from {@link PasswordResetPolicy}, never a literal. */
+    String expiresInText() {
+        int m = resetPolicy.ttlMinutes();
+        return "Expires in " + m + (m == 1 ? " minute" : " minutes");
     }
 
     /** The TEMPORARY PASSWORD row — monospace value, used by both emails' credential card. */

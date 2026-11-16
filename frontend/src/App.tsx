@@ -17,6 +17,7 @@ import { NotAuthorized } from './pages/NotAuthorized';
 import Login               from './pages/auth/Login';
 import Forgot              from './pages/auth/Forgot';
 import Reset               from './pages/auth/Reset';
+import LinkExpired         from './pages/auth/LinkExpired';
 import Locked              from './pages/auth/Locked';
 import Inactive            from './pages/auth/Inactive';
 import ForceChangePassword from './pages/auth/ForceChangePassword';
@@ -196,6 +197,8 @@ function AppRoutes() {
       <Route element={<RedirectAuth />}>
         <Route path="/login"  element={<Login />} />
         <Route path="/forgot" element={<Forgot />} />
+        <Route path="/request-new-link" element={<Forgot variant="newLink" />} />
+        <Route path="/link-expired" element={<LinkExpired />} />
         <Route path="/reset"  element={<Reset />} />
       </Route>
 

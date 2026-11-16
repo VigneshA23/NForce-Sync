@@ -95,6 +95,32 @@ export async function changePassword(
 }
 
 /**
+ * True when /login rejected a correct temporary password because it has passed its expiry
+ * (HTTP 401 with code TEMP_PASSWORD_EXPIRED) — the UI sends the user to the "Link expired" page.
+ */
+export function isTempPasswordExpiredError(err: unknown): boolean {
+  return axios.isAxiosError(err) && err.response?.status === 401
+    && err.response?.data?.code === 'TEMP_PASSWORD_EXPIRED';
+}
+
+export type NewLinkResult = 'sent' | 'throttled';
+
+/**
+ * Asks for a fresh reset link. The server answers the same way whether or not the address is
+ * registered; only 429 (too many requests for this address) is distinguishable, and it is
+ * address-based, so it reveals nothing about accounts. Any other failure is reported as 'sent'
+ * on purpose — the generic confirmation must not hint at what happened.
+ */
+export async function requestNewLink(email: string): Promise<NewLinkResult> {
+  try {
+    await api.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 429) return 'throttled';
+  }
+  return 'sent';
+}
+
+/**
  * Checked when the sign-in screen is opened from the password-reset email link, so the email
  * field can be pre-filled and an expired/used/unknown link can be reported. Never returns a
  * password or a session — actual authentication still happens through the normal login() call.

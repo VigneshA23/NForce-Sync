@@ -421,7 +421,7 @@ class DailyLogTimeAdjustmentTest {
 
     private String eodFormFor(AppUser u) {
         AuthController auth = new AuthController(null, null, null, null, null, null, null, null,
-                allocationRepository, null, null, policy);
+                allocationRepository, null, null, policy, null, null);
         return ReflectionTestUtils.invokeMethod(auth, "computeEodForm", u);
     }
 

@@ -63,7 +63,8 @@ class UserServiceUpdateManagerTest {
     void setUp() {
         service = new UserService(userRepository, auditLogRepository, passwordEncoder, mapper,
                 departmentRepository, designationRepository, locationRepository, shiftRepository,
-                emailService, notificationService, passwordResetTokenRepository);
+                emailService, notificationService, passwordResetTokenRepository,
+                new com.nforceone.sync.auth.PasswordResetPolicy(10, new com.nforceone.sync.config.BusinessClock(java.time.ZoneId.of("Asia/Kolkata"), java.time.Clock.systemUTC())));
         actor = user(1, AppUser.Role.ADMIN);
         oldManager = user(10, AppUser.Role.SUPERADMIN);
         newManager = user(11, AppUser.Role.SUPERADMIN);
