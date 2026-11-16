@@ -53,6 +53,8 @@ export default function Forgot({ variant = 'forgot' }: { variant?: 'forgot' | 'n
       const result = await requestNewLink(email);
       if (result === 'throttled') {
         setFieldError('Too many requests. Please wait a few minutes before trying again.');
+      } else if (result === 'unreachable') {
+        setFieldError('Could not reach the server. Please try again.');
       } else {
         setSent(true);
       }

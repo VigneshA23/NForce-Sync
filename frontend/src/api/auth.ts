@@ -103,19 +103,23 @@ export function isTempPasswordExpiredError(err: unknown): boolean {
     && err.response?.data?.code === 'TEMP_PASSWORD_EXPIRED';
 }
 
-export type NewLinkResult = 'sent' | 'throttled';
+export type NewLinkResult = 'sent' | 'throttled' | 'unreachable';
 
 /**
  * Asks for a fresh reset link. The server answers the same way whether or not the address is
- * registered; only 429 (too many requests for this address) is distinguishable, and it is
- * address-based, so it reveals nothing about accounts. Any other failure is reported as 'sent'
- * on purpose — the generic confirmation must not hint at what happened.
+ * registered. Two failures are safe to surface because neither depends on the account: 429 (too
+ * many requests for this address) and no response at all (server down / network). Any other
+ * server answer is reported as 'sent' on purpose — the generic confirmation must not hint at
+ * whether the address exists.
  */
 export async function requestNewLink(email: string): Promise<NewLinkResult> {
   try {
     await api.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
   } catch (err) {
-    if (axios.isAxiosError(err) && err.response?.status === 429) return 'throttled';
+    if (axios.isAxiosError(err)) {
+      if (!err.response) return 'unreachable';
+      if (err.response.status === 429) return 'throttled';
+    }
   }
   return 'sent';
 }
