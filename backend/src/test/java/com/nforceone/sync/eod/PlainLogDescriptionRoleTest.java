@@ -175,7 +175,7 @@ class PlainLogDescriptionRoleTest {
 
     private String eodFormFor(AppUser u) {
         AuthController auth = new AuthController(null, null, null, null, null, null, null, null,
-                allocationRepository, null, null, benchPolicy);
+                allocationRepository, null, null, benchPolicy, null, null);
         return ReflectionTestUtils.invokeMethod(auth, "computeEodForm", u);
     }
 

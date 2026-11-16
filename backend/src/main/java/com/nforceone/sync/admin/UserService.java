@@ -8,6 +8,7 @@ import com.nforceone.sync.auth.AppUser;
 import com.nforceone.sync.auth.AppUserRepository;
 import com.nforceone.sync.auth.AuditLog;
 import com.nforceone.sync.auth.AuditLogRepository;
+import com.nforceone.sync.auth.PasswordResetPolicy;
 import com.nforceone.sync.auth.PasswordResetToken;
 import com.nforceone.sync.auth.PasswordResetTokenRepository;
 import com.nforceone.sync.auth.dto.UserDto;
@@ -66,6 +67,7 @@ public class UserService {
     private final EmailService emailService;
     private final NotificationService notificationService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final PasswordResetPolicy resetPolicy;
 
     public UserService(AppUserRepository userRepository,
                        AuditLogRepository auditLogRepository,
@@ -77,7 +79,9 @@ public class UserService {
                        ShiftDefinitionRepository shiftRepository,
                        EmailService emailService,
                        NotificationService notificationService,
-                       PasswordResetTokenRepository passwordResetTokenRepository) {
+                       PasswordResetTokenRepository passwordResetTokenRepository,
+                       PasswordResetPolicy resetPolicy) {
+        this.resetPolicy = resetPolicy;
         this.userRepository        = userRepository;
         this.auditLogRepository    = auditLogRepository;
         this.passwordEncoder       = passwordEncoder;
@@ -164,15 +168,8 @@ public class UserService {
         return "NFSync@" + digits;
     }
 
-    private static final java.time.format.DateTimeFormatter RESET_EXPIRY_FORMAT =
-            java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a");
-
-    private String formatExpiry(OffsetDateTime expiresAt) {
-        return expiresAt.format(RESET_EXPIRY_FORMAT);
-    }
-
-    /** Reset-link lifetime: long enough to open an email, short enough to bound exposure. */
-    private static final int RESET_TOKEN_TTL_MINUTES = 10;
+    // The reset-link lifetime and the expiry display live in PasswordResetPolicy, shared with the email
+    // template and the login check, so none of them can drift from the value stored on the token.
 
     // URL-safe so it drops straight into the emailed link with no additional encoding.
     private String generateResetTokenValue() {
@@ -181,17 +178,17 @@ public class UserService {
         return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    private String createPasswordResetToken(AppUser user) {
-        String token = generateResetTokenValue();
-        savePasswordResetToken(user, token);
-        return token;
-    }
-
-    private void savePasswordResetToken(AppUser user, String token) {
+    /**
+     * Issues the user's one live reset token: every earlier token is retired first, so a previous link
+     * (and the temporary password it belongs to, which is overwritten alongside) stops working the
+     * moment a new one is issued. {@code expiresAt} is the same value the email displays.
+     */
+    private void issuePasswordResetToken(AppUser user, String token, OffsetDateTime expiresAt) {
+        passwordResetTokenRepository.invalidateAllForUser(user.getId());
         PasswordResetToken resetToken = new PasswordResetToken();
         resetToken.setUser(user);
         resetToken.setToken(token);
-        resetToken.setExpiresAt(OffsetDateTime.now().plusMinutes(RESET_TOKEN_TTL_MINUTES));
+        resetToken.setExpiresAt(expiresAt);
         resetToken.setUsed(false);
         passwordResetTokenRepository.save(resetToken);
     }
@@ -411,10 +408,11 @@ public class UserService {
         user.setLockedUntil(null);
         userRepository.save(user);
 
-        OffsetDateTime expiresAt = OffsetDateTime.now().plusMinutes(RESET_TOKEN_TTL_MINUTES);
-        String resetToken = createPasswordResetToken(user);
+        OffsetDateTime expiresAt = resetPolicy.expiryFor(resetPolicy.now());
+        String resetToken = generateResetTokenValue();
+        issuePasswordResetToken(user, resetToken, expiresAt);
         emailService.sendPasswordResetEmail(user.getEmail(), user.getFullName(), tempPassword, resetToken,
-                formatExpiry(expiresAt));
+                expiresAt);
         notificationService.send(user.getId(), "PASSWORD_RESET",
                 "Password has been reset",
                 "An admin has reset your password. Check your email for the temporary password.",
@@ -444,10 +442,11 @@ public class UserService {
             if (user.getStatus() == AppUser.Status.ACTIVE && user.getDeletedAt() == null) {
                 String tempPassword = generateTempPassword();
                 String resetToken = generateResetTokenValue();
-                OffsetDateTime expiresAt = OffsetDateTime.now().plusMinutes(RESET_TOKEN_TTL_MINUTES);
+                // One "sent at" instant → one stored UTC expiry, shown verbatim (zone-converted) in the email.
+                OffsetDateTime expiresAt = resetPolicy.expiryFor(resetPolicy.now());
 
                 if (!emailService.sendPasswordResetEmailSync(
-                        user.getEmail(), user.getFullName(), tempPassword, resetToken, formatExpiry(expiresAt))) {
+                        user.getEmail(), user.getFullName(), tempPassword, resetToken, expiresAt)) {
                     log.error("Password reset for {} abandoned — the email could not be sent, so the "
                             + "existing password was left in place.", user.getEmail());
                     return;
@@ -460,7 +459,7 @@ public class UserService {
                 user.setFailedLoginAttempts(0);
                 user.setLockedUntil(null);
                 userRepository.save(user);
-                savePasswordResetToken(user, resetToken);
+                issuePasswordResetToken(user, resetToken, expiresAt);
                 writeAudit("APP_USER", user.getId(), "PASSWORD_RESET_SELF", null, null, user);
             }
         });

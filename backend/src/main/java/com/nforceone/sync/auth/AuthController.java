@@ -43,6 +43,8 @@ public class AuthController {
     private final com.nforceone.sync.eod.BenchModePolicy benchModePolicy;
     private final com.nforceone.sync.project.PmScopeService pmScopeService;
     private final com.nforceone.sync.reporting.ReportingScopeService reportingScopeService;
+    private final PasswordResetPolicy resetPolicy;
+    private final ResetRequestRateLimiter resetRateLimiter;
 
     public AuthController(AuthenticationManager authenticationManager,
                           JwtService jwtService,
@@ -55,7 +57,11 @@ public class AuthController {
                           AllocationRepository allocationRepository,
                           com.nforceone.sync.project.PmScopeService pmScopeService,
                           com.nforceone.sync.reporting.ReportingScopeService reportingScopeService,
-                          com.nforceone.sync.eod.BenchModePolicy benchModePolicy) {
+                          com.nforceone.sync.eod.BenchModePolicy benchModePolicy,
+                          PasswordResetPolicy resetPolicy,
+                          ResetRequestRateLimiter resetRateLimiter) {
+        this.resetPolicy = resetPolicy;
+        this.resetRateLimiter = resetRateLimiter;
         this.benchModePolicy = benchModePolicy;
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
@@ -98,6 +104,15 @@ public class AuthController {
                     new UsernamePasswordAuthenticationToken(email, request.password())
             );
             AppUser user = ((AppUserDetails) auth.getPrincipal()).getAppUser();
+
+            // The temporary password from a reset lives exactly as long as its link. Checked only after the
+            // password matched, so a wrong guess can't probe expiry, and the stored UTC expiry is compared
+            // directly — no formatted text involved. Not a failed attempt: it never counts towards lockout.
+            if (isTempPasswordExpired(user)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                        "error", "This temporary password has expired. Please request a new link.",
+                        "code", "TEMP_PASSWORD_EXPIRED"));
+            }
             accountLockoutService.recordSuccess(existing);
             String token = jwtService.generateToken(user);
             return ResponseEntity.ok(
@@ -143,10 +158,32 @@ public class AuthController {
     @PostMapping("/forgot-password")
     public ResponseEntity<Map<String, String>> forgotPassword(
             @Valid @RequestBody ForgotPasswordRequest request) {
-        userService.forgotPassword(request.email());
+        String normalized = request.email().toLowerCase().trim();
+        // Throttled per address whether or not it is registered, so a 429 reveals nothing about accounts.
+        if (!resetRateLimiter.tryAcquire(normalized, resetPolicy.now())) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of(
+                    "error", "Too many requests. Please wait a few minutes before trying again."));
+        }
+        userService.forgotPassword(normalized);
+        // Identical for registered and unregistered addresses (and for a send that failed).
         return ResponseEntity.ok(Map.of(
-                "message", "If that email is registered, we've sent password reset instructions."
+                "message", "If this email is registered, a new link has been sent."
         ));
+    }
+
+    /**
+     * True when the user is still on a reset-issued temporary password whose stored expiry has passed.
+     * Only the newest token counts: issuing a new reset retires the older ones. Users with no token
+     * (e.g. a fresh invite) are unaffected.
+     */
+    private boolean isTempPasswordExpired(AppUser user) {
+        if (!user.isMustChangePassword()) {
+            return false;
+        }
+        return passwordResetTokenRepository.findFirstByUserIdOrderByIdDesc(user.getId())
+                .filter(t -> !t.isUsed())
+                .map(t -> resetPolicy.isExpired(t.getExpiresAt(), resetPolicy.now()))
+                .orElse(false);
     }
 
     @GetMapping("/me")
@@ -184,6 +221,8 @@ public class AuthController {
         // hatch the lock screen offers, would leave the user just as locked out as before.
         accountLockoutService.clearLock(user);
         appUserRepository.save(user);
+        // A real password is now set: any reset link still outstanding must not be usable again.
+        passwordResetTokenRepository.invalidateAllForUser(user.getId());
 
         // Issue a fresh token with mustChangePassword=false
         String newToken = jwtService.generateToken(user);
@@ -238,7 +277,7 @@ public class AuthController {
         }
         return passwordResetTokenRepository.findByToken(token)
                 .filter(t -> !t.isUsed())
-                .filter(t -> t.getExpiresAt().isAfter(java.time.OffsetDateTime.now()))
+                .filter(t -> !resetPolicy.isExpired(t.getExpiresAt(), resetPolicy.now()))
                 .filter(t -> {
                     AppUser user = t.getUser();
                     return user != null && user.getDeletedAt() == null

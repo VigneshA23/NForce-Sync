@@ -6,7 +6,7 @@ import axios from 'axios';
 import { AuthLayout } from './AuthLayout';
 import { LoginHeroBackdrop } from './LoginHeroBackdrop';
 import { useAuth, ROLE_LANDING, buildAuthUser } from '../../lib/auth';
-import { login, asLockedError, attemptsRemainingFrom, checkResetTokenValid } from '../../api/auth';
+import { login, asLockedError, attemptsRemainingFrom, checkResetTokenValid, isTempPasswordExpiredError } from '../../api/auth';
 import { useCountdown, formatCountdown } from '../../lib/useCountdown';
 
 function MicrosoftIcon() {
@@ -49,7 +49,6 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
   const [lockedUntilMs, setLockedUntilMs] = useState<number | null>(null);
-  const [resetLinkNotice, setResetLinkNotice] = useState<string | null>(null);
   const [viaResetLink, setViaResetLink] = useState(false);
   const viaNewUserLink = searchParams.get('newUser') === '1';
 
@@ -79,13 +78,12 @@ export default function Login() {
           setViaResetLink(true);
           emailRef.current?.focus();
         } else {
-          setResetLinkNotice('This password reset link is invalid or has expired. Please request a new one.');
+          navigate('/link-expired', { replace: true });
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setResetLinkNotice('This password reset link is invalid or has expired. Please request a new one.');
-        }
+        // Can't tell whether the link is good (network/server error): stay on sign-in rather than
+        // claiming it expired — the temporary password itself is still validated by /login.
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -112,6 +110,10 @@ export default function Login() {
         { replace: true },
       );
     } catch (err) {
+      if (isTempPasswordExpiredError(err)) {
+        navigate('/link-expired', { replace: true });
+        return;
+      }
       const locked = asLockedError(err);
       if (locked) {
         navigate('/locked', {
@@ -138,46 +140,6 @@ export default function Login() {
   }
 
   const hasError = Boolean(error);
-
-  if (resetLinkNotice) {
-    return (
-      <AuthLayout leftHeadline="Centralized Work & Utilization Management" showStats heroBackdrop={<LoginHeroBackdrop />} cardTheme="light" heroFullBleed hideFeatureBadges hideEyebrow>
-        <motion.div
-          variants={reduced ? undefined : containerVariants}
-          initial={reduced ? undefined : 'hidden'}
-          animate={reduced ? undefined : 'show'}
-        >
-          <motion.div variants={reduced ? undefined : itemVariants} style={{ marginBottom: 28 }}>
-            <div style={accentLineStyle} />
-            <h1 style={headingStyle}>Change your password</h1>
-          </motion.div>
-
-          <motion.div
-            variants={reduced ? undefined : itemVariants}
-            role="alert"
-            aria-live="polite"
-            style={errorBannerStyle}
-          >
-            <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1, color: 'var(--risk)' }} aria-hidden="true" />
-            <span>{resetLinkNotice}</span>
-          </motion.div>
-
-          <motion.div variants={reduced ? undefined : itemVariants}>
-            <button
-              type="button"
-              onClick={() => navigate('/forgot')}
-              className="nf-submit-btn"
-              style={submitButtonStyle}
-              onMouseEnter={(e) => Object.assign(e.currentTarget.style, submitButtonHoverStyle)}
-              onMouseLeave={(e) => Object.assign(e.currentTarget.style, submitButtonStyle)}
-            >
-              Request a new reset link
-            </button>
-          </motion.div>
-        </motion.div>
-      </AuthLayout>
-    );
-  }
 
   return (
     <AuthLayout leftHeadline="Centralized Work & Utilization Management" showStats heroBackdrop={<LoginHeroBackdrop />} cardTheme="light" heroFullBleed hideFeatureBadges hideEyebrow>
@@ -402,14 +364,6 @@ export default function Login() {
 }
 
 // ── Styles ──────────────────────────────────────────────────────────
-
-const accentLineStyle: React.CSSProperties = {
-  width: 40,
-  height: 2,
-  background: '#E4373D',
-  borderRadius: 1,
-  marginBottom: 20,
-};
 
 const headingStyle: React.CSSProperties = {
   fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif',
